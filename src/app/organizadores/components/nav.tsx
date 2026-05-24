@@ -13,7 +13,7 @@ const LINKS = [
   { href: "#faq", label: "FAQ" },
 ];
 
-export function Nav({ waHref }: { waHref: string }) {
+export function Nav(_props: { waHref?: string }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const headerRef = useRef<HTMLElement>(null);
   const burgerRef = useRef<HTMLButtonElement>(null);
@@ -95,8 +95,8 @@ export function Nav({ waHref }: { waHref: string }) {
             </a>
           ))}
         </nav>
-        <div className="hidden items-center gap-3 lg:inline-flex">
-          {/* Ver eventos como text link sutil — claramente secundario */}
+        <div className="hidden items-center gap-4 lg:inline-flex">
+          {/* Ver eventos como text link sutil — secundario */}
           <a
             href="/"
             className="group inline-flex items-center gap-1.5 text-sm font-medium text-ink-3 transition-colors hover:text-ink"
@@ -109,21 +109,13 @@ export function Nav({ waHref }: { waHref: string }) {
               className="transition-transform duration-200 group-hover:-translate-y-px group-hover:translate-x-px"
             />
           </a>
-          {/* Ingresar al panel — organizadores existentes */}
-          <a
-            href="/es/org"
-            className="inline-flex items-center gap-1.5 rounded-full border border-line bg-transparent px-4 py-2 text-sm font-medium text-ink-2 transition-[border-color,background-color,color] duration-150 hover:border-line-strong hover:bg-bg-elev hover:text-ink"
-          >
-            Ingresar
-          </a>
+          {/* Ingresar al panel — CTA primario para organizadores */}
           <Button
-            href={waHref}
-            target="_blank"
-            aria-label="Hablar por WhatsApp con Pasape"
-            leadingIcon={<Icon name="whatsapp" width={14} height={14} />}
+            href="/es/org"
+            aria-label="Ingresar al panel de organizador"
             className="px-[18px] py-2.5 text-sm"
           >
-            Hablar por WhatsApp
+            Ingresar
           </Button>
         </div>
         <button
@@ -186,21 +178,12 @@ export function Nav({ waHref }: { waHref: string }) {
         </nav>
         <div className="nav-drawer-foot flex flex-col gap-2.5">
           <Button
-            href={waHref}
-            target="_blank"
-            onClick={() => setMenuOpen(false)}
-            leadingIcon={<Icon name="whatsapp" width={16} height={16} />}
-            className="w-full justify-center px-[18px] py-3.5 text-[15px]"
-          >
-            Hablar por WhatsApp
-          </Button>
-          <a
             href="/es/org"
             onClick={() => setMenuOpen(false)}
-            className="block w-full rounded-full border border-line px-[18px] py-3 text-center text-[15px] font-medium text-ink-2 transition-colors hover:bg-bg-elev hover:text-ink"
+            className="w-full justify-center px-[18px] py-3.5 text-[15px]"
           >
             Ingresar al panel
-          </a>
+          </Button>
           <a
             href="/"
             onClick={() => setMenuOpen(false)}
