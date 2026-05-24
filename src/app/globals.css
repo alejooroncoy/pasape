@@ -1,26 +1,91 @@
+/* Fonts del landing Cartelera (Instrument Serif para italics decorativos). */
+@import url("https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap");
+@import url("https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&display=swap");
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  /* Tokens originales de la app (compras / tickets / dashboard). */
+  --color-bg: #0a0a0f;
+  --color-bg-elevated: #12121a;
+  --color-bg-card: #1a1a26;
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-border-strong: rgba(255, 255, 255, 0.14);
+  --color-fg: #ffffff;
+  --color-fg-muted: rgba(255, 255, 255, 0.55);
+  --color-fg-subtle: rgba(255, 255, 255, 0.32);
+  --color-accent: #7c3aed;
+  --color-accent-soft: rgba(124, 58, 237, 0.18);
+  --color-success: #22d17f;
+  --color-danger: #ff4d5e;
+  --color-warning: #ffce3b;
+
+  /* Tokens específicos del landing Cartelera v2 (escala visual diferente). */
+  --color-cart-bg: #0a0a0f;
+  --color-cart-bg-elev: #12121a;
+  --color-cart-bg-elev-2: #16161f;
+  --color-cart-bg-purple: #1a0a2e;
+  --color-cart-ink-2: #d6d6e0;
+  --color-cart-ink-3: #8e8ea1;
+  --color-cart-ink-4: #5e5e70;
+  --color-cart-line: rgba(255, 255, 255, 0.08);
+  --color-cart-line-2: rgba(255, 255, 255, 0.04);
+  --color-cart-line-strong: rgba(255, 255, 255, 0.14);
+  --color-cart-accent: #b87cff;
+  --color-cart-accent-2: #a855f7;
+  --color-cart-accent-soft: rgba(184, 124, 255, 0.16);
+  --color-cart-accent-glow: rgba(184, 124, 255, 0.55);
+  --color-cart-accent-glow-strong: rgba(184, 124, 255, 0.75);
+
+  --font-sans: "General Sans", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --font-serif: "Instrument Serif", "Times New Roman", serif;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+html,
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  margin: 0;
+  padding: 0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.85); }
+}
+
+@keyframes slide-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Antes envolvía el mockup del teléfono en un canvas oscuro.
+   Ahora la pantalla es la ventana real. */
+.pasape-canvas {
+  min-height: 100dvh;
+  background: var(--color-bg);
+  display: flex;
+  flex-direction: column;
+}
+
+/* Grain noise overlay — solo se aplica donde el layout pone <body class="cart-grain">
+   o cualquier wrapper con esa clase. Da textura cinematográfica al landing Cartelera. */
+.cart-grain {
+  position: relative;
+}
+.cart-grain::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 100;
+  opacity: 0.06;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.7  0 0 0 0 0.5  0 0 0 0 1  0 0 0 1 0'/></filter><rect width='200' height='200' filter='url(%23n)'/></svg>");
 }

@@ -1,0 +1,44 @@
+<?xml version="1.0" standalone="no"?>
+<!-- Propuesta B: Solo la cabeza del perrito dibujada a mano alzada — mascot pure.
+     Inspirada en el original pero rediseñada como shape sólido reconocible al toque. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="mark-b-grad" x1="0" y1="0" x2="0" y2="100" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#C49BFF"/>
+      <stop offset="0.55" stop-color="#9333EA"/>
+      <stop offset="1" stop-color="#6B21A8"/>
+    </linearGradient>
+    <linearGradient id="mark-b-ear" x1="0" y1="0" x2="0" y2="100" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F4D8FF"/>
+      <stop offset="1" stop-color="#C49BFF"/>
+    </linearGradient>
+  </defs>
+  <!-- Head shape: oval con base + 2 orejas pointed -->
+  <path
+    fill="url(#mark-b-grad)"
+    d="M50 88
+       C 25 88 12 70 12 50
+       C 12 32 22 18 36 14
+       L 32 4
+       C 32 2 34 1 36 2
+       L 48 12
+       C 49 12 51 12 52 12
+       L 64 2
+       C 66 1 68 2 68 4
+       L 64 14
+       C 78 18 88 32 88 50
+       C 88 70 75 88 50 88 Z"
+  />
+  <!-- Eye derecho -->
+  <circle cx="38" cy="44" r="4.5" fill="#0A0A0F"/>
+  <!-- Eye izquierdo -->
+  <circle cx="62" cy="44" r="4.5" fill="#0A0A0F"/>
+  <!-- Nariz -->
+  <ellipse cx="50" cy="60" rx="6" ry="5" fill="#0A0A0F"/>
+  <!-- Highlight oreja izquierda -->
+  <path
+    fill="url(#mark-b-ear)"
+    opacity="0.6"
+    d="M32 4 L36 14 L42 12 L32 4 Z"
+  />
+</svg>

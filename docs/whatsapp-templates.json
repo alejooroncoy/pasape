@@ -1,0 +1,110 @@
+{
+  "_meta": {
+    "note": "Templates de WhatsApp que Pasape envía vía Kapso Meta Proxy. Submit via POST https://api.kapso.ai/meta/whatsapp/v24.0/{WABA_ID}/message_templates con header X-API-Key. Meta tarda 1-24h en aprobar UTILITY. No usar variables al inicio ni al final del body.",
+    "language_strategy": "Usamos 'es' (no es_PE) porque Meta a veces rechaza locales regionales si el WABA está registrado en español genérico.",
+    "approval_tips": "1) UTILITY > MARKETING (más rápido). 2) Evitar emojis al inicio. 3) Variables {{var}} con ejemplos creíbles. 4) Tono neutro, sin promociones."
+  },
+  "templates": [
+    {
+      "name": "ticket_delivery",
+      "language": "es",
+      "category": "UTILITY",
+      "parameter_format": "NAMED",
+      "components": [
+        {
+          "type": "BODY",
+          "text": "Hola {{holder_name}}, tu entrada para {{event_title}} el {{event_starts_at}} ya está activa. Accede a tu QR aquí: {{ticket_url}}",
+          "example": {
+            "body_text_named_params": [
+              { "param_name": "holder_name", "example": "Alejandro Oroncoy" },
+              { "param_name": "event_title", "example": "Reverb x La Selva" },
+              { "param_name": "event_starts_at", "example": "23 may 2026, 18:47" },
+              { "param_name": "ticket_url", "example": "https://pasape.com/t/abc123" }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "ticket_reminder",
+      "language": "es",
+      "category": "UTILITY",
+      "parameter_format": "NAMED",
+      "components": [
+        {
+          "type": "BODY",
+          "text": "Hola {{holder_name}}, te recordamos que {{event_title}} es {{event_starts_at}} en {{event_venue}}. Tu QR sigue activo en: {{ticket_url}}",
+          "example": {
+            "body_text_named_params": [
+              { "param_name": "holder_name", "example": "Alejandro Oroncoy" },
+              { "param_name": "event_title", "example": "Reverb x La Selva" },
+              { "param_name": "event_starts_at", "example": "mañana 23 may, 18:47" },
+              { "param_name": "event_venue", "example": "Barranco, Lima" },
+              { "param_name": "ticket_url", "example": "https://pasape.com/t/abc123" }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "ticket_transferred_in",
+      "language": "es",
+      "category": "UTILITY",
+      "parameter_format": "NAMED",
+      "components": [
+        {
+          "type": "BODY",
+          "text": "Hola {{holder_name}}, {{sender_name}} te transfirió una entrada para {{event_title}} ({{event_starts_at}}). Reclama tu QR aquí: {{ticket_url}}",
+          "example": {
+            "body_text_named_params": [
+              { "param_name": "holder_name", "example": "Juan Pérez" },
+              { "param_name": "sender_name", "example": "Alejandro Oroncoy" },
+              { "param_name": "event_title", "example": "Reverb x La Selva" },
+              { "param_name": "event_starts_at", "example": "23 may 2026, 18:47" },
+              { "param_name": "ticket_url", "example": "https://pasape.com/t/xyz789" }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "ticket_transferred_out",
+      "language": "es",
+      "category": "UTILITY",
+      "parameter_format": "NAMED",
+      "components": [
+        {
+          "type": "BODY",
+          "text": "Hola {{holder_name}}, confirmamos que transferiste tu entrada para {{event_title}} a {{recipient_phone}}. Si no fuiste tú, contáctanos.",
+          "example": {
+            "body_text_named_params": [
+              { "param_name": "holder_name", "example": "Alejandro Oroncoy" },
+              { "param_name": "event_title", "example": "Reverb x La Selva" },
+              { "param_name": "recipient_phone", "example": "+51 9xx xxx 421" }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "event_cancelled",
+      "language": "es",
+      "category": "UTILITY",
+      "parameter_format": "NAMED",
+      "components": [
+        {
+          "type": "BODY",
+          "text": "Hola {{holder_name}}, lamentamos avisarte que {{event_title}} fue cancelado por el organizador. El reembolso de S/ {{amount}} llegará en 5-10 días hábiles al medio de pago original. Detalles: {{info_url}}",
+          "example": {
+            "body_text_named_params": [
+              { "param_name": "holder_name", "example": "Alejandro Oroncoy" },
+              { "param_name": "event_title", "example": "Reverb x La Selva" },
+              { "param_name": "amount", "example": "33.00" },
+              { "param_name": "info_url", "example": "https://pasape.com/events/reverb/cancellation" }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

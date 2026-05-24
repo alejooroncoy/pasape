@@ -1,0 +1,20 @@
+{
+  "name": "ticket_transferred_out",
+  "language": "es",
+  "category": "UTILITY",
+  "parameterFormat": "NAMED",
+  "components": [
+    {
+      "type": "BODY",
+      "text": "Hola {{holder_name}}, confirmamos que transferiste tu entrada para {{event_title}} al número {{recipient_phone}}. Si no fuiste tú, responde este mensaje y te ayudamos.",
+      "example": {
+        "body_text_named_params": [
+          { "param_name": "holder_name", "example": "Mateo" },
+          { "param_name": "event_title", "example": "Reverb x La Selva" },
+          { "param_name": "recipient_phone", "example": "+51 946 189 585" }
+        ]
+      }
+    },
+    { "type": "FOOTER", "text": "Pasape" }
+  ]
+}

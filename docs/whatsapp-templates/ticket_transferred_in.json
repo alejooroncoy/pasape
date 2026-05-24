@@ -1,0 +1,22 @@
+{
+  "name": "ticket_transferred_in",
+  "language": "es",
+  "category": "UTILITY",
+  "parameterFormat": "NAMED",
+  "components": [
+    {
+      "type": "BODY",
+      "text": "Hola {{holder_name}}, {{sender_name}} te transfirió una entrada para {{event_title}} el {{event_starts_at}}. Abre tu QR en {{ticket_url}} y muéstralo en puerta.",
+      "example": {
+        "body_text_named_params": [
+          { "param_name": "holder_name", "example": "Juan" },
+          { "param_name": "sender_name", "example": "Mateo" },
+          { "param_name": "event_title", "example": "Reverb x La Selva" },
+          { "param_name": "event_starts_at", "example": "23 may 2026, 22:00" },
+          { "param_name": "ticket_url", "example": "https://app.pasape.lat/t/xyz789" }
+        ]
+      }
+    },
+    { "type": "FOOTER", "text": "Pasape" }
+  ]
+}

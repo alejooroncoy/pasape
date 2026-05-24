@@ -1,0 +1,22 @@
+{
+  "name": "ticket_reminder",
+  "language": "es",
+  "category": "UTILITY",
+  "parameterFormat": "NAMED",
+  "components": [
+    {
+      "type": "BODY",
+      "text": "Hola {{holder_name}}, tu entrada para {{event_title}} sigue activa. La cita es {{event_starts_at}} en {{event_venue}}. Abre tu QR en {{ticket_url}} y muéstralo en puerta.",
+      "example": {
+        "body_text_named_params": [
+          { "param_name": "holder_name", "example": "Mateo" },
+          { "param_name": "event_title", "example": "Reverb x La Selva" },
+          { "param_name": "event_starts_at", "example": "23 may 2026, 22:00" },
+          { "param_name": "event_venue", "example": "Barranco, Lima" },
+          { "param_name": "ticket_url", "example": "https://app.pasape.lat/t/abc123" }
+        ]
+      }
+    },
+    { "type": "FOOTER", "text": "Pasape" }
+  ]
+}

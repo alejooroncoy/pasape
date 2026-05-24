@@ -1,0 +1,21 @@
+{
+  "name": "event_cancelled",
+  "language": "es",
+  "category": "UTILITY",
+  "parameterFormat": "NAMED",
+  "components": [
+    {
+      "type": "BODY",
+      "text": "Hola {{holder_name}}, lamentamos avisarte que {{event_title}} fue cancelado por el organizador. El reembolso de S/ {{amount}} llegará en 5 a 10 días hábiles al medio de pago original. Revisa el detalle en {{info_url}} y escríbenos si tienes dudas.",
+      "example": {
+        "body_text_named_params": [
+          { "param_name": "holder_name", "example": "Mateo" },
+          { "param_name": "event_title", "example": "Reverb x La Selva" },
+          { "param_name": "amount", "example": "33.00" },
+          { "param_name": "info_url", "example": "https://app.pasape.lat/events/reverb/cancellation" }
+        ]
+      }
+    },
+    { "type": "FOOTER", "text": "Pasape" }
+  ]
+}

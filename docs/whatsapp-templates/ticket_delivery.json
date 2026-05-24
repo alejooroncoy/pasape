@@ -1,0 +1,32 @@
+{
+  "name": "ticket_delivery",
+  "language": "es",
+  "category": "UTILITY",
+  "components": [
+    {
+      "type": "BODY",
+      "text": "Hola {{holder_name}}, tu entrada para {{event_title}} el {{event_starts_at}} ya está activa. Accede a tu QR aquí: {{ticket_url}}",
+      "example": {
+        "body_text_named_params": [
+          {
+            "param_name": "holder_name",
+            "example": "Alejandro Oroncoy"
+          },
+          {
+            "param_name": "event_title",
+            "example": "Reverb x La Selva"
+          },
+          {
+            "param_name": "event_starts_at",
+            "example": "23 may 2026, 18:47"
+          },
+          {
+            "param_name": "ticket_url",
+            "example": "https://pasape.com/t/abc123"
+          }
+        ]
+      }
+    }
+  ],
+  "parameterFormat": "NAMED"
+}

@@ -1,0 +1,12 @@
+import { Icon } from "../icons";
+
+export function CheckBadge() {
+  return (
+    <span
+      aria-hidden="true"
+      className="inline-grid size-[22px] place-items-center rounded-full bg-accent-soft text-accent"
+    >
+      <Icon name="check" width={12} height={12} />
+    </span>
+  );
+}

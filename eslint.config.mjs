@@ -12,6 +12,12 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Design handoff bundles — read-only reference, not source.
+    "pasape/**",
+    "pasapem/**",
+    "gaa.ts",
+    // Public assets and Supabase migrations are not lint targets.
+    "supabase/**",
   ]),
 ]);
 
