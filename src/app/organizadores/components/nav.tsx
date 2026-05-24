@@ -95,7 +95,7 @@ export function Nav({ waHref }: { waHref: string }) {
             </a>
           ))}
         </nav>
-        <div className="hidden items-center gap-5 lg:inline-flex">
+        <div className="hidden items-center gap-3 lg:inline-flex">
           {/* Ver eventos como text link sutil — claramente secundario */}
           <a
             href="/"
@@ -108,6 +108,13 @@ export function Nav({ waHref }: { waHref: string }) {
               height={13}
               className="transition-transform duration-200 group-hover:-translate-y-px group-hover:translate-x-px"
             />
+          </a>
+          {/* Ingresar al panel — organizadores existentes */}
+          <a
+            href="/es/org"
+            className="inline-flex items-center gap-1.5 rounded-full border border-line bg-transparent px-4 py-2 text-sm font-medium text-ink-2 transition-[border-color,background-color,color] duration-150 hover:border-line-strong hover:bg-bg-elev hover:text-ink"
+          >
+            Ingresar
           </a>
           <Button
             href={waHref}
@@ -188,9 +195,16 @@ export function Nav({ waHref }: { waHref: string }) {
             Hablar por WhatsApp
           </Button>
           <a
+            href="/es/org"
+            onClick={() => setMenuOpen(false)}
+            className="block w-full rounded-full border border-line px-[18px] py-3 text-center text-[15px] font-medium text-ink-2 transition-colors hover:bg-bg-elev hover:text-ink"
+          >
+            Ingresar al panel
+          </a>
+          <a
             href="/"
             onClick={() => setMenuOpen(false)}
-            className="block w-full rounded-full border border-line px-[18px] py-3 text-center text-[15px] font-medium text-ink-2 transition-colors hover:bg-line hover:text-ink"
+            className="block w-full px-[18px] py-2 text-center text-sm font-medium text-ink-3 transition-colors hover:text-ink"
           >
             Ver eventos →
           </a>
