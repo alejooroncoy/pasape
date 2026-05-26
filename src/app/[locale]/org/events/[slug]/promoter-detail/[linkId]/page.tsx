@@ -2,6 +2,7 @@
 
 import { use, useMemo, useState } from "react";
 import { EventShell } from "../../_shell/EventShell";
+import { Link } from "@/i18n/navigation";
 import { useEventPromoters, usePromoterLinkSales } from "@/lib/promoters/hooks/useEventPromoters";
 import { formatMoney } from "@/lib/_shared/format";
 
@@ -58,6 +59,40 @@ export default function PromoterDetailForEventPage({ params }: { params: Params 
         <Kpi label="Recaudado" value={formatMoneyClean(totals.revenue)} hint="bruto" />
         <Kpi label="Comisión" value={formatMoneyClean(totals.commission)} hint="calculada" tone="green" />
       </section>
+
+      {/* Acceso a hitos / premios */}
+      <Link
+        href={`/org/events/${slug}/promoters/${linkId}/tiers` as never}
+        className="mt-5 flex items-center gap-3 rounded-2xl border border-cart-line bg-cart-bg-elev px-4 py-3 transition hover:border-cart-line-strong"
+      >
+        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-cart-accent-soft text-cart-accent">
+          <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
+            <path
+              d="M4 16V8m4 8V4m4 12v-6m4 6v-9"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+            />
+          </svg>
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">
+            Comisión por negociación
+          </div>
+          <div className="mt-0.5 truncate text-[14px] font-medium text-white">
+            Hitos en efectivo y premios en especie
+          </div>
+        </div>
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 14 14"
+          fill="none"
+          className="text-cart-ink-3"
+        >
+          <path d="M5 2l5 5-5 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </Link>
 
       {/* Tabla de ventas */}
       <section className="mt-7 rounded-2xl border border-cart-line bg-cart-bg-elev">
