@@ -52,6 +52,10 @@ export default function ScanPage() {
     holder: string | null;
     typeName: string | null;
     dniLast2: string | null;
+    boxLabel: string | null;
+    boxHostName: string | null;
+    boxFilled: number | null;
+    boxCapacity: number | null;
   } | null>(null);
 
   const stopCamera = useCallback(() => {
@@ -74,6 +78,10 @@ export default function ScanPage() {
           holder: result.holderName ?? null,
           typeName: result.ticketTypeName ?? null,
           dniLast2: result.holderDniLast2 ?? null,
+          boxLabel: result.boxLabel ?? null,
+          boxHostName: result.boxHostName ?? null,
+          boxFilled: result.boxFilled ?? null,
+          boxCapacity: result.boxCapacity ?? null,
         });
       } catch (e) {
         setOverlay({
@@ -81,6 +89,10 @@ export default function ScanPage() {
           holder: null,
           typeName: (e as Error).message,
           dniLast2: null,
+          boxLabel: null,
+          boxHostName: null,
+          boxFilled: null,
+          boxCapacity: null,
         });
       }
       setTimeout(() => {
@@ -212,6 +224,69 @@ export default function ScanPage() {
               <QrSquare code={lastCode || "x"} size={200} />
             </div>
           </div>
+
+          {isValid && overlay.boxLabel && (
+            <div
+              style={{
+                position: "absolute",
+                top: 22,
+                left: 22,
+                padding: "10px 14px",
+                borderRadius: 16,
+                background: "rgba(34,209,127,0.18)",
+                backdropFilter: "blur(20px)",
+                boxShadow: `0 0 0 1.5px ${C.green} inset, 0 14px 36px rgba(34,209,127,0.35)`,
+                display: "flex",
+                flexDirection: "column",
+                gap: 2,
+                maxWidth: 220,
+              }}
+            >
+              <div
+                style={{
+                  fontFamily: FONT_DISPLAY,
+                  fontWeight: 700,
+                  fontSize: 22,
+                  letterSpacing: "-0.01em",
+                  color: "#fff",
+                  lineHeight: 1.05,
+                }}
+              >
+                BOX {overlay.boxLabel}
+              </div>
+              {overlay.holder && (
+                <div
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: "rgba(255,255,255,0.9)",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.04em",
+                  }}
+                >
+                  {overlay.holder}
+                </div>
+              )}
+              {overlay.boxHostName && overlay.boxHostName !== overlay.holder && (
+                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.7)" }}>
+                  invitad@ por {overlay.boxHostName}
+                </div>
+              )}
+              {overlay.boxCapacity != null && (
+                <div
+                  style={{
+                    marginTop: 4,
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: C.green,
+                    letterSpacing: "0.04em",
+                  }}
+                >
+                  {overlay.boxFilled ?? 0}/{overlay.boxCapacity} dentro
+                </div>
+              )}
+            </div>
+          )}
 
           <div
             style={{

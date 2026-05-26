@@ -1,326 +1,334 @@
 "use client";
 
 import { use } from "react";
-import { C, FONT_DISPLAY, LiveDot, Phone } from "@/components/design";
 import { Link } from "@/i18n/navigation";
 import { useEvent } from "@/lib/events/hooks/useEvents";
 import { useEventStats } from "@/lib/events/hooks/useEventStats";
 import { formatMoney } from "@/lib/_shared/format";
-import { BackBtn, LiveBottomNav } from "./_components";
+import { EventShell } from "./_shell/EventShell";
+import { SpotlightTour } from "@/components/ui/SpotlightTour";
 
 type Params = Promise<{ slug: string; locale: string }>;
 
-export default function OrgLivePanelPage({ params }: { params: Params }) {
+export default function OrgEventPanelPage({ params }: { params: Params }) {
   const { slug } = use(params);
   const event = useEvent(slug);
   const stats = useEventStats(slug);
 
   const ev = event.data?.event;
-  const title = ev?.title ?? "Cargando…";
-  const time = ev
-    ? new Intl.DateTimeFormat("es-PE", {
-        timeZone: ev.timezone,
-        hour: "2-digit",
-        minute: "2-digit",
-      }).format(new Date(ev.startsAt))
-    : "";
-
   const sold = stats.data?.sold ?? 0;
   const validated = stats.data?.validated ?? 0;
   const revenue = stats.data?.revenueCents ?? 0;
+  const capacity = ev?.capacity.totalCapacity ?? 0;
+  const soldPct = capacity ? Math.min(100, Math.round((sold / capacity) * 100)) : 0;
+  const validatedPct = sold ? Math.round((validated / sold) * 100) : 0;
 
   return (
-    <Phone>
-      <div
-        style={{
-          padding: "6px 22px 10px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          flexShrink: 0,
-        }}
-      >
-        <BackBtn />
-        <LiveDot />
-        <div style={{ width: 38 }} />
-      </div>
-      <div style={{ flex: 1, overflowY: "auto", padding: "0 22px 80px" }}>
-        <div style={{ fontSize: 12, color: C.dim, letterSpacing: "0.04em" }}>
-          {title.toUpperCase()} {time && `· ${time}`}
-        </div>
+    <EventShell slug={slug} active="panel">
+      {/* KPIs */}
+      <section data-tour="kpis" className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:gap-4">
+        <KpiCard
+          label="Vendidas"
+          value={sold.toLocaleString("es-PE")}
+          hint={capacity ? `${soldPct}% del aforo (${capacity.toLocaleString("es-PE")})` : "Sin aforo definido"}
+          progress={capacity ? soldPct : null}
+          tone="accent"
+        />
+        <KpiCard
+          label="Validadas"
+          value={validated.toLocaleString("es-PE")}
+          hint={sold ? `${validatedPct}% de las vendidas` : "Sin ventas aún"}
+          progress={sold ? validatedPct : null}
+          tone="green"
+        />
+        <KpiCard
+          label="Recaudado"
+          value={formatMoneyClean(revenue)}
+          hint="acumulado · S/"
+          tone="neutral"
+        />
+      </section>
 
-        <div
-          style={{
-            marginTop: 14,
-            padding: "20px 4px",
-            borderTop: "1px solid " + C.line,
-            borderBottom: "1px solid " + C.line,
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr 1fr",
-          }}
-        >
-          <HugeStat n={String(sold)} k="Vendidas" />
-          <HugeStat n={String(validated)} k="Validadas" color={C.green} />
-          <HugeStat
-            n={formatMoney(revenue).replace(/[^\d,.]/g, "").trim() || "0"}
-            k="S/ Recaudado"
-            small
-          />
-        </div>
-
-        <div
-          style={{
-            marginTop: 16,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          <div style={{ fontFamily: FONT_DISPLAY, fontSize: 15, fontWeight: 600 }}>
-            Últimos accesos
-          </div>
-          <div style={{ fontSize: 11, color: C.dim }}>en vivo</div>
-        </div>
-
-        <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
-          {stats.data?.scansRecent.length ? (
-            stats.data.scansRecent.map((s) => (
-              <ScanRow
-                key={s.id}
-                when={new Date(s.scannedAt).toLocaleTimeString("es-PE", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
-                result={s.result}
-              />
-            ))
-          ) : (
-            <div
-              style={{
-                padding: "18px 14px",
-                borderRadius: 16,
-                background: C.bg2,
-                boxShadow: `0 0 0 1px ${C.line} inset`,
-                fontSize: 13,
-                color: C.dim,
-                textAlign: "center",
-              }}
-            >
-              Aún no hay accesos registrados.
+      {/* Body: 2 columnas en desktop, stack en mobile */}
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr] lg:gap-7">
+        {/* Ranking de promotores */}
+        <section data-tour="promoters" className="rounded-2xl border border-cart-line bg-cart-bg-elev">
+          <header className="flex items-center justify-between border-b border-cart-line px-4 py-3 lg:px-5">
+            <div>
+              <h2 className="text-[15px] font-semibold tracking-[-0.01em]">Promotores</h2>
+              <p className="text-[11.5px] text-cart-ink-3">vendido · validado · ingreso</p>
             </div>
-          )}
-        </div>
+            <Link
+              href={`/org/events/${slug}/team` as never}
+              className="rounded-full px-2.5 py-1 text-[11.5px] font-medium text-cart-ink-2 transition hover:bg-white/5 hover:text-white"
+            >
+              Ver links →
+            </Link>
+          </header>
 
-        <div
-          style={{
-            marginTop: 18,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          <div style={{ fontFamily: FONT_DISPLAY, fontSize: 15, fontWeight: 600 }}>
-            Promotores
-          </div>
-          <div style={{ fontSize: 11, color: C.dim }}>vendido · validado · ingreso</div>
-        </div>
-
-        <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
           {stats.data?.byPromoter?.length ? (
-            stats.data.byPromoter.map((p) => {
-              const flagColor =
-                p.flag === "suspect" ? C.red : p.flag === "watch" ? C.yellow : C.green;
-              const flagLabel =
-                p.flag === "suspect"
-                  ? "Posible autoventa"
-                  : p.flag === "watch"
-                    ? "Asistencia baja"
-                    : "Asistencia OK";
-              const attendancePct = Math.round((p.attendanceRate ?? 0) * 100);
-              return (
-                <div
-                  key={p.promoterLinkId}
-                  style={{
-                    background: C.bg2,
-                    borderRadius: 14,
-                    padding: "10px 14px",
-                    boxShadow: `0 0 0 1px ${C.line} inset`,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                  }}
-                >
-                  <div style={{ display: "flex", flexDirection: "column" }}>
-                    <span
-                      style={{
-                        fontFamily: FONT_DISPLAY,
-                        fontWeight: 600,
-                        fontSize: 13,
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 8,
-                      }}
-                    >
-                      {p.name}
-                      <span
-                        title={flagLabel}
-                        aria-label={flagLabel}
-                        style={{
-                          width: 8,
-                          height: 8,
-                          borderRadius: 999,
-                          background: flagColor,
-                          boxShadow: `0 0 6px ${flagColor}66`,
-                          display: "inline-block",
-                        }}
-                      />
-                    </span>
-                    <span style={{ fontSize: 11, color: C.dim }}>
-                      {p.code} · {attendancePct}% asistencia
-                    </span>
-                  </div>
-                  <div style={{ display: "flex", gap: 10, fontSize: 12, fontWeight: 700 }}>
-                    <span>{p.ticketsSold}</span>
-                    <span style={{ color: C.green }}>{p.ticketsValidated}</span>
-                    <span style={{ color: C.dim }}>
-                      {formatMoney(p.revenueCents).replace(/[^\d,.]/g, "").trim() || "0"}
-                    </span>
-                  </div>
-                </div>
-              );
-            })
-          ) : (
-            <div
-              style={{
-                padding: "12px 14px",
-                borderRadius: 14,
-                background: C.bg2,
-                boxShadow: `0 0 0 1px ${C.line} inset`,
-                fontSize: 12,
-                color: C.dim,
-                textAlign: "center",
-              }}
-            >
-              Sin ventas por promotor todavía.
+            <div className="divide-y divide-cart-line">
+              {stats.data.byPromoter.map((p, i) => (
+                <PromoterRow key={p.promoterLinkId} rank={i + 1} promoter={p} slug={slug} />
+              ))}
             </div>
+          ) : (
+            <EmptyRow label="Sin ventas por promotor todavía." />
           )}
-        </div>
+        </section>
 
-        <Link
-          /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-          href={`/org/events/${slug}/door-link` as any}
-          style={{ textDecoration: "none", color: "inherit" }}
-        >
-          <div
-            style={{
-              marginTop: 14,
-              padding: "14px 18px",
-              background: C.bg2,
-              borderRadius: 18,
-              boxShadow: `0 0 0 1px ${C.line} inset`,
-              fontSize: 13,
-              fontFamily: FONT_DISPLAY,
-              fontWeight: 600,
-            }}
-          >
-            Compartir link de portero →
+        {/* Live feed */}
+        <section data-tour="live-scans" className="rounded-2xl border border-cart-line bg-cart-bg-elev">
+          <header className="flex items-center justify-between border-b border-cart-line px-4 py-3 lg:px-5">
+            <div className="flex items-center gap-2">
+              <span className="relative grid size-5 place-items-center">
+                <span className="absolute size-3 animate-ping rounded-full bg-cart-accent/40" />
+                <span className="size-1.5 rounded-full bg-cart-accent shadow-[0_0_8px_var(--color-cart-accent-glow-strong)]" />
+              </span>
+              <h2 className="text-[15px] font-semibold tracking-[-0.01em]">Accesos en vivo</h2>
+            </div>
+            <span className="text-[11.5px] text-cart-ink-4">últimos 10</span>
+          </header>
+
+          {stats.data?.scansRecent.length ? (
+            <ul className="divide-y divide-cart-line">
+              {stats.data.scansRecent.slice(0, 10).map((s) => (
+                <ScanRow key={s.id} when={s.scannedAt} result={s.result} />
+              ))}
+            </ul>
+          ) : (
+            <EmptyRow label="Aún no hay accesos registrados." />
+          )}
+
+          <div className="border-t border-cart-line p-3 lg:p-4">
+            <Link
+              href={`/org/events/${slug}/team` as never}
+              className="block rounded-xl border border-dashed border-cart-line-strong px-3.5 py-2.5 text-center text-[12.5px] font-medium text-cart-ink-2 transition hover:border-white/40 hover:text-white"
+            >
+              Ver historial completo
+            </Link>
           </div>
-        </Link>
+        </section>
+      </div>
 
+      {/* Quick actions (mobile inline; desktop ya está arriba) */}
+      <section className="mt-6 grid grid-cols-2 gap-2.5 lg:hidden">
+        <Link
+          href={`/org/events/${slug}/door-link` as never}
+          className="flex items-center gap-2 rounded-2xl border border-cart-line bg-cart-bg-elev px-3.5 py-3 text-[13px] font-medium"
+        >
+          <span className="grid size-8 place-items-center rounded-lg bg-cart-accent-soft text-cart-accent">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <rect x="2" y="3" width="10" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.4" />
+              <circle cx="7" cy="7" r="1.5" stroke="currentColor" strokeWidth="1.4" />
+            </svg>
+          </span>
+          Link portero
+        </Link>
         <button
           type="button"
+          data-tour="download"
           onClick={() => {
             window.location.href = `/api/events/${slug}/export`;
           }}
-          style={{
-            marginTop: 10,
-            padding: "14px 18px",
-            background: C.bg2,
-            borderRadius: 18,
-            boxShadow: `0 0 0 1px ${C.line} inset`,
-            fontSize: 13,
-            fontFamily: FONT_DISPLAY,
-            fontWeight: 600,
-            color: "inherit",
-            textAlign: "left",
-            width: "100%",
-            border: "none",
-            cursor: "pointer",
-          }}
+          className="flex items-center gap-2 rounded-2xl border border-cart-line bg-cart-bg-elev px-3.5 py-3 text-left text-[13px] font-medium"
         >
-          Descargar Excel ↓
+          <span className="grid size-8 place-items-center rounded-lg bg-cart-accent-soft text-cart-accent">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M7 2v8m0 0l-3-3m3 3l3-3M2 12h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </span>
+          Excel
         </button>
-      </div>
-      <LiveBottomNav slug={slug} active="panel" />
-    </Phone>
+      </section>
+
+      <SpotlightTour
+        tourId="event_panel"
+        steps={[
+          {
+            selector: "[data-tour='kpis']",
+            title: "Lo importante",
+            body: "Estos 3 números son tu noche.",
+          },
+          {
+            selector: "[data-tour='promoters']",
+            title: "Tu equipo",
+            body: "Tap a un promotor para ver sus ventas.",
+          },
+          {
+            selector: "[data-tour='live-scans']",
+            title: "En vivo",
+            body: "Cada vez que el portero escanea, aparece aquí.",
+          },
+          {
+            selector: "[data-tour='download']",
+            title: "Cuando quieras",
+            body: "Bajá el Excel a cualquier hora.",
+          },
+        ]}
+      />
+    </EventShell>
   );
 }
 
-const HugeStat = ({
-  n,
-  k,
-  color = "#fff",
-  small,
+// ============================================================
+// KPI Card
+// ============================================================
+function KpiCard({
+  label,
+  value,
+  hint,
+  progress,
+  tone,
 }: {
-  n: string;
-  k: string;
-  color?: string;
-  small?: boolean;
-}) => (
-  <div style={{ textAlign: "center" }}>
-    <div
-      style={{
-        fontFamily: FONT_DISPLAY,
-        fontSize: small ? 30 : 40,
-        fontWeight: 700,
-        letterSpacing: "-0.04em",
-        color,
-        lineHeight: 1,
-      }}
-    >
-      {n}
+  label: string;
+  value: string;
+  hint: string;
+  progress?: number | null;
+  tone: "accent" | "green" | "neutral";
+}) {
+  const barColor =
+    tone === "accent" ? "var(--color-cart-accent)" : tone === "green" ? "#22D17F" : "rgba(255,255,255,0.5)";
+  return (
+    <div className="rounded-2xl border border-cart-line bg-cart-bg-elev p-4 lg:p-5">
+      <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-cart-ink-3">
+        <span
+          className="size-1.5 rounded-full"
+          style={{ background: barColor, boxShadow: tone === "green" ? "0 0 6px rgba(34,209,127,0.6)" : "none" }}
+        />
+        {label}
+      </div>
+      <div className="mt-2 font-sans text-[36px] font-semibold leading-none tracking-[-0.035em] lg:text-[44px]">
+        {value}
+      </div>
+      <div className="mt-2 text-[11.5px] text-cart-ink-3">{hint}</div>
+      {typeof progress === "number" && (
+        <div className="mt-3 h-1 overflow-hidden rounded-full bg-white/5">
+          <div
+            className="h-full rounded-full transition-[width] duration-500"
+            style={{ width: `${progress}%`, background: barColor }}
+          />
+        </div>
+      )}
     </div>
-    <div
-      style={{
-        fontSize: 11,
-        color: C.dim,
-        marginTop: 8,
-        letterSpacing: "0.05em",
-      }}
-    >
-      {k.toUpperCase()}
-    </div>
-  </div>
-);
+  );
+}
 
-const ScanRow = ({
+// ============================================================
+// Promoter row
+// ============================================================
+function PromoterRow({
+  rank,
+  promoter,
+  slug,
+}: {
+  rank: number;
+  promoter: {
+    promoterLinkId: string;
+    name: string;
+    code: string;
+    ticketsSold: number;
+    ticketsValidated: number;
+    revenueCents: number;
+    flag?: string;
+    attendanceRate?: number;
+  };
+  slug: string;
+}) {
+  const flagColor =
+    promoter.flag === "suspect"
+      ? "#FF4D5E"
+      : promoter.flag === "watch"
+        ? "#FFCE3B"
+        : "#22D17F";
+  const flagLabel =
+    promoter.flag === "suspect"
+      ? "Revisar — posible autoventa"
+      : promoter.flag === "watch"
+        ? "Asistencia baja"
+        : "Asistencia OK";
+  const pct = Math.round((promoter.attendanceRate ?? 0) * 100);
+
+  return (
+    <Link
+      href={`/org/events/${slug}/promoter-detail/${promoter.promoterLinkId}` as never}
+      className="grid grid-cols-[auto_1fr_auto] items-center gap-3 px-4 py-3 transition hover:bg-white/[0.02] lg:px-5"
+    >
+      <div className="grid size-8 shrink-0 place-items-center rounded-full bg-cart-bg-elev-2 text-[12px] font-semibold text-cart-ink-2">
+        {rank}
+      </div>
+      <div className="min-w-0">
+        <div className="flex items-center gap-1.5">
+          <span className="truncate text-[14px] font-semibold tracking-[-0.01em]">{promoter.name}</span>
+          <span
+            title={flagLabel}
+            aria-label={flagLabel}
+            className="size-1.5 shrink-0 rounded-full"
+            style={{ background: flagColor, boxShadow: `0 0 6px ${flagColor}88` }}
+          />
+        </div>
+        <div className="mt-0.5 truncate font-mono text-[11px] text-cart-ink-3">
+          {promoter.code} · {pct}% asistencia
+        </div>
+      </div>
+      <div className="flex items-baseline gap-3 text-right">
+        <span className="font-mono text-[13px] font-semibold">{promoter.ticketsSold}</span>
+        <span className="font-mono text-[12.5px] font-semibold text-[#22D17F]">
+          {promoter.ticketsValidated}
+        </span>
+        <span className="hidden font-mono text-[12.5px] text-cart-ink-3 sm:inline">
+          {formatMoneyClean(promoter.revenueCents)}
+        </span>
+      </div>
+    </Link>
+  );
+}
+
+// ============================================================
+// Scan row
+// ============================================================
+function ScanRow({
   when,
   result,
 }: {
   when: string;
   result: "valid" | "already_used" | "invalid" | "void" | "unknown_event";
-}) => {
+}) {
   const meta = {
-    valid: { color: C.green, label: "Válido" },
-    already_used: { color: C.yellow, label: "Ya usado" },
-    invalid: { color: C.red, label: "Inválido" },
-    void: { color: C.red, label: "Anulado" },
-    unknown_event: { color: C.dim, label: "Otro evento" },
+    valid: { color: "#22D17F", label: "Válido" },
+    already_used: { color: "#FFCE3B", label: "Ya usado" },
+    invalid: { color: "#FF4D5E", label: "Inválido" },
+    void: { color: "#FF4D5E", label: "Anulado" },
+    unknown_event: { color: "rgba(255,255,255,0.45)", label: "Otro evento" },
   }[result];
+
   return (
-    <div
-      style={{
-        background: C.bg2,
-        borderRadius: 14,
-        padding: "10px 14px",
-        boxShadow: `0 0 0 1px ${C.line} inset`,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-      }}
-    >
-      <span style={{ fontFamily: FONT_DISPLAY, fontWeight: 600, fontSize: 13 }}>{meta.label}</span>
-      <span style={{ fontSize: 11, color: meta.color, fontWeight: 700 }}>{when}</span>
-    </div>
+    <li className="flex items-center justify-between gap-3 px-4 py-2.5 lg:px-5">
+      <div className="flex items-center gap-2.5">
+        <span
+          className="size-1.5 rounded-full"
+          style={{ background: meta.color, boxShadow: `0 0 6px ${meta.color}88` }}
+        />
+        <span className="text-[13px] font-medium">{meta.label}</span>
+      </div>
+      <span className="font-mono text-[11.5px] text-cart-ink-3">
+        {new Date(when).toLocaleTimeString("es-PE", {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        })}
+      </span>
+    </li>
   );
-};
+}
+
+function EmptyRow({ label }: { label: string }) {
+  return <div className="px-4 py-8 text-center text-[13px] text-cart-ink-3 lg:px-5">{label}</div>;
+}
+
+function formatMoneyClean(cents: number): string {
+  const s = formatMoney(cents)
+    .replace(/[^\d,.]/g, "")
+    .trim();
+  return s ? `S/ ${s}` : "S/ 0";
+}

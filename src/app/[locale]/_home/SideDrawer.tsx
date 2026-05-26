@@ -131,7 +131,7 @@ export function SideDrawer({ open, onClose, onSignIn }: {
             <div className="flex-shrink-0 border-t border-cart-line bg-cart-bg px-[22px] py-4 pb-[calc(env(safe-area-inset-bottom,0px)+16px)]">
               <div className="mb-3 text-center">
                 <b className="block text-[13.5px] font-medium text-cart-ink-2">
-                  ¿Algo no funciona o tenés dudas?
+                  ¿Algo no funciona o tienes dudas?
                 </b>
                 <span className="mt-0.5 block text-xs text-cart-ink-4">
                   Te respondemos al toque

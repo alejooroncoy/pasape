@@ -267,7 +267,7 @@ export default function BuyerTicketsPastPage() {
 
         {!tickets.isLoading && past.length === 0 && (
           <div style={{ padding: "40px 0", textAlign: "center", color: C.dim, fontSize: 13 }}>
-            Todavía no tenés entradas pasadas.
+            Todavía no tienes entradas pasadas.
           </div>
         )}
 

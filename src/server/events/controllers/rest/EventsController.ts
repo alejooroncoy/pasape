@@ -1,0 +1,291 @@
+import { z } from "zod";
+import { headers } from "next/headers";
+import { err, ok, type Result } from "@/server/_shared/result";
+import { getAuthContext, resolveActiveOrgSlug } from "@/server/_shared/AuthContext";
+import { supabaseEventRepository as repo } from "../../infrastructure/repositories/SupabaseEventRepository";
+import { supabaseAdmin } from "@/server/_shared/supabase/admin";
+import { listPublishedEvents } from "../../application/ListPublishedEvents";
+import { getEventBySlug } from "../../application/GetEventBySlug";
+import { listEventsByOrganization } from "../../application/ListEventsByOrganization";
+import { createEvent } from "../../application/CreateEvent";
+import { getEventStats } from "../../application/GetEventStats";
+import { listEventAccesos } from "../../application/ListEventAccesos";
+import { updateEvent } from "../../application/UpdateEvent";
+import { generateDoorLink, type DoorLink } from "../../application/GenerateDoorLink";
+import { exportEventReport } from "../../application/ExportEventReport";
+import {
+  createTicketType,
+  deleteTicketType,
+  updateTicketType,
+} from "../../application/ManageTicketTypes";
+import {
+  addEventCoOrganizer,
+  listEventCoOrganizers,
+  removeEventCoOrganizer,
+  type EventCoOrganizer,
+} from "../../application/EventCoOrganizers";
+import { supabaseOrganizationRepository } from "@/server/identity/organizations/infrastructure/repositories/SupabaseOrganizationRepository";
+import type { Event, TicketType } from "../../domain/Event";
+import type { EventStats, ScanFeedItem } from "../../ports/EventRepository";
+
+type ResolvedOrgCtx = { profileId: string; orgId: string; orgSlug: string };
+
+const resolveOrgCtx = async (): Promise<Result<ResolvedOrgCtx>> => {
+  const auth = await getAuthContext();
+  if (!auth.ok) return err(auth.error);
+  const slug = await resolveActiveOrgSlug(auth.value.profileId);
+  if (!slug) return err("no_active_org");
+  const org = await supabaseOrganizationRepository.findBySlug(slug);
+  if (!org) return err("no_active_org");
+  return ok({ profileId: auth.value.profileId, orgId: org.id, orgSlug: slug });
+};
+
+const createSchema = z.object({
+  title: z.string().min(1),
+  description: z.string().nullable().optional(),
+  venue: z.string().nullable().optional(),
+  venueLat: z.number().min(-90).max(90).nullable().optional(),
+  venueLng: z.number().min(-180).max(180).nullable().optional(),
+  venueUrl: z.string().url().nullable().optional(),
+  venueSource: z.enum(["manual", "google", "apple"]).nullable().optional(),
+  venueLayoutUrl: z.string().url().nullable().optional(),
+  startsAt: z.string().min(1),
+  endsAt: z.string().nullable().optional(),
+  timezone: z.string().default("America/Lima"),
+  totalCapacity: z.number().int().nullable().optional(),
+  overbookPct: z.number().int().min(0).max(100).default(0),
+  transfersEnabled: z.boolean().default(true),
+  transferDeadlineHours: z.number().int().nullable().optional(),
+  transferMaxCount: z.number().int().min(0).default(1),
+  transferRequiresKyc: z.boolean().default(false),
+  ticketTypes: z
+    .array(
+      z.object({
+        name: z.string().min(1),
+        kind: z.enum(["general", "presale", "vip", "box"]).default("general"),
+        priceCents: z.number().int().min(0),
+        capacity: z.number().int().min(0),
+        boxLabel: z.string().trim().min(1).max(40).nullable().optional(),
+      }),
+    )
+    .min(1),
+});
+
+export const EventsController = {
+  async listPublic(): Promise<Result<Event[]>> {
+    return { ok: true, value: await listPublishedEvents({ repo }) };
+  },
+
+  async getBySlug(slug: string): Promise<Result<{ event: Event; ticketTypes: TicketType[] }>> {
+    const data = await getEventBySlug({ repo }, slug);
+    if (!data) return err("not_found");
+    return { ok: true, value: data };
+  },
+
+  async listMine(): Promise<Result<Event[]>> {
+    const ctx = await resolveOrgCtx();
+    if (!ctx.ok) return err(ctx.error);
+    return { ok: true, value: await listEventsByOrganization({ repo }, ctx.value.orgId) };
+  },
+
+  async create(input: unknown): Promise<Result<Event>> {
+    const ctx = await resolveOrgCtx();
+    if (!ctx.ok) return err(ctx.error);
+    const parsed = createSchema.safeParse(input);
+    if (!parsed.success) return err(parsed.error.issues[0]?.message ?? "invalid_input");
+
+    return createEvent(
+      { repo },
+      {
+        organizationId: ctx.value.orgId,
+        createdBy: ctx.value.profileId,
+        title: parsed.data.title,
+        description: parsed.data.description ?? null,
+        venue: parsed.data.venue ?? null,
+        venueLat: parsed.data.venueLat ?? null,
+        venueLng: parsed.data.venueLng ?? null,
+        venueUrl: parsed.data.venueUrl ?? null,
+        venueSource: parsed.data.venueSource ?? null,
+        venueLayoutUrl: parsed.data.venueLayoutUrl ?? null,
+        startsAt: parsed.data.startsAt,
+        endsAt: parsed.data.endsAt ?? null,
+        timezone: parsed.data.timezone,
+        totalCapacity: parsed.data.totalCapacity ?? null,
+        overbookPct: parsed.data.overbookPct,
+        transfersEnabled: parsed.data.transfersEnabled,
+        transferDeadlineHours: parsed.data.transferDeadlineHours ?? null,
+        transferMaxCount: parsed.data.transferMaxCount,
+        transferRequiresKyc: parsed.data.transferRequiresKyc,
+        ticketTypes: parsed.data.ticketTypes,
+      },
+    );
+  },
+
+  async publish(eventId: string): Promise<Result<Event>> {
+    const ctx = await resolveOrgCtx();
+    if (!ctx.ok) return err(ctx.error);
+    return repo.publish(eventId, ctx.value.orgId);
+  },
+
+  async publishBySlug(slug: string): Promise<Result<Event>> {
+    const guard = await guardEventMember(slug, ["owner", "admin", "editor"]);
+    if (!guard.ok) return err(guard.error);
+    return repo.publish(guard.value.event.id, guard.value.event.organizationId);
+  },
+
+  async stats(slug: string): Promise<Result<EventStats & { scansRecent: ScanFeedItem[] }>> {
+    const guard = await guardEventMember(slug);
+    if (!guard.ok) return err(guard.error);
+    return ok(await getEventStats({ repo }, guard.value.event.id));
+  },
+
+  async accesos(slug: string): Promise<Result<ScanFeedItem[]>> {
+    const guard = await guardEventMember(slug);
+    if (!guard.ok) return err(guard.error);
+    return ok(await listEventAccesos({ repo }, guard.value.event.id, 50));
+  },
+
+  async update(slug: string, input: unknown): Promise<Result<Event>> {
+    const guard = await guardEventMember(slug);
+    if (!guard.ok) return err(guard.error);
+    const parsed = updateSchema.safeParse(input);
+    if (!parsed.success) return err(parsed.error.issues[0]?.message ?? "invalid_input");
+    return updateEvent({ repo }, guard.value.event.id, guard.value.event.organizationId, parsed.data);
+  },
+
+  async doorLink(slug: string): Promise<Result<DoorLink>> {
+    const guard = await guardEventMember(slug);
+    if (!guard.ok) return err(guard.error);
+    const h = await headers();
+    const host = h.get("x-forwarded-host") ?? h.get("host") ?? "pasape.lat";
+    const proto = h.get("x-forwarded-proto") ?? "https";
+    const origin = `${proto}://${host}`;
+    return ok(generateDoorLink(guard.value.event, origin));
+  },
+
+  async listByOrgSlug(slug: string): Promise<Result<Event[]>> {
+    return ok(await repo.listByOrgSlug(slug));
+  },
+
+  async createTicketType(slug: string, input: unknown): Promise<Result<TicketType>> {
+    const guard = await guardEventMember(slug, ["owner", "admin", "editor"]);
+    if (!guard.ok) return err(guard.error);
+    const parsed = createTicketTypeSchema.safeParse(input);
+    if (!parsed.success) return err(parsed.error.issues[0]?.message ?? "invalid_input");
+    return createTicketType({ repo }, guard.value.event.id, {
+      name: parsed.data.name,
+      kind: parsed.data.kind,
+      priceCents: parsed.data.priceCents,
+      capacity: parsed.data.capacity,
+      boxLabel: parsed.data.boxLabel ?? null,
+    });
+  },
+
+  async updateTicketType(
+    slug: string,
+    ticketTypeId: string,
+    input: unknown,
+  ): Promise<Result<TicketType>> {
+    const guard = await guardEventMember(slug, ["owner", "admin", "editor"]);
+    if (!guard.ok) return err(guard.error);
+    const parsed = updateTicketTypeSchema.safeParse(input);
+    if (!parsed.success) return err(parsed.error.issues[0]?.message ?? "invalid_input");
+    return updateTicketType({ repo }, guard.value.event.id, ticketTypeId, parsed.data);
+  },
+
+  async deleteTicketType(slug: string, ticketTypeId: string): Promise<Result<{ id: string }>> {
+    const guard = await guardEventMember(slug, ["owner", "admin", "editor"]);
+    if (!guard.ok) return err(guard.error);
+    return deleteTicketType({ repo }, guard.value.event.id, ticketTypeId);
+  },
+
+  async exportXlsx(
+    slug: string,
+  ): Promise<Result<{ buffer: Buffer; filename: string }>> {
+    const guard = await guardEventMember(slug, ["owner", "admin", "editor"]);
+    if (!guard.ok) return err(guard.error);
+    return ok(await exportEventReport({ repo }, guard.value.event));
+  },
+
+  async listCoOrganizers(slug: string): Promise<Result<EventCoOrganizer[]>> {
+    const guard = await guardEventMember(slug);
+    if (!guard.ok) return err(guard.error);
+    return ok(await listEventCoOrganizers(guard.value.event.id));
+  },
+
+  async addCoOrganizer(
+    slug: string,
+    input: unknown,
+  ): Promise<Result<{ profileId: string }>> {
+    const guard = await guardEventMember(slug, ["owner", "admin", "editor"]);
+    if (!guard.ok) return err(guard.error);
+    const parsed = z.object({ profileId: z.string().uuid() }).safeParse(input);
+    if (!parsed.success) return err("invalid_input");
+    return addEventCoOrganizer(guard.value.event.id, parsed.data.profileId);
+  },
+
+  async removeCoOrganizer(
+    slug: string,
+    profileId: string,
+  ): Promise<Result<{ profileId: string }>> {
+    const guard = await guardEventMember(slug, ["owner", "admin", "editor"]);
+    if (!guard.ok) return err(guard.error);
+    return removeEventCoOrganizer(guard.value.event.id, profileId);
+  },
+};
+
+const createTicketTypeSchema = z.object({
+  name: z.string().min(1),
+  kind: z.enum(["general", "presale", "vip", "box"]).default("general"),
+  priceCents: z.number().int().min(0),
+  capacity: z.number().int().min(0),
+  boxLabel: z.string().trim().min(1).max(40).nullable().optional(),
+});
+
+const updateTicketTypeSchema = z.object({
+  name: z.string().min(1).optional(),
+  priceCents: z.number().int().min(0).optional(),
+  capacity: z.number().int().min(0).optional(),
+  boxLabel: z.string().trim().min(1).max(40).nullable().optional(),
+});
+
+const updateSchema = z.object({
+  status: z.enum(["draft", "published", "closed", "cancelled"]).optional(),
+  title: z.string().min(1).optional(),
+  description: z.string().nullable().optional(),
+  venue: z.string().nullable().optional(),
+  venueLat: z.number().nullable().optional(),
+  venueLng: z.number().nullable().optional(),
+  venueUrl: z.string().nullable().optional(),
+  venueSource: z.enum(["manual", "google", "apple"]).nullable().optional(),
+  venueLayoutUrl: z.string().nullable().optional(),
+  coverUrl: z.string().nullable().optional(),
+  startsAt: z.string().min(1).optional(),
+  totalCapacity: z.number().int().nullable().optional(),
+  overbookPct: z.number().int().min(0).max(100).optional(),
+  transfersEnabled: z.boolean().optional(),
+  transferDeadlineHours: z.number().int().nullable().optional(),
+  transferMaxCount: z.number().int().min(0).optional(),
+  transferRequiresKyc: z.boolean().optional(),
+});
+
+async function guardEventMember(
+  slug: string,
+  allowedRoles?: string[],
+): Promise<Result<{ event: Event; ticketTypes: TicketType[] }>> {
+  const auth = await getAuthContext();
+  if (!auth.ok) return err(auth.error);
+  const detail = await getEventBySlug({ repo }, slug);
+  if (!detail) return err("not_found");
+  // Verify the caller is a member of the event's organization.
+  const db = supabaseAdmin();
+  const { data: membership } = await db
+    .from("org_memberships")
+    .select("role")
+    .eq("organization_id", detail.event.organizationId)
+    .eq("profile_id", auth.value.profileId)
+    .maybeSingle<{ role: string }>();
+  if (!membership) return err("forbidden");
+  if (allowedRoles && !allowedRoles.includes(membership.role)) return err("forbidden");
+  return ok(detail);
+}

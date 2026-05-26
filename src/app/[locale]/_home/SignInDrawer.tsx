@@ -18,8 +18,25 @@ const useIsDesktop = () => {
   return isDesktop;
 };
 
-export function SignInDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { signIn, pending, error } = useGoogleSignIn();
+type Props = {
+  open: boolean;
+  onClose: () => void;
+  /** Texto principal. Default: "Entra a Pasape" */
+  title?: string;
+  /** Subtítulo. Default: copy de comprador. */
+  subtitle?: string;
+  /** A dónde redirige el callback post-Google. Default: la ruta actual. */
+  redirectTo?: string;
+};
+
+export function SignInDrawer({
+  open,
+  onClose,
+  title = "Entra a Pasape",
+  subtitle = "Un toque y guardamos tus eventos favoritos.",
+  redirectTo,
+}: Props) {
+  const { signIn, pending, error } = useGoogleSignIn({ redirectTo });
   const me = useCurrentUser();
   const isDesktop = useIsDesktop();
 
@@ -47,14 +64,14 @@ export function SignInDrawer({ open, onClose }: { open: boolean; onClose: () => 
           onClick={onClose}
           className={
             isDesktop
-              ? "fixed inset-0 z-[90] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+              ? "fixed inset-0 z-[90] flex items-stretch justify-end bg-black/60 backdrop-blur-sm"
               : "fixed inset-0 z-[90] flex items-end justify-center bg-black/60 backdrop-blur-sm"
           }
         >
           <motion.div
-            initial={isDesktop ? { opacity: 0, scale: 0.94, y: 12 } : { y: "100%" }}
-            animate={isDesktop ? { opacity: 1, scale: 1, y: 0 } : { y: 0 }}
-            exit={isDesktop ? { opacity: 0, scale: 0.94, y: 12 } : { y: "100%" }}
+            initial={isDesktop ? { x: "100%" } : { y: "100%" }}
+            animate={isDesktop ? { x: 0 } : { y: 0 }}
+            exit={isDesktop ? { x: "100%" } : { y: "100%" }}
             transition={{ type: "spring", damping: 30, stiffness: 320, mass: 0.8 }}
             onClick={(e) => e.stopPropagation()}
             {...(!isDesktop && {
@@ -67,17 +84,15 @@ export function SignInDrawer({ open, onClose }: { open: boolean; onClose: () => 
             })}
             className={
               isDesktop
-                ? "relative w-full max-w-[440px] mx-4 rounded-[22px] border border-cart-line-strong bg-cart-bg-elev p-7 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.7)]"
+                ? "relative flex h-full w-[min(440px,90vw)] flex-col overflow-y-auto border-l border-cart-line-strong bg-cart-bg-elev p-7 shadow-[-30px_0_80px_-20px_rgba(0,0,0,0.7)]"
                 : "w-full max-w-[420px] rounded-t-[26px] bg-cart-bg-elev px-[22px] pb-9 pt-3.5 shadow-[0_-1px_0_rgba(255,255,255,0.07)_inset,0_-30px_60px_-10px_rgba(0,0,0,0.7)] touch-none"
             }
           >
-            {/* Drag handle solo en mobile */}
             {!isDesktop && (
               <div className="mb-4 flex justify-center">
                 <div className="h-1 w-9 rounded-full bg-white/15" />
               </div>
             )}
-            {/* Close button solo en desktop */}
             {isDesktop && (
               <button
                 type="button"
@@ -96,7 +111,7 @@ export function SignInDrawer({ open, onClose }: { open: boolean; onClose: () => 
               transition={{ delay: 0.08, duration: 0.25 }}
               className="mb-1.5 font-sans text-[24px] font-bold leading-tight tracking-[-0.03em] text-white"
             >
-              Entra a Pasape
+              {title}
             </motion.div>
             <motion.div
               initial={{ opacity: 0, y: 8 }}
@@ -104,7 +119,7 @@ export function SignInDrawer({ open, onClose }: { open: boolean; onClose: () => 
               transition={{ delay: 0.14, duration: 0.25 }}
               className="mb-5 text-[13px] leading-[1.5] text-cart-ink-3"
             >
-              Un toque y guardamos tus eventos favoritos.
+              {subtitle}
             </motion.div>
             <motion.div
               initial={{ opacity: 0, y: 12 }}

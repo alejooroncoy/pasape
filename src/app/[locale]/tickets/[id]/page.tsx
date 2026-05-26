@@ -13,9 +13,11 @@ import {
   QrSquare,
   TopBar,
 } from "@/components/design";
+import Link from "next/link";
 import { useTicket, useTransferTicket } from "@/lib/tickets/hooks/useTickets";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { useRotatingQr } from "@/lib/tickets/hooks/useRotatingQr";
+import { useBoxForTicket } from "@/lib/boxes/hooks/useBoxes";
 import { formatDate } from "@/lib/_shared/format";
 
 type Props = { params: Promise<{ id: string }> };
@@ -29,6 +31,12 @@ export default function TicketDetailPage({ params }: Props) {
   const [recipient, setRecipient] = useState("");
   const rotatingUrl = data && data.status === "active" ? `/api/tickets/${id}/rotating` : null;
   const rotating = useRotatingQr(rotatingUrl);
+  // Why: si el ticket tiene box_label, mostramos contador "X de N personas
+  // dentro" y, si es host (sin box_host_ticket_id), el botón "Invitar al box".
+  const isBoxTicket = !!data?.boxLabel;
+  const isHost = isBoxTicket && !data?.boxHostTicketId;
+  const boxQuery = useBoxForTicket(isHost ? id : "");
+  const box = boxQuery.data ?? null;
 
   return (
     <Phone>
@@ -65,6 +73,25 @@ export default function TicketDetailPage({ params }: Props) {
                 #{data.id.slice(0, 8).toUpperCase()}
               </div>
             </div>
+            {isBoxTicket && (
+              <div style={{ marginBottom: 12 }}>
+                <div
+                  style={{
+                    fontFamily: FONT_DISPLAY,
+                    fontSize: 28,
+                    fontWeight: 600,
+                    letterSpacing: "-0.02em",
+                    lineHeight: 1,
+                    color: "#fff",
+                  }}
+                >
+                  BOX {data.boxLabel}
+                </div>
+                <div style={{ fontSize: 14, color: "rgba(255,255,255,0.8)", marginTop: 2 }}>
+                  {data.holderName ?? me.data?.user?.fullName ?? "Tu pase"}
+                </div>
+              </div>
+            )}
             <div
               style={{
                 fontFamily: FONT_DISPLAY,
@@ -100,6 +127,46 @@ export default function TicketDetailPage({ params }: Props) {
               )}
               {rotating.payload && <CountdownRing seconds={rotating.secondsLeft} />}
             </div>
+
+            {isBoxTicket && box && (
+              <div
+                style={{
+                  marginTop: 12,
+                  fontSize: 12,
+                  color: "rgba(255,255,255,0.85)",
+                  textAlign: "center",
+                  letterSpacing: "0.02em",
+                }}
+              >
+                {box.members.length} de {box.capacity} personas adentro
+              </div>
+            )}
+
+            {isHost && data.status === "active" && (
+              <Link
+                href={`/tickets/${id}/box`}
+                style={{
+                  marginTop: 14,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 8,
+                  padding: "12px 16px",
+                  borderRadius: 14,
+                  background: "rgba(255,255,255,0.08)",
+                  color: "#fff",
+                  fontFamily: FONT_DISPLAY,
+                  fontWeight: 600,
+                  fontSize: 14,
+                  letterSpacing: "0.02em",
+                  textDecoration: "none",
+                  boxShadow: "0 0 0 1px rgba(255,255,255,0.12) inset",
+                }}
+              >
+                INVITAR AL BOX
+                <span aria-hidden style={{ opacity: 0.7 }}>→</span>
+              </Link>
+            )}
 
             <div
               style={{

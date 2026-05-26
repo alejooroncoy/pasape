@@ -1,0 +1,126 @@
+{
+  "common": {
+    "appName": "Pasape",
+    "tagline": "Entradas digitales con beneficios",
+    "loading": "Cargando…",
+    "retry": "Reintentar",
+    "empty": "Nada por aquí todavía",
+    "errorTitle": "Algo falló",
+    "errorBody": "Intentá de nuevo en unos segundos.",
+    "actions": {
+      "continue": "Continuar",
+      "back": "Volver",
+      "save": "Guardar",
+      "cancel": "Cancelar",
+      "create": "Crear",
+      "delete": "Eliminar",
+      "share": "Compartir"
+    }
+  },
+  "identity": {
+    "gate": {
+      "title": "Entrá a Pasape",
+      "google": "Continuar con Google",
+      "sms": "Continuar con celular",
+      "legal": "Al continuar aceptás los términos y la política de privacidad."
+    },
+    "sms": {
+      "title": "Tu número",
+      "country": "+51 Perú",
+      "send": "Mandame el código",
+      "rateLimit": "Esperá unos minutos antes de pedir otro código."
+    },
+    "otp": {
+      "title": "Pegá el código",
+      "subtitle": "Te llegó por SMS",
+      "resend": "Reenviar código"
+    },
+    "onboarding": {
+      "title": "Solo dos cosas más",
+      "name": "Cómo te llamamos",
+      "dni": "DNI",
+      "email": "Email",
+      "phone": "Celular",
+      "submit": "Listo"
+    },
+    "profile": {
+      "myOrgs": "Mis marcas",
+      "createOrg": "Crear marca",
+      "switchOrg": "Cambiar de marca",
+      "logout": "Cerrar sesión"
+    }
+  },
+  "organizations": {
+    "switcher": {
+      "title": "Tus marcas",
+      "subtitle": "Una cuenta, varias marcas — ideal si manejas distintas líneas o productos.",
+      "active": "Activa",
+      "createCta": "+ Nueva marca"
+    },
+    "mine": {
+      "title": "Mis marcas · {n}",
+      "activeBadge": "Activa"
+    },
+    "create": {
+      "title": "Crear marca",
+      "firstEyebrow": "Bienvenida a Pasape",
+      "firstTitle": "Crea tu primera marca",
+      "name": "Nombre",
+      "slug": "URL pública",
+      "logo": "Logo",
+      "submit": "Crear",
+      "submitting": "Creando…"
+    }
+  },
+  "events": {
+    "list": {
+      "title": "Eventos",
+      "search": "Buscar evento, banda o local"
+    },
+    "create": {
+      "title": "Crear evento",
+      "stepBasics": "Lo básico",
+      "stepTickets": "Tipos de entrada",
+      "stepCoorgs": "Co-organizadores",
+      "stepPromoters": "Promotores",
+      "stepReview": "Revisión",
+      "capacityPanel": "Aforo y transferencias",
+      "publish": "Publicar"
+    }
+  },
+  "tickets": {
+    "buy": {
+      "qty": "Cantidad",
+      "summary": "Resumen",
+      "pay": "Pagar",
+      "soldOut": "Agotado"
+    },
+    "wallet": {
+      "upcoming": "Próximas",
+      "past": "Pasadas",
+      "empty": "Aún no compraste entradas"
+    },
+    "transfer": {
+      "title": "Transferir entrada",
+      "to": "A quién",
+      "warning": "La entrada deja de ser tuya."
+    }
+  },
+  "promoters": {
+    "home": {
+      "myLink": "Tu link",
+      "share": "Compartir",
+      "earnings": "Ganancias"
+    }
+  },
+  "boxes": {
+    "share": "Compartir BOX",
+    "members": "Amigos"
+  },
+  "scanning": {
+    "home": "Escanear",
+    "ok": "Válida",
+    "used": "Ya usada",
+    "invalid": "Inválida"
+  }
+}

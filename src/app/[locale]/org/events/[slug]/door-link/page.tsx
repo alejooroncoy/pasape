@@ -78,7 +78,7 @@ export default function OrgDoorLinkPage({ params }: { params: Params }) {
           portero.
         </div>
         <div style={{ fontSize: 13, color: C.dim, marginBottom: 22, lineHeight: 1.5 }}>
-          Compartí este link con quien va a escanear. Lo abre y ya tiene acceso. Te avisamos por
+          Comparte este link con quien va a escanear. Lo abre y ya tiene acceso. Te avisamos por
           email cuando alguien lo use.
         </div>
 

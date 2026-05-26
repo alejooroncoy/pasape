@@ -9,6 +9,9 @@ export const GET = async (req: NextRequest) => {
 };
 
 export const POST = async (req: NextRequest) => {
+  // Body shape se valida en EventsController.create (Zod). Acepta:
+  //   title, description?, venue?, venueLayoutUrl?, startsAt, endsAt?, timezone?,
+  //   totalCapacity?, overbookPct?, transfers*, ticketTypes[]
   const body = await req.json().catch(() => ({}));
   return json(await EventsController.create(body), 201);
 };

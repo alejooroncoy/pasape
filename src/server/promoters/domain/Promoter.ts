@@ -1,0 +1,52 @@
+export type PromoterLink = {
+  id: string;
+  eventId: string;
+  eventSlug: string;
+  eventTitle: string;
+  eventStartsAt: string;
+  eventVenue: string | null;
+  // `promoterId` es null cuando el link viene de un org_promoter del pool
+  // que aún no firmó cuenta Pasape. Al firmar con OTP se completa.
+  promoterId: string | null;
+  orgPromoterId: string | null;
+  code: string;
+  commissionPct: number;
+  active: boolean;
+  createdAt: string;
+};
+
+export type PromoterEventEarning = {
+  eventId: string;
+  eventSlug: string;
+  eventTitle: string;
+  eventStartsAt: string;
+  ticketsSold: number;
+  grossCents: number;
+  commissionPct: number;
+  commissionCents: number;
+  payoutStatus: "pending" | "paid" | "void" | "none";
+};
+
+export type RecentBuyer = {
+  firstName: string;
+  createdAt: string;
+};
+
+export type PromoterHomeData = {
+  link: PromoterLink;
+  soldCount: number;
+  recent: RecentBuyer[];
+};
+
+export type PromoterApplication = {
+  id: string;
+  eventId: string;
+  eventSlug: string;
+  eventTitle: string;
+  applicantId: string;
+  applicantName: string;
+  applicantHandle: string | null;
+  status: "pending" | "approved" | "rejected" | "cancelled";
+  message: string | null;
+  createdAt: string;
+};

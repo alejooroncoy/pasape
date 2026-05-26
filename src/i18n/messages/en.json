@@ -1,0 +1,126 @@
+{
+  "common": {
+    "appName": "Pasape",
+    "tagline": "Digital tickets with perks",
+    "loading": "Loading…",
+    "retry": "Retry",
+    "empty": "Nothing here yet",
+    "errorTitle": "Something broke",
+    "errorBody": "Try again in a few seconds.",
+    "actions": {
+      "continue": "Continue",
+      "back": "Back",
+      "save": "Save",
+      "cancel": "Cancel",
+      "create": "Create",
+      "delete": "Delete",
+      "share": "Share"
+    }
+  },
+  "identity": {
+    "gate": {
+      "title": "Sign in to Pasape",
+      "google": "Continue with Google",
+      "sms": "Continue with phone",
+      "legal": "By continuing you accept the terms and privacy policy."
+    },
+    "sms": {
+      "title": "Your number",
+      "country": "+51 Peru",
+      "send": "Send me the code",
+      "rateLimit": "Wait a few minutes before requesting another code."
+    },
+    "otp": {
+      "title": "Paste the code",
+      "subtitle": "We texted it to you",
+      "resend": "Resend code"
+    },
+    "onboarding": {
+      "title": "Two quick things",
+      "name": "Your name",
+      "dni": "DNI",
+      "email": "Email",
+      "phone": "Phone",
+      "submit": "Done"
+    },
+    "profile": {
+      "myOrgs": "My brands",
+      "createOrg": "Create brand",
+      "switchOrg": "Switch brand",
+      "logout": "Log out"
+    }
+  },
+  "organizations": {
+    "switcher": {
+      "title": "Your brands",
+      "subtitle": "One account, multiple brands — great if you run different lines.",
+      "active": "Active",
+      "createCta": "+ New brand"
+    },
+    "mine": {
+      "title": "My brands · {n}",
+      "activeBadge": "Active"
+    },
+    "create": {
+      "title": "Create brand",
+      "firstEyebrow": "Welcome to Pasape",
+      "firstTitle": "Create your first brand",
+      "name": "Name",
+      "slug": "Public URL",
+      "logo": "Logo",
+      "submit": "Create",
+      "submitting": "Creating…"
+    }
+  },
+  "events": {
+    "list": {
+      "title": "Events",
+      "search": "Search event, band or venue"
+    },
+    "create": {
+      "title": "Create event",
+      "stepBasics": "Basics",
+      "stepTickets": "Ticket types",
+      "stepCoorgs": "Co-organizers",
+      "stepPromoters": "Promoters",
+      "stepReview": "Review",
+      "capacityPanel": "Capacity & transfers",
+      "publish": "Publish"
+    }
+  },
+  "tickets": {
+    "buy": {
+      "qty": "Quantity",
+      "summary": "Summary",
+      "pay": "Pay",
+      "soldOut": "Sold out"
+    },
+    "wallet": {
+      "upcoming": "Upcoming",
+      "past": "Past",
+      "empty": "You haven't bought any tickets yet"
+    },
+    "transfer": {
+      "title": "Transfer ticket",
+      "to": "To whom",
+      "warning": "The ticket will no longer be yours."
+    }
+  },
+  "promoters": {
+    "home": {
+      "myLink": "Your link",
+      "share": "Share",
+      "earnings": "Earnings"
+    }
+  },
+  "boxes": {
+    "share": "Share BOX",
+    "members": "Friends"
+  },
+  "scanning": {
+    "home": "Scan",
+    "ok": "Valid",
+    "used": "Already used",
+    "invalid": "Invalid"
+  }
+}

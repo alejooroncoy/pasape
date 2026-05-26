@@ -1,0 +1,57 @@
+export type EventStatus = "draft" | "published" | "closed" | "cancelled";
+
+export type TransferPolicy = {
+  enabled: boolean;
+  deadlineHours: number | null;
+  maxCount: number;
+  requiresKyc: boolean;
+};
+
+export type CapacityPolicy = {
+  totalCapacity: number | null;
+  overbookPct: number;
+};
+
+export type Event = {
+  id: string;
+  slug: string;
+  organizationId: string;
+  createdBy: string;
+  title: string;
+  description: string | null;
+  venue: string | null;
+  venueLat: number | null;
+  venueLng: number | null;
+  venueUrl: string | null;
+  venueSource: "manual" | "google" | "apple" | null;
+  coverUrl: string | null;
+  venueLayoutUrl: string | null;
+  startsAt: string;
+  endsAt: string | null;
+  timezone: string;
+  status: EventStatus;
+  capacity: CapacityPolicy;
+  transferPolicy: TransferPolicy;
+  version: number;
+  createdAt: string;
+};
+
+export type TicketTypeKind = "general" | "presale" | "vip" | "box";
+
+export type TicketType = {
+  id: string;
+  eventId: string;
+  name: string;
+  kind: TicketTypeKind;
+  priceCents: number;
+  currency: string;
+  capacity: number;
+  sold: number;
+  position: number;
+  /**
+   * Etiqueta humana del box (A, B, VIP-1) cuando `kind === "box"`. Permite que
+   * el portero distinga BOX A vs BOX B al escanear cualquier QR del box.
+   * Para ticket types no-box queda null.
+   */
+  boxLabel: string | null;
+};

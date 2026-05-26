@@ -1,0 +1,241 @@
+import crypto from "node:crypto";
+import { supabaseAdmin } from "@/server/_shared/supabase/admin";
+import { err, ok, type Result } from "@/server/_shared/result";
+import type { BoxRepository } from "@/server/boxes/ports/BoxRepository";
+import type { Box } from "@/server/boxes/domain/Box";
+
+type BoxRow = {
+  id: string;
+  order_id: string;
+  ticket_type_id: string;
+  invite_token: string;
+  box_number: string | null;
+  capacity: number;
+  expires_at: string;
+  created_at: string;
+  ticket_type: {
+    id: string;
+    name: string;
+    event: {
+      id: string;
+      slug: string;
+      title: string;
+      starts_at: string;
+      venue: string | null;
+      timezone: string;
+    };
+  };
+  order: { buyer: { id: string; full_name: string | null } };
+};
+
+type MemberRow = {
+  profile_id: string;
+  ticket_id: string | null;
+  joined_at: string;
+  profile: { full_name: string | null };
+};
+
+const slug = () => crypto.randomBytes(6).toString("base64url").toLowerCase().replace(/[_-]/g, "");
+
+const generateQr = () => crypto.randomBytes(24).toString("base64url");
+
+const loadBox = async (id: string): Promise<Box | null> => {
+  const db = supabaseAdmin();
+  const { data } = await db
+    .from("boxes")
+    .select(
+      `*,
+       ticket_type:ticket_types!inner(
+         id, name,
+         event:events!inner(id, slug, title, starts_at, venue, timezone)
+       ),
+       order:orders!inner(
+         buyer:profiles!inner(id, full_name)
+       )`,
+    )
+    .eq("id", id)
+    .maybeSingle();
+  if (!data) return null;
+  const row = data as unknown as BoxRow;
+
+  const { data: members } = await db
+    .from("box_members")
+    .select("profile_id, ticket_id, joined_at, profile:profiles!inner(full_name)")
+    .eq("box_id", id)
+    .order("joined_at", { ascending: true });
+  const mems = ((members as unknown as MemberRow[] | null) ?? []).map((m) => ({
+    profileId: m.profile_id,
+    name: m.profile.full_name ?? "—",
+    ticketId: m.ticket_id,
+    joinedAt: m.joined_at,
+  }));
+
+  return {
+    id: row.id,
+    orderId: row.order_id,
+    ticketTypeId: row.ticket_type_id,
+    ticketTypeName: row.ticket_type.name,
+    inviteToken: row.invite_token,
+    boxNumber: row.box_number,
+    capacity: row.capacity,
+    expiresAt: row.expires_at,
+    createdAt: row.created_at,
+    members: mems,
+    event: {
+      id: row.ticket_type.event.id,
+      slug: row.ticket_type.event.slug,
+      title: row.ticket_type.event.title,
+      startsAt: row.ticket_type.event.starts_at,
+      venue: row.ticket_type.event.venue,
+      timezone: row.ticket_type.event.timezone,
+    },
+    ownerName: row.order.buyer.full_name ?? "—",
+  };
+};
+
+export const supabaseBoxRepository: BoxRepository = {
+  async createForTicket({ ticketId, ownerId, capacity }): Promise<Result<Box>> {
+    const db = supabaseAdmin();
+    const { data: ticket } = await db
+      .from("tickets")
+      .select(
+        "id, order_id, ticket_type_id, current_holder, ticket_type:ticket_types!inner(kind, event:events!inner(id, starts_at))",
+      )
+      .eq("id", ticketId)
+      .maybeSingle();
+    if (!ticket) return err("ticket_not_found");
+    type T = {
+      id: string;
+      order_id: string;
+      ticket_type_id: string;
+      current_holder: string;
+      ticket_type: { kind: string; event: { id: string; starts_at: string } };
+    };
+    const t = ticket as unknown as T;
+    if (t.current_holder !== ownerId) return err("not_owner");
+
+    const { data: existing } = await db
+      .from("boxes")
+      .select("id")
+      .eq("order_id", t.order_id)
+      .eq("ticket_type_id", t.ticket_type_id)
+      .maybeSingle<{ id: string }>();
+    if (existing) {
+      const box = await loadBox(existing.id);
+      if (box) return ok(box);
+    }
+
+    const token = `bx-${slug()}`;
+    // Why: human-readable BOX number unique per event. We count existing
+    // ticket_types for the event then count boxes attached to those types
+    // and add 1. Race condition is acceptable: collisions only mean two
+    // boxes share a label briefly; invite_token (unique) stays the source
+    // of truth and there is no unique constraint on box_number.
+    const { data: typesForEvent } = await db
+      .from("ticket_types")
+      .select("id")
+      .eq("event_id", t.ticket_type.event.id);
+    const typeIds = (typesForEvent ?? []).map((r) => (r as { id: string }).id);
+    const { count: existingBoxes } = await db
+      .from("boxes")
+      .select("id", { count: "exact", head: true })
+      .in("ticket_type_id", typeIds.length > 0 ? typeIds : [t.ticket_type_id]);
+    const boxNumber = `BOX-${(existingBoxes ?? 0) + 1}`;
+
+    const { data: created, error } = await db
+      .from("boxes")
+      .insert({
+        order_id: t.order_id,
+        ticket_type_id: t.ticket_type_id,
+        invite_token: token,
+        box_number: boxNumber,
+        capacity,
+        expires_at: t.ticket_type.event.starts_at,
+      })
+      .select("id")
+      .single<{ id: string }>();
+    if (error || !created) return err(error?.message ?? "box_create_failed");
+
+    await db.from("box_members").insert({
+      box_id: created.id,
+      profile_id: ownerId,
+      ticket_id: ticketId,
+    });
+
+    const box = await loadBox(created.id);
+    return box ? ok(box) : err("box_load_failed");
+  },
+
+  async getByToken(token) {
+    const db = supabaseAdmin();
+    const { data } = await db
+      .from("boxes")
+      .select("id")
+      .eq("invite_token", token)
+      .maybeSingle<{ id: string }>();
+    if (!data) return null;
+    return loadBox(data.id);
+  },
+
+  async getByTicketId(ticketId, ownerId) {
+    const db = supabaseAdmin();
+    const { data: ticket } = await db
+      .from("tickets")
+      .select("order_id, ticket_type_id, current_holder")
+      .eq("id", ticketId)
+      .maybeSingle<{ order_id: string; ticket_type_id: string; current_holder: string }>();
+    if (!ticket || ticket.current_holder !== ownerId) return null;
+    const { data: box } = await db
+      .from("boxes")
+      .select("id")
+      .eq("order_id", ticket.order_id)
+      .eq("ticket_type_id", ticket.ticket_type_id)
+      .maybeSingle<{ id: string }>();
+    if (!box) return null;
+    return loadBox(box.id);
+  },
+
+  async join({ token, profileId, holderName, holderDni }): Promise<Result<Box>> {
+    const db = supabaseAdmin();
+    const box = await this.getByToken(token);
+    if (!box) return err("invalid_token");
+    if (box.members.some((m) => m.profileId === profileId)) return ok(box);
+    if (box.members.length >= box.capacity) return err("box_full");
+
+    // Why: heredamos box_label desde el ticket_type y enlazamos al ticket host
+    // (primer miembro del box). Así, al escanear cualquier QR el portero ve
+    // "BOX A · Daniela · invitada por José" sin consultas extra.
+    const { data: type } = await db
+      .from("ticket_types")
+      .select("box_label")
+      .eq("id", box.ticketTypeId)
+      .maybeSingle<{ box_label: string | null }>();
+    const hostMember = box.members.find((m) => m.ticketId);
+    const hostTicketId = hostMember?.ticketId ?? null;
+
+    const { data: ticket, error: tkErr } = await db
+      .from("tickets")
+      .insert({
+        order_id: box.orderId,
+        ticket_type_id: box.ticketTypeId,
+        holder_name: holderName,
+        holder_dni_last2: holderDni ? holderDni.slice(-2) : null,
+        qr_code: generateQr(),
+        current_holder: profileId,
+        box_label: type?.box_label ?? null,
+        box_host_ticket_id: hostTicketId,
+      })
+      .select("id")
+      .single<{ id: string }>();
+    if (tkErr || !ticket) return err(tkErr?.message ?? "ticket_create_failed");
+
+    await db.from("box_members").insert({
+      box_id: box.id,
+      profile_id: profileId,
+      ticket_id: ticket.id,
+    });
+
+    const refreshed = await loadBox(box.id);
+    return refreshed ? ok(refreshed) : err("box_load_failed");
+  },
+};

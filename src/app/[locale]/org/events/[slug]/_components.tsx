@@ -37,13 +37,13 @@ export const BackBtn = ({ href }: { href?: string }) => {
   return <button type="button" onClick={() => router.back()} style={{ border: 0, background: "transparent", padding: 0 }}>{inner}</button>;
 };
 
-type Tab = "panel" | "accesos" | "config";
+type Tab = "panel" | "team" | "settings";
 
 export const LiveBottomNav = ({ slug, active }: { slug: string; active: Tab }) => {
   const items: Array<{ key: Tab; label: string; href: string }> = [
     { key: "panel", label: "Panel", href: `/org/events/${slug}` },
-    { key: "accesos", label: "Accesos", href: `/org/events/${slug}/accesos` },
-    { key: "config", label: "Configurar", href: `/org/events/${slug}/configurar` },
+    { key: "team", label: "Equipo", href: `/org/events/${slug}/team` },
+    { key: "settings", label: "Ajustes", href: `/org/events/${slug}/settings` },
   ];
   return (
     <div

@@ -1,0 +1,44 @@
+"use client";
+
+import { useCallback, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { createSupabaseBrowserClient } from "@/server/_shared/supabase/client";
+import { api } from "@/lib/_shared/api-client";
+import { currentUserKey } from "./useCurrentUser";
+
+export const useGoogleSignIn = (opts: { redirectTo?: string } = {}) => {
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const signIn = useCallback(async () => {
+    setPending(true);
+    setError(null);
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const next = opts.redirectTo ?? window.location.pathname;
+      const callbackUrl = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
+      const { error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: callbackUrl },
+      });
+      if (oauthError) throw oauthError;
+      // Browser navega a Google; el callback nos trae de vuelta.
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "sign_in_failed");
+      setPending(false);
+    }
+  }, [opts.redirectTo]);
+
+  return { signIn, pending, error };
+};
+
+export const useSignOut = () => {
+  const qc = useQueryClient();
+  return useCallback(async () => {
+    const supabase = createSupabaseBrowserClient();
+    await supabase.auth.signOut();
+    // Limpia cookie de org activa server-side.
+    await api.del<{ ok: true }>("/api/auth/session");
+    await qc.invalidateQueries({ queryKey: currentUserKey });
+  }, [qc]);
+};

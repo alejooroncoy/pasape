@@ -1,6 +1,8 @@
 #!/usr/bin/env tsx
 // Registra los templates de docs/whatsapp-templates.json en Meta vía Kapso.
-// Uso: WABA_ID=xxxxx pnpm tsx scripts/register-whatsapp-templates.ts
+// Uso:
+//   WABA_ID=xxxxx pnpm tsx scripts/register-whatsapp-templates.ts
+//   WABA_ID=xxxxx pnpm tsx scripts/register-whatsapp-templates.ts --only=team_invitation
 //
 // Requiere KAPSO_API_KEY en .env. WABA_ID lo obtenés del dashboard Kapso
 // o de Meta Business Manager (es el business_account_id, no el phone_number_id).
@@ -13,9 +15,11 @@ import { resolve } from "node:path";
 
 const WABA_ID = process.env.WABA_ID;
 const KAPSO_API_KEY = process.env.KAPSO_API_KEY;
+const onlyArg = process.argv.find((a) => a.startsWith("--only="));
+const onlyName = onlyArg?.slice("--only=".length);
 
 if (!WABA_ID) {
-  console.error("Falta WABA_ID. Uso: WABA_ID=xxxxx pnpm tsx scripts/register-whatsapp-templates.ts");
+  console.error("Falta WABA_ID. Uso: WABA_ID=xxxxx pnpm tsx scripts/register-whatsapp-templates.ts [--only=<name>]");
   process.exit(1);
 }
 if (!KAPSO_API_KEY) {
@@ -29,8 +33,16 @@ const spec = JSON.parse(readFileSync(specPath, "utf8")) as {
 };
 
 const url = `https://api.kapso.ai/meta/whatsapp/v24.0/${WABA_ID}/message_templates`;
+const toSubmit = onlyName
+  ? spec.templates.filter((t) => t.name === onlyName)
+  : spec.templates;
 
-for (const tpl of spec.templates) {
+if (toSubmit.length === 0) {
+  console.error(`No se encontró ningún template con name=${onlyName}`);
+  process.exit(1);
+}
+
+for (const tpl of toSubmit) {
   const name = tpl.name as string;
   process.stdout.write(`→ ${name}... `);
   try {

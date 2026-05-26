@@ -87,6 +87,37 @@
       ]
     },
     {
+      "name": "team_invitation",
+      "language": "es",
+      "category": "UTILITY",
+      "parameter_format": "NAMED",
+      "components": [
+        {
+          "type": "BODY",
+          "text": "Hola! {{inviter_name}} te invitó a sumarte a {{scope_label}} como {{role_label}} en Pasape. La invitación caduca en {{expires_in}}. Toca el botón para aceptar.",
+          "example": {
+            "body_text_named_params": [
+              { "param_name": "inviter_name", "example": "Alejandro Oroncoy" },
+              { "param_name": "scope_label", "example": "Tardeo" },
+              { "param_name": "role_label", "example": "Administrador" },
+              { "param_name": "expires_in", "example": "14 días" }
+            ]
+          }
+        },
+        {
+          "type": "BUTTONS",
+          "buttons": [
+            {
+              "type": "URL",
+              "text": "Aceptar invitación",
+              "url": "https://pasape.pe/es/invites/{{1}}",
+              "example": ["https://pasape.pe/es/invites/abc123def456"]
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "event_cancelled",
       "language": "es",
       "category": "UTILITY",

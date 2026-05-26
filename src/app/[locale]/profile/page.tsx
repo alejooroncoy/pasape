@@ -320,7 +320,7 @@ export default function BuyerProfilePage() {
         {data?.activeOrgSlug && (
           <ProfRow
             icon={<IconBuilding />}
-            label="Tu organización"
+            label="Tu marca"
             sub={`@${data.activeOrgSlug}`}
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             href={`/org/${data.activeOrgSlug}` as any}
