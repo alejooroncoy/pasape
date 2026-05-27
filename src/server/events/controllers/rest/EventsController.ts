@@ -28,6 +28,24 @@ import { supabaseOrganizationRepository } from "@/server/identity/organizations/
 import type { Event, TicketType } from "../../domain/Event";
 import type { EventStats, ScanFeedItem } from "../../ports/EventRepository";
 
+const sanitizeHost = (raw: string): string => {
+  let h = raw.trim();
+  if (h.startsWith("http://")) h = h.slice("http://".length);
+  else if (h.startsWith("https://")) h = h.slice("https://".length);
+  const slashAt = h.indexOf("/");
+  if (slashAt > -1) h = h.slice(0, slashAt);
+  return h || "pasape.lat";
+};
+
+const resolveOriginFromHeaders = async (): Promise<string> => {
+  const envUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
+  if (envUrl) return envUrl.replace(/\/+$/, "");
+  const h = await headers();
+  const host = sanitizeHost(h.get("x-forwarded-host") ?? h.get("host") ?? "pasape.lat");
+  const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
+  return `${proto}://${host}`;
+};
+
 type ResolvedOrgCtx = { profileId: string; orgId: string; orgSlug: string };
 
 const resolveOrgCtx = async (): Promise<Result<ResolvedOrgCtx>> => {
@@ -66,6 +84,8 @@ const createSchema = z.object({
         priceCents: z.number().int().min(0),
         capacity: z.number().int().min(0),
         boxLabel: z.string().trim().min(1).max(40).nullable().optional(),
+        zone: z.string().trim().max(60).nullable().optional(),
+        unitNoun: z.string().trim().max(24).nullable().optional(),
       }),
     )
     .min(1),
@@ -79,6 +99,20 @@ export const EventsController = {
   async getBySlug(slug: string): Promise<Result<{ event: Event; ticketTypes: TicketType[] }>> {
     const data = await getEventBySlug({ repo }, slug);
     if (!data) return err("not_found");
+    // Si el evento está publicado, acceso libre. Si está en draft/closed/
+    // cancelled, sólo lo ve un miembro de la org dueña (preview interno).
+    if (data.event.status !== "published") {
+      const auth = await getAuthContext();
+      if (!auth.ok) return err("not_found");
+      const { data: membership } = await supabaseAdmin()
+        .from("memberships")
+        .select("role")
+        .eq("scope_type", "organization")
+        .eq("scope_id", data.event.organizationId)
+        .eq("profile_id", auth.value.profileId)
+        .maybeSingle<{ role: string }>();
+      if (!membership) return err("not_found");
+    }
     return { ok: true, value: data };
   },
 
@@ -156,10 +190,7 @@ export const EventsController = {
   async doorLink(slug: string): Promise<Result<DoorLink>> {
     const guard = await guardEventMember(slug);
     if (!guard.ok) return err(guard.error);
-    const h = await headers();
-    const host = h.get("x-forwarded-host") ?? h.get("host") ?? "pasape.lat";
-    const proto = h.get("x-forwarded-proto") ?? "https";
-    const origin = `${proto}://${host}`;
+    const origin = await resolveOriginFromHeaders();
     return ok(generateDoorLink(guard.value.event, origin));
   },
 
@@ -178,6 +209,8 @@ export const EventsController = {
       priceCents: parsed.data.priceCents,
       capacity: parsed.data.capacity,
       boxLabel: parsed.data.boxLabel ?? null,
+      zone: parsed.data.zone ?? null,
+      unitNoun: parsed.data.unitNoun ?? null,
     });
   },
 
@@ -240,6 +273,8 @@ const createTicketTypeSchema = z.object({
   priceCents: z.number().int().min(0),
   capacity: z.number().int().min(0),
   boxLabel: z.string().trim().min(1).max(40).nullable().optional(),
+  zone: z.string().trim().max(60).nullable().optional(),
+  unitNoun: z.string().trim().max(24).nullable().optional(),
 });
 
 const updateTicketTypeSchema = z.object({
@@ -247,6 +282,8 @@ const updateTicketTypeSchema = z.object({
   priceCents: z.number().int().min(0).optional(),
   capacity: z.number().int().min(0).optional(),
   boxLabel: z.string().trim().min(1).max(40).nullable().optional(),
+  zone: z.string().trim().max(60).nullable().optional(),
+  unitNoun: z.string().trim().max(24).nullable().optional(),
 });
 
 const updateSchema = z.object({
@@ -280,9 +317,10 @@ async function guardEventMember(
   // Verify the caller is a member of the event's organization.
   const db = supabaseAdmin();
   const { data: membership } = await db
-    .from("org_memberships")
+    .from("memberships")
     .select("role")
-    .eq("organization_id", detail.event.organizationId)
+    .eq("scope_type", "organization")
+    .eq("scope_id", detail.event.organizationId)
     .eq("profile_id", auth.value.profileId)
     .maybeSingle<{ role: string }>();
   if (!membership) return err("forbidden");

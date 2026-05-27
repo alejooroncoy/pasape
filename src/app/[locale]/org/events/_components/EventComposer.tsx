@@ -46,6 +46,10 @@ type TicketRow = {
   kind: TicketKind;
   /** Etiqueta humana del box (A, B, VIP-1). Solo aplica si kind === "box". */
   boxLabel: string;
+  /** Zona del venue para agrupar la lista al comprador. Opcional. */
+  zone: string;
+  /** Cómo llama el organizador a la unidad reservable: box, mesa, lounge u otro. */
+  unitNoun: string;
 };
 
 export type ComposerMode = "create" | "edit";
@@ -179,6 +183,8 @@ export function EventComposer(props: EventComposerProps) {
       priceSoles: fromCents(tt.priceCents),
       capacity: String(tt.capacity),
       boxLabel: tt.boxLabel ?? "",
+      zone: tt.zone ?? "",
+      unitNoun: tt.unitNoun ?? "",
     }));
     return {
       title: ev.title,
@@ -199,6 +205,8 @@ export function EventComposer(props: EventComposerProps) {
                 capacity: "200",
                 kind: "general" as TicketKind,
                 boxLabel: "",
+                zone: "",
+                unitNoun: "",
               },
             ],
       publishNow: ev.status === "published",
@@ -229,6 +237,8 @@ export function EventComposer(props: EventComposerProps) {
         capacity: "200",
         kind: "general",
         boxLabel: "",
+        zone: "",
+        unitNoun: "",
       },
     ],
   );
@@ -374,6 +384,8 @@ export function EventComposer(props: EventComposerProps) {
         priceCents: toCents(t.priceSoles),
         capacity: Number(t.capacity),
         boxLabel: t.kind === "box" ? t.boxLabel.trim() : null,
+        zone: t.zone.trim() || null,
+        unitNoun: t.kind === "box" ? t.unitNoun.trim() || null : null,
       }));
 
       let venueLayoutUrl: string | null = null;
@@ -522,6 +534,8 @@ export function EventComposer(props: EventComposerProps) {
           priceCents: toCents(t.priceSoles),
           capacity: Number(t.capacity),
           boxLabel: t.kind === "box" ? t.boxLabel.trim() : null,
+          zone: t.zone.trim() || null,
+          unitNoun: t.kind === "box" ? t.unitNoun.trim() || null : null,
         });
       }
 
@@ -538,6 +552,11 @@ export function EventComposer(props: EventComposerProps) {
         if (nextCap !== orig.capacity) ttPatch.capacity = nextCap;
         const nextLabel = t.kind === "box" ? t.boxLabel.trim() : null;
         if (nextLabel !== orig.boxLabel) ttPatch.boxLabel = nextLabel;
+        const nextZone = t.zone.trim() || null;
+        if (nextZone !== orig.zone) ttPatch.zone = nextZone;
+        const nextNoun =
+          t.kind === "box" ? t.unitNoun.trim() || null : null;
+        if (nextNoun !== orig.unitNoun) ttPatch.unitNoun = nextNoun;
         if (Object.keys(ttPatch).length > 0) {
           await updateTT.mutateAsync({ id: t.id!, input: ttPatch });
         }
@@ -1337,9 +1356,20 @@ function TicketsEditor({
           kind === "box"
             ? String.fromCharCode(65 + tickets.filter((t) => t.kind === "box").length)
             : "",
+        zone: "",
+        unitNoun: "",
       },
     ]);
   };
+
+  const knownZones = useMemo(
+    () =>
+      Array.from(
+        new Set(tickets.map((t) => t.zone.trim()).filter((z) => z.length > 0)),
+      ),
+    [tickets],
+  );
+  const [bulkOpen, setBulkOpen] = useState(false);
 
   return (
     <div className="flex flex-col gap-3 pb-4">
@@ -1384,27 +1414,53 @@ function TicketsEditor({
             />
           </div>
           {t.kind === "box" && (
-            <label className="mt-2 flex flex-col gap-1 rounded-xl bg-cart-bg-elev px-3 py-2">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">
-                Etiqueta del box
-              </span>
-              <input
-                value={t.boxLabel}
-                onChange={(e) => update(t.rowKey, { boxLabel: e.target.value })}
-                placeholder="A · B · VIP-1"
-                maxLength={20}
-                className={
-                  "w-full bg-transparent font-mono text-[15px] font-semibold tracking-[0.04em] outline-none " +
-                  (t.boxLabel.trim()
-                    ? "text-white"
-                    : "text-amber-300 placeholder:text-amber-300/60")
-                }
+            <>
+              <label className="mt-2 flex flex-col gap-1 rounded-xl bg-cart-bg-elev px-3 py-2">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">
+                  Etiqueta del box
+                </span>
+                <input
+                  value={t.boxLabel}
+                  onChange={(e) => update(t.rowKey, { boxLabel: e.target.value })}
+                  placeholder="A · B · VIP-1"
+                  maxLength={20}
+                  className={
+                    "w-full bg-transparent font-mono text-[15px] font-semibold tracking-[0.04em] outline-none " +
+                    (t.boxLabel.trim()
+                      ? "text-white"
+                      : "text-amber-300 placeholder:text-amber-300/60")
+                  }
+                />
+                <span className="text-[10.5px] text-cart-ink-4">
+                  Se imprime en el QR de cada invitado al box · obligatorio.
+                </span>
+              </label>
+              <UnitNounPicker
+                value={t.unitNoun}
+                onChange={(v) => update(t.rowKey, { unitNoun: v })}
               />
-              <span className="text-[10.5px] text-cart-ink-4">
-                Se imprime en el QR de cada invitado al box · obligatorio.
-              </span>
-            </label>
+            </>
           )}
+          <label className="mt-2 flex items-center gap-2 rounded-xl bg-cart-bg-elev px-3 py-2">
+            <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">
+              Zona
+            </span>
+            <input
+              value={t.zone}
+              onChange={(e) => update(t.rowKey, { zone: e.target.value })}
+              placeholder="Ej: Boxes Premium · opcional"
+              maxLength={60}
+              list={`zones-${t.rowKey}`}
+              className="w-full bg-transparent text-[13.5px] text-white outline-none placeholder:text-cart-ink-4"
+            />
+            <datalist id={`zones-${t.rowKey}`}>
+              {knownZones
+                .filter((z) => z !== t.zone)
+                .map((z) => (
+                  <option key={z} value={z} />
+                ))}
+            </datalist>
+          </label>
         </div>
       ))}
 
@@ -1413,7 +1469,31 @@ function TicketsEditor({
         <AddKindButton kind="presale" onClick={() => add("presale")} />
         <AddKindButton kind="vip" onClick={() => add("vip")} />
         <AddKindButton kind="box" onClick={() => add("box")} />
+        <button
+          type="button"
+          onClick={() => setBulkOpen(true)}
+          className="inline-flex items-center gap-1.5 rounded-full bg-cart-accent/15 px-3.5 py-1.5 text-[12.5px] font-semibold text-cart-accent transition hover:bg-cart-accent/25"
+        >
+          <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
+            <rect x="1.5" y="1.5" width="4.5" height="4.5" rx="1" stroke="currentColor" strokeWidth="1.4" />
+            <rect x="8" y="1.5" width="4.5" height="4.5" rx="1" stroke="currentColor" strokeWidth="1.4" />
+            <rect x="1.5" y="8" width="4.5" height="4.5" rx="1" stroke="currentColor" strokeWidth="1.4" />
+            <rect x="8" y="8" width="4.5" height="4.5" rx="1" stroke="currentColor" strokeWidth="1.4" />
+          </svg>
+          Crear varios boxes
+        </button>
       </div>
+
+      {bulkOpen && (
+        <BulkBoxCreator
+          knownZones={knownZones}
+          onClose={() => setBulkOpen(false)}
+          onCreate={(rows) => {
+            setTickets([...tickets, ...rows]);
+            setBulkOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -1577,7 +1657,7 @@ function PromoterPoolPicker({
                       <span className="truncate text-[14px] font-semibold">{p.name}</span>
                       {!p.profileId && (
                         <span className="rounded-full bg-amber-400/12 px-1.5 py-px text-[9px] font-semibold tracking-[0.08em] text-amber-300">
-                          POR FIRMAR
+                          SIN ACTIVAR
                         </span>
                       )}
                     </div>
@@ -1789,5 +1869,433 @@ function IconPeople() {
       <circle cx="10" cy="5.5" r="1.6" stroke="currentColor" strokeWidth="1.4" />
       <path d="M9 11.5c.2-1.8 1.5-2.5 3-2.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
     </svg>
+  );
+}
+
+// ============================================================
+// Bulk box creator — genera N boxes en una zona en 30 segundos
+// ============================================================
+type NounPreset = "box" | "mesa" | "lounge" | "custom";
+type NumberingScheme = "num" | "alpha";
+
+const NOUN_PRESETS: Array<{ id: NounPreset; label: string }> = [
+  { id: "box", label: "Box" },
+  { id: "mesa", label: "Mesa" },
+  { id: "lounge", label: "Lounge" },
+  { id: "custom", label: "Otro" },
+];
+
+const capitalizeNoun = (s: string): string =>
+  s.length === 0 ? s : s[0].toUpperCase() + s.slice(1).toLowerCase();
+
+function BulkBoxCreator({
+  knownZones,
+  onClose,
+  onCreate,
+}: {
+  knownZones: string[];
+  onClose: () => void;
+  onCreate: (rows: TicketRow[]) => void;
+}) {
+  const [zone, setZone] = useState(knownZones[0] ?? "");
+  const [nounPreset, setNounPreset] = useState<NounPreset>("box");
+  const [customNoun, setCustomNoun] = useState("Espacio");
+  const [numbering, setNumbering] = useState<NumberingScheme>("num");
+  const [startNumber, setStartNumber] = useState("1");
+  const [quantity, setQuantity] = useState("10");
+  const [capacity, setCapacity] = useState("12");
+  const [priceSoles, setPriceSoles] = useState("1500");
+
+  const qty = Math.max(0, Math.min(60, Number(quantity) || 0));
+  const start = Math.max(1, Number(startNumber) || 1);
+  const cap = Math.max(1, Number(capacity) || 1);
+
+  const effectiveNoun =
+    nounPreset === "custom" ? customNoun.trim() || "Espacio" : NOUN_PRESETS.find((p) => p.id === nounPreset)!.label;
+
+  const labels = useMemo(() => {
+    return Array.from({ length: qty }, (_, i) => {
+      const suffix =
+        numbering === "alpha" ? String.fromCharCode(64 + start + i) : String(start + i);
+      return `${capitalizeNoun(effectiveNoun)} ${suffix}`;
+    });
+  }, [qty, start, numbering, effectiveNoun]);
+
+  const previewSample = labels.slice(0, 4).join(" · ") + (labels.length > 4 ? ` … ${labels[labels.length - 1]}` : "");
+
+  const canCreate = qty >= 1 && qty <= 60 && cap >= 1 && Number(priceSoles) >= 0;
+
+  const handleCreate = () => {
+    if (!canCreate) return;
+    const noun = effectiveNoun.toLowerCase();
+    const rows: TicketRow[] = labels.map((label) => ({
+      rowKey: uid(),
+      name: label,
+      kind: "box",
+      priceSoles: String(priceSoles),
+      capacity: String(cap),
+      boxLabel: label,
+      zone: zone.trim(),
+      unitNoun: noun,
+    }));
+    onCreate(rows);
+  };
+
+  return (
+    <>
+      <motion.div
+        key="bbd"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.18 }}
+        onClick={onClose}
+        aria-hidden
+        className="fixed inset-0 z-[110] bg-black/70 backdrop-blur-sm"
+      />
+      <motion.div
+        key="bbs"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Crear boxes en lote"
+        initial={{ y: "100%" }}
+        animate={{ y: 0 }}
+        exit={{ y: "100%" }}
+        transition={{ type: "spring", damping: 32, stiffness: 360, mass: 0.8 }}
+        className="fixed inset-x-0 bottom-0 z-[111] mx-auto flex max-h-[92dvh] w-full max-w-[520px] flex-col overflow-hidden rounded-t-[28px] border-t border-cart-line-strong bg-cart-bg-elev shadow-[0_-20px_60px_-10px_rgba(0,0,0,0.7)]"
+      >
+        <div className="flex shrink-0 items-center justify-between border-b border-cart-line px-5 py-4">
+          <div>
+            <div className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-cart-accent">
+              Boxes en lote
+            </div>
+            <h3 className="mt-0.5 font-sans text-[19px] font-semibold tracking-[-0.02em]">
+              Crear varios a la vez
+            </h3>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="grid size-9 place-items-center rounded-full text-cart-ink-3 transition hover:bg-white/5 hover:text-white"
+            aria-label="Cerrar"
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-5 py-5">
+          {/* 1 — Zona */}
+          <BulkStep number={1} title="Zona del venue">
+            <div className="flex flex-col gap-2">
+              <input
+                value={zone}
+                onChange={(e) => setZone(e.target.value)}
+                placeholder="Ej: Boxes Premium 1er Piso"
+                list="bulk-zones"
+                maxLength={60}
+                className="w-full rounded-xl border border-cart-line bg-cart-bg-elev-2 px-3 py-2.5 text-[14px] text-white outline-none placeholder:text-cart-ink-4 focus:border-cart-accent"
+              />
+              <datalist id="bulk-zones">
+                {knownZones.map((z) => (
+                  <option key={z} value={z} />
+                ))}
+              </datalist>
+              {knownZones.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {knownZones.map((z) => (
+                    <button
+                      key={z}
+                      type="button"
+                      onClick={() => setZone(z)}
+                      className={
+                        "rounded-full px-2.5 py-1 text-[11.5px] transition " +
+                        (zone === z
+                          ? "bg-cart-accent text-cart-bg"
+                          : "border border-cart-line text-cart-ink-2 hover:border-white/40")
+                      }
+                    >
+                      {z}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <p className="text-[10.5px] text-cart-ink-4">
+                Agrupa los boxes en el plano del comprador. Opcional pero recomendado.
+              </p>
+            </div>
+          </BulkStep>
+
+          {/* 2 — Tipo (noun) */}
+          <BulkStep number={2} title="¿Cómo les llamas?">
+            <div className="flex flex-wrap gap-1.5">
+              {NOUN_PRESETS.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setNounPreset(p.id)}
+                  className={
+                    "rounded-full px-3.5 py-1.5 text-[12.5px] font-semibold transition " +
+                    (nounPreset === p.id
+                      ? "bg-cart-accent text-cart-bg"
+                      : "border border-cart-line bg-cart-bg-elev-2 text-cart-ink-2 hover:border-white/40 hover:text-white")
+                  }
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            {nounPreset === "custom" && (
+              <input
+                value={customNoun}
+                onChange={(e) => setCustomNoun(e.target.value)}
+                placeholder="Ej: Lounge, Espacio, Suite…"
+                maxLength={24}
+                className="mt-2 w-full rounded-xl border border-cart-line bg-cart-bg-elev-2 px-3 py-2.5 text-[14px] text-white outline-none placeholder:text-cart-ink-4 focus:border-cart-accent"
+              />
+            )}
+            <p className="mt-2 text-[10.5px] text-cart-ink-4">
+              El comprador verá: <span className="text-cart-ink-2">«Cada {effectiveNoun.toLowerCase()} para X personas»</span>
+            </p>
+          </BulkStep>
+
+          {/* 3 — Numeración */}
+          <BulkStep number={3} title="Numeración">
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                onClick={() => setNumbering("num")}
+                className={
+                  "rounded-full px-3.5 py-1.5 text-[12.5px] font-semibold transition " +
+                  (numbering === "num"
+                    ? "bg-cart-accent text-cart-bg"
+                    : "border border-cart-line bg-cart-bg-elev-2 text-cart-ink-2 hover:border-white/40 hover:text-white")
+                }
+              >
+                1, 2, 3…
+              </button>
+              <button
+                type="button"
+                onClick={() => setNumbering("alpha")}
+                className={
+                  "rounded-full px-3.5 py-1.5 text-[12.5px] font-semibold transition " +
+                  (numbering === "alpha"
+                    ? "bg-cart-accent text-cart-bg"
+                    : "border border-cart-line bg-cart-bg-elev-2 text-cart-ink-2 hover:border-white/40 hover:text-white")
+                }
+              >
+                A, B, C…
+              </button>
+            </div>
+          </BulkStep>
+
+          {/* 4 — Cantidad / cupo / precio */}
+          <BulkStep number={4} title="Configuración">
+            <div className="grid grid-cols-3 gap-2">
+              <BulkNumberField
+                label="Cantidad"
+                value={quantity}
+                onChange={setQuantity}
+                min={1}
+                max={60}
+              />
+              <BulkNumberField
+                label="Cupo c/u"
+                value={capacity}
+                onChange={setCapacity}
+                min={1}
+                max={50}
+              />
+              <BulkNumberField
+                label="Precio S/"
+                value={priceSoles}
+                onChange={setPriceSoles}
+                min={0}
+                max={50000}
+              />
+            </div>
+            <div className="mt-2">
+              <BulkNumberField
+                label="Empezar desde"
+                value={startNumber}
+                onChange={setStartNumber}
+                min={1}
+                max={99}
+                hint={numbering === "alpha" ? "1 = A, 2 = B, 3 = C…" : undefined}
+              />
+            </div>
+          </BulkStep>
+
+          {/* Preview */}
+          <div className="mt-2 rounded-2xl border border-dashed border-cart-line bg-cart-bg-elev-2 px-3.5 py-3">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">
+              Vista previa
+            </div>
+            <div className="mt-1.5 font-mono text-[12.5px] leading-relaxed text-white">
+              {qty > 0 ? previewSample : "—"}
+            </div>
+          </div>
+        </div>
+
+        <div
+          className="shrink-0 border-t border-cart-line bg-cart-bg-elev px-5 pt-3"
+          style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 14px)" }}
+        >
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-full px-4 py-2.5 text-[13.5px] font-medium text-cart-ink-2 transition hover:text-white"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={handleCreate}
+              disabled={!canCreate}
+              className="flex-1 rounded-full bg-cart-accent py-3 text-[14px] font-semibold text-cart-bg shadow-[0_8px_24px_-6px_var(--color-cart-accent-glow)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:bg-cart-bg-elev-2 disabled:text-cart-ink-3 disabled:shadow-none"
+            >
+              {canCreate ? `Crear ${qty} boxes` : "Completa los campos"}
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </>
+  );
+}
+
+// Selector compacto para elegir cómo el organizador llama a la unidad
+// reservable (box, mesa, lounge u otro). Se muestra dentro de cada row de
+// kind=box en el editor de tickets.
+function UnitNounPicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const presets = ["box", "mesa", "lounge"];
+  const lower = value.trim().toLowerCase();
+  const isPreset = presets.includes(lower);
+  const isCustom = lower.length > 0 && !isPreset;
+  const [showCustom, setShowCustom] = useState(isCustom);
+
+  return (
+    <div className="mt-2 flex flex-col gap-1.5 rounded-xl bg-cart-bg-elev px-3 py-2">
+      <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">
+        Tipo
+      </span>
+      <div className="flex flex-wrap gap-1.5">
+        {presets.map((p) => {
+          const active = lower === p;
+          return (
+            <button
+              key={p}
+              type="button"
+              onClick={() => {
+                onChange(p);
+                setShowCustom(false);
+              }}
+              className={
+                "rounded-full px-2.5 py-1 text-[11.5px] font-semibold transition " +
+                (active
+                  ? "bg-cart-accent text-cart-bg"
+                  : "border border-cart-line text-cart-ink-2 hover:border-white/40")
+              }
+            >
+              {p[0].toUpperCase() + p.slice(1)}
+            </button>
+          );
+        })}
+        <button
+          type="button"
+          onClick={() => {
+            setShowCustom(true);
+            if (isPreset) onChange("");
+          }}
+          className={
+            "rounded-full px-2.5 py-1 text-[11.5px] font-semibold transition " +
+            (isCustom || showCustom
+              ? "bg-cart-accent text-cart-bg"
+              : "border border-cart-line text-cart-ink-2 hover:border-white/40")
+          }
+        >
+          Otro
+        </button>
+      </div>
+      {(showCustom || isCustom) && (
+        <input
+          value={isPreset ? "" : value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="Ej: Suite, Cabaña…"
+          maxLength={24}
+          className="mt-1 w-full bg-transparent text-[13px] text-white outline-none placeholder:text-cart-ink-4"
+        />
+      )}
+    </div>
+  );
+}
+
+function BulkStep({
+  number,
+  title,
+  children,
+}: {
+  number: number;
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="mb-5">
+      <div className="mb-2 flex items-center gap-2">
+        <span className="grid size-5 place-items-center rounded-full bg-cart-accent/20 text-[10.5px] font-bold text-cart-accent">
+          {number}
+        </span>
+        <h4 className="text-[13px] font-semibold tracking-[-0.005em] text-white">{title}</h4>
+      </div>
+      <div>{children}</div>
+    </div>
+  );
+}
+
+function BulkNumberField({
+  label,
+  value,
+  onChange,
+  min,
+  max,
+  hint,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  min: number;
+  max: number;
+  hint?: string;
+}) {
+  return (
+    <label className="flex flex-col gap-1 rounded-xl border border-cart-line bg-cart-bg-elev-2 px-2.5 py-2">
+      <span className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">
+        {label}
+      </span>
+      <input
+        inputMode="numeric"
+        value={value}
+        onChange={(e) => {
+          const clean = e.target.value.replace(/[^0-9]/g, "");
+          if (clean === "") return onChange("");
+          const n = Number(clean);
+          if (n > max) return onChange(String(max));
+          onChange(clean);
+        }}
+        onBlur={() => {
+          const n = Number(value);
+          if (!n || n < min) onChange(String(min));
+        }}
+        className="w-full bg-transparent text-[16px] font-semibold tracking-[-0.01em] text-white outline-none"
+      />
+      {hint && <span className="text-[9.5px] text-cart-ink-4">{hint}</span>}
+    </label>
   );
 }

@@ -7,6 +7,7 @@ import { completeOnboarding } from "../../application/CompleteOnboarding";
 import { updateProfile } from "../../application/UpdateProfile";
 import { listNotifications, type Notification } from "../../application/ListNotifications";
 import { listFollows, type FollowedOrg } from "../../application/ListFollows";
+import { lookupProfileByPhone, type LookupResult } from "../../application/LookupProfile";
 import { supabaseUserRepository } from "../../infrastructure/repositories/SupabaseUserRepository";
 import { supabaseOrganizationRepository } from "../../organizations/infrastructure/repositories/SupabaseOrganizationRepository";
 import { supabaseLegalEntityRepository } from "../../organizations/infrastructure/repositories/SupabaseLegalEntityRepository";
@@ -110,5 +111,15 @@ export const IdentityController = {
     const auth = await getAuthContext();
     if (!auth.ok) return err(auth.error);
     return listFollows(auth.value.profileId);
+  },
+
+  // Lookup pública por WhatsApp — usada para confirmar al destinatario al que
+  // le mandas una entrada (estilo Yape). Sin autenticación pero solo expone
+  // displayName corto (privacy-preserving).
+  async lookupByPhone(input: unknown): Promise<Result<LookupResult>> {
+    const parsed = z.object({ phone: z.string().min(9) }).safeParse(input);
+    if (!parsed.success) return { ok: true, value: { found: false } };
+    const result = await lookupProfileByPhone(parsed.data.phone);
+    return { ok: true, value: result };
   },
 };

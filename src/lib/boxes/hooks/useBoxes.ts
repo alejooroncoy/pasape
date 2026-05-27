@@ -16,19 +16,24 @@ export const useBoxByToken = (token: string) =>
     refetchInterval: LIVE_REFETCH_MS,
   });
 
-export const useBoxForTicket = (ticketId: string) =>
+export const useBoxForTicket = (ticketId: string, linkToken?: string | null) =>
   useQuery({
-    queryKey: ["boxes", "ticket", ticketId],
-    queryFn: () => api.get<Box | null>(`/api/boxes/ticket/${ticketId}`),
+    queryKey: ["boxes", "ticket", ticketId, linkToken ?? ""],
+    queryFn: () => {
+      const qs = linkToken ? `?k=${encodeURIComponent(linkToken)}` : "";
+      return api.get<Box | null>(`/api/boxes/ticket/${ticketId}${qs}`);
+    },
     enabled: !!ticketId,
     refetchInterval: LIVE_REFETCH_MS,
   });
 
-export const useCreateBox = () => {
+export const useCreateBox = (linkToken?: string | null) => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { ticketId: string; capacity?: number }) =>
-      api.post<Box>("/api/boxes", input),
+    mutationFn: (input: { ticketId: string; capacity?: number }) => {
+      const qs = linkToken ? `?k=${encodeURIComponent(linkToken)}` : "";
+      return api.post<Box>(`/api/boxes${qs}`, input);
+    },
     onSuccess: (_data, vars) =>
       qc.invalidateQueries({ queryKey: ["boxes", "ticket", vars.ticketId] }),
   });
@@ -37,8 +42,16 @@ export const useCreateBox = () => {
 export const useJoinBox = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { token: string; holderName: string; holderDni?: string | null }) =>
-      api.post<Box>("/api/boxes/join", input),
+    mutationFn: (input: {
+      token: string;
+      holderName: string;
+      holderDni?: string | null;
+      holderPhone?: string | null;
+    }) =>
+      api.post<Box & { joinedTicket: { id: string; k: string } | null }>(
+        "/api/boxes/join",
+        input,
+      ),
     onSuccess: (_data, vars) => qc.invalidateQueries({ queryKey: ["boxes", "token", vars.token] }),
   });
 };

@@ -17,5 +17,5 @@ export const getBoxByTicket = (
 
 export const joinBox = (
   { repo }: Deps,
-  input: { token: string; profileId: string; holderName: string; holderDni: string | null },
+  input: { token: string; profileId: string; holderName: string; holderDni: string | null; holderPhone: string | null },
 ) => repo.join(input);

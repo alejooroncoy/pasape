@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { err, type Result } from "@/server/_shared/result";
 import { getAuthContext } from "@/server/_shared/AuthContext";
+import { supabaseAdmin } from "@/server/_shared/supabase/admin";
+import { verifyTicketLink } from "@/server/notifications/domain/TicketLinkToken";
 import { supabaseTicketRepository as repo } from "../../infrastructure/repositories/SupabaseTicketRepository";
 import { buyTickets } from "../../application/BuyTickets";
 import { getMyTicketById, getMyTickets } from "../../application/GetMyTickets";
@@ -62,10 +64,23 @@ export const TicketsController = {
     return { ok: true, value: await getMyTickets({ repo }, auth.value.profileId) };
   },
 
-  async one(id: string): Promise<Result<WalletTicket>> {
+  async one(id: string, linkToken: string | null = null): Promise<Result<WalletTicket>> {
     const auth = await getAuthContext();
-    if (!auth.ok) return err(auth.error);
-    const t = await getMyTicketById({ repo }, id, auth.value.profileId);
+    // Camino auth normal — buyer logueado pidiendo su propio ticket.
+    let holderId: string | null = auth.ok ? auth.value.profileId : null;
+    // Camino guest — link público con HMAC. Resolvemos el current_holder
+    // desde la tabla y delegamos al mismo path (getMyTicketById filtra por
+    // current_holder, así que el resultado es el mismo).
+    if (!holderId && linkToken && verifyTicketLink(id, linkToken)) {
+      const { data } = await supabaseAdmin()
+        .from("tickets")
+        .select("current_holder")
+        .eq("id", id)
+        .maybeSingle<{ current_holder: string | null }>();
+      holderId = data?.current_holder ?? null;
+    }
+    if (!holderId) return err(auth.ok ? "not_found" : auth.error);
+    const t = await getMyTicketById({ repo }, id, holderId);
     if (!t) return err("not_found");
     return { ok: true, value: t };
   },

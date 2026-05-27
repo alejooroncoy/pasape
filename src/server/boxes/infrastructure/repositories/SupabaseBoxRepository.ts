@@ -195,12 +195,30 @@ export const supabaseBoxRepository: BoxRepository = {
     return loadBox(box.id);
   },
 
-  async join({ token, profileId, holderName, holderDni }): Promise<Result<Box>> {
+  async join({ token, profileId, holderName, holderDni, holderPhone }): Promise<Result<Box>> {
     const db = supabaseAdmin();
     const box = await this.getByToken(token);
     if (!box) return err("invalid_token");
     if (box.members.some((m) => m.profileId === profileId)) return ok(box);
     if (box.members.length >= box.capacity) return err("box_full");
+
+    // Anti-duplicación por DNI dentro del mismo box. Guardamos last2 en tickets
+    // por privacidad, así que también comparamos last2 — colisión 1/100 dentro
+    // de 12 personas es aceptable y el portero termina de validar en puerta.
+    if (holderDni) {
+      const last2 = holderDni.slice(-2);
+      const ticketIds = box.members.map((m) => m.ticketId).filter(Boolean) as string[];
+      if (ticketIds.length) {
+        const { data: dup } = await db
+          .from("tickets")
+          .select("id")
+          .in("id", ticketIds)
+          .eq("holder_dni_last2", last2)
+          .limit(1)
+          .maybeSingle<{ id: string }>();
+        if (dup) return err("dni_already_in_box");
+      }
+    }
 
     // Why: heredamos box_label desde el ticket_type y enlazamos al ticket host
     // (primer miembro del box). Así, al escanear cualquier QR el portero ve
@@ -220,6 +238,7 @@ export const supabaseBoxRepository: BoxRepository = {
         ticket_type_id: box.ticketTypeId,
         holder_name: holderName,
         holder_dni_last2: holderDni ? holderDni.slice(-2) : null,
+        holder_phone: holderPhone,
         qr_code: generateQr(),
         current_holder: profileId,
         box_label: type?.box_label ?? null,

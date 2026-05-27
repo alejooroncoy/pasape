@@ -9,10 +9,13 @@ export const myTicketsKey = ["tickets", "mine"] as const;
 export const useMyTickets = () =>
   useQuery({ queryKey: myTicketsKey, queryFn: () => api.get<WalletTicket[]>("/api/tickets/my") });
 
-export const useTicket = (id: string) =>
+export const useTicket = (id: string, linkToken?: string | null) =>
   useQuery({
-    queryKey: ["tickets", "detail", id],
-    queryFn: () => api.get<WalletTicket>(`/api/tickets/${id}`),
+    queryKey: ["tickets", "detail", id, linkToken ?? ""],
+    queryFn: () => {
+      const qs = linkToken ? `?k=${encodeURIComponent(linkToken)}` : "";
+      return api.get<WalletTicket>(`/api/tickets/${id}${qs}`);
+    },
     enabled: !!id,
   });
 

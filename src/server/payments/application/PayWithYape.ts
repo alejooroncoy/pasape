@@ -99,6 +99,9 @@ export const payWithYape = async (
   const body: Record<string, unknown> = {
     transaction_amount: Math.round(order.total_cents) / 100,
     payment_method_id: "yape",
+    // Yape no admite cuotificación — MP requiere installments=1 explícito,
+    // si no devuelve "Invalid installments".
+    installments: 1,
     token: input.token,
     description,
     external_reference: order.id,

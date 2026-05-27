@@ -42,10 +42,26 @@ const guard = async (slug: string): Promise<Result<EventCtx>> => {
   return ok({ eventId: detail.event.id, organizationId: detail.event.organizationId });
 };
 
+const sanitizeHost = (raw: string): string => {
+  // Defensa contra hosts que vienen con protocolo (ej: "http://localhost:3001"
+  // en dev en vez de "localhost:3001"). Si trae "://" o "http", extrae solo el
+  // host:port real para evitar doble-prefijo "http://localhost:3001http://...".
+  let h = raw.trim();
+  if (h.startsWith("http://")) h = h.slice("http://".length);
+  else if (h.startsWith("https://")) h = h.slice("https://".length);
+  // Si todavía hay un "/" después de limpiar protocolo, cortar el path.
+  const slashAt = h.indexOf("/");
+  if (slashAt > -1) h = h.slice(0, slashAt);
+  return h || "pasape.lat";
+};
+
 const resolveOrigin = async () => {
+  // Preferir el env explícito si está, evita ambigüedad con headers de dev.
+  const envUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
+  if (envUrl) return envUrl.replace(/\/+$/, "");
   const h = await headers();
-  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "pasape.lat";
-  const proto = h.get("x-forwarded-proto") ?? "https";
+  const host = sanitizeHost(h.get("x-forwarded-host") ?? h.get("host") ?? "pasape.lat");
+  const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
   return `${proto}://${host}`;
 };
 

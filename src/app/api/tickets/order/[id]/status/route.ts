@@ -1,9 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
 import { getAuthContext } from "@/server/_shared/AuthContext";
+import { signTicketLink } from "@/server/notifications/domain/TicketLinkToken";
 
-// Polling endpoint used by /events/[slug]/processing. Returns { status, paidAt }.
+// Polling endpoint used by /events/[slug]/processing. Returns
+// { status, paidAt, ticketUrl?, ticketsCount }.
 // Authorization: owner is the logged-in buyer OR a guest passing ?email=.
+// Cuando el pago está paid, también devolvemos `ticketUrl` con el primer
+// ticket firmado para que el guest pueda ver su QR sin login.
 export const GET = async (req: NextRequest, ctx: { params: Promise<{ id: string }> }) => {
   const { id } = await ctx.params;
   const url = new URL(req.url);
@@ -31,5 +35,29 @@ export const GET = async (req: NextRequest, ctx: { params: Promise<{ id: string 
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
-  return NextResponse.json({ data: { status: row.status, paidAt: row.paid_at } });
+  let ticketUrl: string | null = null;
+  let ticketsCount = 0;
+  if (row.status === "paid") {
+    const { data: tickets } = await db
+      .from("tickets")
+      .select("id, created_at")
+      .eq("order_id", id)
+      .eq("status", "active")
+      .order("created_at", { ascending: true });
+    ticketsCount = tickets?.length ?? 0;
+    const first = tickets?.[0];
+    if (first) {
+      const token = signTicketLink(first.id);
+      ticketUrl = `/t/${first.id}?k=${token}`;
+    }
+  }
+
+  return NextResponse.json({
+    data: {
+      status: row.status,
+      paidAt: row.paid_at,
+      ticketUrl,
+      ticketsCount,
+    },
+  });
 };

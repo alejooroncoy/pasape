@@ -23,11 +23,22 @@ export type CreateEventInput = {
   transferRequiresKyc: boolean;
 };
 
+export type SalesSeriesPoint = {
+  /** ISO date "YYYY-MM-DD" (día UTC). */
+  day: string;
+  /** Tickets activos+usados emitidos ese día. */
+  ticketsSold: number;
+  /** Revenue confirmado en centavos (sólo orders paid). */
+  revenueCents: number;
+};
+
 export type EventStats = {
   sold: number;
   validated: number;
   revenueCents: number;
   capacity: number | null;
+  /** Serie diaria desde el view `event_sales_by_day`. Vacío = sin ventas. */
+  salesSeries: SalesSeriesPoint[];
   ticketTypes: Array<{
     id: string;
     name: string;
@@ -84,6 +95,8 @@ export type CreateTicketTypeInput = {
   priceCents: number;
   capacity: number;
   boxLabel?: string | null;
+  zone?: string | null;
+  unitNoun?: string | null;
 };
 
 export type UpdateTicketTypeInput = {
@@ -91,6 +104,8 @@ export type UpdateTicketTypeInput = {
   priceCents?: number;
   capacity?: number;
   boxLabel?: string | null;
+  zone?: string | null;
+  unitNoun?: string | null;
 };
 
 export type UpdateEventInput = {

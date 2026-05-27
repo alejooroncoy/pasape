@@ -66,19 +66,29 @@ export function YapeForm({ orderId, amount, initialPhone = "", onPaid, onError }
           phoneNumber: phoneDigits,
         }),
       });
-      const data = (await res.json()) as
-        | { ok: true; value: { status: string; paymentId: string; message?: string } }
-        | { ok: false; error: string };
-      if (!data.ok) {
-        setLocalError(humanizeYapeError(data.error));
-        onError?.(data.error);
+      // El backend usa el helper json() → respuesta `{data: ...}` en éxito o
+      // `{error: ...}` en error. NO es el shape antiguo `{ok, value/error}`.
+      const body = (await res.json()) as {
+        data?: { status: string; paymentId: string; message?: string };
+        error?: string;
+      };
+      if (!res.ok || body.error) {
+        const errMsg = body.error ?? `HTTP ${res.status}`;
+        setLocalError(humanizeYapeError(errMsg));
+        onError?.(errMsg);
         return;
       }
-      if (data.value.status === "approved" || data.value.status === "in_process") {
+      const value = body.data;
+      if (!value) {
+        setLocalError(humanizeYapeError("empty_response"));
+        onError?.("empty_response");
+        return;
+      }
+      if (value.status === "approved" || value.status === "in_process") {
         onPaid();
       } else {
-        setLocalError(humanizeYapeError(data.value.message ?? "rejected"));
-        onError?.(data.value.message ?? "rejected");
+        setLocalError(humanizeYapeError(value.message ?? "rejected"));
+        onError?.(value.message ?? "rejected");
       }
     } catch (e) {
       const msg = (e as Error).message ?? "yape_failed";

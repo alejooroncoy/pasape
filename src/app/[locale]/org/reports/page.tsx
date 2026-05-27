@@ -72,7 +72,10 @@ export default function OrgReportsPage() {
     return { revenue, sold, validated, conversion };
   }, [data]);
 
-  const series = useMemo(() => generateZeroSeries(range), [range]);
+  const series = useMemo(
+    () => buildSeries(data?.salesSeries ?? [], range),
+    [data?.salesSeries, range],
+  );
 
   // Empty state when the org has zero events at all.
   const hasNoEvents = events.isFetched && (events.data?.length ?? 0) === 0;
@@ -183,9 +186,9 @@ export default function OrgReportsPage() {
                   Ventas en el tiempo
                 </h2>
                 <p className="mt-0.5 text-[12.5px] text-cart-ink-3">
-                  {kpis.sold === 0
-                    ? "Aún sin ventas — los datos aparecerán aquí en vivo"
-                    : "Evolución de tickets vendidos"}
+                  {series.some((v) => v > 0)
+                    ? "Evolución de tickets vendidos"
+                    : "Aún sin ventas — los datos aparecerán aquí en vivo"}
                 </p>
               </div>
               <div className="hidden items-center gap-2 text-[11.5px] text-cart-ink-3 sm:flex">
@@ -196,35 +199,42 @@ export default function OrgReportsPage() {
                 Tickets
               </div>
             </div>
-            {kpis.sold === 0 ? (
-              <SalesEmptyState />
+            {series.some((v) => v > 0) ? (
+              <Sparkline data={series} range={range} />
             ) : (
-              <Sparkline data={series} />
+              <SalesEmptyState />
             )}
           </section>
 
-          {/* Breakdown by ticket type */}
+          {/* Breakdown by ticket type — agrupado por familia (Box, Mesa, etc.) */}
           <section className="rounded-2xl border border-cart-line bg-cart-bg-elev p-4 sm:p-6">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="font-sans text-[15.5px] font-semibold tracking-[-0.01em] text-white">
-                Por tipo de ticket
-              </h2>
-              <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-cart-ink-4">
-                {(data?.ticketTypes ?? []).length} tipos
-              </span>
-            </div>
-            {(data?.ticketTypes ?? []).length === 0 ? (
-              <TicketTypesEmpty />
-            ) : (
-              <TicketBreakdown
-                rows={(data?.ticketTypes ?? []).map((t) => ({
+            {(() => {
+              const grouped = groupTicketRows(
+                (data?.ticketTypes ?? []).map((t) => ({
                   name: t.name,
                   price: t.priceCents / 100,
                   sold: t.sold,
                   capacity: t.capacity,
-                }))}
-              />
-            )}
+                })),
+              );
+              return (
+                <>
+                  <div className="mb-4 flex items-center justify-between">
+                    <h2 className="font-sans text-[15.5px] font-semibold tracking-[-0.01em] text-white">
+                      Por tipo de ticket
+                    </h2>
+                    <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-cart-ink-4">
+                      {grouped.length} {grouped.length === 1 ? "categoría" : "categorías"}
+                    </span>
+                  </div>
+                  {grouped.length === 0 ? (
+                    <TicketTypesEmpty />
+                  ) : (
+                    <TicketBreakdown rows={grouped} />
+                  )}
+                </>
+              );
+            })()}
           </section>
         </>
       )}
@@ -449,13 +459,13 @@ function ExportButton({ slug, disabled }: { slug: string | null; disabled: boole
 
   return (
     <div className="relative">
-      <motion.button
+      <button
         type="button"
         onClick={onClick}
-        whileTap={isDisabled ? undefined : { scale: 0.97 }}
-        disabled={isDisabled}
-        aria-disabled={isDisabled}
-        className={`inline-flex items-center gap-2 rounded-full border px-3.5 py-2 text-[12.5px] font-medium transition-colors sm:px-4 sm:py-2.5 sm:text-[13.5px] ${
+        disabled={!!isDisabled}
+        aria-disabled={!!isDisabled}
+        suppressHydrationWarning
+        className={`inline-flex items-center gap-2 rounded-full border px-3.5 py-2 text-[12.5px] font-medium transition-colors active:scale-[0.97] sm:px-4 sm:py-2.5 sm:text-[13.5px] ${
           isDisabled
             ? "cursor-not-allowed border-cart-line bg-cart-bg-elev text-cart-ink-4"
             : "border-cart-accent/40 bg-cart-accent-soft text-white hover:border-cart-accent/70"
@@ -486,7 +496,7 @@ function ExportButton({ slug, disabled }: { slug: string | null; disabled: boole
           {loading ? "Generando…" : "Exportar a Excel"}
         </span>
         <span className="sm:hidden">{loading ? "…" : "Exportar"}</span>
-      </motion.button>
+      </button>
       {error && (
         <div className="absolute right-0 top-full mt-2 whitespace-nowrap rounded-lg border border-rose-500/30 bg-rose-500/10 px-2.5 py-1.5 text-[11.5px] font-medium text-rose-200">
           {error}
@@ -599,18 +609,60 @@ function generateZeroSeries(range: RangeKey): number[] {
   return new Array(n).fill(0);
 }
 
-function Sparkline({ data }: { data: number[] }) {
+/**
+ * Rellena la serie diaria del backend en buckets contiguos según el rango.
+ * El backend devuelve sólo días con ventas; acá expandimos a un array
+ * denso (un punto por día) para que el sparkline pinte líneas continuas
+ * sin huecos. Para "today" mostramos sólo el día de hoy.
+ */
+function buildSeries(
+  points: Array<{ day: string; ticketsSold: number }>,
+  range: RangeKey,
+): number[] {
+  const map = new Map<string, number>();
+  for (const p of points) {
+    // p.day puede llegar como "2026-05-27" o "2026-05-27T00:00:00.000Z".
+    const key = p.day.slice(0, 10);
+    map.set(key, (map.get(key) ?? 0) + p.ticketsSold);
+  }
+  const days = range === "today" ? 1 : range === "7d" ? 7 : range === "30d" ? 30 : 60;
+  const out: number[] = [];
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(today);
+    d.setUTCDate(today.getUTCDate() - i);
+    const key = d.toISOString().slice(0, 10);
+    out.push(map.get(key) ?? 0);
+  }
+  return out;
+}
+
+function Sparkline({ data, range }: { data: number[]; range: RangeKey }) {
   const w = 800;
-  const h = 200;
-  const pad = 24;
+  const h = 220;
+  const padL = 40; // espacio para labels Y
+  const padR = 16;
+  const padT = 12;
+  const padB = 28; // espacio para labels X
+  const innerW = w - padL - padR;
+  const innerH = h - padT - padB;
   const max = Math.max(1, ...data);
-  const step = (w - pad * 2) / Math.max(1, data.length - 1);
+  const step = innerW / Math.max(1, data.length - 1);
   const pts = data
-    .map((v, i) => [pad + i * step, h - pad - (v / max) * (h - pad * 2)] as const)
+    .map((v, i) => [padL + i * step, padT + innerH - (v / max) * innerH] as const)
     .map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`)
     .join(" L ");
   const path = `M ${pts}`;
-  const area = `${path} L ${w - pad},${h - pad} L ${pad},${h - pad} Z`;
+  const area = `${path} L ${padL + (data.length - 1) * step},${padT + innerH} L ${padL},${padT + innerH} Z`;
+
+  // Y axis ticks: 0, mid, max. Si max es pequeño usamos enteros.
+  const yTicks = [0, Math.round(max / 2), max];
+
+  // X axis labels: 4 hitos (primero, 1/3, 2/3, último). Para "today" mostramos
+  // sólo "Hoy"; para los demás, fechas cortas tipo "27 may".
+  const xLabels = buildXLabels(data.length, range);
+
   return (
     <div className="relative w-full">
       <svg
@@ -628,17 +680,51 @@ function Sparkline({ data }: { data: number[] }) {
             <stop offset="100%" stopColor="#c084fc" />
           </linearGradient>
         </defs>
-        {[0.25, 0.5, 0.75].map((g) => (
-          <line
-            key={g}
-            x1={pad}
-            x2={w - pad}
-            y1={pad + (h - pad * 2) * g}
-            y2={pad + (h - pad * 2) * g}
-            stroke="rgba(255,255,255,0.05)"
-            strokeDasharray="2 4"
-          />
-        ))}
+
+        {/* Grid + labels Y */}
+        {yTicks.map((tick) => {
+          const y = padT + innerH - (tick / max) * innerH;
+          return (
+            <g key={tick}>
+              <line
+                x1={padL}
+                x2={w - padR}
+                y1={y}
+                y2={y}
+                stroke="rgba(255,255,255,0.06)"
+                strokeDasharray="2 4"
+              />
+              <text
+                x={padL - 8}
+                y={y}
+                textAnchor="end"
+                dominantBaseline="middle"
+                fill="rgba(255,255,255,0.45)"
+                style={{ font: "500 11px system-ui, sans-serif" }}
+              >
+                {tick}
+              </text>
+            </g>
+          );
+        })}
+
+        {/* Labels X */}
+        {xLabels.map(({ i, label }) => {
+          const x = padL + i * step;
+          return (
+            <text
+              key={i}
+              x={x}
+              y={h - 8}
+              textAnchor={i === 0 ? "start" : i === data.length - 1 ? "end" : "middle"}
+              fill="rgba(255,255,255,0.45)"
+              style={{ font: "500 10.5px system-ui, sans-serif" }}
+            >
+              {label}
+            </text>
+          );
+        })}
+
         <motion.path
           d={area}
           fill="url(#sl-area)"
@@ -660,6 +746,21 @@ function Sparkline({ data }: { data: number[] }) {
       </svg>
     </div>
   );
+}
+
+function buildXLabels(n: number, range: RangeKey): Array<{ i: number; label: string }> {
+  if (n <= 1) return [{ i: 0, label: "Hoy" }];
+  const indices = [0, Math.floor(n / 3), Math.floor((2 * n) / 3), n - 1];
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  const fmt = new Intl.DateTimeFormat("es-PE", { day: "numeric", month: "short" });
+  return indices.map((i) => {
+    if (range === "today") return { i, label: i === n - 1 ? "Hoy" : "" };
+    if (i === n - 1) return { i, label: "Hoy" };
+    const d = new Date(today);
+    d.setUTCDate(today.getUTCDate() - (n - 1 - i));
+    return { i, label: fmt.format(d) };
+  });
 }
 
 function SalesEmptyState() {
@@ -715,16 +816,94 @@ function SalesEmptyState() {
 /* Ticket-type breakdown                                                    */
 /* ──────────────────────────────────────────────────────────────────────── */
 
-function TicketBreakdown({
-  rows,
-}: {
-  rows: { name: string; price: number; sold: number; capacity: number }[];
-}) {
+type BreakdownRow = {
+  name: string;
+  price: number;
+  sold: number;
+  capacity: number;
+  /** Cantidad de tipos individuales que componen este grupo (1 = no agrupado). */
+  count?: number;
+  /** Boxes/mesas ocupados (al menos 1 ticket vendido). Sólo relevante si count>1. */
+  unitsOccupied?: number;
+  /** Si el grupo tiene precios distintos, mostramos rango en lugar del único. */
+  priceMax?: number;
+};
+
+/**
+ * Agrupa tipos con el mismo "tronco" de nombre (ej. "Box 1", "Box 2"... → "Box"
+ * x14). Útil cuando un evento define cada box/mesa como un ticket_type
+ * separado y el listado se infla a 30+ filas redundantes.
+ */
+function groupTicketRows(
+  rows: { name: string; price: number; sold: number; capacity: number }[],
+): BreakdownRow[] {
+  const groups = new Map<string, BreakdownRow>();
+  for (const r of rows) {
+    const base = baseName(r.name);
+    const existing = groups.get(base);
+    if (!existing) {
+      groups.set(base, {
+        name: base,
+        price: r.price,
+        priceMax: r.price,
+        sold: r.sold,
+        capacity: r.capacity,
+        count: 1,
+        unitsOccupied: r.sold > 0 ? 1 : 0,
+      });
+    } else {
+      existing.sold += r.sold;
+      existing.capacity += r.capacity;
+      existing.count = (existing.count ?? 1) + 1;
+      existing.unitsOccupied = (existing.unitsOccupied ?? 0) + (r.sold > 0 ? 1 : 0);
+      existing.price = Math.min(existing.price, r.price);
+      existing.priceMax = Math.max(existing.priceMax ?? existing.price, r.price);
+    }
+  }
+  return Array.from(groups.values());
+}
+
+/**
+ * Devuelve la métrica relevante para mostrar en la tabla:
+ *  - Para grupos (boxes/mesas, count > 1): se midió por unidades ocupadas
+ *    de N totales. Lo que importa al organizador es "cuántos boxes vendí",
+ *    no cuántos asientos ocupó cada grupo — eso ya lo decide el host una
+ *    vez pagó el box.
+ *  - Para tickets singulares (Preventa, General): la métrica natural es
+ *    asientos vendidos sobre aforo.
+ */
+function displayMetric(r: BreakdownRow): { sold: number; total: number; unitLabel: string | null } {
+  if ((r.count ?? 1) > 1) {
+    return {
+      sold: r.unitsOccupied ?? 0,
+      total: r.count ?? 0,
+      unitLabel: (r.count ?? 0) === 1 ? "vendido" : "vendidos",
+    };
+  }
+  return { sold: r.sold, total: r.capacity, unitLabel: null };
+}
+
+/** "Box 1" → "Box"; "Mesa M1" → "Mesa"; "Box S.VIP 3" → "Box S.VIP"; "Preventa" → "Preventa". */
+function baseName(name: string): string {
+  // Quita sufijos numéricos finales con o sin letra previa: " 1", " 12", " M1", " A3".
+  const trimmed = name.trim().replace(/\s+[A-Za-z]?\d+\s*$/, "").trim();
+  return trimmed.length > 0 ? trimmed : name.trim();
+}
+
+function formatPriceRange(r: BreakdownRow): string {
+  if (r.priceMax !== undefined && r.priceMax > r.price) {
+    return `${formatMoney(r.price)}–${formatMoney(r.priceMax)}`;
+  }
+  return formatMoney(r.price);
+}
+
+function TicketBreakdown({ rows }: { rows: BreakdownRow[] }) {
   return (
     <>
       <div className="flex flex-col gap-2.5 sm:hidden">
         {rows.map((r, i) => {
-          const pct = r.capacity > 0 ? Math.min(100, (r.sold / r.capacity) * 100) : 0;
+          const m = displayMetric(r);
+          const pct = m.total > 0 ? Math.min(100, (m.sold / m.total) * 100) : 0;
           return (
             <motion.div
               key={r.name}
@@ -737,14 +916,19 @@ function TicketBreakdown({
                 <div className="flex items-baseline gap-2">
                   <span className="text-[14.5px] font-semibold tracking-[-0.01em] text-white">
                     {r.name}
+                    {r.count && r.count > 1 && (
+                      <span className="ml-1.5 text-[11.5px] font-medium text-cart-ink-3">
+                        × {r.count}
+                      </span>
+                    )}
                   </span>
                   <span className="text-[11.5px] tabular-nums text-cart-ink-3">
-                    {formatMoney(r.price)}
+                    {formatPriceRange(r)}
                   </span>
                 </div>
                 <span className="text-[11px] font-semibold tabular-nums text-cart-ink-3">
-                  {r.sold.toLocaleString("es-PE")}
-                  <span className="text-cart-ink-4"> / {r.capacity.toLocaleString("es-PE")}</span>
+                  {m.sold.toLocaleString("es-PE")}
+                  <span className="text-cart-ink-4"> / {m.total.toLocaleString("es-PE")}</span>
                 </span>
               </div>
               <div className="flex items-center gap-2.5">
@@ -776,13 +960,14 @@ function TicketBreakdown({
               <th className="px-2 pb-2 text-left font-medium">Tipo</th>
               <th className="px-2 pb-2 text-right font-medium">Precio</th>
               <th className="px-2 pb-2 text-right font-medium">Vendidos</th>
-              <th className="px-2 pb-2 text-right font-medium">Aforo</th>
-              <th className="px-2 pb-2 text-left font-medium">Progreso</th>
+              <th className="px-2 pb-2 text-right font-medium">Total</th>
+              <th className="px-2 pb-2 text-left font-medium">% Vendido</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((r, i) => {
-              const pct = r.capacity > 0 ? Math.min(100, (r.sold / r.capacity) * 100) : 0;
+              const m = displayMetric(r);
+              const pct = m.total > 0 ? Math.min(100, (m.sold / m.total) * 100) : 0;
               return (
                 <motion.tr
                   key={r.name}
@@ -792,15 +977,20 @@ function TicketBreakdown({
                 >
                   <td className="rounded-l-xl bg-cart-bg-elev-2/70 px-3 py-3 text-[13.5px] font-medium text-white">
                     {r.name}
+                    {r.count && r.count > 1 && (
+                      <span className="ml-1.5 text-[11.5px] font-normal text-cart-ink-3">
+                        × {r.count}
+                      </span>
+                    )}
                   </td>
                   <td className="bg-cart-bg-elev-2/70 px-3 py-3 text-right text-[13px] tabular-nums text-cart-ink-2">
-                    {formatMoney(r.price)}
+                    {formatPriceRange(r)}
                   </td>
                   <td className="bg-cart-bg-elev-2/70 px-3 py-3 text-right text-[13px] tabular-nums text-white">
-                    {r.sold.toLocaleString("es-PE")}
+                    {m.sold.toLocaleString("es-PE")}
                   </td>
                   <td className="bg-cart-bg-elev-2/70 px-3 py-3 text-right text-[13px] tabular-nums text-cart-ink-3">
-                    {r.capacity.toLocaleString("es-PE")}
+                    {m.total.toLocaleString("es-PE")}
                   </td>
                   <td className="rounded-r-xl bg-cart-bg-elev-2/70 px-3 py-3">
                     <div className="flex items-center gap-2">

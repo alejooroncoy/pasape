@@ -26,9 +26,10 @@ async function guard(slug: string) {
   if (!detail) return { ok: false as const, error: "not_found" };
   const db = supabaseAdmin();
   const { data: membership } = await db
-    .from("org_memberships")
+    .from("memberships")
     .select("role")
-    .eq("organization_id", detail.event.organizationId)
+    .eq("scope_type", "organization")
+    .eq("scope_id", detail.event.organizationId)
     .eq("profile_id", auth.value.profileId)
     .maybeSingle<{ role: string }>();
   if (!membership) return { ok: false as const, error: "forbidden" };
@@ -43,9 +44,10 @@ async function readGuard(slug: string) {
   const db = supabaseAdmin();
   const [{ data: membership }, { data: promoterLink }] = await Promise.all([
     db
-      .from("org_memberships")
+      .from("memberships")
       .select("role")
-      .eq("organization_id", detail.event.organizationId)
+      .eq("scope_type", "organization")
+      .eq("scope_id", detail.event.organizationId)
       .eq("profile_id", auth.value.profileId)
       .maybeSingle<{ role: string }>(),
     db

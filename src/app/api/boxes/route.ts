@@ -4,5 +4,6 @@ import { json } from "@/server/_shared/http";
 
 export const POST = async (req: NextRequest) => {
   const body = await req.json().catch(() => ({}));
-  return json(await BoxesController.create(body), 201);
+  const k = new URL(req.url).searchParams.get("k");
+  return json(await BoxesController.create(body, k), 201);
 };

@@ -72,6 +72,17 @@ export const supabaseTicketRepository: TicketRepository = {
 
     if (!input.buyerId && !input.guest) return err("buyer_required");
 
+    // Why: bloquear compras a eventos no publicados (draft/closed/cancelled).
+    // Sin esto, cualquiera con el slug podría comprar a un evento que el
+    // organizador aún no lanzó. Cerrado/cancelado también bloqueado.
+    const { data: evStatus } = await db
+      .from("events")
+      .select("status")
+      .eq("id", input.eventId)
+      .maybeSingle<{ status: string }>();
+    if (!evStatus) return err("event_not_found");
+    if (evStatus.status !== "published") return err("event_not_published");
+
     const ttIds = input.items.map((i) => i.ticketTypeId);
     const { data: tts, error: ttErr } = await db
       .from("ticket_types")
@@ -132,18 +143,31 @@ export const supabaseTicketRepository: TicketRepository = {
       if (existingId) {
         effectiveBuyerId = existingId;
       } else {
-        const { data: created, error: createErr } = await db
+        // Why: profiles.id es FK a auth.users(id), no podemos insertar profile
+        // directo. Creamos un auth user (el trigger handle_new_user inserta
+        // la row de profile auto). Si el guest solo dio phone, sintetizamos
+        // un email para satisfacer el requirement de createUser de Supabase.
+        const synthEmail = emailNorm ?? `guest+${phoneNorm}@pasape.app`;
+        const { data: authUser, error: authErr } = await db.auth.admin.createUser({
+          email: synthEmail,
+          phone: phoneNorm ?? undefined,
+          email_confirm: true,
+          phone_confirm: !!phoneNorm,
+          user_metadata: { full_name: input.guest.fullName },
+        });
+        if (authErr || !authUser?.user) {
+          return err(authErr?.message ?? "guest_profile_create_failed");
+        }
+        // El trigger creó (id, email, full_name) pero no copia phone — lo
+        // actualizamos acá. DNI vive en orders.guest_dni (no en profiles).
+        await db
           .from("profiles")
-          .insert({
-            email: emailNorm,
+          .update({
             phone: phoneNorm,
-            full_name: input.guest.fullName,
             initial_role: "buyer",
           })
-          .select("id")
-          .single<{ id: string }>();
-        if (createErr || !created) return err(createErr?.message ?? "guest_profile_create_failed");
-        effectiveBuyerId = created.id;
+          .eq("id", authUser.user.id);
+        effectiveBuyerId = authUser.user.id;
       }
     }
     if (!effectiveBuyerId) return err("buyer_required");

@@ -121,12 +121,22 @@ export const supabasePromoterRepository: PromoterRepository = {
         .select("total_cents")
         .eq("promoter_link_id", l.id)
         .eq("status", "paid");
-      const gross = ((orders as Array<{ total_cents: number }> | null) ?? []).reduce(
-        (a, o) => a + o.total_cents,
-        0,
-      );
-      const sold = (orders ?? []).length;
-      const commission = Math.round((gross * l.commission_pct) / 100);
+      const orderRows = (orders as Array<{ total_cents: number }> | null) ?? [];
+      const gross = orderRows.reduce((a, o) => a + o.total_cents, 0);
+      const sold = orderRows.length;
+
+      // Use unlocked tiers if they exist for this link; fall back to percentage.
+      const { data: tiers } = await db
+        .from("commission_tiers")
+        .select("reward_amount_cents, threshold_count")
+        .eq("promoter_link_id", l.id)
+        .not("unlocked_at", "is", null);
+      type TierRow = { reward_amount_cents: number | null; threshold_count: number };
+      const tierRows = (tiers as TierRow[] | null) ?? [];
+      const commission =
+        tierRows.length > 0
+          ? tierRows.reduce((a, t) => a + (t.reward_amount_cents ?? 0), 0)
+          : Math.round((gross * l.commission_pct) / 100);
 
       const { data: payout } = await db
         .from("payouts")

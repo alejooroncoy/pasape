@@ -410,13 +410,18 @@ function AssignmentRow({
   onChangeCommission: (pct: number) => void;
 }) {
   const [copied, setCopied] = useState(false);
+  // Why: assignment.url puede venir absoluta (con origin) o relativa (/r/code).
+  // Si ya es absoluta, no le prependeamos otro origin (causaba el doble URL
+  // http://localhost:3001http://localhost:3001/r/...).
+  const absoluteUrl = () => {
+    if (typeof window === "undefined") return assignment.url;
+    return assignment.url.startsWith("/")
+      ? `${window.location.origin}${assignment.url}`
+      : assignment.url;
+  };
   const onCopy = async () => {
     try {
-      const url =
-        typeof window !== "undefined"
-          ? `${window.location.origin}${assignment.url}`
-          : assignment.url;
-      await navigator.clipboard.writeText(url);
+      await navigator.clipboard.writeText(absoluteUrl());
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
     } catch {
@@ -425,12 +430,8 @@ function AssignmentRow({
   };
   const onWa = () => {
     if (!assignment.whatsapp) return;
-    const url =
-      typeof window !== "undefined"
-        ? `${window.location.origin}${assignment.url}`
-        : assignment.url;
     const text = encodeURIComponent(
-      `Hola ${assignment.name.split(" ")[0]}, este es tu link para vender el evento: ${url}`,
+      `Hola ${assignment.name.split(" ")[0]}, este es tu link para vender el evento: ${absoluteUrl()}`,
     );
     const phone = assignment.whatsapp.replace(/[^\d]/g, "");
     window.open(`https://wa.me/${phone}?text=${text}`, "_blank");
@@ -449,7 +450,7 @@ function AssignmentRow({
             {!assignment.profileId && (
               <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/12 px-1.5 py-px text-[9px] font-semibold tracking-[0.08em] text-amber-300">
                 <span className="size-1 rounded-full bg-amber-300" />
-                POR FIRMAR
+                SIN ACTIVAR
               </span>
             )}
           </div>
@@ -623,7 +624,7 @@ function PoolPicker({
                   <span className="truncate text-[14px] font-semibold">{p.name}</span>
                   {!p.profileId && (
                     <span className="rounded-full bg-amber-400/12 px-1.5 py-px text-[9px] font-semibold tracking-[0.08em] text-amber-300">
-                      POR FIRMAR
+                      SIN ACTIVAR
                     </span>
                   )}
                 </div>

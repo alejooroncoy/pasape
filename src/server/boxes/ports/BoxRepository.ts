@@ -14,5 +14,6 @@ export type BoxRepository = {
     profileId: string;
     holderName: string;
     holderDni: string | null;
+    holderPhone: string | null;
   }): Promise<Result<Box>>;
 };

@@ -57,6 +57,7 @@ export const POST = async (
       profileId,
       holderName: parsed.data.holderName,
       holderDni: parsed.data.holderDni ?? null,
+      holderPhone: null,
     },
   );
   if (!result.ok) return fail(result.error);

@@ -1,0 +1,717 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pasape · Pipeline del promotor</title>
+    <style>
+      :root {
+        --bg: #0a0a0f;
+        --bg-elev: #12121a;
+        --bg-elev-2: #16161f;
+        --line: rgba(255, 255, 255, 0.08);
+        --line-strong: rgba(255, 255, 255, 0.14);
+        --ink: #f3f3f7;
+        --ink-2: #d6d6e0;
+        --ink-3: #8e8ea1;
+        --ink-4: #5e5e70;
+        --accent: #b87cff;
+        --accent-soft: rgba(184, 124, 255, 0.16);
+        --accent-glow: rgba(184, 124, 255, 0.55);
+        --green: #22d17f;
+        --green-soft: rgba(34, 209, 127, 0.14);
+        --yellow: #ffce3b;
+        --yellow-soft: rgba(255, 206, 59, 0.14);
+        --blue: #38bdf8;
+        --blue-soft: rgba(56, 189, 248, 0.14);
+        --red: #ff4d5e;
+        --red-soft: rgba(255, 77, 94, 0.14);
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Inter", system-ui, sans-serif;
+        background: var(--bg);
+        color: var(--ink);
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+      }
+      .wrap {
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 48px 24px 80px;
+      }
+      header.hero { margin-bottom: 28px; }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        background: var(--accent-soft);
+        color: var(--accent);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+      h1 {
+        margin: 12px 0 8px;
+        font-size: 36px;
+        font-weight: 700;
+        letter-spacing: -0.025em;
+        line-height: 1.05;
+      }
+      .lede {
+        color: var(--ink-3);
+        max-width: 640px;
+        font-size: 15px;
+      }
+      .status-board {
+        margin: 28px 0;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 12px;
+      }
+      .status-board .card {
+        padding: 14px 16px;
+        border-radius: 14px;
+        background: var(--bg-elev);
+        box-shadow: inset 0 0 0 1px var(--line);
+      }
+      .status-board .card .title {
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--ink-3);
+      }
+      .status-board .card .desc {
+        margin-top: 6px;
+        font-size: 13px;
+        color: var(--ink-2);
+      }
+      .status-board .card.green { box-shadow: inset 0 0 0 1px rgba(34, 209, 127, 0.4); }
+      .status-board .card.yellow { box-shadow: inset 0 0 0 1px rgba(255, 206, 59, 0.4); }
+      .status-board .card.red { box-shadow: inset 0 0 0 1px rgba(255, 77, 94, 0.4); }
+
+      section.row {
+        position: relative;
+        display: grid;
+        grid-template-columns: 80px 1fr;
+        gap: 24px;
+        padding: 28px 0;
+        border-top: 1px dashed var(--line);
+      }
+      section.row:first-of-type { border-top: 0; padding-top: 8px; }
+      .step-mark {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+      }
+      .step-num {
+        width: 44px;
+        height: 44px;
+        display: grid;
+        place-items: center;
+        border-radius: 14px;
+        background: var(--bg-elev);
+        box-shadow: inset 0 0 0 1px var(--line);
+        font-size: 18px;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+        color: var(--ink-2);
+      }
+      .actor-organizer .step-num {
+        background: var(--accent-soft);
+        color: var(--accent);
+        box-shadow: inset 0 0 0 1px rgba(184, 124, 255, 0.4);
+      }
+      .actor-promoter .step-num {
+        background: rgba(56, 189, 248, 0.14);
+        color: var(--blue);
+        box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.4);
+      }
+      .actor-system .step-num {
+        background: var(--bg-elev-2);
+        color: var(--ink-3);
+      }
+      .actor-buyer .step-num {
+        background: var(--green-soft);
+        color: var(--green);
+        box-shadow: inset 0 0 0 1px rgba(34, 209, 127, 0.4);
+      }
+      .step-body h2 {
+        margin: 0 0 4px;
+        font-size: 19px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+      .step-body .sub {
+        color: var(--ink-3);
+        font-size: 14px;
+        margin-bottom: 14px;
+      }
+      .step-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-bottom: 8px;
+      }
+      .step-actor-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        background: var(--bg-elev);
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ink-3);
+      }
+      .step-actor-label .dot { width: 6px; height: 6px; border-radius: 999px; }
+      .actor-organizer .step-actor-label .dot { background: var(--accent); }
+      .actor-promoter .step-actor-label .dot { background: var(--blue); }
+      .actor-system .step-actor-label .dot { background: var(--ink-3); }
+      .actor-buyer .step-actor-label .dot { background: var(--green); }
+      .impl-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+      .impl-pill.done {
+        background: var(--green-soft);
+        color: var(--green);
+      }
+      .impl-pill.partial {
+        background: var(--yellow-soft);
+        color: var(--yellow);
+      }
+      .impl-pill.todo {
+        background: var(--red-soft);
+        color: var(--red);
+      }
+      .frame {
+        margin-top: 12px;
+        padding: 16px 18px;
+        border-radius: 16px;
+        background: var(--bg-elev);
+        box-shadow: inset 0 0 0 1px var(--line);
+      }
+      .frame .title {
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ink-3);
+        margin-bottom: 8px;
+      }
+      .mono {
+        font-family: "SF Mono", ui-monospace, Menlo, monospace;
+        font-size: 12.5px;
+        color: var(--ink-2);
+        background: var(--bg-elev-2);
+        padding: 2px 6px;
+        border-radius: 6px;
+      }
+      ul.bullets {
+        margin: 8px 0 0;
+        padding-left: 18px;
+        color: var(--ink-2);
+        font-size: 14px;
+      }
+      ul.bullets li { margin: 4px 0; }
+      ul.bullets li b { color: var(--ink); font-weight: 600; }
+      .files {
+        margin-top: 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .files .file {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-family: "SF Mono", monospace;
+        font-size: 11.5px;
+        color: var(--ink-3);
+      }
+      .files .file::before {
+        content: "→";
+        color: var(--ink-4);
+      }
+      .files .file b {
+        color: var(--ink-2);
+        font-weight: 500;
+      }
+      .pillrow {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 10px;
+      }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 3px 8px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        background: var(--bg-elev-2);
+        color: var(--ink-2);
+        box-shadow: inset 0 0 0 1px var(--line);
+      }
+      .pill.green {
+        background: var(--green-soft);
+        color: var(--green);
+        box-shadow: inset 0 0 0 1px rgba(34, 209, 127, 0.3);
+      }
+      .pill.yellow {
+        background: var(--yellow-soft);
+        color: var(--yellow);
+        box-shadow: inset 0 0 0 1px rgba(255, 206, 59, 0.3);
+      }
+      .pill.accent {
+        background: var(--accent-soft);
+        color: var(--accent);
+        box-shadow: inset 0 0 0 1px rgba(184, 124, 255, 0.4);
+      }
+      .pill.blue {
+        background: var(--blue-soft);
+        color: var(--blue);
+        box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.3);
+      }
+      .mock {
+        margin-top: 10px;
+        padding: 18px 20px;
+        border-radius: 22px;
+        background: linear-gradient(180deg, rgba(124, 58, 237, 0.18), rgba(20, 12, 40, 0.4));
+        box-shadow: inset 0 0 0 1px rgba(184, 124, 255, 0.3), 0 30px 60px -30px rgba(124, 58, 237, 0.4);
+        max-width: 360px;
+      }
+      .mock .label {
+        font-size: 10.5px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--ink-3);
+      }
+      .mock .big {
+        margin-top: 6px;
+        font-size: 22px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+        line-height: 1.15;
+      }
+      .mock .sub-text {
+        margin-top: 4px;
+        font-size: 13px;
+        color: var(--ink-3);
+      }
+      .mock .cta {
+        margin-top: 14px;
+        display: flex;
+        gap: 8px;
+      }
+      .mock .cta button {
+        flex: 1;
+        height: 42px;
+        border-radius: 14px;
+        border: 0;
+        font-weight: 700;
+        font-size: 13px;
+        cursor: pointer;
+      }
+      .mock .cta button.primary { background: #fff; color: #0a0a0f; }
+      .mock .cta button.secondary { background: rgba(255, 255, 255, 0.08); color: #fff; }
+      .arrow {
+        position: absolute;
+        left: 22px;
+        top: 60%;
+        bottom: -20px;
+        width: 1px;
+        background: linear-gradient(to bottom, var(--line) 0%, var(--line-strong) 100%);
+      }
+      section.row:last-of-type .arrow { display: none; }
+      .legend {
+        margin-bottom: 18px;
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      .legend .item {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-radius: 12px;
+        background: var(--bg-elev);
+        box-shadow: inset 0 0 0 1px var(--line);
+        font-size: 12px;
+        color: var(--ink-2);
+      }
+      .legend .item .dot { width: 8px; height: 8px; border-radius: 999px; }
+      .summary {
+        margin-top: 48px;
+        padding: 24px;
+        border-radius: 20px;
+        background: var(--bg-elev);
+        box-shadow: inset 0 0 0 1px var(--line);
+      }
+      .summary h3 { margin: 0 0 12px; font-size: 16px; letter-spacing: -0.01em; }
+      .summary p { margin: 0 0 8px; color: var(--ink-2); font-size: 14px; }
+      .summary .note { color: var(--ink-3); font-size: 12.5px; }
+      @media (max-width: 640px) {
+        section.row { grid-template-columns: 56px 1fr; gap: 14px; }
+        .step-num { width: 38px; height: 38px; font-size: 15px; }
+        h1 { font-size: 26px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="hero">
+        <span class="badge">Pipeline del promotor · estado actual</span>
+        <h1>Cómo un promotor pasa de "lo agrego al pool" a "ya está vendiendo"</h1>
+        <p class="lede">
+          Onboarding ultra-light: el organizador hace el 80% del trabajo (tipea nombre
+          + WhatsApp). El promotor solo toca el botón del WhatsApp y queda dentro.
+          <b>Sin OTP, sin contraseña, sin email.</b>
+        </p>
+      </header>
+
+      <div class="status-board">
+        <div class="card green">
+          <div class="title">✓ Backend listo</div>
+          <div class="desc">
+            Migración aplicada · API + sender + claim · página /c/[token]
+          </div>
+        </div>
+        <div class="card yellow">
+          <div class="title">⏳ Pendiente Meta</div>
+          <div class="desc">
+            Registrar template <span class="mono">promoter_invite</span> (1–24 h
+            aprobación). Necesita <span class="mono">WABA_ID</span>.
+          </div>
+        </div>
+        <div class="card yellow">
+          <div class="title">⏳ Pendiente UI org</div>
+          <div class="desc">
+            Botón "Enviar invitación" en <span class="mono">/promoter-detail</span>
+            que llame al endpoint.
+          </div>
+        </div>
+        <div class="card yellow">
+          <div class="title">⏳ Pendiente UI promo</div>
+          <div class="desc">
+            Refactor <span class="mono">/promo</span> al nuevo design system
+            (sigue mobile-only).
+          </div>
+        </div>
+      </div>
+
+      <div class="legend">
+        <span class="item"><span class="dot" style="background: var(--accent);"></span>Organizador</span>
+        <span class="item"><span class="dot" style="background: var(--blue);"></span>Promotor</span>
+        <span class="item"><span class="dot" style="background: var(--ink-3);"></span>Sistema</span>
+        <span class="item"><span class="dot" style="background: var(--green);"></span>Comprador</span>
+      </div>
+
+      <!-- Step 1 -->
+      <section class="row actor-organizer">
+        <div class="step-mark"><div class="step-num">1</div></div>
+        <div class="step-body">
+          <div class="step-meta">
+            <span class="step-actor-label"><span class="dot"></span>Organizador</span>
+            <span class="impl-pill done">✓ Construido</span>
+          </div>
+          <h2>Agrega promotor al pool de la marca</h2>
+          <div class="sub">Una vez por persona. Vive en la marca, se reusa entre eventos.</div>
+          <div class="frame">
+            <div class="title">Org · Equipo · Pool de promotores</div>
+            <ul class="bullets">
+              <li>Nombre <span class="mono">Mauro Salazar</span></li>
+              <li>WhatsApp <span class="mono">+51 987 654 321</span></li>
+              <li>Comisión por defecto <span class="mono">15 %</span></li>
+            </ul>
+          </div>
+          <div class="files">
+            <div class="file">tabla <b>org_promoters</b> · profile_id null hasta el claim</div>
+            <div class="file">UI <b>/org/team</b> + sheet del composer al asignar</div>
+          </div>
+        </div>
+        <div class="arrow"></div>
+      </section>
+
+      <!-- Step 2 -->
+      <section class="row actor-organizer">
+        <div class="step-mark"><div class="step-num">2</div></div>
+        <div class="step-body">
+          <div class="step-meta">
+            <span class="step-actor-label"><span class="dot"></span>Organizador</span>
+            <span class="impl-pill done">✓ Construido</span>
+          </div>
+          <h2>Asigna el promotor al evento</h2>
+          <div class="sub">
+            Se genera <span class="mono">promoter_links</span> con código público
+            <span class="mono">/r/mau-rev24</span> (para atribución).
+            Status: <b>pending</b> hasta el claim.
+          </div>
+          <div class="pillrow">
+            <span class="pill yellow">● Por firmar</span>
+            <span class="pill">15 % comisión</span>
+            <span class="pill">evento Reverb x La Selva</span>
+          </div>
+          <div class="files">
+            <div class="file">tabla <b>promoter_links</b> · promoter_id null hasta claim</div>
+            <div class="file">tabla <b>org_promoters.claim_token</b> · 48 hex, TTL 14 días, single-use</div>
+          </div>
+        </div>
+        <div class="arrow"></div>
+      </section>
+
+      <!-- Step 3 -->
+      <section class="row actor-organizer">
+        <div class="step-mark"><div class="step-num">3</div></div>
+        <div class="step-body">
+          <div class="step-meta">
+            <span class="step-actor-label"><span class="dot"></span>Organizador</span>
+            <span class="impl-pill partial">⏳ Falta botón UI</span>
+          </div>
+          <h2>Dispara "Enviar invitación"</h2>
+          <div class="sub">
+            POST al endpoint nuevo. Backend resuelve org_promoter, refresca token
+            si caducó, llama a Kapso con template <span class="mono">promoter_invite</span>.
+            Idempotente: reenviar sobre un token vivo no rota nada.
+          </div>
+          <div class="files">
+            <div class="file">endpoint <b>POST /api/org/promoters/[id]/send-invite</b></div>
+            <div class="file">sender <b>PromoterInviteWhatsAppSender</b> → Kapso → Meta</div>
+          </div>
+        </div>
+        <div class="arrow"></div>
+      </section>
+
+      <!-- Step 4 -->
+      <section class="row actor-system">
+        <div class="step-mark"><div class="step-num">4</div></div>
+        <div class="step-body">
+          <div class="step-meta">
+            <span class="step-actor-label"><span class="dot"></span>Sistema</span>
+            <span class="impl-pill done">✓ Construido</span>
+            <span class="impl-pill partial">⏳ Template en revisión</span>
+          </div>
+          <h2>WhatsApp lo entrega como template UTILITY + botón URL</h2>
+          <div class="sub">
+            El promotor ve un mensaje normal de WhatsApp con un botón "Activar mi
+            link" que apunta a <span class="mono">pasape.pe/es/c/&lt;token&gt;</span>.
+            Sin texto sospechoso, sin pedirle nada al usuario.
+          </div>
+          <div class="frame">
+            <div class="title">WhatsApp · promoter_invite</div>
+            <ul class="bullets">
+              <li>"Hola <b>Mauro</b>, <b>IN Punta Hermosa</b> te activó como promotor de <b>Reverb x La Selva</b>."</li>
+              <li>"Ganás <b>15 %</b> por entrada vendida. Activa tu link cuando estés listo."</li>
+              <li><span class="mono">[Activar mi link]</span> ← botón URL dinámico {{1}} = token</li>
+            </ul>
+          </div>
+        </div>
+        <div class="arrow"></div>
+      </section>
+
+      <!-- Step 5 -->
+      <section class="row actor-promoter">
+        <div class="step-mark"><div class="step-num">5</div></div>
+        <div class="step-body">
+          <div class="step-meta">
+            <span class="step-actor-label"><span class="dot"></span>Promotor</span>
+            <span class="impl-pill done">✓ Construido</span>
+          </div>
+          <h2>Toca el botón y aterriza en <span class="mono">/c/&lt;token&gt;</span></h2>
+          <div class="sub">
+            Landing personalizada con el nombre del organizador, el evento y la
+            comisión. Un solo CTA: <b>Activar mi link</b>.
+          </div>
+          <div class="mock">
+            <div class="label">IN PUNTA HERMOSA</div>
+            <div class="big">Hola Mauro 👋</div>
+            <div class="sub-text">
+              <b>IN Punta Hermosa</b> te activó como promotor de
+              <b>Reverb x La Selva</b>. Ganás <b>15 %</b> por entrada.
+            </div>
+            <div class="cta">
+              <button class="primary">Activar mi link →</button>
+            </div>
+          </div>
+          <div class="files">
+            <div class="file">página <b>src/app/[locale]/c/[token]/page.tsx</b></div>
+            <div class="file">preview <b>GET /api/promoter-claim/[token]</b></div>
+          </div>
+        </div>
+        <div class="arrow"></div>
+      </section>
+
+      <!-- Step 6 -->
+      <section class="row actor-system">
+        <div class="step-mark"><div class="step-num">6</div></div>
+        <div class="step-body">
+          <div class="step-meta">
+            <span class="step-actor-label"><span class="dot"></span>Sistema</span>
+            <span class="impl-pill done">✓ Construido</span>
+          </div>
+          <h2>Claim: crea user Supabase + sesión sin OTP</h2>
+          <div class="sub">
+            Backend valida token → busca user por email phantom
+            <span class="mono">wa-{phone}@pasape.lat</span> → si no existe, lo crea
+            (trigger inserta en <span class="mono">profiles</span>) → marca
+            <span class="mono">org_promoter.profile_id</span> → emite magic-link
+            admin <span class="mono">token_hash</span> → cliente hace
+            <span class="mono">supabase.auth.verifyOtp</span> y queda con sesión.
+          </div>
+          <div class="pillrow">
+            <span class="pill green">✓ profile creado</span>
+            <span class="pill green">✓ org_promoter linkeado</span>
+            <span class="pill blue">cookie de sesión seteada</span>
+          </div>
+          <div class="files">
+            <div class="file">app service <b>claimPromoter</b> → genera magic-link admin</div>
+            <div class="file">endpoint <b>POST /api/promoter-claim</b></div>
+            <div class="file">cliente: <b>supabase.auth.verifyOtp({ token_hash, type: 'magiclink' })</b></div>
+          </div>
+        </div>
+        <div class="arrow"></div>
+      </section>
+
+      <!-- Step 7 -->
+      <section class="row actor-promoter">
+        <div class="step-mark"><div class="step-num">7</div></div>
+        <div class="step-body">
+          <div class="step-meta">
+            <span class="step-actor-label"><span class="dot"></span>Promotor</span>
+            <span class="impl-pill partial">⏳ Falta refactor visual</span>
+          </div>
+          <h2>Aterriza en <span class="mono">/promo</span> con sesión activa</h2>
+          <div class="sub">
+            Ve su link público <span class="mono">/r/&lt;code&gt;</span> listo para
+            copiar o compartir por WhatsApp. Métricas en cero, pero ya puede vender.
+            <br /><b>UI actual:</b> existe pero mobile-only (wrapper Phone). Pendiente
+            pasar al design system actual (PromoterShell desktop+iOS).
+          </div>
+          <div class="mock">
+            <div class="label">TU LINK · REVERB X LA SELVA</div>
+            <div class="big">pasape.lat/r/mau-rev24</div>
+            <div class="sub-text">0 entradas vendidas · 15 % comisión</div>
+            <div class="cta">
+              <button class="primary">Compartir por WhatsApp</button>
+              <button class="secondary">Copiar</button>
+            </div>
+          </div>
+          <div class="files">
+            <div class="file">página <b>src/app/[locale]/promo/page.tsx</b></div>
+            <div class="file">hook <b>useMyPromoterLinks / usePromoterHome</b></div>
+          </div>
+        </div>
+        <div class="arrow"></div>
+      </section>
+
+      <!-- Step 8 -->
+      <section class="row actor-buyer">
+        <div class="step-mark"><div class="step-num">8</div></div>
+        <div class="step-body">
+          <div class="step-meta">
+            <span class="step-actor-label"><span class="dot"></span>Comprador</span>
+            <span class="impl-pill done">✓ Construido</span>
+          </div>
+          <h2>Llega al checkout por <span class="mono">/r/&lt;code&gt;</span></h2>
+          <div class="sub">
+            La ruta <span class="mono">/r/&lt;code&gt;</span> redirige al evento con
+            el promo_code cacheado en localStorage + URL. Cualquier orden creada
+            queda atribuida a este promotor.
+          </div>
+          <div class="pillrow">
+            <span class="pill blue">promo = mau-rev24</span>
+            <span class="pill">atribución persiste cross-tab</span>
+          </div>
+        </div>
+        <div class="arrow"></div>
+      </section>
+
+      <!-- Step 9 -->
+      <section class="row actor-system">
+        <div class="step-mark"><div class="step-num">9</div></div>
+        <div class="step-body">
+          <div class="step-meta">
+            <span class="step-actor-label"><span class="dot"></span>Sistema</span>
+            <span class="impl-pill done">✓ Construido</span>
+          </div>
+          <h2>Mercado Pago paga → atribuye + recalcula hitos</h2>
+          <div class="sub">
+            Webhook MP marca la orden como pagada. Sistema incrementa
+            <span class="mono">soldCount</span> del link, llama a
+            <span class="mono">recalcUnlocksForLink</span> y marca como
+            <span class="mono">unlocked_at</span> los tiers cuyo umbral se cruzó.
+          </div>
+          <div class="pillrow">
+            <span class="pill green">+1 venta atribuida</span>
+            <span class="pill accent">hito S/ 100 desbloqueado</span>
+          </div>
+        </div>
+        <div class="arrow"></div>
+      </section>
+
+      <!-- Step 10 -->
+      <section class="row actor-promoter">
+        <div class="step-mark"><div class="step-num">10</div></div>
+        <div class="step-body">
+          <div class="step-meta">
+            <span class="step-actor-label"><span class="dot"></span>Promotor</span>
+            <span class="impl-pill done">✓ Construido</span>
+          </div>
+          <h2>Refresca <span class="mono">/promo</span> y ve el movimiento</h2>
+          <div class="sub">
+            Counter sube. Activity feed muestra "Camila P. compró · 21:47".
+            Si cruzó un hito, la card cambia a "✓ Desbloqueado".
+          </div>
+          <div class="pillrow">
+            <span class="pill green">7 ventas</span>
+            <span class="pill yellow">S/ 100 hito unlocked</span>
+            <span class="pill">comisión: S/ 31.50</span>
+          </div>
+        </div>
+      </section>
+
+      <div class="summary">
+        <h3>Lo que NO le pedimos al promotor</h3>
+        <p>· Email, contraseña, foto, bio, redes sociales.</p>
+        <p>· Subir contrato, firmar PDF, configurar payouts.</p>
+        <p>· Tener cuenta Pasape previa.</p>
+
+        <h3 style="margin-top: 18px;">Lo único que hace el promotor</h3>
+        <p>· Recibir WhatsApp · Tocar el botón · Tocar "Activar mi link".</p>
+        <p class="note">
+          Entre 0 y "ya vendiendo": menos de 30 segundos. Mismo modelo que Posh,
+          Luma, Slack y Notion usan para invites. Cuando Meta apruebe la
+          verificación de negocio podemos sumar Authentication category encima,
+          pero magic-link queda como fallback funcional.
+        </p>
+
+        <h3 style="margin-top: 18px;">Para que ande punta a punta hoy</h3>
+        <p>· <b>WABA_ID</b> en envs para registrar el template Meta.</p>
+        <p>· <code class="mono">pnpm tsx scripts/register-whatsapp-templates.ts --only=promoter_invite</code>.</p>
+        <p>· Esperar 1–24 h la aprobación UTILITY.</p>
+        <p>· Sumar botón "Enviar invitación" en <span class="mono">/org/events/[slug]/promoter-detail/[linkId]</span>.</p>
+        <p>· (Opcional) refactorear <span class="mono">/promo</span> al nuevo design system.</p>
+      </div>
+    </div>
+  </body>
+</html>

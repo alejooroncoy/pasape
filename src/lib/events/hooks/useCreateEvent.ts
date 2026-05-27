@@ -28,6 +28,8 @@ export type CreateEventInput = {
     priceCents: number;
     capacity: number;
     boxLabel?: string | null;
+    zone?: string | null;
+    unitNoun?: string | null;
   }>;
 };
 

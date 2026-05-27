@@ -54,4 +54,17 @@ export type TicketType = {
    * Para ticket types no-box queda null.
    */
   boxLabel: string | null;
+  /**
+   * Zona del venue ("Boxes Premium 1er Piso", "Mesas Premium", "Zona Chivas")
+   * usada para agrupar la lista al comprador. Coincide con el plano referencial
+   * que el organizador publica. Opcional: si es null, el ticket type aparece sin
+   * agrupar.
+   */
+  zone: string | null;
+  /**
+   * Sustantivo que el organizador usa para esta unidad reservable: "box",
+   * "mesa", "lounge", "espacio" u otro custom. Si es null, el display usa
+   * "box" por default. Solo aplica cuando kind === "box".
+   */
+  unitNoun: string | null;
 };

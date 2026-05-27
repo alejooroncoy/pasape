@@ -13,6 +13,10 @@ type TicketTypeInput = {
   capacity: number;
   /** Etiqueta del box (A, B, VIP-1). Requerido cuando kind === "box". */
   boxLabel?: string | null;
+  /** Zona del venue para agrupar visualmente. Opcional. */
+  zone?: string | null;
+  /** Cómo llamar a la unidad reservable (box, mesa, lounge...). Opcional. */
+  unitNoun?: string | null;
 };
 
 export const createEvent = async (
@@ -40,6 +44,9 @@ export const createEvent = async (
       capacity: tt.capacity,
       position: i,
       box_label: tt.kind === "box" ? tt.boxLabel?.trim() ?? null : null,
+      zone: tt.zone?.trim() || null,
+      unit_noun:
+        tt.kind === "box" && tt.unitNoun?.trim() ? tt.unitNoun.trim() : null,
     })),
   );
   if (error) return err(error.message);

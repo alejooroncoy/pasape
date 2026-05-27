@@ -13,8 +13,20 @@ type TicketRow = {
   status: string;
   holder_name: string | null;
   holder_email: string | null;
-  ticket_type: { name: string } | null;
-  order: { event: { title: string; starts_at: string; venue: string | null; timezone: string } | null } | null;
+  box_label: string | null;
+  box_host_ticket_id: string | null;
+  ticket_type: { name: string; unit_noun: string | null; capacity: number } | null;
+  order: {
+    event: {
+      slug: string;
+      title: string;
+      starts_at: string;
+      venue: string | null;
+      venue_url: string | null;
+      timezone: string;
+      cover_url: string | null;
+    } | null;
+  } | null;
 };
 
 export default async function PublicTicketPage({ params, searchParams }: Props) {
@@ -26,7 +38,7 @@ export default async function PublicTicketPage({ params, searchParams }: Props) 
   const { data: ticket } = await db
     .from("tickets")
     .select(
-      "id, status, holder_name, holder_email, ticket_type:ticket_types(name), order:orders(event:events(title, starts_at, venue, timezone))",
+      "id, status, holder_name, holder_email, box_label, box_host_ticket_id, ticket_type:ticket_types(name, unit_noun, capacity), order:orders(event:events(slug, title, starts_at, venue, venue_url, timezone, cover_url))",
     )
     .eq("id", ticketId)
     .maybeSingle<TicketRow>();
@@ -42,6 +54,10 @@ export default async function PublicTicketPage({ params, searchParams }: Props) 
       holderName={ticket.holder_name}
       holderEmail={ticket.holder_email}
       ticketTypeName={ticket.ticket_type?.name ?? "Entrada"}
+      boxLabel={ticket.box_label}
+      unitNoun={ticket.ticket_type?.unit_noun ?? null}
+      boxCapacity={ticket.ticket_type?.capacity ?? null}
+      isBoxHost={!!ticket.box_label && !ticket.box_host_ticket_id}
       event={event}
     />
   );

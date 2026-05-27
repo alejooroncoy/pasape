@@ -46,9 +46,10 @@ async function authForLink(
   }
   const db = supabaseAdmin();
   const { data: membership } = await db
-    .from("org_memberships")
+    .from("memberships")
     .select("role")
-    .eq("organization_id", ownership.organizationId)
+    .eq("scope_type", "organization")
+    .eq("scope_id", ownership.organizationId)
     .eq("profile_id", profileId)
     .maybeSingle<{ role: string }>();
   if (membership) return { ok: true, role: "organizer", profileId };

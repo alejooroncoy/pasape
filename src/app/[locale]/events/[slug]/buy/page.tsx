@@ -1,35 +1,32 @@
 "use client";
 
-import { Suspense, use, useEffect, useRef, useState } from "react";
+import { Suspense, use, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import {
-  BackBtn,
-  Btn,
-  BuyTicketRow,
-  C,
-  CloseBtn,
-  Field,
-  FONT_DISPLAY,
-  Phone,
-  PriceRow,
-  StepDots,
-} from "@/components/design";
 import { useRouter } from "@/i18n/navigation";
 import { useEvent } from "@/lib/events/hooks/useEvents";
 import { useBuyTickets } from "@/lib/tickets/hooks/useTickets";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { useDniLookup } from "@/lib/identity/hooks/useDniLookup";
+import { useProfileLookup } from "@/lib/identity/hooks/useProfileLookup";
 import { formatMoney } from "@/lib/_shared/format";
 import { CardForm } from "@/components/payments/CardForm";
 import { YapeForm } from "@/components/payments/YapeForm";
+import type { TicketType } from "@/server/events/domain/Event";
+import {
+  capitalize,
+  groupTicketTypesByZone,
+  ticketStatus,
+  ticketSubtitle,
+  unitNoun,
+  unitNounPlural,
+} from "@/lib/events/ticketDisplay";
 
 type Props = { params: Promise<{ slug: string }> };
-
-type Step = 0 | 1 | 2;
+type Phase = "pick" | "data" | "pay";
 
 export default function BuyFlowPage(props: Props) {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<PageLoader />}>
       <BuyFlowInner {...props} />
     </Suspense>
   );
@@ -42,22 +39,23 @@ function BuyFlowInner({ params }: Props) {
   const me = useCurrentUser();
   const buy = useBuyTickets();
   const search = useSearchParams();
-  const [step, setStep] = useState<Step>(0);
+  const [phase, setPhase] = useState<Phase>("pick");
   const [qty, setQty] = useState<Record<string, number>>({});
   const [promoCode, setPromoCode] = useState<string | null>(null);
-  const [preferenceId, setPreferenceId] = useState<string | null>(null);
+  const [, setPreferenceId] = useState<string | null>(null);
   const [orderId, setOrderId] = useState<string | null>(null);
   const [payMethod, setPayMethod] = useState<"yape" | "mp">("yape");
   const [guestName, setGuestName] = useState("");
   const [guestEmail, setGuestEmail] = useState("");
   const [guestDni, setGuestDni] = useState("");
   const [guestPhone, setGuestPhone] = useState("");
+  // assignees[i] = WhatsApp del pata al que se le manda la entrada i+1 (slot 0
+  // siempre es el comprador). String vacío = "yo voy con esta entrada".
+  const [assignees, setAssignees] = useState<string[]>([]);
   const nameTouchedRef = useRef(false);
   const { lookup: dniLookup, pending: dniPending } = useDniLookup();
   const [dniHint, setDniHint] = useState<"idle" | "not_found">("idle");
 
-  // Why: cuando el DNI llega a 8 dígitos, llamamos a Decolecta (RENIEC) y
-  // autocompletamos el nombre si el usuario no lo ha tocado todavía.
   useEffect(() => {
     if (guestDni.length !== 8) {
       setDniHint("idle");
@@ -90,14 +88,11 @@ function BuyFlowInner({ params }: Props) {
       } catch {}
     }
     if (next) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- sync de fuente externa (URL + localStorage)
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPromoCode(next);
     }
   }, [slug, search]);
 
-  // Why: si recargan la página en paso 2, restauramos el estado desde la URL
-  // (orderId) + sessionStorage (qty + datos del form). Así no pierden todo.
-  // Se ejecuta una sola vez al montar.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const orderFromUrl = search.get("order");
@@ -120,32 +115,60 @@ function BuyFlowInner({ params }: Props) {
       setGuestDni(restored.guestDni ?? "");
       setGuestPhone(restored.guestPhone ?? "");
       setOrderId(orderFromUrl);
-      setStep(2);
+      setPhase("pay");
     } catch {}
   }, []);
 
-  if (!data) return <Phone><div style={{ padding: 28, color: C.dim }}>Cargando…</div></Phone>;
-
-  const items = Object.entries(qty)
-    .filter(([, q]) => q > 0)
-    .map(([ticketTypeId, q]) => ({ ticketTypeId, qty: q }));
-  const total = data.ticketTypes.reduce(
-    (sum, tt) => sum + tt.priceCents * (qty[tt.id] ?? 0),
-    0,
+  const items = useMemo(
+    () =>
+      Object.entries(qty)
+        .filter(([, q]) => q > 0)
+        .map(([ticketTypeId, q]) => ({ ticketTypeId, qty: q })),
+    [qty],
   );
+  const total = useMemo(() => {
+    if (!data) return 0;
+    return data.ticketTypes.reduce(
+      (sum, tt) => sum + tt.priceCents * (qty[tt.id] ?? 0),
+      0,
+    );
+  }, [data, qty]);
   const totalItems = items.reduce((a, b) => a + b.qty, 0);
   const fee = totalItems > 0 ? 300 : 0;
+  const acompCount = Math.max(0, totalItems - 1);
+
+  // Resize assignees al cambiar la cantidad — preserva las entradas ya
+  // ingresadas. Si bajan la cantidad, recortamos.
+  useEffect(() => {
+    setAssignees((prev) => {
+      if (prev.length === acompCount) return prev;
+      const next = [...prev];
+      if (next.length < acompCount) {
+        while (next.length < acompCount) next.push("");
+      } else {
+        next.length = acompCount;
+      }
+      return next;
+    });
+  }, [acompCount]);
+
+  // Acompañantes válidos: cualquier slot que tenga teléfono debe tener 9
+  // dígitos. Slots vacíos (= "yo voy") son válidos por default.
+  const acompValid = assignees.every((a) => {
+    const digits = a.replace(/\D/g, "");
+    return digits.length === 0 || digits.length === 9;
+  });
 
   const isLogged = !!me.data?.user;
-  // Why: WhatsApp es siempre requerido (canal principal del QR). Email es
-  // opcional en este paso. Si en el paso 2 elige tarjeta y no tiene email,
-  // se lo pedimos ahí antes de mostrar el form de tarjeta (MP lo exige).
   const emailOk = /.+@.+\..+/.test(guestEmail.trim());
   const phoneOk = guestPhone.replace(/\D/g, "").length === 9;
   const guestValid =
     guestName.trim().length >= 2 &&
     guestDni.trim().length === 8 &&
     phoneOk;
+  const orderValid = totalItems > 0 && (isLogged || guestValid) && acompValid;
+
+  if (!data) return <PageLoader />;
 
   const startPayment = async () => {
     try {
@@ -164,9 +187,7 @@ function BuyFlowInner({ params }: Props) {
       });
       setPreferenceId(res.preference.id);
       setOrderId(res.order.id);
-      setStep(2);
-      // Persist para sobrevivir reload en paso 2. La URL lleva el order; el
-      // sessionStorage guarda los datos del form para prefill del payment widget.
+      setPhase("pay");
       try {
         const url = new URL(window.location.href);
         url.searchParams.set("order", res.order.id);
@@ -189,428 +210,1230 @@ function BuyFlowInner({ params }: Props) {
     }
   };
 
-  const goNext = () => {
-    // Why: el comprador es commodity — no exigimos login. Si no hay sesión,
-    // el paso 2 muestra el formulario guest. La validación se hace en step 1.
-    if (step === 0 && totalItems > 0) {
-      setStep(1);
-    } else if (step === 1) {
-      if (!isLogged && !guestValid) return;
-      void startPayment();
+  const pickValid = totalItems > 0;
+  const dataValid = isLogged || guestValid;
+
+  const onPrimary = () => {
+    if (phase === "pick" && pickValid) {
+      setPhase("data");
+      return;
     }
+    if (phase === "data" && orderValid) void startPayment();
   };
 
+  const onBack = () => {
+    if (phase === "pay") {
+      setPhase("data");
+      return;
+    }
+    if (phase === "data") {
+      setPhase("pick");
+      return;
+    }
+    router.back();
+  };
+
+  const phaseLabel: Record<Phase, string> = {
+    pick: "1 de 3 · Tu pedido",
+    data: "2 de 3 · Tus datos",
+    pay: "3 de 3 · Pago",
+  };
+
+  const primaryCtaLabel = (compact: boolean): string => {
+    if (buy.isPending) return "Preparando…";
+    if (phase === "pick") {
+      if (!pickValid) return "Elige una entrada";
+      return compact ? `Continuar · ${formatMoney(total)}` : `Continuar · ${formatMoney(total)}`;
+    }
+    if (phase === "data") {
+      if (!dataValid) return "Completa tus datos";
+      if (!acompValid) return "Revisa los acompañantes";
+      return `Ir a pagar · ${formatMoney(total)}`;
+    }
+    return "Continuar";
+  };
+  const primaryCtaDisabled = (() => {
+    if (buy.isPending) return true;
+    if (phase === "pick") return !pickValid;
+    if (phase === "data") return !orderValid;
+    return false;
+  })();
+
   return (
-    <Phone>
-      <div style={{ padding: "6px 22px 0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        {step > 0 ? (
+    <div className="min-h-dvh bg-cart-bg text-white">
+      {/* Top bar */}
+      <header className="sticky top-0 z-30 border-b border-cart-line bg-cart-bg/85 backdrop-blur-md">
+        <div className="mx-auto flex max-w-[1120px] items-center justify-between px-5 py-3.5 lg:px-8">
           <button
             type="button"
-            onClick={() => setStep((step - 1) as Step)}
-            style={{
-              width: 38,
-              height: 38,
-              borderRadius: 14,
-              background: "rgba(255,255,255,0.06)",
-              boxShadow: "0 0 0 1px rgba(255,255,255,0.08) inset",
-              border: 0,
-              cursor: "pointer",
-            }}
+            onClick={onBack}
+            aria-label="Volver"
+            className="grid size-9 place-items-center rounded-full bg-cart-bg-elev text-cart-ink-2 transition hover:bg-cart-bg-elev-2 hover:text-white"
           >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <path d="M10 3l-5 5 5 5" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+              <path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </button>
-        ) : (
-          <BackBtn />
-        )}
-        <StepDots step={step} of={3} />
-        <CloseBtn />
+          <div className="text-[12.5px] font-medium text-cart-ink-3">
+            {phaseLabel[phase]}
+          </div>
+          <button
+            type="button"
+            onClick={() => router.push(`/events/${slug}` as never)}
+            aria-label="Cerrar"
+            className="grid size-9 place-items-center rounded-full bg-cart-bg-elev text-cart-ink-2 transition hover:bg-cart-bg-elev-2 hover:text-white"
+          >
+            <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
+              <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <div className="mx-auto w-full max-w-[1120px] px-5 lg:flex lg:min-h-[calc(100dvh-72px)] lg:items-start lg:px-8 lg:py-10">
+        <div className="grid w-full gap-8 lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-10">
+          {/* Main */}
+          <main className="pt-6 pb-44 lg:pb-12">
+            {phase === "pick" ? (
+              <PickPhase
+                ticketTypes={data.ticketTypes}
+                initialZone={search.get("zone")}
+                qty={qty}
+                setQty={setQty}
+              />
+            ) : phase === "data" ? (
+              <DataPhase
+                ticketTypes={data.ticketTypes}
+                qty={qty}
+                isLogged={isLogged}
+                userName={me.data?.user?.fullName ?? null}
+                userIdent={me.data?.user?.email ?? me.data?.user?.phone ?? null}
+                guestDni={guestDni}
+                setGuestDni={(v) => {
+                  nameTouchedRef.current = false;
+                  setGuestDni(v.replace(/\D/g, "").slice(0, 8));
+                }}
+                guestName={guestName}
+                setGuestName={(v) => {
+                  nameTouchedRef.current = true;
+                  setGuestName(v);
+                }}
+                guestPhone={guestPhone}
+                setGuestPhone={setGuestPhone}
+                guestEmail={guestEmail}
+                setGuestEmail={setGuestEmail}
+                dniHint={dniHint}
+                dniPending={dniPending}
+                totalItems={totalItems}
+                assignees={assignees}
+                setAssignees={setAssignees}
+              />
+            ) : (
+              <PayPhase
+                payMethod={payMethod}
+                setPayMethod={setPayMethod}
+                orderId={orderId}
+                total={total}
+                fee={fee}
+                isLogged={isLogged}
+                userPhone={me.data?.user?.phone ?? ""}
+                userName={me.data?.user?.fullName ?? ""}
+                userEmail={me.data?.user?.email ?? ""}
+                guestName={guestName}
+                guestPhone={guestPhone}
+                guestEmail={guestEmail}
+                setGuestEmail={setGuestEmail}
+                guestDni={guestDni}
+                emailOk={emailOk}
+                onPaid={() => {
+                  if (!orderId) return;
+                  try {
+                    sessionStorage.removeItem(`pasape:buy:${orderId}`);
+                  } catch {}
+                  // Why: el polling de /processing necesita el email del guest
+                  // para autorizar el lookup del status (sin sesión). Sin esto
+                  // todos los polls dan 403 y termina en pay-error a los 60s.
+                  const emailQs = !isLogged && guestEmail.trim()
+                    ? `&email=${encodeURIComponent(guestEmail.trim())}`
+                    : "";
+                  router.push(`/events/${slug}/processing?order=${orderId}${emailQs}`);
+                }}
+              />
+            )}
+          </main>
+
+          {/* Sidebar summary (desktop) */}
+          <aside className="hidden lg:block">
+            <div className="sticky top-24">
+              <OrderSummary
+                event={data.event}
+                ticketTypes={data.ticketTypes}
+                qty={qty}
+                total={total}
+                fee={phase === "pay" ? fee : 0}
+                promo={promoCode}
+              />
+              {phase !== "pay" && (
+                <button
+                  type="button"
+                  onClick={onPrimary}
+                  disabled={primaryCtaDisabled}
+                  className="mt-4 w-full rounded-full bg-cart-accent py-3.5 text-[14.5px] font-semibold text-cart-bg shadow-[0_8px_24px_-6px_var(--color-cart-accent-glow)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:bg-cart-bg-elev-2 disabled:text-cart-ink-3 disabled:shadow-none"
+                >
+                  {primaryCtaLabel(false)}
+                </button>
+              )}
+              {buy.error && (
+                <p className="mt-3 text-center text-[12px] text-rose-300">
+                  {(buy.error as Error).message}
+                </p>
+              )}
+            </div>
+          </aside>
+        </div>
       </div>
 
-      {step === 0 && (
-        <div style={{ padding: "22px 22px 110px" }}>
-          <div style={{ fontSize: 12, color: C.purple, letterSpacing: "0.08em", fontWeight: 700, marginBottom: 6 }}>
-            PASO 1 DE 3
-          </div>
-          <div style={{ fontFamily: FONT_DISPLAY, fontSize: 28, fontWeight: 700, letterSpacing: "-0.035em", lineHeight: 0.95 }}>
-            Elegí tu entrada.
-          </div>
-
-          <div style={{ marginTop: 22, display: "flex", flexDirection: "column", gap: 10 }}>
-            {data.ticketTypes.map((tt) => {
-              const remaining = tt.capacity - tt.sold;
-              return (
-                <BuyTicketRow
-                  key={tt.id}
-                  name={tt.name}
-                  sub={remaining > 0 ? `${remaining} disponibles` : "agotada"}
-                  priceCents={tt.priceCents}
-                  qty={qty[tt.id] ?? 0}
-                  onChange={(next) => setQty({ ...qty, [tt.id]: next })}
-                  remaining={remaining}
-                  accent={tt.kind === "vip" ? C.yellow : tt.kind === "box" ? C.red : null}
-                  disabled={remaining === 0}
-                />
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {step === 1 && (
-        <div style={{ padding: "20px 22px 110px" }}>
-          <div style={{ fontSize: 12, color: C.purple, letterSpacing: "0.08em", fontWeight: 700, marginBottom: 6 }}>
-            PASO 2 DE 3
-          </div>
-          <div
-            style={{
-              fontFamily: FONT_DISPLAY,
-              fontSize: 28,
-              fontWeight: 700,
-              letterSpacing: "-0.035em",
-              lineHeight: 0.95,
-              marginBottom: 18,
-            }}
-          >
-            ¿Quién va?
-          </div>
-
-          {isLogged ? (
-            <div
-              style={{
-                padding: "14px 16px",
-                borderRadius: 16,
-                marginBottom: 16,
-                background: "rgba(124,58,237,0.10)",
-                boxShadow: "0 0 0 1.5px rgba(124,58,237,0.35) inset",
-              }}
+      {/* Mobile sticky CTA */}
+      {phase !== "pay" && (
+        <div
+          className="fixed inset-x-0 bottom-0 z-40 border-t border-cart-line bg-cart-bg/95 backdrop-blur-md lg:hidden"
+          style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)" }}
+        >
+          <div className="mx-auto w-full max-w-[640px] px-5 pt-3">
+            {buy.error && (
+              <p className="mb-2 text-center text-[12px] text-rose-300">
+                {(buy.error as Error).message}
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={onPrimary}
+              disabled={primaryCtaDisabled}
+              className="w-full rounded-full bg-cart-accent py-3.5 text-[14.5px] font-semibold text-cart-bg shadow-[0_8px_24px_-6px_var(--color-cart-accent-glow)] transition active:brightness-110 disabled:cursor-not-allowed disabled:bg-cart-bg-elev-2 disabled:text-cart-ink-3 disabled:shadow-none"
             >
-              <div style={{ fontFamily: FONT_DISPLAY, fontWeight: 600, fontSize: 14 }}>Usar datos de mi cuenta</div>
-              <div style={{ fontSize: 11, color: C.dim, marginTop: 2 }}>
-                {me.data?.user?.fullName ?? "—"} · {me.data?.user?.email ?? me.data?.user?.phone ?? "—"}
-              </div>
-            </div>
-          ) : (
-            <div style={{ marginBottom: 18 }}>
-              <div style={{ fontSize: 11, color: C.dim, marginBottom: 8 }}>
-                Tu QR llega por WhatsApp o email. Sin contraseña.
-              </div>
-              <Field
-                label="DNI"
-                mono
-                value={guestDni}
-                onChange={(e) => {
-                  nameTouchedRef.current = false;
-                  setGuestDni(e.target.value.replace(/\D/g, "").slice(0, 8));
-                }}
-                placeholder="71234567"
-                active={guestDni.length > 0}
-                hint={
-                  dniHint === "not_found"
-                    ? "DNI no encontrado en RENIEC — ingresá tu nombre manualmente"
-                    : undefined
-                }
-              />
-              <Field
-                label="Nombre completo"
-                value={guestName}
-                onChange={(e) => {
-                  nameTouchedRef.current = true;
-                  setGuestName(e.target.value);
-                }}
-                placeholder={dniPending ? "Buscando en RENIEC…" : "Juan Pérez García"}
-                active={guestName.length > 0}
-                disabled={dniPending}
-              />
-              <Field
-                label="WhatsApp"
-                mono
-                value={guestPhone}
-                onChange={(e) => setGuestPhone(e.target.value)}
-                placeholder="987 654 321"
-                active={guestPhone.length > 0}
-              />
-              <Field
-                label="Email (opcional)"
-                type="email"
-                value={guestEmail}
-                onChange={(e) => setGuestEmail(e.target.value)}
-                placeholder="juan@gmail.com"
-                active={guestEmail.length > 0}
-                hint="Obligatorio si pagaras con tarjeta — si no lo completas ahora, te lo pedimos en el siguiente paso."
-              />
-            </div>
-          )}
-
-          <div style={{ marginTop: 22, padding: "16px 18px", background: C.bg2, borderRadius: 18, boxShadow: `0 0 0 1px ${C.line} inset` }}>
-            {data.ticketTypes
-              .filter((tt) => (qty[tt.id] ?? 0) > 0)
-              .map((tt) => (
-                <PriceRow
-                  key={tt.id}
-                  label={`${tt.name} × ${qty[tt.id]}`}
-                  value={formatMoney(tt.priceCents * qty[tt.id])}
-                />
-              ))}
-            <div style={{ height: 1, background: C.line, margin: "10px 0" }} />
-            <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <div style={{ fontFamily: FONT_DISPLAY, fontWeight: 700, fontSize: 16 }}>Total</div>
-              <div style={{ fontFamily: FONT_DISPLAY, fontWeight: 700, fontSize: 22, letterSpacing: "-0.02em" }}>
-                {formatMoney(total)}
-              </div>
-            </div>
+              {primaryCtaLabel(true)}
+            </button>
           </div>
         </div>
       )}
-
-      {step === 2 && (
-        <div style={{ padding: "20px 22px 140px" }}>
-          <div style={{ fontSize: 12, color: C.purple, letterSpacing: "0.08em", fontWeight: 700, marginBottom: 6 }}>
-            PASO 3 DE 3
-          </div>
-          <div style={{ fontFamily: FONT_DISPLAY, fontSize: 26, fontWeight: 700, letterSpacing: "-0.03em", marginBottom: 16 }}>
-            Pagá tu entrada.
-          </div>
-
-          <div style={{ marginBottom: 16, padding: "16px 18px", background: C.bg2, borderRadius: 18, boxShadow: `0 0 0 1px ${C.line} inset` }}>
-            {data.ticketTypes
-              .filter((tt) => (qty[tt.id] ?? 0) > 0)
-              .map((tt) => (
-                <PriceRow
-                  key={tt.id}
-                  label={`${tt.name} × ${qty[tt.id]}`}
-                  value={formatMoney(tt.priceCents * qty[tt.id])}
-                />
-              ))}
-            <PriceRow label="Servicio" value={formatMoney(fee)} />
-            <div style={{ height: 1, background: C.line, margin: "10px 0" }} />
-            <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <div style={{ fontFamily: FONT_DISPLAY, fontWeight: 700, fontSize: 16 }}>Total</div>
-              <div style={{ fontFamily: FONT_DISPLAY, fontWeight: 700, fontSize: 22, letterSpacing: "-0.02em" }}>
-                {formatMoney(total + fee)}
-              </div>
-            </div>
-          </div>
-
-          {orderId ? (
-            <>
-              <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
-                <PayMethodPill
-                  active={payMethod === "yape"}
-                  onClick={() => setPayMethod("yape")}
-                  label="Yape"
-                  sub="Paga en 2 segundos"
-                  badge="MÁS RÁPIDO"
-                  icon={<YapeIcon />}
-                />
-                <PayMethodPill
-                  active={payMethod === "mp"}
-                  onClick={() => setPayMethod("mp")}
-                  label="Tarjeta"
-                  sub="Crédito · Débito"
-                  badge={null}
-                  icon={<CardIcon />}
-                />
-              </div>
-              {payMethod === "yape" ? (
-                <YapeForm
-                  orderId={orderId}
-                  amount={(total + fee) / 100}
-                  initialPhone={isLogged ? me.data?.user?.phone ?? "" : guestPhone}
-                  onPaid={() => {
-                    try {
-                      sessionStorage.removeItem(`pasape:buy:${orderId}`);
-                    } catch {}
-                    router.push(`/events/${slug}/processing?order=${orderId}`);
-                  }}
-                  onError={(msg) => {
-                    // No redirige a pay-error: Yape errors son recuperables
-                    // (código vencido / saldo). Dejamos al usuario reintentar.
-                    console.warn("yape error:", msg);
-                  }}
-                />
-              ) : !isLogged && !emailOk ? (
-                <div
-                  style={{
-                    background: C.bg2,
-                    borderRadius: 18,
-                    padding: 18,
-                    boxShadow: `0 0 0 1px ${C.line} inset`,
-                  }}
-                >
-                  <div style={{ fontFamily: FONT_DISPLAY, fontSize: 15, fontWeight: 700, marginBottom: 4 }}>
-                    Necesitamos tu email
-                  </div>
-                  <div style={{ fontSize: 12, color: C.dim, marginBottom: 14, lineHeight: 1.5 }}>
-                    Para pagar con tarjeta, Mercado Pago requiere tu correo. Es solo para el comprobante.
-                  </div>
-                  <Field
-                    label="Email"
-                    type="email"
-                    value={guestEmail}
-                    onChange={(e) => setGuestEmail(e.target.value)}
-                    placeholder="juan@gmail.com"
-                    active={guestEmail.length > 0}
-                  />
-                </div>
-              ) : (
-                <CardForm
-                  orderId={orderId}
-                  amount={(total + fee) / 100}
-                  initialHolder={isLogged ? me.data?.user?.fullName ?? "" : guestName}
-                  initialDni={isLogged ? "" : guestDni}
-                  initialEmail={isLogged ? me.data?.user?.email ?? "" : guestEmail}
-                  onPaid={() => {
-                    try {
-                      sessionStorage.removeItem(`pasape:buy:${orderId}`);
-                    } catch {}
-                    router.push(`/events/${slug}/processing?order=${orderId}`);
-                  }}
-                  onError={(msg) => {
-                    console.warn("card error:", msg);
-                  }}
-                />
-              )}
-            </>
-          ) : (
-            <div style={{ color: C.dim, fontSize: 13, textAlign: "center" }}>Preparando el checkout…</div>
-          )}
-
-          <div style={{ marginTop: 12, fontSize: 12, color: C.dim, textAlign: "center" }}>
-            Tu QR llega a tu cuenta ni bien confirmemos el pago
-          </div>
-        </div>
-      )}
-
-      {step !== 2 && (
-        <div style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 390, padding: "0 22px" }}>
-          {buy.error && (
-            <div style={{ marginBottom: 10, fontSize: 12, color: C.red, textAlign: "center" }}>
-              {(buy.error as Error).message}
-            </div>
-          )}
-          <Btn
-            onClick={goNext}
-            disabled={
-              buy.isPending ||
-              (step === 0 && totalItems === 0) ||
-              (step === 1 && !isLogged && !guestValid)
-            }
-          >
-            {buy.isPending
-              ? "Procesando…"
-              : step === 0
-                ? totalItems === 0
-                  ? "Elegí una entrada"
-                  : `Continuar · ${formatMoney(total)}`
-                : `Ir a pagar · ${formatMoney(total + fee)}`}
-          </Btn>
-        </div>
-      )}
-    </Phone>
+    </div>
   );
 }
 
-function PayMethodPill({
-  active,
-  onClick,
-  label,
-  sub,
-  badge,
-  icon,
+/* ============================ Order phase ============================ */
+
+function PickPhase({
+  ticketTypes,
+  initialZone,
+  qty,
+  setQty,
 }: {
-  active: boolean;
-  onClick: () => void;
-  label: string;
-  sub: string;
-  badge: string | null;
-  icon: React.ReactNode;
+  ticketTypes: TicketType[];
+  initialZone: string | null;
+  qty: Record<string, number>;
+  setQty: (next: Record<string, number>) => void;
 }) {
+  const groups = useMemo(() => groupTicketTypesByZone(ticketTypes), [ticketTypes]);
+  // Tab "Todos" siempre primero. initialZone viene desde /events/[slug]
+  // cuando el comprador tappeó una zone card específica.
+  const tabs = useMemo(() => {
+    const list: Array<{ id: string; label: string }> = [
+      { id: "__all", label: "Todos" },
+    ];
+    for (const g of groups) {
+      list.push({ id: g.zone ?? "__ungrouped__", label: g.zone ?? "Otros" });
+    }
+    return list;
+  }, [groups]);
+  const initialTab = useMemo(() => {
+    if (!initialZone) return "__all";
+    return tabs.find((t) => t.id === initialZone)?.id ?? "__all";
+  }, [initialZone, tabs]);
+  const [selectedTab, setSelectedTab] = useState(initialTab);
+
+  const visibleGroups = useMemo(() => {
+    if (selectedTab === "__all") return groups;
+    return groups.filter((g) => (g.zone ?? "__ungrouped__") === selectedTab);
+  }, [selectedTab, groups]);
+
+  return (
+    <div className="flex flex-col gap-8">
+      <Section title="Entradas">
+        {tabs.length > 2 && (
+          <div className="-mx-5 mb-4 overflow-x-auto px-5 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+            <div className="flex min-w-min gap-1.5">
+              {tabs.map((tab) => {
+                const active = selectedTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setSelectedTab(tab.id)}
+                    className={
+                      "shrink-0 rounded-full px-3.5 py-1.5 text-[12.5px] font-semibold transition " +
+                      (active
+                        ? "bg-cart-accent text-cart-bg"
+                        : "border border-cart-line bg-cart-bg-elev text-cart-ink-2 hover:border-cart-line-strong hover:text-white")
+                    }
+                  >
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        <div className="flex flex-col gap-5">
+          {visibleGroups.map((group, gi) => {
+            const allBoxes =
+              group.items.length > 0 && group.items.every((i) => i.kind === "box");
+            // Grid de tiles cuando es zona pura de boxes y hay 4+ (evita
+            // mostrar cards idénticas con sólo el número cambiando). Aplica
+            // también en el tab "Todos" — cada grupo se renderiza como grid.
+            const useGrid = allBoxes && group.items.length >= 4;
+            return (
+              <div key={group.zone ?? `__ungrouped__-${gi}`} className="flex flex-col gap-2.5">
+                {selectedTab === "__all" && group.zone && (
+                  <h3 className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">
+                    {group.zone}
+                  </h3>
+                )}
+                {useGrid ? (
+                  <BoxGrid
+                    items={group.items}
+                    qty={qty}
+                    onChange={(id, v) => setQty({ ...qty, [id]: v })}
+                  />
+                ) : (
+                  group.items.map((tt) => (
+                    <TicketCard
+                      key={tt.id}
+                      tt={tt}
+                      value={qty[tt.id] ?? 0}
+                      onChange={(v) => setQty({ ...qty, [tt.id]: v })}
+                    />
+                  ))
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </Section>
+    </div>
+  );
+}
+
+function DataPhase({
+  ticketTypes,
+  qty,
+  isLogged,
+  userName,
+  userIdent,
+  guestDni,
+  setGuestDni,
+  guestName,
+  setGuestName,
+  guestPhone,
+  setGuestPhone,
+  guestEmail,
+  setGuestEmail,
+  dniHint,
+  dniPending,
+  totalItems,
+  assignees,
+  setAssignees,
+}: {
+  ticketTypes: TicketType[];
+  qty: Record<string, number>;
+  isLogged: boolean;
+  userName: string | null;
+  userIdent: string | null;
+  guestDni: string;
+  setGuestDni: (v: string) => void;
+  guestName: string;
+  setGuestName: (v: string) => void;
+  guestPhone: string;
+  setGuestPhone: (v: string) => void;
+  guestEmail: string;
+  setGuestEmail: (v: string) => void;
+  dniHint: "idle" | "not_found";
+  dniPending: boolean;
+  totalItems: number;
+  assignees: string[];
+  setAssignees: (v: string[]) => void;
+}) {
+  const slotLabels: string[] = [];
+  for (const tt of ticketTypes) {
+    const q = qty[tt.id] ?? 0;
+    for (let i = 0; i < q; i++) slotLabels.push(tt.name);
+  }
+
+  return (
+    <div className="flex flex-col gap-8">
+      <Section
+        title={isLogged ? "Tus datos" : "¿Quién va?"}
+        hint={isLogged ? undefined : "Para enviarte el QR por WhatsApp"}
+      >
+        {isLogged ? (
+          <div className="rounded-2xl border border-cart-accent/40 bg-cart-accent-soft px-4 py-4">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-cart-accent">
+              Usas los datos de tu cuenta
+            </div>
+            <div className="mt-1.5 text-[15.5px] font-semibold">{userName ?? "—"}</div>
+            <div className="mt-0.5 text-[12.5px] text-cart-ink-2">{userIdent ?? "—"}</div>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            <Field
+              label="DNI"
+              value={guestDni}
+              onChange={setGuestDni}
+              placeholder="71234567"
+              mono
+              hint={
+                dniHint === "not_found"
+                  ? "No te encontramos en RENIEC — escribe tu nombre abajo."
+                  : "Lo buscamos en RENIEC y completamos tu nombre."
+              }
+            />
+            <Field
+              label="Nombre completo"
+              value={guestName}
+              onChange={setGuestName}
+              placeholder={dniPending ? "Buscando en RENIEC…" : "Juan Pérez García"}
+              disabled={dniPending}
+            />
+            <Field
+              label="WhatsApp"
+              value={guestPhone}
+              onChange={setGuestPhone}
+              placeholder="987 654 321"
+              mono
+              hint="Tu QR llega por aquí."
+            />
+            <Field
+              label="Email (opcional)"
+              type="email"
+              value={guestEmail}
+              onChange={setGuestEmail}
+              placeholder="juan@gmail.com"
+              hint="Solo si pagas con tarjeta."
+            />
+          </div>
+        )}
+      </Section>
+
+      {totalItems > 1 && (
+        <Section
+          title={`Tus acompañantes (${totalItems - 1})`}
+          hint="Mándales su QR desde aquí"
+        >
+          <div className="flex flex-col gap-2.5">
+            {slotLabels.slice(1).map((label, i) => (
+              <AcompCard
+                key={i}
+                slotIndex={i + 1}
+                ticketLabel={label}
+                phone={assignees[i] ?? ""}
+                onChange={(v) => {
+                  const next = [...assignees];
+                  next[i] = v;
+                  setAssignees(next);
+                }}
+              />
+            ))}
+          </div>
+        </Section>
+      )}
+    </div>
+  );
+}
+
+/* ===================== AcompCard (Yape-style) ===================== */
+
+function AcompCard({
+  slotIndex,
+  ticketLabel,
+  phone,
+  onChange,
+}: {
+  slotIndex: number;
+  ticketLabel: string;
+  phone: string;
+  onChange: (v: string) => void;
+}) {
+  const mode: "self" | "friend" = phone === "" ? "self" : "friend";
+  const lookup = useProfileLookup(phone);
+  const digits = phone.replace(/\D/g, "");
+  const showRecipientName = mode === "friend" && digits.length === 9 && !lookup.loading && lookup.result?.found;
+
+  return (
+    <div
+      className={
+        "rounded-2xl border bg-cart-bg-elev p-4 transition " +
+        (mode === "friend"
+          ? "border-cart-accent shadow-[0_0_0_3px_var(--color-cart-accent-soft)]"
+          : "border-cart-line")
+      }
+    >
+      <div className="mb-3 flex items-center justify-between">
+        <div>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-cart-ink-3">
+            Persona {slotIndex + 1}
+          </div>
+          <div className="mt-0.5 text-[14px] font-semibold">{ticketLabel}</div>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <button
+          type="button"
+          onClick={() => onChange("")}
+          className={
+            "flex items-center gap-3 rounded-xl border p-3 text-left transition " +
+            (mode === "self"
+              ? "border-cart-accent bg-cart-accent-soft"
+              : "border-cart-line bg-cart-bg-elev-2 hover:border-cart-line-strong")
+          }
+        >
+          <Radio active={mode === "self"} color="var(--color-cart-accent)" />
+          <span className="text-[13.5px]">
+            <span className="font-semibold">Yo voy con esta entrada</span>
+            <span className="ml-1.5 text-cart-ink-3">· la transfiero después si quiero</span>
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            if (mode === "self") onChange(" "); // placeholder no vacío para abrir el input
+          }}
+          className={
+            "flex items-center gap-3 rounded-xl border p-3 text-left transition " +
+            (mode === "friend"
+              ? "border-cart-accent bg-cart-accent-soft"
+              : "border-cart-line bg-cart-bg-elev-2 hover:border-cart-line-strong")
+          }
+        >
+          <Radio active={mode === "friend"} color="var(--color-cart-accent)" />
+          <span className="text-[13.5px] font-semibold">Mandársela a un acompañante</span>
+        </button>
+      </div>
+
+      {mode === "friend" && (
+        <div className="mt-3 rounded-xl border border-cart-line bg-cart-bg-elev-2 p-3">
+          <label className="block">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-cart-ink-3">
+              WhatsApp del acompañante
+            </span>
+            <input
+              type="tel"
+              inputMode="numeric"
+              value={phone.trim()}
+              onChange={(e) => onChange(e.target.value.replace(/[^\d\s]/g, "").slice(0, 11))}
+              placeholder="987 654 321"
+              autoFocus
+              className="mt-1.5 block w-full rounded-xl border border-cart-line bg-cart-bg px-3.5 py-3 font-mono text-[15px] tracking-[0.04em] text-white outline-none transition focus:border-cart-accent focus:shadow-[0_0_0_3px_var(--color-cart-accent-soft)]"
+            />
+          </label>
+
+          {lookup.loading && digits.length === 9 && (
+            <div className="mt-2 text-[11.5px] text-cart-ink-3">Buscando…</div>
+          )}
+          {showRecipientName && lookup.result?.found && (
+            <div className="mt-2 flex items-center gap-2 text-[12.5px] text-emerald-300">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                <path d="M3 8l3.5 3.5L13 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              Le mandas su entrada a <strong className="text-white">{lookup.result.displayName}</strong>
+            </div>
+          )}
+          {digits.length === 9 && !lookup.loading && lookup.result?.found === false && (
+            <div className="mt-2 text-[11.5px] text-cart-ink-3">
+              Le llegará un enlace por WhatsApp para confirmar su DNI y abrir su QR.
+            </div>
+          )}
+          {digits.length > 0 && digits.length < 9 && (
+            <div className="mt-2 text-[11.5px] text-cart-ink-4">
+              Faltan {9 - digits.length} dígitos
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Section({
+  title,
+  hint,
+  children,
+}: {
+  title: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section>
+      <div className="mb-3 flex items-baseline justify-between">
+        <h2 className="text-[18px] font-bold tracking-[-0.01em]">{title}</h2>
+        {hint && <span className="text-[11.5px] text-cart-ink-3">{hint}</span>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function TicketBadge({
+  kind,
+  boxLabel,
+}: {
+  kind: TicketType["kind"];
+  boxLabel: string | null;
+}) {
+  if (kind === "box")
+    return (
+      <span className="rounded-full bg-cart-accent-soft px-1.5 py-px text-[9.5px] font-bold uppercase tracking-[0.1em] text-cart-accent">
+        Box{boxLabel ? ` · ${boxLabel}` : ""}
+      </span>
+    );
+  if (kind === "presale")
+    return (
+      <span className="rounded-full bg-amber-500/15 px-1.5 py-px text-[9.5px] font-bold uppercase tracking-[0.1em] text-amber-300">
+        Preventa
+      </span>
+    );
+  if (kind === "vip")
+    return (
+      <span className="rounded-full bg-yellow-400/15 px-1.5 py-px text-[9.5px] font-bold uppercase tracking-[0.1em] text-yellow-300">
+        VIP
+      </span>
+    );
+  return null;
+}
+
+function BoxGrid({
+  items,
+  qty,
+  onChange,
+}: {
+  items: TicketType[];
+  qty: Record<string, number>;
+  onChange: (ticketTypeId: string, value: number) => void;
+}) {
+  const selectedItems = items.filter((tt) => (qty[tt.id] ?? 0) > 0);
+  const totalCents = selectedItems.reduce((acc, tt) => acc + tt.priceCents, 0);
+  const totalPeople = selectedItems.reduce((acc, tt) => acc + tt.capacity, 0);
+
+  // Si todos los boxes de la zona tienen el mismo precio y capacidad, se
+  // muestra una sola vez arriba del grid. Es el caso típico.
+  const uniqPrices = new Set(items.map((i) => i.priceCents));
+  const uniqCaps = new Set(items.map((i) => i.capacity));
+  const samePrice = uniqPrices.size === 1;
+  const sameCap = uniqCaps.size === 1;
+  const commonPriceCents = samePrice ? items[0].priceCents : null;
+  const commonCap = sameCap ? items[0].capacity : null;
+  const currency = items[0].currency;
+  // Noun más usado en la zona (los items suelen compartirlo). Default "box".
+  const noun = unitNoun(items[0]);
+
+  return (
+    <div className="rounded-2xl border border-cart-line bg-cart-bg-elev p-4">
+      {/* Header común — info que se repetía en cada card */}
+      <div className="flex items-baseline justify-between">
+        <p className="text-[12.5px] text-cart-ink-2">
+          {commonCap !== null
+            ? `Cada ${noun} para ${commonCap} personas · Tú invitas`
+            : "Tú invitas a tu grupo"}
+        </p>
+        {commonPriceCents !== null && (
+          <p className="text-[14px] font-bold tracking-[-0.01em] text-white">
+            {formatMoney(commonPriceCents, currency)}
+            <span className="ml-0.5 text-[10.5px] font-medium text-cart-ink-3">/{noun}</span>
+          </p>
+        )}
+      </div>
+
+      {/* Grid de tiles */}
+      <div className="mt-4 grid grid-cols-[repeat(auto-fill,minmax(56px,1fr))] gap-2">
+        {items.map((tt) => {
+          const status = ticketStatus(tt);
+          const sold = status.kind === "soldout";
+          const selected = (qty[tt.id] ?? 0) > 0;
+          // Si el precio difiere, mostrar el precio en la tile como subline
+          const showPriceOnTile = !samePrice;
+          return (
+            <button
+              key={tt.id}
+              type="button"
+              disabled={sold}
+              onClick={() => onChange(tt.id, selected ? 0 : 1)}
+              aria-pressed={selected}
+              title={`${tt.boxLabel ?? tt.name}${sold ? " · Reservado" : ""}`}
+              className={
+                "group relative grid aspect-square place-items-center rounded-xl text-center font-semibold transition " +
+                (sold
+                  ? "cursor-not-allowed border border-cart-line bg-cart-bg-elev-2/40 text-cart-ink-4"
+                  : selected
+                    ? "bg-cart-accent text-cart-bg shadow-[0_6px_20px_-6px_var(--color-cart-accent-glow)]"
+                    : "border border-cart-line bg-cart-bg-elev-2 text-white hover:border-cart-accent hover:text-cart-accent")
+              }
+            >
+              <span className={"leading-none " + (showPriceOnTile ? "text-[13px]" : "text-[15px]")}>
+                {tileLabel(tt)}
+              </span>
+              {showPriceOnTile && !sold && (
+                <span className="mt-0.5 text-[9.5px] font-medium opacity-80">
+                  {formatMoney(tt.priceCents, tt.currency)}
+                </span>
+              )}
+              {sold && (
+                <span className="absolute inset-x-2 top-1/2 h-px -translate-y-1/2 -rotate-45 bg-cart-ink-4/60" />
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Leyenda */}
+      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10.5px] text-cart-ink-3">
+        <span className="inline-flex items-center gap-1.5">
+          <span className="size-2.5 rounded-sm border border-cart-line bg-cart-bg-elev-2" />
+          Libre
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="size-2.5 rounded-sm bg-cart-accent" />
+          Tu elección
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="size-2.5 rounded-sm border border-cart-line bg-cart-bg-elev-2/40" />
+          Reservado
+        </span>
+      </div>
+
+      {/* Resumen de selección */}
+      <div className="mt-4 border-t border-cart-line pt-3">
+        {selectedItems.length === 0 ? (
+          <p className="text-center text-[12.5px] text-cart-ink-3">
+            Tappea {indefiniteArticle(noun)} {noun} para reservarlo
+          </p>
+        ) : (
+          <div className="flex items-baseline justify-between gap-3">
+            <div className="min-w-0">
+              <p className="truncate text-[13.5px] font-semibold text-white">
+                {selectedItems.map((s) => s.boxLabel ?? s.name).join(" · ")}
+              </p>
+              <p className="mt-0.5 text-[11.5px] text-cart-ink-3">
+                {selectedItems.length === 1
+                  ? `${selectedItems[0].capacity} personas`
+                  : `${selectedItems.length} ${unitNounPlural(noun)} · ${totalPeople} personas`}
+              </p>
+            </div>
+            <p className="shrink-0 text-[15px] font-bold tracking-[-0.01em]">
+              {formatMoney(totalCents, currency)}
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Artículo indefinido aproximado en castellano según terminación del noun. */
+function indefiniteArticle(noun: string): string {
+  return noun.toLowerCase().endsWith("a") ? "una" : "un";
+}
+
+function tileLabel(tt: TicketType): string {
+  // Extrae el "número" o label corto del box ("Box 7" → "7", "S.VIP 1" → "S1", "M3" → "M3").
+  const raw = (tt.boxLabel ?? tt.name).trim();
+  // Si empieza con "Box " quita el prefijo
+  const stripped = raw.replace(/^Box\s+/i, "");
+  // Comprime "S.VIP 1" → "S1" para que entre
+  if (stripped.length > 4) {
+    const m = stripped.match(/([A-Z])\.?[A-Z]*\.?\s*(\d+)/i);
+    if (m) return `${m[1].toUpperCase()}${m[2]}`;
+  }
+  return stripped;
+}
+
+function TicketCard({
+  tt,
+  value,
+  onChange,
+}: {
+  tt: TicketType;
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  const status = ticketStatus(tt);
+  const soldOut = status.kind === "soldout";
+  const isBox = tt.kind === "box";
+  const remaining = status.kind === "available" ? status.remaining : 0;
+  const selected = value > 0;
+
+  return (
+    <div
+      className={
+        "rounded-2xl border bg-cart-bg-elev px-4 py-4 transition " +
+        (soldOut
+          ? "border-cart-line opacity-60"
+          : selected
+            ? "border-cart-accent shadow-[0_0_0_3px_var(--color-cart-accent-soft)]"
+            : "border-cart-line hover:border-cart-line-strong")
+      }
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[15.5px] font-semibold tracking-[-0.01em]">
+              {tt.name}
+            </span>
+            <TicketBadge kind={tt.kind} boxLabel={tt.boxLabel} />
+          </div>
+          <div className="mt-1 text-[12px] text-cart-ink-3">
+            {ticketSubtitle(tt)}
+          </div>
+        </div>
+        <div className="text-right text-[16px] font-bold tracking-[-0.01em]">
+          {formatMoney(tt.priceCents, tt.currency)}
+        </div>
+      </div>
+      <div className="mt-4 flex items-center justify-between">
+        <span className="text-[11px] uppercase tracking-[0.1em] text-cart-ink-4">
+          {isBox ? "Reserva" : "Cantidad"}
+        </span>
+        {isBox ? (
+          <BoxToggle
+            noun={unitNoun(tt)}
+            selected={selected}
+            disabled={soldOut}
+            onChange={(v) => onChange(v ? 1 : 0)}
+          />
+        ) : (
+          <QtyControl
+            value={value}
+            max={remaining}
+            onChange={onChange}
+            disabled={soldOut}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function BoxToggle({
+  noun,
+  selected,
+  disabled,
+  onChange,
+}: {
+  noun: string;
+  selected: boolean;
+  disabled?: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  if (disabled) {
+    return (
+      <span className="rounded-full bg-cart-bg-elev-2 px-3 py-1.5 text-[11.5px] font-medium uppercase tracking-[0.1em] text-cart-ink-3">
+        Reservado
+      </span>
+    );
+  }
+  if (!selected) {
+    return (
+      <button
+        type="button"
+        onClick={() => onChange(true)}
+        className="rounded-full bg-white px-4 py-1.5 text-[13px] font-semibold text-cart-bg transition hover:brightness-95"
+      >
+        Reservar {noun}
+      </button>
+    );
+  }
   return (
     <button
       type="button"
-      onClick={onClick}
-      style={{
-        flex: 1,
-        padding: "14px 14px",
-        borderRadius: 18,
-        border: 0,
-        background: active
-          ? "linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.05))"
-          : "rgba(255,255,255,0.04)",
-        boxShadow: active
-          ? "0 0 0 2px #fff inset, 0 12px 30px -12px rgba(124,58,237,0.55)"
-          : `0 0 0 1px ${C.line} inset`,
-        color: "#fff",
-        textAlign: "left",
-        cursor: "pointer",
-        position: "relative",
-        transition: "all 120ms ease",
-      }}
+      onClick={() => onChange(false)}
+      className="inline-flex items-center gap-2 rounded-full bg-cart-accent px-3.5 py-1.5 text-[12.5px] font-semibold text-cart-bg transition hover:brightness-110"
     >
-      {badge && (
-        <div
-          style={{
-            position: "absolute",
-            top: -8,
-            right: 10,
-            fontSize: 9,
-            fontWeight: 800,
-            letterSpacing: "0.08em",
-            padding: "3px 7px",
-            borderRadius: 6,
-            background: C.green,
-            color: "#062315",
-            boxShadow: "0 4px 12px rgba(34,209,127,0.4)",
-          }}
-        >
-          {badge}
-        </div>
-      )}
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <div
-          style={{
-            width: 36,
-            height: 36,
-            borderRadius: 10,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: active ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.05)",
-            flexShrink: 0,
-          }}
-        >
-          {icon}
-        </div>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontFamily: FONT_DISPLAY, fontWeight: 700, fontSize: 15, lineHeight: 1.1 }}>
-            {label}
-          </div>
-          <div style={{ fontSize: 11, color: active ? "rgba(255,255,255,0.75)" : C.dim, marginTop: 3 }}>
-            {sub}
-          </div>
-        </div>
-      </div>
+      <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
+        <path d="M2.5 6.5l2.3 2.3 4.7-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+      Reservado por ti
     </button>
   );
 }
 
-const YapeIcon = () => (
-  // eslint-disable-next-line @next/next/no-img-element
-  <img
-    src="/brand/yape.png"
-    alt="Yape"
-    width={36}
-    height={36}
-    style={{ display: "block", borderRadius: 8 }}
-  />
-);
+function QtyControl({
+  value,
+  max,
+  onChange,
+  disabled,
+}: {
+  value: number;
+  max: number;
+  onChange: (v: number) => void;
+  disabled?: boolean;
+}) {
+  if (disabled) {
+    return (
+      <span className="rounded-full bg-cart-bg-elev-2 px-3 py-1.5 text-[11.5px] font-medium uppercase tracking-[0.1em] text-cart-ink-3">
+        Agotado
+      </span>
+    );
+  }
+  if (value === 0) {
+    return (
+      <button
+        type="button"
+        onClick={() => onChange(1)}
+        className="rounded-full bg-white px-4 py-1.5 text-[13px] font-semibold text-cart-bg transition hover:brightness-95"
+      >
+        Agregar
+      </button>
+    );
+  }
+  return (
+    <div className="flex items-center gap-3 rounded-full border border-cart-line-strong bg-cart-bg-elev-2 px-1.5 py-1">
+      <button
+        type="button"
+        onClick={() => onChange(Math.max(0, value - 1))}
+        aria-label="Restar"
+        className="grid size-7 place-items-center rounded-full bg-cart-bg text-white transition hover:bg-cart-accent hover:text-cart-bg"
+      >
+        <svg width="10" height="10" viewBox="0 0 10 10"><path d="M2 5h6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
+      </button>
+      <span className="min-w-5 text-center text-[14px] font-bold tabular-nums">{value}</span>
+      <button
+        type="button"
+        onClick={() => onChange(Math.min(max, value + 1))}
+        aria-label="Sumar"
+        disabled={value >= max}
+        className="grid size-7 place-items-center rounded-full bg-cart-bg text-white transition hover:bg-cart-accent hover:text-cart-bg disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        <svg width="10" height="10" viewBox="0 0 10 10"><path d="M5 2v6M2 5h6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
+      </button>
+    </div>
+  );
+}
 
-const CardIcon = () => (
-  <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-    <rect x="2" y="4" width="18" height="14" rx="2.5" stroke="#fff" strokeWidth="1.6" />
-    <rect x="2" y="7.5" width="18" height="2.5" fill="#fff" />
-    <rect x="5" y="13" width="4" height="2" rx="0.5" fill="#fff" opacity="0.7" />
-  </svg>
-);
+function Field({
+  label,
+  value,
+  onChange,
+  placeholder,
+  hint,
+  mono,
+  type,
+  disabled,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  hint?: string;
+  mono?: boolean;
+  type?: string;
+  disabled?: boolean;
+}) {
+  return (
+    <label className="block">
+      <span className="text-[11.5px] font-semibold uppercase tracking-[0.12em] text-cart-ink-3">
+        {label}
+      </span>
+      <input
+        type={type ?? "text"}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        disabled={disabled}
+        className={
+          "mt-1.5 block w-full rounded-2xl border border-cart-line bg-cart-bg-elev px-4 py-3.5 text-[15px] text-white outline-none transition focus:border-cart-accent focus:shadow-[0_0_0_3px_var(--color-cart-accent-soft)] disabled:cursor-not-allowed disabled:opacity-60 " +
+          (mono ? "font-mono tracking-[0.04em]" : "")
+        }
+      />
+      {hint && (
+        <span className="mt-1.5 block text-[11.5px] text-cart-ink-4">{hint}</span>
+      )}
+    </label>
+  );
+}
+
+/* ============================ Pay phase ============================ */
+
+function PayPhase({
+  payMethod,
+  setPayMethod,
+  orderId,
+  total,
+  fee,
+  isLogged,
+  userPhone,
+  userName,
+  userEmail,
+  guestName,
+  guestPhone,
+  guestEmail,
+  setGuestEmail,
+  guestDni,
+  emailOk,
+  onPaid,
+}: {
+  payMethod: "yape" | "mp";
+  setPayMethod: (m: "yape" | "mp") => void;
+  orderId: string | null;
+  total: number;
+  fee: number;
+  isLogged: boolean;
+  userPhone: string;
+  userName: string;
+  userEmail: string;
+  guestName: string;
+  guestPhone: string;
+  guestEmail: string;
+  setGuestEmail: (v: string) => void;
+  guestDni: string;
+  emailOk: boolean;
+  onPaid: () => void;
+}) {
+  if (!orderId) {
+    return <p className="py-8 text-center text-[13px] text-cart-ink-3">Preparando el checkout…</p>;
+  }
+  return (
+    <div className="flex flex-col gap-5">
+      {/* Mobile total summary (desktop ya lo muestra en sidebar) */}
+      <div className="rounded-2xl border border-cart-line bg-cart-bg-elev px-4 py-3.5 lg:hidden">
+        <div className="flex items-baseline justify-between">
+          <span className="text-[11.5px] font-semibold uppercase tracking-[0.12em] text-cart-ink-3">
+            Total a pagar
+          </span>
+          <span className="text-[22px] font-bold tabular-nums tracking-[-0.02em]">
+            {formatMoney(total + fee)}
+          </span>
+        </div>
+      </div>
+
+      {/* Yape — primary, full width, brand green */}
+      <button
+        type="button"
+        onClick={() => setPayMethod("yape")}
+        className={
+          "flex items-center gap-3 rounded-2xl border-2 p-4 text-left transition " +
+          (payMethod === "yape"
+            ? "border-[#41E0BC] bg-[#41E0BC]/10 shadow-[0_0_0_4px_rgba(65,224,188,0.16)]"
+            : "border-cart-line bg-cart-bg-elev hover:border-cart-line-strong")
+        }
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/brand/yape.png" alt="Yape" className="size-12 flex-shrink-0 rounded-xl object-cover" />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="text-[16.5px] font-semibold">Pagar con Yape</span>
+            <span className="rounded-md bg-[#41E0BC] px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-[0.08em] text-[#062315]">
+              Más rápido
+            </span>
+          </div>
+          <div className="mt-0.5 text-[12px] text-cart-ink-3">
+            Listo en 10 segundos · sin tarjeta
+          </div>
+        </div>
+        <Radio active={payMethod === "yape"} color="#41E0BC" />
+      </button>
+
+      {/* Tarjeta — secondary */}
+      <button
+        type="button"
+        onClick={() => setPayMethod("mp")}
+        className={
+          "flex items-center gap-3 rounded-2xl border p-4 text-left transition " +
+          (payMethod === "mp"
+            ? "border-cart-accent bg-cart-accent-soft"
+            : "border-cart-line bg-cart-bg-elev hover:border-cart-line-strong")
+        }
+      >
+        <span className="grid size-12 flex-shrink-0 place-items-center rounded-xl bg-cart-bg-elev-2 text-white">
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+            <rect x="2" y="4" width="18" height="14" rx="2.5" stroke="currentColor" strokeWidth="1.6" />
+            <rect x="2" y="7.5" width="18" height="2.5" fill="currentColor" />
+            <rect x="5" y="13" width="4" height="2" rx="0.5" fill="currentColor" opacity="0.7" />
+          </svg>
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="text-[16.5px] font-semibold">Pagar con tarjeta</div>
+          <div className="mt-0.5 text-[12px] text-cart-ink-3">Crédito o débito · Visa / Mastercard</div>
+        </div>
+        <Radio active={payMethod === "mp"} color="var(--color-cart-accent)" />
+      </button>
+
+      {/* Form area */}
+      <div className="mt-2">
+        {payMethod === "yape" ? (
+          <YapeForm
+            orderId={orderId}
+            amount={(total + fee) / 100}
+            initialPhone={isLogged ? userPhone : guestPhone}
+            onPaid={onPaid}
+            onError={(msg) => console.warn("yape error:", msg)}
+          />
+        ) : !isLogged && !emailOk ? (
+          <div className="rounded-2xl border border-cart-line bg-cart-bg-elev p-5">
+            <div className="text-[16px] font-semibold">Necesitamos tu email</div>
+            <p className="mt-1 text-[13px] text-cart-ink-3">
+              Mercado Pago lo pide para el comprobante de tarjeta.
+            </p>
+            <div className="mt-4">
+              <Field
+                label="Email"
+                value={guestEmail}
+                onChange={setGuestEmail}
+                placeholder="juan@gmail.com"
+                type="email"
+              />
+            </div>
+          </div>
+        ) : (
+          <CardForm
+            orderId={orderId}
+            amount={(total + fee) / 100}
+            initialHolder={isLogged ? userName : guestName}
+            initialDni={isLogged ? "" : guestDni}
+            initialEmail={isLogged ? userEmail : guestEmail}
+            onPaid={onPaid}
+            onError={(msg) => console.warn("card error:", msg)}
+          />
+        )}
+      </div>
+
+      <p className="mt-2 text-center text-[12px] text-cart-ink-4">
+        Tu QR llega apenas confirmemos el pago.
+      </p>
+    </div>
+  );
+}
+
+function Radio({ active, color }: { active: boolean; color: string }) {
+  return (
+    <span
+      className="grid size-5 flex-shrink-0 place-items-center rounded-full border-2 transition"
+      style={{
+        borderColor: active ? color : "rgba(255,255,255,0.18)",
+      }}
+    >
+      {active && <span className="size-2.5 rounded-full" style={{ background: color }} />}
+    </span>
+  );
+}
+
+/* ============================ Sidebar summary ============================ */
+
+function OrderSummary({
+  event,
+  ticketTypes,
+  qty,
+  total,
+  fee,
+  promo,
+}: {
+  event: { title: string; coverUrl: string | null; startsAt: string; timezone: string };
+  ticketTypes: TicketType[];
+  qty: Record<string, number>;
+  total: number;
+  fee: number;
+  promo: string | null;
+}) {
+  const lines = ticketTypes.filter((tt) => (qty[tt.id] ?? 0) > 0);
+  const startsAt = new Date(event.startsAt);
+  const dateLabel = new Intl.DateTimeFormat("es-PE", {
+    timeZone: event.timezone,
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(startsAt).replace(".", "");
+
+  return (
+    <div className="rounded-3xl border border-cart-line bg-cart-bg-elev p-5 shadow-[0_20px_60px_-20px_rgba(0,0,0,0.6)]">
+      <div className="flex items-center gap-3">
+        <div className="size-12 flex-shrink-0 overflow-hidden rounded-xl bg-cart-bg-elev-2">
+          {event.coverUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={event.coverUrl} alt="" className="size-full object-cover" />
+          ) : (
+            <div className="size-full" style={{ background: "linear-gradient(135deg, #4B1F9A, #FF4D5E)" }} />
+          )}
+        </div>
+        <div className="min-w-0">
+          <div className="truncate text-[14px] font-semibold leading-tight">
+            {event.title}
+          </div>
+          <div className="mt-0.5 text-[11.5px] text-cart-ink-3">{dateLabel}</div>
+        </div>
+      </div>
+
+      <div className="my-4 h-px bg-cart-line" />
+
+      {lines.length === 0 ? (
+        <p className="py-2 text-center text-[12.5px] text-cart-ink-3">
+          Aún no eliges entradas
+        </p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {lines.map((tt) => (
+            <div key={tt.id} className="flex items-baseline justify-between gap-3">
+              <span className="text-[13px] text-cart-ink-2">
+                {tt.name} <span className="text-cart-ink-3">× {qty[tt.id]}</span>
+              </span>
+              <span className="text-[13px] font-semibold tabular-nums">
+                {formatMoney(tt.priceCents * (qty[tt.id] ?? 0), tt.currency)}
+              </span>
+            </div>
+          ))}
+          {fee > 0 && (
+            <div className="flex items-baseline justify-between">
+              <span className="text-[12.5px] text-cart-ink-3">Servicio</span>
+              <span className="text-[13px] tabular-nums text-cart-ink-2">
+                {formatMoney(fee)}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="my-4 h-px bg-cart-line" />
+
+      <div className="flex items-baseline justify-between">
+        <span className="text-[13px] font-semibold uppercase tracking-[0.08em] text-cart-ink-3">
+          Total
+        </span>
+        <span className="text-[22px] font-bold tabular-nums tracking-[-0.02em]">
+          {formatMoney(total + fee)}
+        </span>
+      </div>
+
+      {promo && (
+        <div className="mt-4 flex items-center gap-2 rounded-xl border border-cart-accent/30 bg-cart-accent-soft px-3 py-2">
+          <span className="grid size-5 place-items-center rounded-full bg-cart-accent/30 text-cart-accent">
+            <svg width="10" height="10" viewBox="0 0 16 16" fill="none">
+              <path d="M3 7l3 3 7-7" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </span>
+          <span className="truncate text-[11.5px] text-cart-ink-2">
+            Promotor: <span className="font-mono text-white">{promo}</span>
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PageLoader() {
+  return (
+    <div className="grid min-h-dvh place-items-center bg-cart-bg text-cart-ink-3">
+      <span className="text-[13px]">Cargando…</span>
+    </div>
+  );
+}

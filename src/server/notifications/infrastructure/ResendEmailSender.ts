@@ -24,16 +24,16 @@ const buildHtml = (input: TicketDeliveryInput): string => {
   return `<!doctype html>
 <html><body style="font-family:system-ui,-apple-system,sans-serif;background:#0A0A0F;color:#fff;padding:24px">
   <div style="max-width:520px;margin:0 auto;background:#140C28;border-radius:16px;padding:28px">
-    <h1 style="font-size:22px;margin:0 0 12px">Tu QR está listo 🎉</h1>
+    <h1 style="font-size:22px;margin:0 0 12px">Tu entrada está lista</h1>
     <p style="color:rgba(255,255,255,0.7);margin:0 0 18px">Hola ${escapeHtml(input.holderName)}, tu entrada para <strong>${escapeHtml(input.eventTitle)}</strong> ya está disponible.</p>
     <div style="background:rgba(124,58,237,0.18);border-radius:12px;padding:14px 16px;margin-bottom:18px">
       <div style="font-weight:600">${escapeHtml(input.eventTitle)}</div>
       <div style="color:rgba(255,255,255,0.7);font-size:13px;margin-top:4px">${escapeHtml(fechaFmt)}</div>
       ${venue}
     </div>
-    <a href="${input.ticketUrl}" style="display:block;text-align:center;background:#7C3AED;color:#fff;padding:14px 18px;border-radius:999px;text-decoration:none;font-weight:600;margin-bottom:12px">Ver tu ticket (QR)</a>
-    <a href="${input.walletSignupUrl}" style="display:block;text-align:center;background:rgba(255,255,255,0.08);color:#fff;padding:12px 18px;border-radius:999px;text-decoration:none;font-weight:500">Crear tu wallet para guardarlo</a>
-    <p style="color:rgba(255,255,255,0.5);font-size:12px;margin-top:24px;line-height:1.5">Mostrá el QR en puerta. No le saques screenshot — el QR rota.</p>
+    <a href="${input.ticketUrl}" style="display:block;text-align:center;background:#7C3AED;color:#fff;padding:14px 18px;border-radius:999px;text-decoration:none;font-weight:600;margin-bottom:12px">Ver mi entrada</a>
+    <a href="${input.walletSignupUrl}" style="display:block;text-align:center;background:rgba(255,255,255,0.08);color:#fff;padding:12px 18px;border-radius:999px;text-decoration:none;font-weight:500">Guardar mis entradas en Pasape</a>
+    <p style="color:rgba(255,255,255,0.5);font-size:12px;margin-top:24px;line-height:1.5">Mostrá el QR en puerta. No le saques screenshot — el QR rota cada pocos segundos.</p>
   </div>
 </body></html>`;
 };

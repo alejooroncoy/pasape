@@ -118,6 +118,31 @@
       ]
     },
     {
+      "name": "promoter_invite_v10",
+      "language": "es",
+      "category": "UTILITY",
+      "parameter_format": "NAMED",
+      "components": [
+        {
+          "type": "BODY",
+          "text": "Hola {{holder_name}}, {{sender_name}} te transfirió un pase para {{event_title}} el {{event_starts_at}}. Abre tu pase en {{ticket_url}} y úsalo cuando estés listo.",
+          "example": {
+            "body_text_named_params": [
+              { "param_name": "holder_name", "example": "Mateo" },
+              { "param_name": "sender_name", "example": "IN Punta Hermosa" },
+              { "param_name": "event_title", "example": "Reverb x La Selva" },
+              { "param_name": "event_starts_at", "example": "19 jun 2026, 10:00 p. m." },
+              { "param_name": "ticket_url", "example": "https://app.pasape.lat/es/c/abc123def456" }
+            ]
+          }
+        },
+        {
+          "type": "FOOTER",
+          "text": "Pasape"
+        }
+      ]
+    },
+    {
       "name": "event_cancelled",
       "language": "es",
       "category": "UTILITY",

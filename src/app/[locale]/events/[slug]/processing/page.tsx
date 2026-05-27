@@ -2,7 +2,6 @@
 
 import { Suspense, use, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { C, FONT_DISPLAY, FONT_MONO, Phone } from "@/components/design";
 import { useRouter } from "@/i18n/navigation";
 import { useEvent } from "@/lib/events/hooks/useEvents";
 import { useMyTickets } from "@/lib/tickets/hooks/useTickets";
@@ -30,24 +29,27 @@ function Inner({ params }: Props) {
   const [startedAt] = useState(() => Date.now());
   const [paid, setPaid] = useState(false);
 
-  // Poll the order status endpoint. When `paid`, mostramos animación de éxito
-  // por ~1.6s y después redirect a /tickets.
   useEffect(() => {
     if (!orderId || paid) return;
     let cancelled = false;
     const tick = async () => {
       try {
         const qs = guestEmail ? `?email=${encodeURIComponent(guestEmail)}` : "";
-        const res = await api.get<{ status: string; paidAt: string | null }>(
-          `/api/tickets/order/${orderId}/status${qs}`,
-        );
+        const res = await api.get<{
+          status: string;
+          paidAt: string | null;
+          ticketUrl: string | null;
+        }>(`/api/tickets/order/${orderId}/status${qs}`);
         if (cancelled) return;
         if (res.status === "paid") {
           setPaid(true);
           await tickets.refetch();
           setTimeout(() => {
+            // Para guests usamos ticketUrl firmado (no requiere sesión).
+            // Para logueados va a /tickets (su wallet).
+            const dest = res.ticketUrl ?? "/tickets";
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            router.replace("/tickets" as any);
+            router.replace(dest as any);
           }, 1600);
         } else if (res.status === "failed" || res.status === "expired") {
           router.replace(
@@ -55,9 +57,7 @@ function Inner({ params }: Props) {
             `/events/${slug}/pay-error?reason=${res.status}` as any,
           );
         }
-      } catch {
-        // keep polling
-      }
+      } catch {}
     };
     void tick();
     const id = setInterval(() => void tick(), 2000);
@@ -67,7 +67,6 @@ function Inner({ params }: Props) {
     };
   }, [orderId, guestEmail, router, slug, tickets, paid]);
 
-  // Fallback path when no orderId — preserve old behavior of polling tickets.
   useEffect(() => {
     if (orderId) return;
     const id = setInterval(() => void tickets.refetch(), 1500);
@@ -108,9 +107,9 @@ function Inner({ params }: Props) {
   }, [eventData]);
 
   return (
-    <Phone>
+    <div className="grid min-h-dvh place-items-center bg-cart-bg px-6 text-center text-white">
       <style>{`
-        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes pasape-spin { to { transform: rotate(360deg); } }
         @keyframes pasape-pop {
           0% { transform: scale(0.4); opacity: 0; }
           60% { transform: scale(1.12); opacity: 1; }
@@ -124,150 +123,93 @@ function Inner({ params }: Props) {
           from { opacity: 0; transform: translateY(8px); }
           to { opacity: 1; transform: translateY(0); }
         }
-        @keyframes pasape-pulse {
+        @keyframes pasape-pulse-green {
           0%, 100% { box-shadow: 0 0 0 0 rgba(34,209,127,0.55), 0 0 60px rgba(34,209,127,0.55); }
           50% { box-shadow: 0 0 0 22px rgba(34,209,127,0), 0 0 80px rgba(34,209,127,0.65); }
         }
       `}</style>
-      <div
-        style={{
-          flex: 1,
-          padding: 22,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          textAlign: "center",
-          minHeight: "100dvh",
-        }}
-      >
-        {paid ? (
-          <>
-            <div
-              style={{
-                width: 140,
-                height: 140,
-                borderRadius: 999,
-                background: "linear-gradient(180deg, #22D17F, #16A35F)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                animation: "pasape-pop 420ms cubic-bezier(0.34, 1.56, 0.64, 1), pasape-pulse 1.6s ease-out 420ms",
-              }}
-            >
-              <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
-                <path
-                  d="M16 33l11 11 21-25"
-                  stroke="#fff"
-                  strokeWidth="6"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  fill="none"
-                  strokeDasharray="60"
-                  style={{
-                    animation: "pasape-check 520ms ease-out 240ms forwards",
-                    strokeDashoffset: 60,
-                  }}
-                />
-              </svg>
-            </div>
-            <div
-              style={{
-                fontFamily: FONT_DISPLAY,
-                fontSize: 28,
-                fontWeight: 700,
-                letterSpacing: "-0.025em",
-                marginTop: 32,
-                animation: "pasape-fade-in 420ms ease-out 360ms both",
-              }}
-            >
-              ¡Pago aprobado!
-            </div>
-            <div
-              style={{
-                fontSize: 14,
-                color: C.dim,
-                marginTop: 8,
-                lineHeight: 1.5,
-                animation: "pasape-fade-in 420ms ease-out 540ms both",
-              }}
-            >
-              Llevándote a tu QR…
-            </div>
-          </>
-        ) : (
-          <>
-            <div style={{ position: "relative", width: 140, height: 140 }}>
-              <div
+
+      {paid ? (
+        <div className="flex max-w-[420px] flex-col items-center">
+          <div
+            className="grid size-[140px] place-items-center rounded-full"
+            style={{
+              background: "linear-gradient(180deg, #22D17F, #16A35F)",
+              animation:
+                "pasape-pop 420ms cubic-bezier(0.34, 1.56, 0.64, 1), pasape-pulse-green 1.6s ease-out 420ms",
+            }}
+          >
+            <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
+              <path
+                d="M16 33l11 11 21-25"
+                stroke="#fff"
+                strokeWidth="6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                fill="none"
+                strokeDasharray="60"
                 style={{
-                  position: "absolute",
-                  inset: 0,
-                  borderRadius: 999,
-                  background: `conic-gradient(from 0deg, transparent, ${C.purple})`,
-                  animation: "spin 1.4s linear infinite",
-                  WebkitMask:
-                    "radial-gradient(closest-side, transparent calc(50% - 4px), #000 calc(50% - 3px))",
-                  mask: "radial-gradient(closest-side, transparent calc(50% - 4px), #000 calc(50% - 3px))",
-                  filter: `drop-shadow(0 0 12px ${C.purple})`,
+                  animation: "pasape-check 520ms ease-out 240ms forwards",
+                  strokeDashoffset: 60,
                 }}
               />
-              <div
-                style={{
-                  position: "absolute",
-                  inset: 20,
-                  borderRadius: 999,
-                  background: C.bg2,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  boxShadow: `0 0 0 1px ${C.line} inset`,
-                }}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src="/brand/yape.png"
-                  alt="Yape"
-                  width={64}
-                  height={64}
-                  style={{ borderRadius: 12 }}
-                />
-              </div>
-            </div>
+            </svg>
+          </div>
+          <h1
+            className="mt-8 text-[28px] font-bold tracking-[-0.02em]"
+            style={{ animation: "pasape-fade-in 420ms ease-out 360ms both" }}
+          >
+            ¡Pago aprobado!
+          </h1>
+          <p
+            className="mt-2 text-[14px] text-cart-ink-2"
+            style={{ animation: "pasape-fade-in 420ms ease-out 540ms both" }}
+          >
+            Llevándote a tu QR…
+          </p>
+        </div>
+      ) : (
+        <div className="flex max-w-[420px] flex-col items-center">
+          <div className="relative size-[140px]">
             <div
+              className="absolute inset-0 rounded-full"
               style={{
-                fontFamily: FONT_DISPLAY,
-                fontSize: 22,
-                fontWeight: 700,
-                letterSpacing: "-0.02em",
-                marginTop: 30,
+                background:
+                  "conic-gradient(from 0deg, transparent, var(--color-cart-accent))",
+                animation: "pasape-spin 1.4s linear infinite",
+                WebkitMask:
+                  "radial-gradient(closest-side, transparent calc(50% - 4px), #000 calc(50% - 3px))",
+                mask: "radial-gradient(closest-side, transparent calc(50% - 4px), #000 calc(50% - 3px))",
+                filter: "drop-shadow(0 0 12px var(--color-cart-accent-glow))",
               }}
-            >
-              Procesando tu pago...
+            />
+            <div className="absolute inset-[20px] grid place-items-center rounded-full border border-cart-line bg-cart-bg-elev">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/brand/yape.png"
+                alt="Yape"
+                width={64}
+                height={64}
+                className="rounded-xl"
+              />
             </div>
-            <div style={{ fontSize: 14, color: C.dim, marginTop: 8, lineHeight: 1.5 }}>
-              No cierres esta ventana.
-              <br />
-              Tu QR llega en segundos.
+          </div>
+          <h1 className="mt-8 text-[22px] font-bold tracking-[-0.02em]">
+            Procesando tu pago…
+          </h1>
+          <p className="mt-2 text-[14px] leading-[1.5] text-cart-ink-2">
+            No cierres esta ventana.
+            <br />
+            Tu QR llega en segundos.
+          </p>
+          {summary && (
+            <div className="mt-7 rounded-full bg-cart-bg-elev px-4 py-2 font-mono text-[12px] text-cart-ink-3">
+              {summary.price ? `${summary.price} · ` : ""}
+              {summary.title}
             </div>
-            {summary && (
-              <div
-                style={{
-                  marginTop: 28,
-                  padding: "10px 14px",
-                  borderRadius: 999,
-                  background: "rgba(255,255,255,0.05)",
-                  fontSize: 12,
-                  color: C.dim,
-                  fontFamily: FONT_MONO,
-                }}
-              >
-                {summary.price ? `${summary.price} · ` : ""}
-                {summary.title}
-              </div>
-            )}
-          </>
-        )}
-      </div>
-    </Phone>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

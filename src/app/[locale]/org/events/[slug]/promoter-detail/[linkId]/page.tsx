@@ -4,6 +4,7 @@ import { use, useMemo, useState } from "react";
 import { EventShell } from "../../_shell/EventShell";
 import { Link } from "@/i18n/navigation";
 import { useEventPromoters, usePromoterLinkSales } from "@/lib/promoters/hooks/useEventPromoters";
+import { useSendPromoterInvite } from "@/lib/promoters/hooks/useSendPromoterInvite";
 import { formatMoney } from "@/lib/_shared/format";
 
 type Params = Promise<{ slug: string; linkId: string; locale: string }>;
@@ -41,7 +42,7 @@ export default function PromoterDetailForEventPage({ params }: { params: Params 
             </h2>
             {assignment && !assignment.profileId && (
               <span className="rounded-full bg-amber-400/12 px-1.5 py-px text-[9px] font-semibold tracking-[0.08em] text-amber-300">
-                POR FIRMAR
+                SIN ACTIVAR
               </span>
             )}
           </div>
@@ -51,6 +52,15 @@ export default function PromoterDetailForEventPage({ params }: { params: Params 
         </div>
         {assignment && <LinkActions url={assignment.url} name={assignment.name} whatsapp={assignment.whatsapp} />}
       </section>
+
+      {/* Activación pendiente — sólo si el promotor aún no firmó */}
+      {assignment && !assignment.profileId && (
+        <InviteCard
+          orgPromoterId={assignment.orgPromoterId}
+          promoterName={assignment.name}
+          whatsapp={assignment.whatsapp}
+        />
+      )}
 
       {/* KPIs */}
       <section className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
@@ -119,6 +129,99 @@ export default function PromoterDetailForEventPage({ params }: { params: Params 
         )}
       </section>
     </EventShell>
+  );
+}
+
+function InviteCard({
+  orgPromoterId,
+  promoterName,
+  whatsapp,
+}: {
+  orgPromoterId: string;
+  promoterName: string;
+  whatsapp: string | null;
+}) {
+  const send = useSendPromoterInvite(orgPromoterId);
+  const result = send.data;
+
+  const expiresLabel = result?.expiresAt
+    ? new Date(result.expiresAt).toLocaleString("es-PE", {
+        weekday: "short",
+        day: "2-digit",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : null;
+
+  return (
+    <section
+      className="mb-6 rounded-2xl border border-amber-400/30 bg-amber-400/[0.05] p-4 lg:p-5"
+      style={{
+        background:
+          "linear-gradient(180deg, rgba(255,206,59,0.06), rgba(20,12,40,0.0))",
+      }}
+    >
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex items-start gap-3">
+          <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-amber-400/15 text-amber-300">
+            <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
+              <path
+                d="M3 6h14M3 6l1 9a2 2 0 002 2h8a2 2 0 002-2l1-9M8 10v3M12 10v3"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+              />
+            </svg>
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-amber-300">
+              Activación pendiente
+            </div>
+            <div className="mt-0.5 text-[14px] font-medium text-white">
+              {promoterName.split(" ")[0]} todavía no entró a su panel.
+            </div>
+            <p className="mt-1 text-[12.5px] leading-relaxed text-cart-ink-3">
+              Le mandamos un mensaje de WhatsApp con un link para activar su cuenta.
+              {whatsapp && (
+                <>
+                  {" "}Se envía a <span className="font-mono text-cart-ink-2">{whatsapp}</span>.
+                </>
+              )}
+            </p>
+            {result && (
+              <p
+                className={
+                  "mt-2 text-[11.5px] " +
+                  (result.delivered ? "text-[#22D17F]" : "text-amber-300")
+                }
+              >
+                {result.delivered
+                  ? `✓ Mensaje enviado. El link caduca ${expiresLabel ?? "en 48 h"}.`
+                  : "⚠ Token generado pero el envío de WhatsApp falló. Revisa configuración de Kapso."}
+              </p>
+            )}
+            {send.error && (
+              <p className="mt-2 text-[11.5px] text-red-300">
+                {(send.error as Error).message}
+              </p>
+            )}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => send.mutate()}
+          disabled={send.isPending || !whatsapp}
+          className="self-start rounded-full bg-cart-accent px-4 py-2 text-[12.5px] font-semibold text-white shadow-[0_8px_18px_-8px_var(--color-cart-accent-glow-strong)] transition hover:brightness-110 disabled:opacity-60 lg:self-auto"
+        >
+          {send.isPending
+            ? "Enviando…"
+            : result
+              ? "Reenviar invitación"
+              : "Enviar invitación"}
+        </button>
+      </div>
+    </section>
   );
 }
 

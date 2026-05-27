@@ -96,6 +96,8 @@ type TicketTypeRow = {
   sold: number;
   position: number;
   box_label: string | null;
+  zone: string | null;
+  unit_noun: string | null;
 };
 
 const toEvent = (r: EventRow): Event => ({
@@ -141,6 +143,8 @@ const toTicketType = (r: TicketTypeRow): TicketType => ({
   sold: r.sold,
   position: r.position,
   boxLabel: r.box_label,
+  zone: r.zone,
+  unitNoun: r.unit_noun,
 });
 
 const slugify = (s: string): string =>
@@ -324,6 +328,11 @@ export const supabaseEventRepository: EventRepository = {
         capacity: input.capacity,
         position,
         box_label: input.kind === "box" ? input.boxLabel?.trim() ?? null : null,
+        zone: input.zone?.trim() || null,
+        unit_noun:
+          input.kind === "box" && input.unitNoun?.trim()
+            ? input.unitNoun.trim()
+            : null,
       })
       .select("*")
       .single<TicketTypeRow>();
@@ -342,6 +351,9 @@ export const supabaseEventRepository: EventRepository = {
     if (input.priceCents !== undefined) patch.price_cents = input.priceCents;
     if (input.capacity !== undefined) patch.capacity = input.capacity;
     if (input.boxLabel !== undefined) patch.box_label = input.boxLabel;
+    if (input.zone !== undefined) patch.zone = input.zone?.trim() || null;
+    if (input.unitNoun !== undefined)
+      patch.unit_noun = input.unitNoun?.trim() || null;
     if (Object.keys(patch).length === 0) return err("nothing_to_update");
     const { data, error } = await db
       .from("ticket_types")
@@ -565,11 +577,28 @@ export const supabaseEventRepository: EventRepository = {
       })
       .sort((a, b) => b.ticketsSold - a.ticketsSold);
 
+    // Serie diaria desde el view `event_sales_by_day` (migración
+    // 20260527140000). Sólo cuenta tickets active/used de orders paid.
+    const { data: seriesRows } = await db
+      .from("event_sales_by_day")
+      .select("day, tickets_sold, revenue_cents")
+      .eq("event_id", eventId)
+      .order("day", { ascending: true });
+    const salesSeries =
+      (seriesRows as Array<{ day: string; tickets_sold: number; revenue_cents: number }> | null)?.map(
+        (r) => ({
+          day: r.day,
+          ticketsSold: Number(r.tickets_sold ?? 0),
+          revenueCents: Number(r.revenue_cents ?? 0),
+        }),
+      ) ?? [];
+
     return {
       sold,
       validated: validatedCount ?? 0,
       revenueCents,
       capacity: capacity || null,
+      salesSeries,
       ticketTypes: ticketTypes.map((t) => ({
         id: t.id,
         name: t.name,
@@ -630,29 +659,16 @@ export const supabaseEventRepository: EventRepository = {
 
     const summary = await this.getStats(eventId);
 
-    // Pull commission_pct for each promoter_link associated to event.
-    const { data: links } = await db
-      .from("promoter_links")
-      .select("id, code, commission_pct")
-      .eq("event_id", eventId);
-    type LinkRow = { id: string; code: string; commission_pct: number };
-    const linkPctByCode = new Map<string, number>();
-    for (const l of (links as LinkRow[] | null) ?? []) {
-      linkPctByCode.set(l.code, l.commission_pct);
-    }
-
-    const promoters: PromoterReportRow[] = summary.byPromoter.map((p) => {
-      const pct = linkPctByCode.get(p.code) ?? 0;
-      return {
-        name: p.name,
-        code: p.code,
-        ticketsSold: p.ticketsSold,
-        ticketsValidated: p.ticketsValidated,
-        revenueCents: p.revenueCents,
-        commissionPct: pct,
-        commissionCalculatedCents: Math.round((p.revenueCents * pct) / 100),
-      };
-    });
+    // Use payoutCents already resolved by getStats (handles percentage/tiered/inkind).
+    const promoters: PromoterReportRow[] = summary.byPromoter.map((p) => ({
+      name: p.name,
+      code: p.code,
+      ticketsSold: p.ticketsSold,
+      ticketsValidated: p.ticketsValidated,
+      revenueCents: p.revenueCents,
+      commissionPct: p.commissionPct,
+      commissionCalculatedCents: p.payoutCents,
+    }));
 
     return { attendees, promoters, summary };
   },

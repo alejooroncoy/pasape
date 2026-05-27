@@ -116,11 +116,30 @@ export const getOrgPromoterDetail = async (
 
   const cleanOrigin = origin.replace(/\/$/, "");
 
+  // Fetch unlocked tiers for all links in one query.
+  const { data: allTiers } = await db
+    .from("commission_tiers")
+    .select("promoter_link_id, reward_amount_cents")
+    .in("promoter_link_id", linkIds)
+    .not("unlocked_at", "is", null);
+  type TierRow = { promoter_link_id: string; reward_amount_cents: number | null };
+  const tiersByLink = ((allTiers as TierRow[] | null) ?? []).reduce(
+    (acc, t) => {
+      acc.set(t.promoter_link_id, (acc.get(t.promoter_link_id) ?? 0) + (t.reward_amount_cents ?? 0));
+      return acc;
+    },
+    new Map<string, number>(),
+  );
+
   const byEvent: PromoterDetailEvent[] = linkRows
     .filter((l) => l.event !== null)
     .map((l) => {
       const stats = perLink.get(l.id) ?? { ticketsSold: 0, ticketsValidated: 0, grossCents: 0 };
-      const commissionCents = Math.round((stats.grossCents * l.commission_pct) / 100);
+      const unlockedTiersCents = tiersByLink.get(l.id);
+      const commissionCents =
+        unlockedTiersCents !== undefined
+          ? unlockedTiersCents
+          : Math.round((stats.grossCents * l.commission_pct) / 100);
       return {
         eventId: l.event!.id,
         eventSlug: l.event!.slug,
