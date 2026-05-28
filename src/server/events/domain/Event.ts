@@ -67,4 +67,10 @@ export type TicketType = {
    * "box" por default. Solo aplica cuando kind === "box".
    */
   unitNoun: string | null;
+  /**
+   * ISO 8601. Si está definido, las ventas de este tipo de entrada se cierran
+   * automáticamente cuando se alcanza esta fecha/hora, independientemente del
+   * estado del evento. Útil para preventas con fecha límite.
+   */
+  saleEndsAt: string | null;
 };

@@ -211,6 +211,7 @@ export const EventsController = {
       boxLabel: parsed.data.boxLabel ?? null,
       zone: parsed.data.zone ?? null,
       unitNoun: parsed.data.unitNoun ?? null,
+      saleEndsAt: parsed.data.saleEndsAt ?? null,
     });
   },
 
@@ -275,6 +276,7 @@ const createTicketTypeSchema = z.object({
   boxLabel: z.string().trim().min(1).max(40).nullable().optional(),
   zone: z.string().trim().max(60).nullable().optional(),
   unitNoun: z.string().trim().max(24).nullable().optional(),
+  saleEndsAt: z.string().datetime().nullable().optional(),
 });
 
 const updateTicketTypeSchema = z.object({
@@ -284,6 +286,7 @@ const updateTicketTypeSchema = z.object({
   boxLabel: z.string().trim().min(1).max(40).nullable().optional(),
   zone: z.string().trim().max(60).nullable().optional(),
   unitNoun: z.string().trim().max(24).nullable().optional(),
+  saleEndsAt: z.string().datetime().nullable().optional(),
 });
 
 const updateSchema = z.object({

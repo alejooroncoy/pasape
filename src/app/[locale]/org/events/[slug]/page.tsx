@@ -7,6 +7,7 @@ import { useEventStats } from "@/lib/events/hooks/useEventStats";
 import { formatMoney } from "@/lib/_shared/format";
 import { EventShell } from "./_shell/EventShell";
 import { SpotlightTour } from "@/components/ui/SpotlightTour";
+import type { EventStatsPayload } from "@/lib/events/hooks/useEventStats";
 
 type Params = Promise<{ slug: string; locale: string }>;
 
@@ -16,15 +17,45 @@ export default function OrgEventPanelPage({ params }: { params: Params }) {
   const stats = useEventStats(slug);
 
   const ev = event.data?.event;
-  const sold = stats.data?.sold ?? 0;
-  const validated = stats.data?.validated ?? 0;
-  const revenue = stats.data?.revenueCents ?? 0;
+  const status = ev?.status ?? "draft";
+
+  const isFinished =
+    status === "closed" ||
+    status === "cancelled" ||
+    (status === "published" && ev?.endsAt != null && new Date(ev.endsAt) < new Date());
+
+  return (
+    <EventShell slug={slug} active="panel">
+      {isFinished ? (
+        <FinalReport slug={slug} ev={ev} stats={stats.data} />
+      ) : (
+        <LivePanel slug={slug} ev={ev} stats={stats.data} />
+      )}
+    </EventShell>
+  );
+}
+
+// ============================================================
+// Live panel (evento en curso o futuro)
+// ============================================================
+function LivePanel({
+  slug,
+  ev,
+  stats,
+}: {
+  slug: string;
+  ev: ReturnType<typeof useEvent>["data"] extends { event: infer E } | null | undefined ? E | undefined : never;
+  stats: EventStatsPayload | undefined;
+}) {
+  const sold = stats?.sold ?? 0;
+  const validated = stats?.validated ?? 0;
+  const revenue = stats?.revenueCents ?? 0;
   const capacity = ev?.capacity.totalCapacity ?? 0;
   const soldPct = capacity ? Math.min(100, Math.round((sold / capacity) * 100)) : 0;
   const validatedPct = sold ? Math.round((validated / sold) * 100) : 0;
 
   return (
-    <EventShell slug={slug} active="panel">
+    <>
       {/* KPIs */}
       <section data-tour="kpis" className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:gap-4">
         <KpiCard
@@ -66,9 +97,9 @@ export default function OrgEventPanelPage({ params }: { params: Params }) {
             </Link>
           </header>
 
-          {stats.data?.byPromoter?.length ? (
+          {stats?.byPromoter?.length ? (
             <div className="divide-y divide-cart-line">
-              {stats.data.byPromoter.map((p, i) => (
+              {stats.byPromoter.map((p, i) => (
                 <PromoterRow key={p.promoterLinkId} rank={i + 1} promoter={p} slug={slug} />
               ))}
             </div>
@@ -90,9 +121,9 @@ export default function OrgEventPanelPage({ params }: { params: Params }) {
             <span className="text-[11.5px] text-cart-ink-4">últimos 10</span>
           </header>
 
-          {stats.data?.scansRecent.length ? (
+          {stats?.scansRecent.length ? (
             <ul className="divide-y divide-cart-line">
-              {stats.data.scansRecent.slice(0, 10).map((s) => (
+              {stats.scansRecent.slice(0, 10).map((s) => (
                 <ScanRow key={s.id} when={s.scannedAt} result={s.result} />
               ))}
             </ul>
@@ -111,7 +142,7 @@ export default function OrgEventPanelPage({ params }: { params: Params }) {
         </section>
       </div>
 
-      {/* Quick actions (mobile inline; desktop ya está arriba) */}
+      {/* Quick actions (mobile) */}
       <section className="mt-6 grid grid-cols-2 gap-2.5 lg:hidden">
         <Link
           href={`/org/events/${slug}/door-link` as never}
@@ -128,9 +159,7 @@ export default function OrgEventPanelPage({ params }: { params: Params }) {
         <button
           type="button"
           data-tour="download"
-          onClick={() => {
-            window.location.href = `/api/events/${slug}/export`;
-          }}
+          onClick={() => { window.location.href = `/api/events/${slug}/export`; }}
           className="flex items-center gap-2 rounded-2xl border border-cart-line bg-cart-bg-elev px-3.5 py-3 text-left text-[13px] font-medium"
         >
           <span className="grid size-8 place-items-center rounded-lg bg-cart-accent-soft text-cart-accent">
@@ -145,34 +174,253 @@ export default function OrgEventPanelPage({ params }: { params: Params }) {
       <SpotlightTour
         tourId="event_panel"
         steps={[
-          {
-            selector: "[data-tour='kpis']",
-            title: "Lo importante",
-            body: "Estos 3 números son tu noche.",
-          },
-          {
-            selector: "[data-tour='promoters']",
-            title: "Tu equipo",
-            body: "Tap a un promotor para ver sus ventas.",
-          },
-          {
-            selector: "[data-tour='live-scans']",
-            title: "En vivo",
-            body: "Cada vez que el portero escanea, aparece aquí.",
-          },
-          {
-            selector: "[data-tour='download']",
-            title: "Cuando quieras",
-            body: "Bajá el Excel a cualquier hora.",
-          },
+          { selector: "[data-tour='kpis']", title: "Lo importante", body: "Estos 3 números son tu noche." },
+          { selector: "[data-tour='promoters']", title: "Tu equipo", body: "Tap a un promotor para ver sus ventas." },
+          { selector: "[data-tour='live-scans']", title: "En vivo", body: "Cada vez que el portero escanea, aparece aquí." },
+          { selector: "[data-tour='download']", title: "Cuando quieras", body: "Bajá el Excel a cualquier hora." },
         ]}
       />
-    </EventShell>
+    </>
   );
 }
 
 // ============================================================
-// KPI Card
+// Reporte final (evento terminado)
+// ============================================================
+function FinalReport({
+  slug,
+  ev,
+  stats,
+}: {
+  slug: string;
+  ev: ReturnType<typeof useEvent>["data"] extends { event: infer E } | null | undefined ? E | undefined : never;
+  stats: EventStatsPayload | undefined;
+}) {
+  const sold = stats?.sold ?? 0;
+  const validated = stats?.validated ?? 0;
+  const noShow = Math.max(0, sold - validated);
+  const revenue = stats?.revenueCents ?? 0;
+  const capacity = ev?.capacity.totalCapacity ?? 0;
+  const soldPct = capacity ? Math.min(100, Math.round((sold / capacity) * 100)) : 0;
+  const attendancePct = sold ? Math.round((validated / sold) * 100) : 0;
+
+  return (
+    <div className="flex flex-col gap-6">
+      {/* Cabecera del reporte */}
+      <div className="flex items-center justify-between">
+        <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1">
+          <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
+            <path d="M2 12V5l5-3 5 3v7" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+            <rect x="5" y="8" width="4" height="4" rx="0.5" stroke="currentColor" strokeWidth="1.4" />
+          </svg>
+          <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-cart-ink-2">
+            Reporte final
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={() => { window.location.href = `/api/events/${slug}/export`; }}
+          className="hidden items-center gap-1.5 rounded-full border border-cart-line bg-cart-bg-elev px-3.5 py-1.5 text-[12.5px] font-semibold text-white transition hover:border-cart-line-strong lg:inline-flex"
+        >
+          <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
+            <path d="M7 2v8m0 0l-3-3m3 3l3-3M2 12h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          Descargar Excel
+        </button>
+      </div>
+
+      {/* Recaudado — hero */}
+      <div
+        className="rounded-2xl p-5 lg:p-6"
+        style={{
+          background: "linear-gradient(160deg, rgba(124,58,237,0.18) 0%, rgba(124,58,237,0.04) 100%)",
+          boxShadow: "0 0 0 1px rgba(124,58,237,0.25) inset",
+        }}
+      >
+        <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-cart-ink-3">
+          Total recaudado
+        </div>
+        <div className="mt-2 font-sans text-[48px] font-semibold leading-none tracking-[-0.04em] lg:text-[60px]">
+          {formatMoneyClean(revenue)}
+        </div>
+
+        {/* Trío de stats */}
+        <div className="mt-5 grid grid-cols-3 gap-3 border-t border-white/8 pt-5">
+          <div>
+            <div className="font-sans text-[26px] font-semibold leading-none tracking-[-0.03em] lg:text-[32px]">
+              {sold.toLocaleString("es-PE")}
+            </div>
+            <div className="mt-1 text-[11.5px] text-cart-ink-3">vendidas</div>
+          </div>
+          <div>
+            <div className="font-sans text-[26px] font-semibold leading-none tracking-[-0.03em] text-[#22D17F] lg:text-[32px]">
+              {validated.toLocaleString("es-PE")}
+            </div>
+            <div className="mt-1 text-[11.5px] text-cart-ink-3">asistieron</div>
+          </div>
+          <div>
+            <div className="font-sans text-[26px] font-semibold leading-none tracking-[-0.03em] text-cart-ink-2 lg:text-[32px]">
+              {noShow.toLocaleString("es-PE")}
+            </div>
+            <div className="mt-1 text-[11.5px] text-cart-ink-3">no shows</div>
+          </div>
+        </div>
+
+        {/* Barra de asistencia */}
+        {sold > 0 && (
+          <div className="mt-4">
+            <div className="mb-1.5 flex justify-between text-[11px] text-cart-ink-3">
+              <span>Asistencia</span>
+              <span className="font-semibold text-[#22D17F]">{attendancePct}%</span>
+            </div>
+            <div className="h-1.5 overflow-hidden rounded-full bg-white/8">
+              <div
+                className="h-full rounded-full bg-[#22D17F] transition-[width] duration-700"
+                style={{ width: `${attendancePct}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Aforo */}
+        {capacity > 0 && (
+          <div className="mt-4">
+            <div className="mb-1.5 flex justify-between text-[11px] text-cart-ink-3">
+              <span>Aforo cubierto</span>
+              <span className="font-semibold text-white">{soldPct}% de {capacity.toLocaleString("es-PE")}</span>
+            </div>
+            <div className="h-1.5 overflow-hidden rounded-full bg-white/8">
+              <div
+                className="h-full rounded-full bg-cart-accent transition-[width] duration-700"
+                style={{ width: `${soldPct}%` }}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Body: 2 columnas en desktop */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr] lg:gap-7">
+        {/* Promotores */}
+        <section className="rounded-2xl border border-cart-line bg-cart-bg-elev">
+          <header className="flex items-center justify-between border-b border-cart-line px-4 py-3 lg:px-5">
+            <div>
+              <h2 className="text-[15px] font-semibold tracking-[-0.01em]">Promotores</h2>
+              <p className="text-[11.5px] text-cart-ink-3">vendido · validado · recaudado</p>
+            </div>
+            <Link
+              href={`/org/events/${slug}/team` as never}
+              className="rounded-full px-2.5 py-1 text-[11.5px] font-medium text-cart-ink-2 transition hover:bg-white/5 hover:text-white"
+            >
+              Ver detalle →
+            </Link>
+          </header>
+          {stats?.byPromoter?.length ? (
+            <div className="divide-y divide-cart-line">
+              {stats.byPromoter.map((p, i) => (
+                <PromoterRow key={p.promoterLinkId} rank={i + 1} promoter={p} slug={slug} />
+              ))}
+            </div>
+          ) : (
+            <EmptyRow label="Sin ventas por promotor." />
+          )}
+        </section>
+
+        {/* Desglose por tipo de entrada */}
+        <section className="rounded-2xl border border-cart-line bg-cart-bg-elev">
+          <header className="border-b border-cart-line px-4 py-3 lg:px-5">
+            <h2 className="text-[15px] font-semibold tracking-[-0.01em]">Por tipo de entrada</h2>
+            <p className="text-[11.5px] text-cart-ink-3">vendidas · recaudado</p>
+          </header>
+          {stats?.ticketTypes?.length ? (
+            <div className="divide-y divide-cart-line">
+              {(() => {
+                const nonBox = stats.ticketTypes.filter((t) => t.kind !== "box");
+                const boxes = stats.ticketTypes.filter((t) => t.kind === "box");
+                const rows: React.ReactNode[] = nonBox.map((t) => {
+                  const fillPct = t.capacity > 0 ? Math.round((t.sold / t.capacity) * 100) : 0;
+                  return (
+                    <div key={t.id} className="px-4 py-3 lg:px-5">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="truncate text-[13.5px] font-semibold">{t.name}</div>
+                          <div className="mt-0.5 text-[11px] text-cart-ink-3">
+                            {t.sold} de {t.capacity} vendidas
+                          </div>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <div className="font-mono text-[13px] font-semibold">
+                            {formatMoneyClean(t.priceCents * t.sold)}
+                          </div>
+                          <div className="mt-0.5 text-[11px] text-cart-ink-3">
+                            {fillPct}% del cupo
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/5">
+                        <div className="h-full rounded-full bg-cart-accent/60" style={{ width: `${fillPct}%` }} />
+                      </div>
+                    </div>
+                  );
+                });
+                if (boxes.length > 0) {
+                  const totalBoxes = boxes.length;
+                  const soldBoxes = boxes.filter((b) => b.sold > 0).length;
+                  const boxRevenue = boxes.reduce((s, b) => s + b.priceCents * b.sold, 0);
+                  const fillPct = totalBoxes > 0 ? Math.round((soldBoxes / totalBoxes) * 100) : 0;
+                  const noun = boxes[0]?.name?.split(" ")[0] ?? "Box";
+                  rows.push(
+                    <div key="__boxes__" className="px-4 py-3 lg:px-5">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="truncate text-[13.5px] font-semibold">{noun}s</div>
+                          <div className="mt-0.5 text-[11px] text-cart-ink-3">
+                            {soldBoxes} de {totalBoxes} reservados
+                          </div>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <div className="font-mono text-[13px] font-semibold">
+                            {formatMoneyClean(boxRevenue)}
+                          </div>
+                          <div className="mt-0.5 text-[11px] text-cart-ink-3">
+                            {fillPct}% ocupados
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/5">
+                        <div className="h-full rounded-full bg-cart-accent/60" style={{ width: `${fillPct}%` }} />
+                      </div>
+                    </div>
+                  );
+                }
+                return rows;
+              })()}
+            </div>
+          ) : (
+            <EmptyRow label="Sin datos de entradas." />
+          )}
+        </section>
+      </div>
+
+      {/* CTA Excel mobile */}
+      <div className="lg:hidden">
+        <button
+          type="button"
+          onClick={() => { window.location.href = `/api/events/${slug}/export`; }}
+          className="flex w-full items-center justify-center gap-2 rounded-2xl border border-cart-line bg-cart-bg-elev py-3.5 text-[14px] font-semibold transition hover:border-cart-line-strong hover:text-white"
+        >
+          <svg width="16" height="16" viewBox="0 0 14 14" fill="none">
+            <path d="M7 2v8m0 0l-3-3m3 3l3-3M2 12h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          Descargar Excel completo
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// KPI Card (live panel)
 // ============================================================
 function KpiCard({
   label,
@@ -215,7 +463,7 @@ function KpiCard({
 }
 
 // ============================================================
-// Promoter row
+// Promoter row (shared entre live y reporte)
 // ============================================================
 function PromoterRow({
   rank,
@@ -236,11 +484,7 @@ function PromoterRow({
   slug: string;
 }) {
   const flagColor =
-    promoter.flag === "suspect"
-      ? "#FF4D5E"
-      : promoter.flag === "watch"
-        ? "#FFCE3B"
-        : "#22D17F";
+    promoter.flag === "suspect" ? "#FF4D5E" : promoter.flag === "watch" ? "#FFCE3B" : "#22D17F";
   const flagLabel =
     promoter.flag === "suspect"
       ? "Revisar — posible autoventa"
@@ -273,9 +517,7 @@ function PromoterRow({
       </div>
       <div className="flex items-baseline gap-3 text-right">
         <span className="font-mono text-[13px] font-semibold">{promoter.ticketsSold}</span>
-        <span className="font-mono text-[12.5px] font-semibold text-[#22D17F]">
-          {promoter.ticketsValidated}
-        </span>
+        <span className="font-mono text-[12.5px] font-semibold text-[#22D17F]">{promoter.ticketsValidated}</span>
         <span className="hidden font-mono text-[12.5px] text-cart-ink-3 sm:inline">
           {formatMoneyClean(promoter.revenueCents)}
         </span>
@@ -305,18 +547,11 @@ function ScanRow({
   return (
     <li className="flex items-center justify-between gap-3 px-4 py-2.5 lg:px-5">
       <div className="flex items-center gap-2.5">
-        <span
-          className="size-1.5 rounded-full"
-          style={{ background: meta.color, boxShadow: `0 0 6px ${meta.color}88` }}
-        />
+        <span className="size-1.5 rounded-full" style={{ background: meta.color, boxShadow: `0 0 6px ${meta.color}88` }} />
         <span className="text-[13px] font-medium">{meta.label}</span>
       </div>
       <span className="font-mono text-[11.5px] text-cart-ink-3">
-        {new Date(when).toLocaleTimeString("es-PE", {
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit",
-        })}
+        {new Date(when).toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
       </span>
     </li>
   );
@@ -327,8 +562,6 @@ function EmptyRow({ label }: { label: string }) {
 }
 
 function formatMoneyClean(cents: number): string {
-  const s = formatMoney(cents)
-    .replace(/[^\d,.]/g, "")
-    .trim();
+  const s = formatMoney(cents).replace(/[^\d,.]/g, "").trim();
   return s ? `S/ ${s}` : "S/ 0";
 }

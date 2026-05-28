@@ -50,6 +50,8 @@ type TicketRow = {
   zone: string;
   /** Cómo llama el organizador a la unidad reservable: box, mesa, lounge u otro. */
   unitNoun: string;
+  /** ISO 8601. Cierre de ventas de este tipo (solo relevante para kind=presale). */
+  saleEndsAt: string;
 };
 
 export type ComposerMode = "create" | "edit";
@@ -185,6 +187,7 @@ export function EventComposer(props: EventComposerProps) {
       boxLabel: tt.boxLabel ?? "",
       zone: tt.zone ?? "",
       unitNoun: tt.unitNoun ?? "",
+      saleEndsAt: tt.saleEndsAt ?? "",
     }));
     const endDt = ev.endsAt ? isoToDateTime(ev.endsAt, ev.timezone) : null;
     return {
@@ -210,6 +213,7 @@ export function EventComposer(props: EventComposerProps) {
                 boxLabel: "",
                 zone: "",
                 unitNoun: "",
+                saleEndsAt: "",
               },
             ],
       publishNow: ev.status === "published",
@@ -244,6 +248,7 @@ export function EventComposer(props: EventComposerProps) {
         boxLabel: "",
         zone: "",
         unitNoun: "",
+        saleEndsAt: "",
       },
     ],
   );
@@ -391,6 +396,7 @@ export function EventComposer(props: EventComposerProps) {
         boxLabel: t.kind === "box" ? t.boxLabel.trim() : null,
         zone: t.zone.trim() || null,
         unitNoun: t.kind === "box" ? t.unitNoun.trim() || null : null,
+        saleEndsAt: t.saleEndsAt || null,
       }));
 
       let venueLayoutUrl: string | null = null;
@@ -552,6 +558,7 @@ export function EventComposer(props: EventComposerProps) {
           boxLabel: t.kind === "box" ? t.boxLabel.trim() : null,
           zone: t.zone.trim() || null,
           unitNoun: t.kind === "box" ? t.unitNoun.trim() || null : null,
+          saleEndsAt: t.saleEndsAt || null,
         });
       }
 
@@ -573,6 +580,8 @@ export function EventComposer(props: EventComposerProps) {
         const nextNoun =
           t.kind === "box" ? t.unitNoun.trim() || null : null;
         if (nextNoun !== orig.unitNoun) ttPatch.unitNoun = nextNoun;
+        const nextSaleEndsAt = t.saleEndsAt || null;
+        if (nextSaleEndsAt !== orig.saleEndsAt) ttPatch.saleEndsAt = nextSaleEndsAt;
         if (Object.keys(ttPatch).length > 0) {
           await updateTT.mutateAsync({ id: t.id!, input: ttPatch });
         }
@@ -1362,6 +1371,234 @@ function Sheet({
 }
 
 // ============================================================
+// SaleEndsAtPicker — cierre automático de ventas por tipo
+// ============================================================
+function SaleEndsAtPicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (iso: string) => void;
+}) {
+  const [date, setDate] = useState(() => (value ? value.slice(0, 10) : ""));
+  const [time, setTime] = useState(() => {
+    if (!value) return "";
+    const d = new Date(value);
+    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  });
+
+  const sync = (d: string, t: string) => {
+    if (d && t) onChange(new Date(`${d}T${t}:00`).toISOString());
+    else onChange("");
+  };
+
+  return (
+    <div className="mt-2 rounded-xl bg-cart-bg-elev px-3 py-2">
+      <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-400/80">
+        Cierre de preventa
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <DatePicker
+          value={date}
+          onChange={(v) => { setDate(v); sync(v, time); }}
+          placeholder="Fecha límite"
+        />
+        <TimePicker
+          value={time}
+          onChange={(v) => { setTime(v); sync(date, v); }}
+          placeholder="Hora"
+        />
+      </div>
+      {date && time ? (
+        <div className="mt-2 flex items-center justify-between">
+          <span className="text-[10.5px] text-cart-ink-3">
+            Ventas cierran el{" "}
+            {new Date(`${date}T${time}:00`).toLocaleDateString("es-PE", {
+              day: "numeric",
+              month: "short",
+              year: "numeric",
+            })}
+          </span>
+          <button
+            type="button"
+            onClick={() => { setDate(""); setTime(""); onChange(""); }}
+            className="text-[10px] text-cart-ink-4 transition hover:text-white"
+          >
+            Quitar
+          </button>
+        </div>
+      ) : (
+        <p className="mt-1.5 text-[10.5px] text-cart-ink-4">
+          Sin fecha límite — se vende hasta que el evento cierre o se agote.
+        </p>
+      )}
+    </div>
+  );
+}
+
+// BoxGroupEditor — edición masiva de boxes
+// ============================================================
+function BoxGroupEditor({
+  boxes,
+  canDelete,
+  knownZones,
+  onUpdateAll,
+  onUpdateOne,
+  onRemove,
+  onAddOne,
+}: {
+  boxes: TicketRow[];
+  canDelete: boolean;
+  knownZones: string[];
+  onUpdateAll: (patch: Partial<TicketRow>) => void;
+  onUpdateOne: (rowKey: string, patch: Partial<TicketRow>) => void;
+  onRemove: (rowKey: string) => void;
+  onAddOne: () => void;
+}) {
+  const first = boxes[0]!;
+  const rawNoun = first.unitNoun || "Box";
+  const nounCap = rawNoun.charAt(0).toUpperCase() + rawNoun.slice(1);
+  const nounPlural =
+    rawNoun.toLowerCase() === "box"
+      ? "Boxes"
+      : rawNoun.toLowerCase().endsWith("x") || rawNoun.toLowerCase().endsWith("z")
+        ? nounCap + "es"
+        : nounCap + "s";
+
+  return (
+    <div
+      className="rounded-2xl border border-cart-line bg-cart-bg-elev-2 p-3"
+      style={{ boxShadow: `inset 0 0 0 1px ${TICKET_KIND_META.box.tint}` }}
+    >
+      {/* Header */}
+      <div className="flex items-center gap-2">
+        <span className="flex-1 text-[15px] font-semibold tracking-[-0.01em] text-white">
+          {nounPlural}
+          <span className="ml-1.5 font-mono text-[12px] font-normal text-cart-ink-3">
+            ({boxes.length})
+          </span>
+        </span>
+        <span
+          className="rounded-full px-2 py-0.5 text-[9.5px] font-semibold uppercase tracking-[0.12em]"
+          style={{ background: `${TICKET_KIND_META.box.tint}22`, color: TICKET_KIND_META.box.tint }}
+        >
+          Box
+        </span>
+      </div>
+
+      {/* Shared fields */}
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <Stepper
+          label="Precio (todos)"
+          suffix="S/"
+          value={first.priceSoles}
+          onChange={(v) => onUpdateAll({ priceSoles: v })}
+        />
+        <Stepper
+          label="Aforo c/u"
+          value={first.capacity}
+          onChange={(v) => onUpdateAll({ capacity: v })}
+        />
+      </div>
+
+      {/* Noun picker (shared) */}
+      <div className="mt-2">
+        <UnitNounPicker
+          value={first.unitNoun}
+          onChange={(v) => onUpdateAll({ unitNoun: v })}
+        />
+      </div>
+
+      {/* Zone (shared) */}
+      <label className="mt-2 flex items-center gap-2 rounded-xl bg-cart-bg-elev px-3 py-2">
+        <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">
+          Zona
+        </span>
+        <input
+          value={first.zone}
+          onChange={(e) => onUpdateAll({ zone: e.target.value })}
+          placeholder="Opcional"
+          maxLength={60}
+          list="box-group-zones"
+          className="w-full bg-transparent text-[13.5px] text-white outline-none placeholder:text-cart-ink-4"
+        />
+        <datalist id="box-group-zones">
+          {knownZones.filter((z) => z !== first.zone).map((z) => (
+            <option key={z} value={z} />
+          ))}
+        </datalist>
+      </label>
+
+      {/* Individual labels + precio override */}
+      <div className="mt-3 border-t border-cart-line pt-3">
+        <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">
+          Individuales
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {boxes.map((b) => {
+            const priceOverridden = b.priceSoles !== first.priceSoles;
+            return (
+              <div
+                key={b.rowKey}
+                className="flex flex-col gap-0.5 rounded-lg border border-cart-line bg-cart-bg-elev px-2 py-1.5"
+              >
+                <div className="flex items-center gap-1">
+                  <input
+                    value={b.boxLabel}
+                    onChange={(e) => onUpdateOne(b.rowKey, { boxLabel: e.target.value, name: e.target.value })}
+                    maxLength={20}
+                    className={
+                      "w-[4.5rem] bg-transparent font-mono text-[12.5px] font-semibold outline-none " +
+                      (b.boxLabel.trim() ? "text-white" : "text-amber-300")
+                    }
+                  />
+                  {canDelete && (
+                    <button
+                      type="button"
+                      onClick={() => onRemove(b.rowKey)}
+                      className="grid size-4 shrink-0 place-items-center rounded-full text-cart-ink-4 transition hover:text-red-300"
+                      aria-label="Eliminar"
+                    >
+                      <svg width="9" height="9" viewBox="0 0 14 14" fill="none">
+                        <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+                {/* Precio individual — gris si igual al shared, blanco si distinto */}
+                <div className="flex items-center gap-0.5">
+                  <span className={priceOverridden ? "text-[9px] text-cart-ink-3" : "text-[9px] text-cart-ink-4"}>
+                    S/
+                  </span>
+                  <input
+                    inputMode="numeric"
+                    value={b.priceSoles}
+                    onChange={(e) => onUpdateOne(b.rowKey, { priceSoles: e.target.value.replace(/[^\d]/g, "") })}
+                    className={
+                      "w-[3.5rem] bg-transparent font-mono text-[11px] outline-none " +
+                      (priceOverridden ? "font-semibold text-white" : "text-cart-ink-4")
+                    }
+                  />
+                </div>
+              </div>
+            );
+          })}
+          <button
+            type="button"
+            onClick={onAddOne}
+            className="flex items-center gap-1 rounded-lg border border-dashed border-cart-line px-2.5 py-1 text-[12px] text-cart-ink-3 transition hover:border-cart-line-strong hover:text-white"
+          >
+            <svg width="10" height="10" viewBox="0 0 14 14" fill="none">
+              <path d="M7 2v10M2 7h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
+            Agregar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Tickets editor
 // ============================================================
 function TicketsEditor({
@@ -1373,6 +1610,9 @@ function TicketsEditor({
 }) {
   const update = (rowKey: string, patch: Partial<TicketRow>) => {
     setTickets(tickets.map((t) => (t.rowKey === rowKey ? { ...t, ...patch } : t)));
+  };
+  const updateAll = (keys: string[], patch: Partial<TicketRow>) => {
+    setTickets(tickets.map((t) => (keys.includes(t.rowKey) ? { ...t, ...patch } : t)));
   };
   const remove = (rowKey: string) => {
     if (tickets.length === 1) return;
@@ -1395,6 +1635,7 @@ function TicketsEditor({
             : "",
         zone: "",
         unitNoun: "",
+        saleEndsAt: "",
       },
     ]);
   };
@@ -1408,9 +1649,12 @@ function TicketsEditor({
   );
   const [bulkOpen, setBulkOpen] = useState(false);
 
+  const nonBoxTickets = tickets.filter((t) => t.kind !== "box");
+  const boxTickets = tickets.filter((t) => t.kind === "box");
+
   return (
     <div className="flex flex-col gap-3 pb-4">
-      {tickets.map((t) => (
+      {nonBoxTickets.map((t) => (
         <div
           key={t.rowKey}
           className="rounded-2xl border border-cart-line bg-cart-bg-elev-2 p-3"
@@ -1450,34 +1694,6 @@ function TicketsEditor({
               onChange={(v) => update(t.rowKey, { capacity: v })}
             />
           </div>
-          {t.kind === "box" && (
-            <>
-              <label className="mt-2 flex flex-col gap-1 rounded-xl bg-cart-bg-elev px-3 py-2">
-                <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">
-                  Etiqueta del box
-                </span>
-                <input
-                  value={t.boxLabel}
-                  onChange={(e) => update(t.rowKey, { boxLabel: e.target.value })}
-                  placeholder="A · B · VIP-1"
-                  maxLength={20}
-                  className={
-                    "w-full bg-transparent font-mono text-[15px] font-semibold tracking-[0.04em] outline-none " +
-                    (t.boxLabel.trim()
-                      ? "text-white"
-                      : "text-amber-300 placeholder:text-amber-300/60")
-                  }
-                />
-                <span className="text-[10.5px] text-cart-ink-4">
-                  Se imprime en el QR de cada invitado al box · obligatorio.
-                </span>
-              </label>
-              <UnitNounPicker
-                value={t.unitNoun}
-                onChange={(v) => update(t.rowKey, { unitNoun: v })}
-              />
-            </>
-          )}
           <label className="mt-2 flex items-center gap-2 rounded-xl bg-cart-bg-elev px-3 py-2">
             <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">
               Zona
@@ -1498,8 +1714,97 @@ function TicketsEditor({
                 ))}
             </datalist>
           </label>
+          {t.kind === "presale" && (
+            <SaleEndsAtPicker
+              value={t.saleEndsAt}
+              onChange={(v) => update(t.rowKey, { saleEndsAt: v })}
+            />
+          )}
         </div>
       ))}
+
+      {/* Boxes agrupados: 2+ → tarjeta única con edición masiva */}
+      {boxTickets.length >= 2 && (
+        <BoxGroupEditor
+          boxes={boxTickets}
+          canDelete={tickets.length > 1}
+          knownZones={knownZones}
+          onUpdateAll={(patch) => updateAll(boxTickets.map((b) => b.rowKey), patch)}
+          onUpdateOne={(rowKey, patch) => update(rowKey, patch)}
+          onRemove={(rowKey) => remove(rowKey)}
+          onAddOne={() => {
+            const next = String.fromCharCode(65 + boxTickets.length);
+            const first = boxTickets[0];
+            setTickets([
+              ...tickets,
+              {
+                rowKey: uid(),
+                name: `${first?.unitNoun ? first.unitNoun.charAt(0).toUpperCase() + first.unitNoun.slice(1) : "Box"} ${next}`,
+                priceSoles: first?.priceSoles ?? "1500",
+                capacity: first?.capacity ?? "12",
+                kind: "box",
+                boxLabel: `${first?.unitNoun ? first.unitNoun.charAt(0).toUpperCase() + first.unitNoun.slice(1) : "Box"} ${next}`,
+                zone: first?.zone ?? "",
+                unitNoun: first?.unitNoun ?? "",
+                saleEndsAt: "",
+              },
+            ]);
+          }}
+        />
+      )}
+
+      {/* Si solo hay 1 box, mostrarlo como tarjeta individual normal */}
+      {boxTickets.length === 1 &&
+        boxTickets.map((t) => (
+          <div
+            key={t.rowKey}
+            className="rounded-2xl border border-cart-line bg-cart-bg-elev-2 p-3"
+            style={{ boxShadow: `inset 0 0 0 1px ${TICKET_KIND_META[t.kind].tint}` }}
+          >
+            <div className="flex items-center gap-2">
+              <input
+                value={t.name}
+                onChange={(e) => update(t.rowKey, { name: e.target.value })}
+                className="flex-1 bg-transparent text-[15px] font-semibold tracking-[-0.01em] text-white outline-none placeholder:text-cart-ink-3"
+                placeholder="Nombre del box"
+              />
+              <KindPicker value={t.kind} onChange={(k) => update(t.rowKey, { kind: k })} />
+              {tickets.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => remove(t.rowKey)}
+                  className="grid size-7 place-items-center rounded-full text-cart-ink-3 transition hover:bg-white/5 hover:text-red-300"
+                  aria-label="Eliminar"
+                >
+                  <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
+                    <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                  </svg>
+                </button>
+              )}
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <Stepper label="Precio" suffix="S/" value={t.priceSoles} onChange={(v) => update(t.rowKey, { priceSoles: v })} />
+              <Stepper label="Cupos" value={t.capacity} onChange={(v) => update(t.rowKey, { capacity: v })} />
+            </div>
+            <label className="mt-2 flex flex-col gap-1 rounded-xl bg-cart-bg-elev px-3 py-2">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">Etiqueta del box</span>
+              <input
+                value={t.boxLabel}
+                onChange={(e) => update(t.rowKey, { boxLabel: e.target.value })}
+                placeholder="A · VIP-1"
+                maxLength={20}
+                className={"w-full bg-transparent font-mono text-[15px] font-semibold tracking-[0.04em] outline-none " + (t.boxLabel.trim() ? "text-white" : "text-amber-300 placeholder:text-amber-300/60")}
+              />
+              <span className="text-[10.5px] text-cart-ink-4">Se imprime en el QR de cada invitado al box · obligatorio.</span>
+            </label>
+            <UnitNounPicker value={t.unitNoun} onChange={(v) => update(t.rowKey, { unitNoun: v })} />
+            <label className="mt-2 flex items-center gap-2 rounded-xl bg-cart-bg-elev px-3 py-2">
+              <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">Zona</span>
+              <input value={t.zone} onChange={(e) => update(t.rowKey, { zone: e.target.value })} placeholder="Opcional" maxLength={60} className="w-full bg-transparent text-[13.5px] text-white outline-none placeholder:text-cart-ink-4" />
+            </label>
+          </div>
+        ))
+      }
 
       <div className="flex flex-wrap gap-2">
         <AddKindButton kind="general" onClick={() => add("general")} />
@@ -1939,12 +2244,16 @@ function BulkBoxCreator({
   const [customNoun, setCustomNoun] = useState("Espacio");
   const [numbering, setNumbering] = useState<NumberingScheme>("num");
   const [startNumber, setStartNumber] = useState("1");
+  const [startLetter, setStartLetter] = useState("A");
   const [quantity, setQuantity] = useState("10");
   const [capacity, setCapacity] = useState("12");
   const [priceSoles, setPriceSoles] = useState("1500");
 
   const qty = Math.max(0, Math.min(60, Number(quantity) || 0));
-  const start = Math.max(1, Number(startNumber) || 1);
+  const start =
+    numbering === "alpha"
+      ? Math.max(1, (startLetter.toUpperCase().charCodeAt(0) - 64) || 1)
+      : Math.max(1, Number(startNumber) || 1);
   const cap = Math.max(1, Number(capacity) || 1);
 
   const effectiveNoun =
@@ -1974,6 +2283,7 @@ function BulkBoxCreator({
       boxLabel: label,
       zone: zone.trim(),
       unitNoun: noun,
+      saleEndsAt: "",
     }));
     onCreate(rows);
   };
@@ -2153,14 +2463,30 @@ function BulkBoxCreator({
               />
             </div>
             <div className="mt-2">
-              <BulkNumberField
-                label="Empezar desde"
-                value={startNumber}
-                onChange={setStartNumber}
-                min={1}
-                max={99}
-                hint={numbering === "alpha" ? "1 = A, 2 = B, 3 = C…" : undefined}
-              />
+              {numbering === "alpha" ? (
+                <label className="flex flex-col gap-1 rounded-xl border border-cart-line bg-cart-bg-elev-2 px-2.5 py-2">
+                  <span className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">
+                    Empezar en
+                  </span>
+                  <input
+                    value={startLetter}
+                    maxLength={1}
+                    onChange={(e) => {
+                      const l = e.target.value.replace(/[^a-zA-Z]/g, "").toUpperCase();
+                      if (l) setStartLetter(l);
+                    }}
+                    className="w-full bg-transparent text-[16px] font-semibold tracking-[-0.01em] text-white outline-none uppercase"
+                  />
+                </label>
+              ) : (
+                <BulkNumberField
+                  label="Empezar desde"
+                  value={startNumber}
+                  onChange={setStartNumber}
+                  min={1}
+                  max={99}
+                />
+              )}
             </div>
           </BulkStep>
 

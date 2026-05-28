@@ -968,15 +968,27 @@ function TicketCard({
 }) {
   const status = ticketStatus(tt);
   const soldOut = status.kind === "soldout";
+  const expired = status.kind === "expired";
+  const unavailable = soldOut || expired;
   const isBox = tt.kind === "box";
   const remaining = status.kind === "available" ? status.remaining : 0;
   const selected = value > 0;
+
+  const saleDeadline =
+    tt.saleEndsAt && status.kind !== "expired"
+      ? new Date(tt.saleEndsAt).toLocaleDateString("es-PE", {
+          day: "numeric",
+          month: "short",
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      : null;
 
   return (
     <div
       className={
         "rounded-2xl border bg-cart-bg-elev px-4 py-4 transition " +
-        (soldOut
+        (unavailable
           ? "border-cart-line opacity-60"
           : selected
             ? "border-cart-accent shadow-[0_0_0_3px_var(--color-cart-accent-soft)]"
@@ -994,6 +1006,11 @@ function TicketCard({
           <div className="mt-1 text-[12px] text-cart-ink-3">
             {ticketSubtitle(tt)}
           </div>
+          {saleDeadline && (
+            <div className="mt-1 text-[11px] text-amber-400/80">
+              Válida hasta el {saleDeadline}
+            </div>
+          )}
         </div>
         <div className="text-right text-[16px] font-bold tracking-[-0.01em]">
           {formatMoney(tt.priceCents, tt.currency)}
@@ -1007,7 +1024,7 @@ function TicketCard({
           <BoxToggle
             noun={unitNoun(tt)}
             selected={selected}
-            disabled={soldOut}
+            disabled={unavailable}
             onChange={(v) => onChange(v ? 1 : 0)}
           />
         ) : (
@@ -1015,7 +1032,7 @@ function TicketCard({
             value={value}
             max={remaining}
             onChange={onChange}
-            disabled={soldOut}
+            disabled={unavailable}
           />
         )}
       </div>

@@ -13,6 +13,7 @@ export default function OrgEventConfigPage({ params }: { params: Params }) {
   const event = useEvent(slug);
   const update = useUpdateEvent(slug);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [confirmClose, setConfirmClose] = useState(false);
 
   const ev = event.data?.event;
 
@@ -57,13 +58,42 @@ export default function OrgEventConfigPage({ params }: { params: Params }) {
           )}
         </Section>
 
+        {/* Cerrar evento */}
+        {ev?.status !== "cancelled" && (
+          <div className="rounded-2xl border border-cart-line bg-cart-bg-elev p-4 lg:p-5">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex-1">
+                <div className="text-[14.5px] font-semibold">Cerrar evento</div>
+                <div className="mt-1 text-[12.5px] leading-relaxed text-cart-ink-3">
+                  El evento ya ocurrió. Marca como cerrado para archivar estadísticas y
+                  detener las ventas. Los compradores conservan sus entradas.
+                </div>
+              </div>
+              {ev?.status === "closed" ? (
+                <div className="inline-flex items-center gap-1.5 rounded-full bg-white/8 px-3 py-1 text-[12px] font-semibold text-cart-ink-2">
+                  <span className="size-1.5 rounded-full bg-cart-ink-2" />
+                  Cerrado
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setConfirmClose(true)}
+                  className="self-start rounded-full border border-cart-line bg-cart-bg-elev-2 px-4 py-2 text-[12.5px] font-semibold text-cart-ink-2 transition hover:border-cart-line-strong hover:text-white lg:self-auto"
+                >
+                  Cerrar evento
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Zona peligrosa */}
         <div className="rounded-2xl border border-red-500/30 bg-red-500/[0.04] p-4 lg:p-5">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <div className="text-[14.5px] font-semibold text-red-300">Cancelar evento</div>
               <div className="mt-1 text-[12.5px] leading-relaxed text-cart-ink-3">
-                Notificamos a todos los compradores e iniciamos el proceso de reembolso.
+                El evento no va a ocurrir. Notificamos a los compradores e iniciamos reembolsos.
                 Esta acción no se puede deshacer.
               </div>
             </div>
@@ -86,6 +116,15 @@ export default function OrgEventConfigPage({ params }: { params: Params }) {
       </div>
 
       <AnimatePresence>
+        {confirmClose && (
+          <ConfirmCloseSheet
+            onCancel={() => setConfirmClose(false)}
+            onConfirm={() => {
+              update.mutate({ status: "closed" });
+              setConfirmClose(false);
+            }}
+          />
+        )}
         {confirmCancel && (
           <ConfirmSheet
             onCancel={() => setConfirmCancel(false)}
@@ -259,6 +298,65 @@ function ConfirmSheet({
             className="flex h-12 flex-1 items-center justify-center rounded-2xl bg-red-500 text-[14px] font-semibold text-white"
           >
             Sí, cancelar
+          </button>
+        </div>
+      </motion.div>
+    </>
+  );
+}
+
+// ============================================================
+// Confirm sheet (cerrar)
+// ============================================================
+function ConfirmCloseSheet({
+  onCancel,
+  onConfirm,
+}: {
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <>
+      <motion.div
+        key="close-bd"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onCancel}
+        aria-hidden
+        className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm"
+      />
+      <motion.div
+        key="close-sh"
+        role="dialog"
+        aria-modal="true"
+        initial={{ y: "100%", opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        exit={{ y: "100%", opacity: 0 }}
+        transition={{ type: "spring", damping: 32, stiffness: 360 }}
+        className="fixed inset-x-0 bottom-0 z-[81] mx-auto w-full max-w-[480px] rounded-t-[28px] border-t border-cart-line-strong bg-cart-bg-elev p-5 shadow-[0_-20px_60px_-10px_rgba(0,0,0,0.7)]"
+        style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 22px)" }}
+      >
+        <div className="mx-auto mb-3 h-1 w-9 rounded-full bg-white/15" />
+        <div className="text-[20px] font-semibold tracking-[-0.02em]">¿Cerrar el evento?</div>
+        <p className="mt-1.5 text-[13.5px] leading-relaxed text-cart-ink-3">
+          Las ventas se detienen y el evento queda archivado. Los compradores conservan
+          sus entradas. Puedes reabrirlo si lo necesitas.
+        </p>
+        <div className="mt-5 flex gap-2.5">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="flex h-12 flex-1 items-center justify-center rounded-2xl border border-cart-line bg-cart-bg-elev-2 text-[14px] font-semibold"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="flex h-12 flex-1 items-center justify-center rounded-2xl border border-cart-line-strong bg-cart-bg-elev-2 text-[14px] font-semibold text-white"
+          >
+            Sí, cerrar
           </button>
         </div>
       </motion.div>

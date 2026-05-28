@@ -87,7 +87,7 @@ export const supabaseTicketRepository: TicketRepository = {
     const ttIds = input.items.map((i) => i.ticketTypeId);
     const { data: tts, error: ttErr } = await db
       .from("ticket_types")
-      .select("id, price_cents, capacity, sold, currency, event_id, kind, box_label")
+      .select("id, price_cents, capacity, sold, currency, event_id, kind, box_label, sale_ends_at")
       .in("id", ttIds);
     if (ttErr || !tts) return err(ttErr?.message ?? "ticket_types_lookup_failed");
     if (tts.some((t) => t.event_id !== input.eventId)) return err("event_mismatch");
@@ -96,6 +96,7 @@ export const supabaseTicketRepository: TicketRepository = {
     for (const item of input.items) {
       const tt = tts.find((t) => t.id === item.ticketTypeId);
       if (!tt) return err("ticket_type_missing");
+      if (tt.sale_ends_at && new Date(tt.sale_ends_at) < new Date()) return err("ticket_type_sales_closed");
       if (tt.sold + item.qty > tt.capacity) return err("sold_out");
       total += tt.price_cents * item.qty;
     }

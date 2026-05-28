@@ -12,6 +12,7 @@ export type CreateTicketTypePayload = {
   boxLabel?: string | null;
   zone?: string | null;
   unitNoun?: string | null;
+  saleEndsAt?: string | null;
 };
 
 export type UpdateTicketTypePayload = {
@@ -21,6 +22,7 @@ export type UpdateTicketTypePayload = {
   boxLabel?: string | null;
   zone?: string | null;
   unitNoun?: string | null;
+  saleEndsAt?: string | null;
 };
 
 const invalidate = (qc: ReturnType<typeof useQueryClient>, slug: string) => {
