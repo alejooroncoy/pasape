@@ -77,11 +77,12 @@ export const supabaseTicketRepository: TicketRepository = {
     // organizador aún no lanzó. Cerrado/cancelado también bloqueado.
     const { data: evStatus } = await db
       .from("events")
-      .select("status")
+      .select("status, ends_at")
       .eq("id", input.eventId)
-      .maybeSingle<{ status: string }>();
+      .maybeSingle<{ status: string; ends_at: string | null }>();
     if (!evStatus) return err("event_not_found");
     if (evStatus.status !== "published") return err("event_not_published");
+    if (evStatus.ends_at && new Date(evStatus.ends_at) < new Date()) return err("event_sales_closed");
 
     const ttIds = input.items.map((i) => i.ticketTypeId);
     const { data: tts, error: ttErr } = await db

@@ -186,11 +186,14 @@ export function EventComposer(props: EventComposerProps) {
       zone: tt.zone ?? "",
       unitNoun: tt.unitNoun ?? "",
     }));
+    const endDt = ev.endsAt ? isoToDateTime(ev.endsAt, ev.timezone) : null;
     return {
       title: ev.title,
       description: ev.description ?? "",
       date,
       time,
+      endDate: endDt?.date ?? "",
+      endTime: endDt?.time ?? "",
       venue: venueValue,
       coverUrl: ev.coverUrl,
       layoutUrl: ev.venueLayoutUrl,
@@ -219,6 +222,8 @@ export function EventComposer(props: EventComposerProps) {
   const [description, setDescription] = useState(seedFromEdit?.description ?? "");
   const [date, setDate] = useState(seedFromEdit?.date ?? "");
   const [time, setTime] = useState(seedFromEdit?.time ?? "");
+  const [endDate, setEndDate] = useState(seedFromEdit?.endDate ?? "");
+  const [endTime, setEndTime] = useState(seedFromEdit?.endTime ?? "");
   const [venue, setVenue] = useState<VenueValue>(
     seedFromEdit?.venue ?? {
       name: "",
@@ -410,6 +415,10 @@ export function EventComposer(props: EventComposerProps) {
         }
       }
 
+      const endsAt =
+        endDate && endTime
+          ? new Date(`${endDate}T${endTime}:00`).toISOString()
+          : null;
       const ev = await create.mutateAsync({
         title: title.trim(),
         description: description.trim() || null,
@@ -420,6 +429,7 @@ export function EventComposer(props: EventComposerProps) {
         venueSource: venue.source,
         venueLayoutUrl,
         startsAt,
+        endsAt,
         timezone: "America/Lima",
         ticketTypes,
         transfersEnabled: true,
@@ -506,6 +516,12 @@ export function EventComposer(props: EventComposerProps) {
       if (venue.url !== ev.venueUrl) patch.venueUrl = venue.url;
       if (venue.source !== ev.venueSource) patch.venueSource = venue.source;
       if (startsAt !== ev.startsAt) patch.startsAt = startsAt;
+      if (endDate && endTime) {
+        const nextEndsAt = new Date(`${endDate}T${endTime}:00`).toISOString();
+        if (nextEndsAt !== ev.endsAt) patch.endsAt = nextEndsAt;
+      } else if (!endDate && ev.endsAt) {
+        patch.endsAt = null;
+      }
       if (nextCoverUrl !== undefined) patch.coverUrl = nextCoverUrl;
       if (nextLayoutUrl !== undefined) patch.venueLayoutUrl = nextLayoutUrl;
 
@@ -738,6 +754,27 @@ export function EventComposer(props: EventComposerProps) {
                 </FieldShell>
               </div>
             </div>
+          </div>
+
+          {/* Fin de ventas (opcional) */}
+          <div className="rounded-2xl border border-cart-line bg-cart-bg-elev px-4 py-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 sm:gap-3">
+              <div>
+                <FieldShell icon={<IconCalendar />} label="Fin de ventas">
+                  <DatePicker value={endDate} onChange={setEndDate} placeholder="Opcional" />
+                </FieldShell>
+              </div>
+              <div>
+                <FieldShell icon={<IconClock />} label="Hora de cierre">
+                  <TimePicker value={endTime} onChange={setEndTime} placeholder="Opcional" />
+                </FieldShell>
+              </div>
+            </div>
+            {!endDate && !endTime && (
+              <p className="mt-2 text-[11px] text-cart-ink-4">
+                Opcional — bloquea nuevas compras a partir de esta fecha y hora.
+              </p>
+            )}
           </div>
 
           {/* Venue */}

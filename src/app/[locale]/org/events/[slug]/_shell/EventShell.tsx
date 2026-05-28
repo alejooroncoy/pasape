@@ -85,6 +85,7 @@ export function EventShell({
 
   const status = ev?.status ?? "draft";
   const isLive = status === "published" && new Date(ev?.startsAt ?? 0).getTime() < Date.now() + 6 * 3600 * 1000;
+  const finished = status === "published" && ev?.endsAt != null && new Date(ev.endsAt) < new Date();
 
   return (
     <OrgShell>
@@ -193,7 +194,7 @@ export function EventShell({
             <EventThumb title={ev?.title ?? ""} />
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <StatusPill status={status} live={isLive} />
+                <StatusPill status={status} live={isLive} finished={finished} />
                 <span className="truncate text-[11.5px] font-medium uppercase tracking-[0.14em] text-cart-ink-3">
                   {dateLabel}
                 </span>
@@ -431,12 +432,14 @@ function EventThumb({ title }: { title: string }) {
   );
 }
 
-function StatusPill({ status, live }: { status: string; live: boolean }) {
+function StatusPill({ status, live, finished }: { status: string; live: boolean; finished: boolean }) {
   const cfg =
     live && status === "published"
       ? { dot: "#22D17F", label: "EN VIVO", tint: "rgba(34,209,127,0.15)", text: "#22D17F" }
-      : status === "published"
-        ? { dot: "#22D17F", label: "Publicado", tint: "rgba(34,209,127,0.12)", text: "#22D17F" }
+      : finished && status === "published"
+        ? { dot: "rgba(255,255,255,0.4)", label: "Finalizado", tint: "rgba(255,255,255,0.04)", text: "rgba(255,255,255,0.6)" }
+        : status === "published"
+          ? { dot: "#22D17F", label: "Publicado", tint: "rgba(34,209,127,0.12)", text: "#22D17F" }
         : status === "draft"
           ? { dot: "rgba(255,255,255,0.5)", label: "BORRADOR", tint: "rgba(255,255,255,0.06)", text: "rgba(255,255,255,0.75)" }
           : status === "closed"
