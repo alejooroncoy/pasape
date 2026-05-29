@@ -1401,12 +1401,19 @@ function TicketsEditor({
             )}
           </div>
           <div className="mt-3 grid grid-cols-2 gap-2">
-            <Stepper
-              label="Precio"
-              suffix="S/"
-              value={t.priceSoles}
-              onChange={(v) => update(t.rowKey, { priceSoles: v })}
-            />
+            <div className="relative">
+              <Stepper
+                label="Precio"
+                suffix="S/"
+                value={t.priceSoles}
+                onChange={(v) => update(t.rowKey, { priceSoles: v })}
+              />
+              {t.priceSoles === "0" && (
+                <span className="absolute right-2 top-2 rounded-full bg-emerald-500/20 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em] text-emerald-300">
+                  Gratis
+                </span>
+              )}
+            </div>
             <Stepper
               label="Cupos"
               value={t.capacity}

@@ -134,7 +134,7 @@ function BuyFlowInner({ params }: Props) {
     );
   }, [data, qty]);
   const totalItems = items.reduce((a, b) => a + b.qty, 0);
-  const fee = totalItems > 0 ? 300 : 0;
+  const fee = totalItems > 0 && total > 0 ? 300 : 0;
   const acompCount = Math.max(0, totalItems - 1);
 
   // Resize assignees al cambiar la cantidad — preserva las entradas ya
@@ -210,6 +210,32 @@ function BuyFlowInner({ params }: Props) {
     }
   };
 
+  const completeFreeOrder = async () => {
+    try {
+      const res = await buy.mutateAsync({
+        eventId: data.event.id,
+        items,
+        promoCode,
+        guest: isLogged
+          ? undefined
+          : {
+              email: guestEmail.trim() || null,
+              fullName: guestName.trim(),
+              dni: guestDni.trim(),
+              phone: guestPhone.replace(/\D/g, "") || null,
+            },
+      });
+      const emailQs =
+        !isLogged && guestEmail.trim()
+          ? `&email=${encodeURIComponent(guestEmail.trim())}`
+          : "";
+      router.replace(`/events/${slug}/processing?order=${res.order.id}&total=${res.order.totalCents}${emailQs}`);
+    } catch (e) {
+      const reason = encodeURIComponent((e as Error).message || "unknown");
+      router.replace(`/events/${slug}/pay-error?reason=${reason}`);
+    }
+  };
+
   const pickValid = totalItems > 0;
   const dataValid = isLogged || guestValid;
 
@@ -218,7 +244,10 @@ function BuyFlowInner({ params }: Props) {
       setPhase("data");
       return;
     }
-    if (phase === "data" && orderValid) void startPayment();
+    if (phase === "data" && orderValid) {
+      if (total === 0) void completeFreeOrder();
+      else void startPayment();
+    }
   };
 
   const onBack = () => {
@@ -233,9 +262,10 @@ function BuyFlowInner({ params }: Props) {
     router.back();
   };
 
+  const totalSteps = total === 0 ? 2 : 3;
   const phaseLabel: Record<Phase, string> = {
-    pick: "1 de 3 · Tu pedido",
-    data: "2 de 3 · Tus datos",
+    pick: `1 de ${totalSteps} · Tu pedido`,
+    data: `2 de ${totalSteps} · Tus datos`,
     pay: "3 de 3 · Pago",
   };
 
@@ -243,11 +273,13 @@ function BuyFlowInner({ params }: Props) {
     if (buy.isPending) return "Preparando…";
     if (phase === "pick") {
       if (!pickValid) return "Elige una entrada";
-      return compact ? `Continuar · ${formatMoney(total)}` : `Continuar · ${formatMoney(total)}`;
+      const priceLabel = total === 0 ? "Gratis" : formatMoney(total);
+      return `Continuar · ${priceLabel}`;
     }
     if (phase === "data") {
       if (!dataValid) return "Completa tus datos";
       if (!acompValid) return "Revisa los acompañantes";
+      if (total === 0) return "Confirmar entrada gratuita";
       return `Ir a pagar · ${formatMoney(total)}`;
     }
     return "Continuar";
@@ -350,13 +382,10 @@ function BuyFlowInner({ params }: Props) {
                   try {
                     sessionStorage.removeItem(`pasape:buy:${orderId}`);
                   } catch {}
-                  // Why: el polling de /processing necesita el email del guest
-                  // para autorizar el lookup del status (sin sesión). Sin esto
-                  // todos los polls dan 403 y termina en pay-error a los 60s.
                   const emailQs = !isLogged && guestEmail.trim()
                     ? `&email=${encodeURIComponent(guestEmail.trim())}`
                     : "";
-                  router.push(`/events/${slug}/processing?order=${orderId}${emailQs}`);
+                  router.push(`/events/${slug}/processing?order=${orderId}&total=${total + fee}${emailQs}`);
                 }}
               />
             )}
@@ -617,7 +646,7 @@ function DataPhase({
               value={guestEmail}
               onChange={setGuestEmail}
               placeholder="juan@gmail.com"
-              hint="Solo si pagas con tarjeta."
+              hint="Para notificaciones, no es obligatorio."
             />
           </div>
         )}
@@ -996,7 +1025,7 @@ function TicketCard({
           </div>
         </div>
         <div className="text-right text-[16px] font-bold tracking-[-0.01em]">
-          {formatMoney(tt.priceCents, tt.currency)}
+          {tt.priceCents === 0 ? "Gratis" : formatMoney(tt.priceCents, tt.currency)}
         </div>
       </div>
       <div className="mt-4 flex items-center justify-between">
@@ -1388,7 +1417,9 @@ function OrderSummary({
                 {tt.name} <span className="text-cart-ink-3">× {qty[tt.id]}</span>
               </span>
               <span className="text-[13px] font-semibold tabular-nums">
-                {formatMoney(tt.priceCents * (qty[tt.id] ?? 0), tt.currency)}
+                {tt.priceCents === 0
+                  ? "Gratis"
+                  : formatMoney(tt.priceCents * (qty[tt.id] ?? 0), tt.currency)}
               </span>
             </div>
           ))}
@@ -1410,7 +1441,7 @@ function OrderSummary({
           Total
         </span>
         <span className="text-[22px] font-bold tabular-nums tracking-[-0.02em]">
-          {formatMoney(total + fee)}
+          {total + fee === 0 ? "Gratis" : formatMoney(total + fee)}
         </span>
       </div>
 

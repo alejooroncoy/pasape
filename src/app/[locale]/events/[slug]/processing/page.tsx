@@ -99,12 +99,13 @@ function Inner({ params }: Props) {
 
   const summary = useMemo(() => {
     if (!eventData) return null;
-    const min = eventData.ticketTypes[0]?.priceCents;
+    const totalStr = search.get("total");
+    const totalCents = totalStr ? parseInt(totalStr, 10) : eventData.ticketTypes[0]?.priceCents;
     return {
       title: eventData.event.title,
-      price: min != null ? formatMoney(min) : null,
+      price: totalCents === 0 ? "Gratis" : totalCents != null ? formatMoney(totalCents) : null,
     };
-  }, [eventData]);
+  }, [eventData, search]);
 
   return (
     <div className="grid min-h-dvh place-items-center bg-cart-bg px-6 text-center text-white">

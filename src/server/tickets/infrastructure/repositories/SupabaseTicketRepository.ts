@@ -7,6 +7,8 @@ import type {
 } from "@/server/tickets/ports/TicketRepository";
 import type { Order, Ticket, WalletTicket } from "@/server/tickets/domain/Ticket";
 import { createPreference } from "@/server/payments/application/CreatePreference";
+import { dispatchTicketDelivery } from "@/server/notifications/application/DispatchTicketDelivery";
+import { supabaseCommissionTierRepository } from "@/server/promoters/tiers/infrastructure/repositories/SupabaseCommissionTierRepository";
 import crypto from "node:crypto";
 
 const generateQr = () =>
@@ -234,6 +236,36 @@ export const supabaseTicketRepository: TicketRepository = {
         .from("ticket_types")
         .update({ sold: tt.sold + item.qty })
         .eq("id", item.ticketTypeId);
+    }
+
+    // Órdenes gratuitas: marcar paid inmediatamente, despachar QR, recalc hitos.
+    if (total === 0) {
+      await db
+        .from("orders")
+        .update({ status: "paid", paid_at: new Date().toISOString() })
+        .eq("id", orderRow.id);
+
+      void dispatchTicketDelivery({ db }, orderRow.id).catch((e) => {
+        console.error("[buy:free] dispatchTicketDelivery failed:", (e as Error).message);
+      });
+
+      if (promoterLinkId) {
+        const { count: paidCount } = await db
+          .from("orders")
+          .select("id", { count: "exact", head: true })
+          .eq("promoter_link_id", promoterLinkId)
+          .eq("status", "paid");
+        await supabaseCommissionTierRepository.recalcUnlocksForLink(
+          promoterLinkId,
+          paidCount ?? 0,
+        );
+      }
+
+      return ok({
+        order: { ...toOrder(orderRow), status: "paid" as const },
+        tickets: (tkRows as TicketRow[]).map(toTicket),
+        preference: { id: "", initPoint: "" },
+      });
     }
 
     // Why: la recalc de hitos vive en HandleWebhook ahora — al momento de

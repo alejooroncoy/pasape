@@ -49,3 +49,7 @@ elpepe.env
 calculadora.html
 gaa.ts
 pasape/
+
+.claude/
+.vscode/
+package-lock.json
