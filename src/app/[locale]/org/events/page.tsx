@@ -19,6 +19,7 @@ const TABS: { key: TabKey; label: string }[] = [
 
 function classifyEvent(ev: Event): TabKey {
   if (ev.status === "draft") return "draft";
+  if (ev.status === "published" && ev.endsAt && new Date(ev.endsAt).getTime() < Date.now()) return "past";
   const startsAt = new Date(ev.startsAt).getTime();
   if (ev.status === "published" && startsAt < Date.now()) return "past";
   if (ev.status === "closed" || ev.status === "cancelled") return "past";

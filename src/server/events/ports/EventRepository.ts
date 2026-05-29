@@ -97,6 +97,7 @@ export type CreateTicketTypeInput = {
   boxLabel?: string | null;
   zone?: string | null;
   unitNoun?: string | null;
+  saleEndsAt?: string | null;
 };
 
 export type UpdateTicketTypeInput = {
@@ -106,6 +107,7 @@ export type UpdateTicketTypeInput = {
   boxLabel?: string | null;
   zone?: string | null;
   unitNoun?: string | null;
+  saleEndsAt?: string | null;
 };
 
 export type UpdateEventInput = {

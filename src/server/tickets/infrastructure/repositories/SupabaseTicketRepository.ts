@@ -79,16 +79,17 @@ export const supabaseTicketRepository: TicketRepository = {
     // organizador aún no lanzó. Cerrado/cancelado también bloqueado.
     const { data: evStatus } = await db
       .from("events")
-      .select("status")
+      .select("status, ends_at")
       .eq("id", input.eventId)
-      .maybeSingle<{ status: string }>();
+      .maybeSingle<{ status: string; ends_at: string | null }>();
     if (!evStatus) return err("event_not_found");
     if (evStatus.status !== "published") return err("event_not_published");
+    if (evStatus.ends_at && new Date(evStatus.ends_at) < new Date()) return err("event_sales_closed");
 
     const ttIds = input.items.map((i) => i.ticketTypeId);
     const { data: tts, error: ttErr } = await db
       .from("ticket_types")
-      .select("id, price_cents, capacity, sold, currency, event_id, kind, box_label")
+      .select("id, price_cents, capacity, sold, currency, event_id, kind, box_label, sale_ends_at")
       .in("id", ttIds);
     if (ttErr || !tts) return err(ttErr?.message ?? "ticket_types_lookup_failed");
     if (tts.some((t) => t.event_id !== input.eventId)) return err("event_mismatch");
@@ -97,6 +98,7 @@ export const supabaseTicketRepository: TicketRepository = {
     for (const item of input.items) {
       const tt = tts.find((t) => t.id === item.ticketTypeId);
       if (!tt) return err("ticket_type_missing");
+      if (tt.sale_ends_at && new Date(tt.sale_ends_at) < new Date()) return err("ticket_type_sales_closed");
       if (tt.sold + item.qty > tt.capacity) return err("sold_out");
       total += tt.price_cents * item.qty;
     }

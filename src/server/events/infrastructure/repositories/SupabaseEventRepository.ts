@@ -98,6 +98,7 @@ type TicketTypeRow = {
   box_label: string | null;
   zone: string | null;
   unit_noun: string | null;
+  sale_ends_at: string | null;
 };
 
 const toEvent = (r: EventRow): Event => ({
@@ -145,6 +146,7 @@ const toTicketType = (r: TicketTypeRow): TicketType => ({
   boxLabel: r.box_label,
   zone: r.zone,
   unitNoun: r.unit_noun,
+  saleEndsAt: r.sale_ends_at,
 });
 
 const slugify = (s: string): string =>
@@ -333,6 +335,7 @@ export const supabaseEventRepository: EventRepository = {
           input.kind === "box" && input.unitNoun?.trim()
             ? input.unitNoun.trim()
             : null,
+        sale_ends_at: input.saleEndsAt ?? null,
       })
       .select("*")
       .single<TicketTypeRow>();
@@ -354,6 +357,7 @@ export const supabaseEventRepository: EventRepository = {
     if (input.zone !== undefined) patch.zone = input.zone?.trim() || null;
     if (input.unitNoun !== undefined)
       patch.unit_noun = input.unitNoun?.trim() || null;
+    if ("saleEndsAt" in input) patch.sale_ends_at = input.saleEndsAt ?? null;
     if (Object.keys(patch).length === 0) return err("nothing_to_update");
     const { data, error } = await db
       .from("ticket_types")

@@ -85,6 +85,8 @@ export function EventShell({
 
   const status = ev?.status ?? "draft";
   const isLive = status === "published" && new Date(ev?.startsAt ?? 0).getTime() < Date.now() + 6 * 3600 * 1000;
+  const finished = status === "published" && ev?.endsAt != null && new Date(ev.endsAt) < new Date();
+  const isOver = status === "closed" || status === "cancelled" || finished;
 
   return (
     <OrgShell>
@@ -117,7 +119,7 @@ export function EventShell({
           </div>
 
           {/* Editar evento mobile */}
-          {ev && (
+          {ev && !isOver && (
             <button
               type="button"
               onClick={() => setEditOpen(true)}
@@ -138,7 +140,7 @@ export function EventShell({
           {/* Acciones rápidas desktop */}
           {ev && (
             <div className="hidden items-center gap-2 lg:flex">
-              {ev.status === "published" && (
+              {!isOver && ev.status === "published" && (
                 <button
                   type="button"
                   onClick={() => setShareOpen(true)}
@@ -155,34 +157,36 @@ export function EventShell({
                   Compartir
                 </button>
               )}
-              <button
-                type="button"
-                onClick={() => setEditOpen(true)}
-                className="inline-flex items-center gap-1.5 rounded-full border border-cart-line bg-cart-bg-elev px-3.5 py-1.5 text-[12.5px] font-medium text-cart-ink-2 transition hover:border-cart-line-strong hover:text-white"
-              >
-                <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
-                  <path
-                    d="M2 12l2-.5L11 4.5l-1.5-1.5L2.5 10 2 12z"
-                    stroke="currentColor"
-                    strokeWidth="1.4"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-                Editar evento
-              </button>
-              <button
-                type="button"
-                data-tour="download"
-                onClick={() => {
-                  window.location.href = `/api/events/${slug}/export`;
-                }}
-                className="inline-flex items-center gap-1.5 rounded-full border border-cart-line bg-cart-bg-elev px-3.5 py-1.5 text-[12.5px] font-medium text-cart-ink-2 transition hover:border-cart-line-strong hover:text-white"
-              >
-                <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
-                  <path d="M7 2v8m0 0l-3-3m3 3l3-3M2 12h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-                Descargar Excel
-              </button>
+              {!isOver && (
+                <button
+                  type="button"
+                  onClick={() => setEditOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-cart-line bg-cart-bg-elev px-3.5 py-1.5 text-[12.5px] font-medium text-cart-ink-2 transition hover:border-cart-line-strong hover:text-white"
+                >
+                  <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
+                    <path
+                      d="M2 12l2-.5L11 4.5l-1.5-1.5L2.5 10 2 12z"
+                      stroke="currentColor"
+                      strokeWidth="1.4"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                  Editar evento
+                </button>
+              )}
+              {!isOver && (
+                <button
+                  type="button"
+                  data-tour="download"
+                  onClick={() => { window.location.href = `/api/events/${slug}/export`; }}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-cart-line bg-cart-bg-elev px-3.5 py-1.5 text-[12.5px] font-medium text-cart-ink-2 transition hover:border-cart-line-strong hover:text-white"
+                >
+                  <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
+                    <path d="M7 2v8m0 0l-3-3m3 3l3-3M2 12h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  Descargar Excel
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -193,7 +197,7 @@ export function EventShell({
             <EventThumb title={ev?.title ?? ""} />
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <StatusPill status={status} live={isLive} />
+                <StatusPill status={status} live={isLive} finished={finished} />
                 <span className="truncate text-[11.5px] font-medium uppercase tracking-[0.14em] text-cart-ink-3">
                   {dateLabel}
                 </span>
@@ -210,7 +214,7 @@ export function EventShell({
 
         {/* ============ Sub-nav (desktop horizontal) ============ */}
         <nav className="mb-7 hidden gap-1 border-b border-cart-line lg:flex">
-          {TABS.map((t) => {
+          {TABS.filter((t) => !isOver || t.key !== "settings").map((t) => {
             const on = t.key === active;
             return (
               <Link
@@ -241,7 +245,7 @@ export function EventShell({
         style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 6px)" }}
       >
         <div className="mx-auto flex max-w-[640px] items-stretch justify-around px-3 pt-2">
-          {TABS.map((t) => {
+          {TABS.filter((t) => !isOver || t.key !== "settings").map((t) => {
             const on = t.key === active;
             return (
               <Link
@@ -431,12 +435,14 @@ function EventThumb({ title }: { title: string }) {
   );
 }
 
-function StatusPill({ status, live }: { status: string; live: boolean }) {
+function StatusPill({ status, live, finished }: { status: string; live: boolean; finished: boolean }) {
   const cfg =
     live && status === "published"
       ? { dot: "#22D17F", label: "EN VIVO", tint: "rgba(34,209,127,0.15)", text: "#22D17F" }
-      : status === "published"
-        ? { dot: "#22D17F", label: "Publicado", tint: "rgba(34,209,127,0.12)", text: "#22D17F" }
+      : finished && status === "published"
+        ? { dot: "rgba(255,255,255,0.4)", label: "Finalizado", tint: "rgba(255,255,255,0.04)", text: "rgba(255,255,255,0.6)" }
+        : status === "published"
+          ? { dot: "#22D17F", label: "Publicado", tint: "rgba(34,209,127,0.12)", text: "#22D17F" }
         : status === "draft"
           ? { dot: "rgba(255,255,255,0.5)", label: "BORRADOR", tint: "rgba(255,255,255,0.06)", text: "rgba(255,255,255,0.75)" }
           : status === "closed"

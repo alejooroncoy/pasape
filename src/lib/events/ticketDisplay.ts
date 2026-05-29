@@ -30,9 +30,13 @@ export function unitNounPlural(noun: string): string {
  */
 export type TicketStatus =
   | { kind: "available"; remaining: number }
-  | { kind: "soldout" };
+  | { kind: "soldout" }
+  | { kind: "expired" };
 
 export function ticketStatus(tt: TicketType): TicketStatus {
+  if (tt.saleEndsAt && new Date(tt.saleEndsAt) < new Date()) {
+    return { kind: "expired" };
+  }
   if (tt.kind === "box") {
     return tt.sold > 0
       ? { kind: "soldout" }
@@ -50,6 +54,7 @@ export function ticketStatus(tt: TicketType): TicketStatus {
  */
 export function ticketSubtitle(tt: TicketType): string {
   const status = ticketStatus(tt);
+  if (status.kind === "expired") return "Preventa cerrada";
   if (tt.kind === "box") {
     return status.kind === "soldout"
       ? "Reservado"
