@@ -436,6 +436,7 @@ export function EventComposer(props: EventComposerProps) {
       }));
 
       let venueLayoutUrl: string | null = null;
+      let coverUrl: string | null = null;
       if (layoutFile || coverFile) {
         setUploadingAssets(true);
         try {
@@ -447,7 +448,7 @@ export function EventComposer(props: EventComposerProps) {
           }
           if (coverFile) {
             try {
-              await uploadEventAsset(coverFile, { slugHint: title, kind: "cover" });
+              coverUrl = await uploadEventAsset(coverFile, { slugHint: title, kind: "cover" });
             } catch {
               // si falla el cover no bloqueamos
             }
@@ -470,6 +471,7 @@ export function EventComposer(props: EventComposerProps) {
         venueUrl: venue.url,
         venueSource: venue.source,
         venueLayoutUrl,
+        coverUrl,
         startsAt,
         endsAt,
         timezone: "America/Lima",

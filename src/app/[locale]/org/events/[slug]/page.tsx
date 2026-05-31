@@ -1,13 +1,16 @@
 "use client";
 
-import { use } from "react";
+import { use, useRef, useState } from "react";
 import { Link } from "@/i18n/navigation";
 import { useEvent } from "@/lib/events/hooks/useEvents";
 import { useEventStats } from "@/lib/events/hooks/useEventStats";
+import { useEventPartners, useAddEventPartner, useRemoveEventPartner } from "@/lib/events/hooks/useEventPartners";
 import { formatMoney } from "@/lib/_shared/format";
 import { EventShell } from "./_shell/EventShell";
 import { SpotlightTour } from "@/components/ui/SpotlightTour";
+import { createSupabaseBrowserClient } from "@/server/_shared/supabase/client";
 import type { EventStatsPayload } from "@/lib/events/hooks/useEventStats";
+import type { EventPartner } from "@/server/events/application/EventPartners";
 
 type Params = Promise<{ slug: string; locale: string }>;
 
@@ -141,6 +144,9 @@ function LivePanel({
           </div>
         </section>
       </div>
+
+      {/* Partners */}
+      <PartnersSection slug={slug} />
 
       {/* Quick actions (mobile) */}
       <section className="mt-6 grid grid-cols-2 gap-2.5 lg:hidden">
@@ -564,4 +570,184 @@ function EmptyRow({ label }: { label: string }) {
 function formatMoneyClean(cents: number): string {
   const s = formatMoney(cents).replace(/[^\d,.]/g, "").trim();
   return s ? `S/ ${s}` : "S/ 0";
+}
+
+/* ============================== Partners section ============================== */
+
+const BUCKET = "event-assets";
+
+async function uploadPartnerLogo(file: File, slugHint: string): Promise<string> {
+  const db = createSupabaseBrowserClient();
+  const ext = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
+  const path = `events/${slugHint}/partner-${Date.now()}.${ext}`;
+  const { error } = await db.storage.from(BUCKET).upload(path, file, { upsert: true });
+  if (error) throw new Error(error.message);
+  const { data } = db.storage.from(BUCKET).getPublicUrl(path);
+  return data.publicUrl;
+}
+
+function PartnersSection({ slug }: { slug: string }) {
+  const partners = useEventPartners(slug);
+  const add = useAddEventPartner(slug);
+  const remove = useRemoveEventPartner(slug);
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [url, setUrl] = useState("");
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const list = partners.data ?? [];
+
+  const pickFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0] ?? null;
+    setLogoFile(f);
+    if (f) setLogoPreview(URL.createObjectURL(f));
+  };
+
+  const reset = () => {
+    setOpen(false);
+    setName("");
+    setUrl("");
+    setLogoFile(null);
+    setLogoPreview(null);
+    if (fileRef.current) fileRef.current.value = "";
+  };
+
+  const handleAdd = async () => {
+    if (!name.trim()) return;
+    setSaving(true);
+    try {
+      let logoUrl: string | null = null;
+      if (logoFile) logoUrl = await uploadPartnerLogo(logoFile, slug);
+      await add.mutateAsync({ name: name.trim(), logoUrl, websiteUrl: url.trim() || null });
+      reset();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <section className="mt-6">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-[13px] font-semibold text-cart-ink-2">Partners</span>
+          {list.length > 0 && (
+            <span className="rounded-full bg-white/8 px-1.5 py-0.5 text-[10px] font-semibold text-cart-ink-3">
+              {list.length}
+            </span>
+          )}
+        </div>
+        {!open && (
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            className="rounded-full border border-cart-line px-2.5 py-1 text-[11.5px] font-medium text-cart-ink-2 transition hover:border-cart-line-strong hover:text-white"
+          >
+            + Agregar
+          </button>
+        )}
+      </div>
+
+      {/* Lista de partners */}
+      {list.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {list.map((p) => (
+            <PartnerChip key={p.id} partner={p} onRemove={() => remove.mutate(p.id)} />
+          ))}
+        </div>
+      )}
+
+      {/* Formulario inline */}
+      {open && (
+        <div className="mt-3 rounded-2xl border border-cart-line bg-cart-bg-elev p-4">
+          <div className="flex flex-col gap-3">
+            {/* Logo picker */}
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              className="flex h-16 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-cart-line bg-cart-bg-elev-2 text-[12.5px] text-cart-ink-3 transition hover:border-cart-line-strong hover:text-white"
+            >
+              {logoPreview ? (
+                <img src={logoPreview} alt="" className="h-10 max-w-[120px] object-contain" />
+              ) : (
+                <>
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                    <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                  </svg>
+                  Subir logo <span className="text-cart-ink-4">(opcional)</span>
+                </>
+              )}
+            </button>
+            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={pickFile} />
+
+            {/* Nombre */}
+            <input
+              type="text"
+              placeholder="Nombre del partner"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full rounded-xl border border-cart-line bg-cart-bg-elev-2 px-3 py-2.5 text-[13.5px] text-white placeholder-cart-ink-4 outline-none transition focus:border-cart-accent"
+            />
+
+            {/* URL */}
+            <input
+              type="url"
+              placeholder="URL del sitio (opcional)"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              className="w-full rounded-xl border border-cart-line bg-cart-bg-elev-2 px-3 py-2.5 text-[13.5px] text-white placeholder-cart-ink-4 outline-none transition focus:border-cart-accent"
+            />
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={handleAdd}
+                disabled={!name.trim() || saving}
+                className="flex-1 rounded-full bg-cart-accent py-2 text-[13px] font-semibold text-cart-bg transition hover:brightness-110 disabled:opacity-40"
+              >
+                {saving ? "Subiendo…" : "Agregar"}
+              </button>
+              <button
+                type="button"
+                onClick={reset}
+                className="rounded-full border border-cart-line px-4 py-2 text-[13px] font-medium text-cart-ink-2 transition hover:text-white"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {list.length === 0 && !open && (
+        <p className="mt-2 text-[12px] text-cart-ink-4">
+          Logos de marcas que apoyan el evento — aparecen en la página pública.
+        </p>
+      )}
+    </section>
+  );
+}
+
+function PartnerChip({ partner, onRemove }: { partner: EventPartner; onRemove: () => void }) {
+  return (
+    <div className="group flex items-center gap-2 rounded-xl border border-cart-line bg-cart-bg-elev px-2.5 py-1.5 transition hover:border-cart-line-strong">
+      {partner.logoUrl && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={partner.logoUrl} alt="" className="h-5 max-w-[60px] object-contain grayscale" />
+      )}
+      <span className="text-[12.5px] font-medium text-cart-ink-2">{partner.name}</span>
+      <button
+        type="button"
+        onClick={onRemove}
+        className="ml-0.5 grid size-4 place-items-center rounded-full text-cart-ink-4 opacity-0 transition hover:bg-white/10 hover:text-white group-hover:opacity-100"
+        aria-label={`Quitar ${partner.name}`}
+      >
+        <svg width="8" height="8" viewBox="0 0 10 10" fill="none">
+          <path d="M2 2l6 6M8 2l-6 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        </svg>
+      </button>
+    </div>
+  );
 }
