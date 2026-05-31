@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { GoogleBtn, QrSquare } from "@/components/design";
@@ -128,7 +129,7 @@ export const TicketView = ({
 
       <header className="sticky top-0 z-30 border-b border-cart-line bg-cart-bg/85 backdrop-blur-md">
         <div className="mx-auto flex max-w-[1040px] items-center justify-between px-5 py-3.5">
-          <a
+          <Link
             href="/"
             className="inline-flex items-center gap-2 text-[16px] font-semibold tracking-[-0.01em]"
           >
@@ -141,7 +142,7 @@ export const TicketView = ({
               />
             </span>
             <span>Pasape</span>
-          </a>
+          </Link>
           <span className="text-[12.5px] font-medium text-cart-ink-3">Tu entrada</span>
           <span className="size-8" />
         </div>

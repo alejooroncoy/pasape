@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { use, useEffect, useRef, useState } from "react";
 import { useRouter } from "@/i18n/navigation";
 import { Btn, C, Field, FONT_DISPLAY, PhoneField } from "@/components/design";
@@ -297,7 +298,7 @@ function BrandHeader() {
   return (
     <header className="sticky top-0 z-30 border-b border-cart-line bg-cart-bg/85 backdrop-blur-md">
       <div className="mx-auto flex max-w-[1040px] items-center justify-between px-5 py-3.5">
-        <a
+        <Link
           href="/"
           className="inline-flex items-center gap-2 text-[16px] font-semibold tracking-[-0.01em]"
         >
@@ -310,7 +311,7 @@ function BrandHeader() {
             />
           </span>
           <span>Pasape</span>
-        </a>
+        </Link>
         <span className="text-[12.5px] font-medium text-cart-ink-3">Invitación al BOX</span>
         <span className="size-8" />
       </div>

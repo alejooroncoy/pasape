@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { CloseIcon, WaIcon, MusicIcon, DjIcon, ComedyIcon, CultureIcon, PinIcon } from "./icons";
@@ -55,7 +56,7 @@ export function SideDrawer({ open, onClose, onSignIn }: {
             className="fixed inset-y-0 right-0 z-[81] flex w-[min(380px,86vw)] flex-col overflow-hidden border-l border-cart-line bg-cart-bg shadow-[-30px_0_60px_-20px_rgba(0,0,0,0.6)]"
           >
             <div className="flex flex-shrink-0 items-center justify-between border-b border-cart-line px-[22px] py-[18px]">
-              <a href="/" className="inline-flex items-center gap-2.5 text-[19px] font-semibold tracking-[-0.01em]">
+              <Link href="/" className="inline-flex items-center gap-2.5 text-[19px] font-semibold tracking-[-0.01em]">
                 <span className="grid size-[34px] place-items-center">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
@@ -65,7 +66,7 @@ export function SideDrawer({ open, onClose, onSignIn }: {
                   />
                 </span>
                 Pasape
-              </a>
+              </Link>
               <button
                 type="button"
                 onClick={onClose}
@@ -114,7 +115,7 @@ export function SideDrawer({ open, onClose, onSignIn }: {
               </Section>
 
               <Section title="Pasape" topBorder>
-                <a
+                <Link
                   href="/organizadores"
                   className="flex w-full items-center gap-3.5 rounded-[10px] bg-transparent px-4 py-[11px] text-[15px] font-medium text-cart-ink-2 hover:bg-cart-bg-elev hover:text-white"
                 >
@@ -124,7 +125,7 @@ export function SideDrawer({ open, onClose, onSignIn }: {
                     </svg>
                   </span>
                   Organizar mi evento
-                </a>
+                </Link>
               </Section>
             </div>
 

@@ -1,10 +1,12 @@
+import Link from "next/link";
+
 export function Footer() {
   return (
     <footer className="mt-[clamp(64px,9vw,120px)] border-t border-cart-line px-[clamp(20px,4vw,56px)] py-12 text-[13.5px] text-cart-ink-3">
       <div className="mx-auto max-w-[1320px]">
         <div className="grid grid-cols-[1.4fr_repeat(3,1fr)] gap-8 max-[900px]:grid-cols-2 max-[560px]:grid-cols-1">
           <div>
-            <a href="/" className="inline-flex items-center gap-2.5 text-[19px] font-semibold tracking-[-0.01em] text-white">
+            <Link href="/" className="inline-flex items-center gap-2.5 text-[19px] font-semibold tracking-[-0.01em] text-white">
               <span className="grid size-[34px] place-items-center">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
@@ -14,7 +16,7 @@ export function Footer() {
                 />
               </span>
               Pasape
-            </a>
+            </Link>
             <p className="mt-4 max-w-[32ch] text-[13.5px] leading-[1.55] text-cart-ink-3">
               Tu pase a los eventos que valen la pena en Lima.
             </p>
