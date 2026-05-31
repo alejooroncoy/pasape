@@ -13,6 +13,7 @@ export type CreateEventInput = {
   venueUrl?: string | null;
   venueSource?: "manual" | "google" | "apple" | null;
   venueLayoutUrl?: string | null;
+  coverUrl?: string | null;
   startsAt: string;
   endsAt?: string | null;
   timezone?: string;

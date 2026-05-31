@@ -1,4 +1,5 @@
 import type { TicketType } from "@/server/events/domain/Event";
+import { activePricing } from "./pricing";
 
 /**
  * Sustantivo de la unidad reservable. Default "box" cuando el organizador no
@@ -130,8 +131,9 @@ export function summarizeZone(group: TicketGroup): ZoneSummary {
     const status = ticketStatus(tt);
     if (status.kind === "available") {
       anyAvailable = true;
-      minPriceCents =
-        minPriceCents == null ? tt.priceCents : Math.min(minPriceCents, tt.priceCents);
+      // Precio activo (preventa vigente o normal) para el "desde S/…".
+      const price = activePricing(tt).priceCents;
+      minPriceCents = minPriceCents == null ? price : Math.min(minPriceCents, price);
     }
   }
   // Noun más frecuente; si nadie es box, default "box".

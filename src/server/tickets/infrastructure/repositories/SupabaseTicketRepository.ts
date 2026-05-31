@@ -6,6 +6,8 @@ import type {
   TicketRepository,
 } from "@/server/tickets/ports/TicketRepository";
 import type { Order, Ticket, WalletTicket } from "@/server/tickets/domain/Ticket";
+import type { Promo } from "@/server/events/domain/Event";
+import { activePricing, applyPromos, type PromoLineInput } from "@/lib/events/pricing";
 import { createPreference } from "@/server/payments/application/CreatePreference";
 import { dispatchTicketDelivery } from "@/server/notifications/application/DispatchTicketDelivery";
 import { supabaseCommissionTierRepository } from "@/server/promoters/tiers/infrastructure/repositories/SupabaseCommissionTierRepository";
@@ -89,19 +91,44 @@ export const supabaseTicketRepository: TicketRepository = {
     const ttIds = input.items.map((i) => i.ticketTypeId);
     const { data: tts, error: ttErr } = await db
       .from("ticket_types")
-      .select("id, price_cents, capacity, sold, currency, event_id, kind, box_label, sale_ends_at")
+      .select(
+        "id, price_cents, capacity, sold, currency, event_id, kind, box_label, sale_ends_at, presale_price_cents, presale_qty, presale_ends_at",
+      )
       .in("id", ttIds);
     if (ttErr || !tts) return err(ttErr?.message ?? "ticket_types_lookup_failed");
     if (tts.some((t) => t.event_id !== input.eventId)) return err("event_mismatch");
 
-    let total = 0;
+    // Promos activas del evento (2x1 / 3x2), aplicadas al total server-side.
+    const { data: promoRows } = await db
+      .from("ticket_promos")
+      .select("id, event_id, ticket_type_id, kind, ends_at")
+      .eq("event_id", input.eventId);
+    const promos: Promo[] = (promoRows ?? []).map((r) => ({
+      id: r.id,
+      eventId: r.event_id,
+      ticketTypeId: r.ticket_type_id,
+      kind: r.kind as Promo["kind"],
+      endsAt: r.ends_at,
+    }));
+
+    // Why: el precio NO se confía del cliente. Se resuelve el precio activo
+    // (preventa vigente o normal) y luego se aplican las promos.
+    const priceItems: PromoLineInput[] = [];
     for (const item of input.items) {
       const tt = tts.find((t) => t.id === item.ticketTypeId);
       if (!tt) return err("ticket_type_missing");
       if (tt.sale_ends_at && new Date(tt.sale_ends_at) < new Date()) return err("ticket_type_sales_closed");
       if (tt.sold + item.qty > tt.capacity) return err("sold_out");
-      total += tt.price_cents * item.qty;
+      const ap = activePricing({
+        priceCents: tt.price_cents,
+        presalePriceCents: tt.presale_price_cents,
+        presaleQty: tt.presale_qty,
+        presaleEndsAt: tt.presale_ends_at,
+        sold: tt.sold,
+      });
+      priceItems.push({ ticketTypeId: tt.id, qty: item.qty, unitPriceCents: ap.priceCents });
     }
+    const total = applyPromos(priceItems, promos).totalCents;
 
     let promoterLinkId: string | null = null;
     let promoterId: string | null = null;

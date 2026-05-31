@@ -1,15 +1,19 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
+import { createSupabaseBrowserClient } from "@/server/_shared/supabase/client";
 import { OrgShell } from "../_shell/OrgShell";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { useMyOrgs } from "@/lib/identity/organizations/hooks/useMyOrgs";
+import { useUpdateOrganization } from "@/lib/identity/hooks/useUpdateOrganization";
 import { useLegalEntities } from "@/lib/identity/organizations/hooks/useLegalEntities";
 import { useUpdateLegalEntity } from "@/lib/identity/organizations/hooks/useUpdateLegalEntity";
 import { SettingsCard, SettingsRow } from "./_components/SettingsCard";
 import { TextInput, TextArea } from "./_components/Field";
 import { SectionNav, type Section } from "./_components/SectionNav";
+
+const ORG_ASSETS_BUCKET = "event-assets";
 
 // Solo settings de MARCA. Lo de tu cuenta (perfil, notifs, sesión) vive en /account.
 const SECTIONS: Section[] = [
@@ -30,17 +34,68 @@ export default function OrgSettingsPage() {
 
   const [orgName, setOrgName] = useState(activeOrg?.name ?? "");
   const [orgSlug, setOrgSlug] = useState(activeOrg?.slug ?? "");
-  const [orgDescription, setOrgDescription] = useState("");
+  const [orgDescription, setOrgDescription] = useState(activeOrg?.description ?? "");
+  const [orgInstagram, setOrgInstagram] = useState(activeOrg?.instagram ?? "");
   const [logoPreview, setLogoPreview] = useState<string | null>(activeOrg?.logoUrl ?? null);
+  const [logoUploading, setLogoUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   const [bankOpen, setBankOpen] = useState(false);
 
-  const onLogoPick = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const save = useUpdateOrganization(activeOrg?.slug ?? "");
+
+  // Rehidrata el formulario cuando carga / cambia la org activa.
+  useEffect(() => {
+    if (!activeOrg) return;
+    setOrgName(activeOrg.name);
+    setOrgSlug(activeOrg.slug);
+    setOrgDescription(activeOrg.description ?? "");
+    setOrgInstagram(activeOrg.instagram ?? "");
+    setLogoPreview(activeOrg.logoUrl ?? null);
+  }, [activeOrg]);
+
+  const onLogoPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
-    const url = URL.createObjectURL(f);
-    setLogoPreview(url);
+    setLogoUploading(true);
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const ext = f.name.includes(".") ? f.name.split(".").pop() : "jpg";
+      const path = `org-logos/${activeOrg?.slug ?? "org"}-${crypto.randomUUID()}.${ext}`;
+      const { error } = await supabase.storage
+        .from(ORG_ASSETS_BUCKET)
+        .upload(path, f, { cacheControl: "3600", upsert: false, contentType: f.type || undefined });
+      if (error) throw error;
+      const { data } = supabase.storage.from(ORG_ASSETS_BUCKET).getPublicUrl(path);
+      setLogoPreview(data.publicUrl);
+    } catch {
+      // Si falla la subida no rompemos la UI; el organizador puede reintentar.
+    } finally {
+      setLogoUploading(false);
+    }
+  };
+
+  const cleanInstagram = orgInstagram.trim().replace(/^@+/, "");
+  const dirty = useMemo(() => {
+    if (!activeOrg) return false;
+    return (
+      orgName.trim() !== activeOrg.name ||
+      orgSlug.trim() !== activeOrg.slug ||
+      (orgDescription.trim() || null) !== (activeOrg.description ?? null) ||
+      (cleanInstagram || null) !== (activeOrg.instagram ?? null) ||
+      (logoPreview ?? null) !== (activeOrg.logoUrl ?? null)
+    );
+  }, [activeOrg, orgName, orgSlug, orgDescription, cleanInstagram, logoPreview]);
+
+  const onSave = async () => {
+    if (!activeOrg || !dirty) return;
+    await save.mutateAsync({
+      name: orgName.trim() || undefined,
+      slug: orgSlug.trim() || undefined,
+      description: orgDescription.trim() || null,
+      instagram: cleanInstagram || null,
+      logoUrl: logoPreview,
+    });
   };
 
   return (
@@ -91,9 +146,10 @@ export default function OrgSettingsPage() {
                 <button
                   type="button"
                   onClick={() => fileRef.current?.click()}
-                  className="rounded-full border border-cart-line bg-cart-bg px-3.5 py-1.5 text-[12.5px] font-medium text-cart-ink-2 transition hover:border-cart-line-strong hover:text-white"
+                  disabled={logoUploading}
+                  className="rounded-full border border-cart-line bg-cart-bg px-3.5 py-1.5 text-[12.5px] font-medium text-cart-ink-2 transition hover:border-cart-line-strong hover:text-white disabled:opacity-60"
                 >
-                  Cambiar
+                  {logoUploading ? "Subiendo…" : "Cambiar"}
                 </button>
                 <input
                   ref={fileRef}
@@ -107,7 +163,7 @@ export default function OrgSettingsPage() {
 
             <SettingsRow label="Nombre" description="Como aparece en tus eventos.">
               <TextInput
-                value={orgName || activeOrg?.name || ""}
+                value={orgName}
                 onChange={(e) => setOrgName(e.target.value)}
                 placeholder="Nombre de tu marca"
               />
@@ -145,8 +201,15 @@ export default function OrgSettingsPage() {
               }
             >
               <TextInput
-                value={orgSlug || activeOrg?.slug || ""}
-                onChange={(e) => setOrgSlug(e.target.value.toLowerCase())}
+                value={orgSlug}
+                onChange={(e) =>
+                  setOrgSlug(
+                    e.target.value
+                      .toLowerCase()
+                      .replace(/[^a-z0-9-]/g, "-")
+                      .replace(/-+/g, "-"),
+                  )
+                }
                 placeholder="tu-marca"
               />
             </SettingsRow>
@@ -164,6 +227,17 @@ export default function OrgSettingsPage() {
                 maxLength={160}
                 placeholder="Una línea corta de qué hace tu marca"
                 rows={2}
+              />
+            </SettingsRow>
+
+            <SettingsRow
+              label="Instagram"
+              description="Tu usuario, sin el @. Aparece en tu página pública."
+            >
+              <TextInput
+                value={orgInstagram}
+                onChange={(e) => setOrgInstagram(e.target.value)}
+                placeholder="111producciones"
               />
             </SettingsRow>
           </SettingsCard>
@@ -227,6 +301,39 @@ export default function OrgSettingsPage() {
             legalEntity={activeLegalEntity}
             onClose={() => setBankOpen(false)}
           />
+        )}
+      </AnimatePresence>
+
+      {/* Barra de guardar — aparece solo cuando hay cambios sin guardar. */}
+      <AnimatePresence>
+        {dirty && (
+          <motion.div
+            initial={{ y: 80, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 80, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 400, damping: 32 }}
+            className="fixed inset-x-0 bottom-0 z-40 border-t border-cart-line bg-cart-bg/90 backdrop-blur-md"
+          >
+            <div className="mx-auto flex w-full max-w-[760px] items-center justify-between gap-3 px-5 py-3.5 lg:px-8">
+              <span className="text-[13px] text-cart-ink-3">
+                {save.isError ? (
+                  <span className="text-rose-300">
+                    No se pudo guardar. Revisa el slug (puede estar tomado).
+                  </span>
+                ) : (
+                  "Tienes cambios sin guardar"
+                )}
+              </span>
+              <button
+                type="button"
+                onClick={onSave}
+                disabled={save.isPending || logoUploading}
+                className="rounded-full bg-cart-accent px-5 py-2 text-[13.5px] font-semibold text-white transition hover:brightness-110 disabled:opacity-60"
+              >
+                {save.isPending ? "Guardando…" : "Guardar"}
+              </button>
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
     </OrgShell>

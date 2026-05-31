@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
   CaretIcon,
@@ -70,9 +71,9 @@ export function Nav({ onOpenDrawer, onOpenSignIn }: {
             </a>
           </div>
           <div className="hidden items-center gap-[18px] sm:flex">
-            <a href="/organizadores" className="whitespace-nowrap transition-colors hover:text-white">
+            <Link href="/organizadores" className="whitespace-nowrap transition-colors hover:text-white">
               Para organizadores
-            </a>
+            </Link>
             <span className="size-0.5 rounded-full bg-cart-ink-4" aria-hidden />
             <a href="#" className="whitespace-nowrap transition-colors hover:text-white">
               Ayuda
@@ -91,7 +92,7 @@ export function Nav({ onOpenDrawer, onOpenSignIn }: {
 
       {/* Main row */}
       <div className="mx-auto grid h-[68px] max-w-[1320px] grid-cols-[auto_auto_1fr_auto] items-center gap-[18px] px-[clamp(20px,4vw,56px)] max-[900px]:grid-cols-[auto_1fr_auto] max-[560px]:h-[60px] max-[560px]:gap-2">
-        <a href="/" className="inline-flex items-center gap-2.5 text-[19px] font-semibold tracking-[-0.01em] max-[560px]:text-[0]">
+        <Link href="/" className="inline-flex items-center gap-2.5 text-[19px] font-semibold tracking-[-0.01em] max-[560px]:text-[0]">
           <span className="grid size-[40px] place-items-center max-[560px]:size-9">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -101,7 +102,7 @@ export function Nav({ onOpenDrawer, onOpenSignIn }: {
             />
           </span>
           <span className="max-[560px]:sr-only">Pasape</span>
-        </a>
+        </Link>
 
         <button
           type="button"

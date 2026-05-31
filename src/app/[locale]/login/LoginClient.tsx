@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { motion } from "motion/react";
 import { useSearchParams } from "next/navigation";
 import { GoogleBtn } from "@/components/design";
@@ -78,9 +79,9 @@ export function LoginClient() {
 
         <div className="mt-10 flex items-center justify-center gap-2 text-[11.5px] text-cart-ink-4">
           <span>¿No eres organizador?</span>
-          <a href="/" className="font-medium text-cart-ink-2 hover:text-white">
+          <Link href="/" className="font-medium text-cart-ink-2 hover:text-white">
             Explorar eventos
-          </a>
+          </Link>
         </div>
       </motion.div>
     </main>

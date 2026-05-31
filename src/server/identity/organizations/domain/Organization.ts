@@ -6,6 +6,10 @@ export type Organization = {
   name: string;
   logoUrl: string | null;
   brandColor: string | null;
+  /** Descripción corta para la vitrina pública (máx ~160). */
+  description: string | null;
+  /** Handle de Instagram sin @ (ej. "111producciones"). */
+  instagram: string | null;
   legalEntityId: string;
   timezone: string;
   createdBy: string;

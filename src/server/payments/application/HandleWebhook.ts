@@ -96,7 +96,7 @@ export const handleMpWebhook = async (
     if (!okSig) return err("invalid_signature");
   } catch {
     if (process.env.NODE_ENV === "production") return err("missing_mp_webhook_secret");
-    // eslint-disable-next-line no-console
+     
     console.warn("[mp-webhook] MP_WEBHOOK_SECRET not set — skipping signature verification (dev only)");
   }
 
@@ -113,7 +113,7 @@ export const handleMpWebhook = async (
       return ok({});
     }
     // Other errors: continue but log.
-    // eslint-disable-next-line no-console
+     
     console.warn("[mp-webhook] dedupe insert failed:", dupErr.message);
   }
 
@@ -160,7 +160,7 @@ export const handleMpWebhook = async (
   // registrados en `notification_dispatches`.
   if (mapped === "paid" && orderRow) {
     void dispatchTicketDelivery({ db }, orderRow.id).catch((e) => {
-      // eslint-disable-next-line no-console
+       
       console.error("[mp-webhook] dispatchTicketDelivery failed:", (e as Error).message);
     });
   }

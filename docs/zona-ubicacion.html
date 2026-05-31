@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Zona / Ubicación — comparación</title>
+<style>
+  :root{
+    --bg:#0a0a0b;
+    --elev:#141417;
+    --elev2:#1c1c20;
+    --line:#26262b;
+    --ink:#f5f5f7;
+    --ink2:#a9a9b2;
+    --ink3:#73737d;
+    --ink4:#55555e;
+    --accent:#a855f7;
+    --accent-soft:rgba(168,85,247,.16);
+    --emerald:#34d399;
+    --amber:#fbbf24;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:"SF Pro Display",-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1120px;margin:0 auto;padding:40px 20px 90px;}
+  h1{font-size:22px;font-weight:800;letter-spacing:-.02em;margin:0 0 6px}
+  .sub{color:var(--ink2);font-size:13.5px;margin:0 0 36px;line-height:1.5}
+  .grid{display:grid;gap:28px}
+  @media(min-width:880px){.grid{grid-template-columns:1fr 1fr}}
+  .col-h{display:flex;align-items:center;gap:8px;margin:0 0 14px}
+  .tag{font-size:10.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+    padding:3px 9px;border-radius:999px}
+  .tag.bad{color:#fca5a5;background:rgba(244,63,94,.13)}
+  .tag.good{color:var(--emerald);background:rgba(52,211,153,.13)}
+  .col-note{color:var(--ink3);font-size:12px;margin:0 0 16px;line-height:1.5}
+
+  /* ---- card base (igual que la página de compra) ---- */
+  .stack{display:flex;flex-direction:column;gap:12px}
+  .card{border:1px solid var(--line);background:var(--elev);border-radius:18px;padding:16px}
+  .card.sel{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+
+  /* zona heading "viejo" */
+  .zoneHead{display:flex;align-items:baseline;gap:8px;padding:0 4px;margin:6px 0 2px}
+  .zoneHead .ln{height:1px;width:16px;background:var(--line)}
+  .zoneHead h3{margin:0;font-size:11px;font-weight:600;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--ink3)}
+
+  /* ---- card header ---- */
+  .row{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+  .name{font-size:15.5px;font-weight:600;letter-spacing:-.01em}
+  .titleRow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .desc{font-size:12.5px;color:var(--ink2);margin-top:4px}
+  .price{font-size:15px;font-weight:700;letter-spacing:-.01em;white-space:nowrap}
+  .price .cur{color:var(--ink3);font-weight:600;font-size:12px}
+
+  /* pin chip */
+  .pin{display:inline-flex;align-items:center;gap:5px;border-radius:999px;
+    background:var(--elev2);padding:3px 9px 3px 7px;
+    font-size:11px;font-weight:500;color:var(--ink2);
+    border:1px solid var(--line)}
+  .pin svg{width:12px;height:12px;flex:none;opacity:.85}
+
+  /* preventa badge + tachado */
+  .badge{display:inline-flex;align-items:center;gap:5px;border-radius:999px;
+    background:var(--accent-soft);color:#d8b4fe;
+    padding:3px 9px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+  .badge .dot{width:5px;height:5px;border-radius:999px;background:var(--accent)}
+  .strike{color:var(--ink3);text-decoration:line-through;font-weight:600;font-size:12.5px;margin-right:6px}
+  .after{color:var(--ink3);font-size:11.5px;margin-top:3px}
+  .fomo{display:inline-flex;align-items:center;gap:6px;margin-top:8px;
+    font-size:11.5px;font-weight:600;color:var(--amber)}
+  .fomo .clk{font-variant-numeric:tabular-nums}
+
+  /* box grid */
+  .boxhdr{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px}
+  .tiles{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
+  @media(max-width:520px){.tiles{grid-template-columns:repeat(4,1fr)}}
+  .tile{aspect-ratio:1;display:grid;place-items:center;border-radius:12px;
+    border:1px solid var(--line);background:var(--elev2);
+    font-weight:600;font-size:15px;color:var(--ink);cursor:default}
+  .tile.sel{border-color:var(--accent);background:var(--accent-soft);color:#e9d5ff}
+  .tile.rsv{opacity:.32}
+  .legend{display:flex;gap:18px;margin-top:14px;font-size:12px;color:var(--ink3)}
+  .legend i{width:11px;height:11px;border-radius:5px;display:inline-block;margin-right:6px;vertical-align:-1px;border:1px solid var(--line)}
+  .legend i.sel{background:var(--accent);border-color:var(--accent)}
+  .hint{margin-top:14px;padding-top:14px;border-top:1px solid var(--line);
+    text-align:center;color:var(--ink3);font-size:12.5px}
+
+  .sectionTitle{font-size:13px;font-weight:700;color:var(--ink2);letter-spacing:.02em;
+    margin:48px 0 18px;text-transform:none}
+  /* ===== zona como ESTATUS (variantes) ===== */
+  .tier{display:inline-flex;align-items:center;gap:5px;border-radius:999px;
+    font-size:11px;font-weight:700;letter-spacing:.04em;padding:3px 10px}
+  /* A: dorado premium */
+  .tier.gold{color:#f5d98b;background:linear-gradient(180deg,rgba(245,217,139,.18),rgba(245,217,139,.07));
+    border:1px solid rgba(245,217,139,.32);text-transform:uppercase;letter-spacing:.08em}
+  .tier.gold svg{width:11px;height:11px}
+  /* B: chip con punto de color por tier */
+  .tier.dotbadge{color:var(--ink);background:var(--elev2);border:1px solid var(--line);
+    text-transform:uppercase;letter-spacing:.07em;font-size:10.5px}
+  .tier.dotbadge .gem{width:7px;height:7px;border-radius:2px;transform:rotate(45deg)}
+  /* C: banda lateral + nombre grande */
+  .tierband{position:relative;overflow:hidden}
+  .tierband::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;
+    background:linear-gradient(180deg,#f5d98b,#b9892f)}
+  .eyebrow{display:flex;align-items:center;gap:7px;margin-bottom:2px}
+  .eyebrow .k{font-size:10.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;
+    color:#f5d98b}
+  .eyebrow .gem{width:6px;height:6px;border-radius:2px;transform:rotate(45deg);background:#f5d98b}
+  .scarce{display:inline-flex;align-items:center;gap:5px;margin-top:8px;font-size:11.5px;
+    font-weight:600;color:#fca5a5}
+  .scarce .pulse{width:6px;height:6px;border-radius:999px;background:#fb7185;
+    box-shadow:0 0 0 0 rgba(251,113,133,.6);animation:p 1.6s infinite}
+  @keyframes p{70%{box-shadow:0 0 0 6px rgba(251,113,133,0)}100%{box-shadow:0 0 0 0 rgba(251,113,133,0)}}
+
+  .callout{margin-top:40px;border:1px solid var(--line);border-radius:16px;
+    background:var(--elev);padding:18px 20px}
+  .callout h4{margin:0 0 10px;font-size:13.5px}
+  .callout ul{margin:0;padding-left:18px;color:var(--ink2);font-size:13px;line-height:1.7}
+  .callout b{color:var(--ink)}
+  .mob{max-width:430px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Zona / ubicación en la página de compra</h1>
+  <p class="sub">
+    La zona dice <b style="color:var(--ink)">dónde</b> está físicamente (Platinum, Terraza, Mezzanine).
+    Hoy la mostramos como un encabezado <span style="color:#fca5a5">“ZONA X”</span> arriba de las tarjetas — pesa y se siente redundante.
+    Propuesta (estilo Posh): la zona vive como un <b style="color:var(--ink)">pin 📍 dentro de la tarjeta</b>, y solo aparece si el organizador la puso.
+  </p>
+
+  <div class="grid">
+    <!-- ===================== HOY ===================== -->
+    <div>
+      <div class="col-h"><span class="tag bad">Hoy</span><span style="font-size:13px;color:var(--ink2)">encabezado “ZONA”</span></div>
+      <p class="col-note">El “ZONA PLATINUM” en gris arriba compite con el título de la tarjeta y no aporta jerarquía.</p>
+
+      <div class="stack">
+        <div class="zoneHead"><span class="ln"></span><h3>Zona Platinum</h3></div>
+
+        <div class="card">
+          <div class="boxhdr">
+            <div>
+              <div class="name">Boxes</div>
+              <div class="desc">Cada box para 12 personas · Tú invitas</div>
+            </div>
+            <div class="price">S/ 1,500 <span class="cur">/box</span></div>
+          </div>
+          <div class="tiles">
+            <div class="tile">1</div><div class="tile">2</div><div class="tile">3</div>
+            <div class="tile">4</div><div class="tile">5</div><div class="tile">6</div>
+            <div class="tile">7</div><div class="tile rsv">8</div><div class="tile">9</div>
+            <div class="tile">10</div>
+          </div>
+          <div class="legend"><span><i></i>Libre</span><span><i class="sel"></i>Tu elección</span><span><i style="opacity:.32"></i>Reservado</span></div>
+          <div class="hint">Tappea un box para reservarlo</div>
+        </div>
+
+        <div class="card">
+          <div class="row">
+            <div>
+              <div class="titleRow"><span class="name">General</span>
+                <span class="badge"><span class="dot"></span>Preventa</span></div>
+              <div class="desc">Acceso general al evento</div>
+            </div>
+            <div class="price"><span class="strike">S/30</span>S/ 20</div>
+          </div>
+          <div class="after">Después sube a S/ 30</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================== PROPUESTA ===================== -->
+    <div>
+      <div class="col-h"><span class="tag good">Propuesta</span><span style="font-size:13px;color:var(--ink2)">pin dentro de la tarjeta</span></div>
+      <p class="col-note">Sin encabezado. La ubicación es un chip discreto junto al título — pega con el nombre del box. Si no hay zona, no se muestra nada.</p>
+
+      <div class="stack">
+        <div class="card">
+          <div class="boxhdr">
+            <div>
+              <div class="titleRow">
+                <span class="name">Boxes</span>
+                <span class="pin">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 1 1 18 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+                  Platinum
+                </span>
+              </div>
+              <div class="desc">Cada box para 12 personas · Tú invitas</div>
+            </div>
+            <div class="price">S/ 1,500 <span class="cur">/box</span></div>
+          </div>
+          <div class="tiles">
+            <div class="tile">1</div><div class="tile">2</div><div class="tile sel">3</div>
+            <div class="tile">4</div><div class="tile">5</div><div class="tile">6</div>
+            <div class="tile">7</div><div class="tile rsv">8</div><div class="tile">9</div>
+            <div class="tile">10</div>
+          </div>
+          <div class="legend"><span><i></i>Libre</span><span><i class="sel"></i>Tu elección</span><span><i style="opacity:.32"></i>Reservado</span></div>
+          <div class="hint">Tappea un box para reservarlo</div>
+        </div>
+
+        <div class="card">
+          <div class="row">
+            <div>
+              <div class="titleRow"><span class="name">General</span>
+                <span class="badge"><span class="dot"></span>Preventa</span></div>
+              <div class="desc">Acceso general al evento</div>
+            </div>
+            <div class="price"><span class="strike">S/30</span>S/ 20</div>
+          </div>
+          <div class="after">Después sube a S/ 30</div>
+          <div class="fomo">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/></svg>
+            <span>Preventa termina en <span class="clk">02:48:11</span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== MÓVIL ===================== -->
+  <div class="sectionTitle">En móvil (propuesta)</div>
+  <div class="stack mob">
+    <div class="card">
+      <div class="boxhdr">
+        <div>
+          <div class="titleRow">
+            <span class="name">Mesas VIP</span>
+            <span class="pin">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 1 1 18 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+              Terraza
+            </span>
+          </div>
+          <div class="desc">Cada mesa para 6 personas · Tú invitas</div>
+        </div>
+        <div class="price">S/ 800 <span class="cur">/mesa</span></div>
+      </div>
+      <div class="tiles">
+        <div class="tile sel">1</div><div class="tile">2</div><div class="tile">3</div>
+        <div class="tile">4</div><div class="tile rsv">5</div><div class="tile">6</div>
+      </div>
+      <div class="hint">Tappea una mesa para reservarla</div>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <div>
+          <div class="titleRow"><span class="name">General</span>
+            <span class="badge"><span class="dot"></span>Preventa</span></div>
+          <div class="desc">Sin zona → la tarjeta no muestra pin</div>
+        </div>
+        <div class="price"><span class="strike">S/30</span>S/ 20</div>
+      </div>
+      <div class="fomo">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/></svg>
+        <span>Preventa termina en <span class="clk" id="clk">00:42:09</span></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== ZONA = ESTATUS ===================== -->
+  <div class="sectionTitle">La zona como estatus (lo que pediste — que resalte)</div>
+  <p class="col-note" style="max-width:620px;margin-top:-6px;margin-bottom:24px">
+    Un box <b style="color:var(--ink)">Platinum</b> o una mesa <b style="color:var(--ink)">VIP</b> no es solo “dónde”: es aspiracional.
+    Tratarlo como premium (dorado / gema) genera deseo. Tres formas, de la más sutil a la más fuerte:
+  </p>
+
+  <div class="grid">
+    <!-- Variante A -->
+    <div>
+      <div class="col-h"><span class="tag good">A</span><span style="font-size:13px;color:var(--ink2)">Chip dorado premium</span></div>
+      <div class="card">
+        <div class="boxhdr">
+          <div>
+            <div class="titleRow">
+              <span class="name">Boxes</span>
+              <span class="tier gold">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 6.9H21l-5.3 4 2 6.9L12 16l-5.7 3.8 2-6.9L3 8.9h6.6z"/></svg>
+                Platinum
+              </span>
+            </div>
+            <div class="desc">Cada box para 12 personas · Tú invitas</div>
+          </div>
+          <div class="price">S/ 1,500 <span class="cur">/box</span></div>
+        </div>
+        <div class="tiles">
+          <div class="tile sel">1</div><div class="tile">2</div><div class="tile">3</div>
+          <div class="tile rsv">4</div><div class="tile">5</div><div class="tile rsv">6</div>
+          <div class="tile rsv">7</div><div class="tile rsv">8</div><div class="tile rsv">9</div>
+          <div class="tile rsv">10</div>
+        </div>
+        <div class="scarce"><span class="pulse"></span>Solo quedan 3 de 10 boxes</div>
+      </div>
+    </div>
+
+    <!-- Variante B -->
+    <div>
+      <div class="col-h"><span class="tag good">B</span><span style="font-size:13px;color:var(--ink2)">Tag con gema por tier</span></div>
+      <div class="card">
+        <div class="boxhdr">
+          <div>
+            <div class="titleRow">
+              <span class="name">Mesas</span>
+              <span class="tier dotbadge"><span class="gem" style="background:#f5d98b"></span>VIP</span>
+            </div>
+            <div class="desc">Cada mesa para 6 personas · Tú invitas</div>
+          </div>
+          <div class="price">S/ 800 <span class="cur">/mesa</span></div>
+        </div>
+        <div class="tiles" style="grid-template-columns:repeat(6,1fr)">
+          <div class="tile sel">1</div><div class="tile">2</div><div class="tile">3</div>
+          <div class="tile rsv">4</div><div class="tile">5</div><div class="tile rsv">6</div>
+        </div>
+        <div class="scarce"><span class="pulse"></span>Quedan 3 mesas VIP</div>
+      </div>
+      <p class="col-note" style="margin-top:12px">El color de la gema cambia por tier: dorado Platinum/VIP, plateado General, etc. Lenguaje visual escalable.</p>
+    </div>
+  </div>
+
+  <!-- Variante C full width -->
+  <div style="margin-top:28px">
+    <div class="col-h"><span class="tag good">C</span><span style="font-size:13px;color:var(--ink2)">Eyebrow + banda lateral (máximo protagonismo)</span></div>
+    <div class="card tierband" style="max-width:520px">
+      <div class="eyebrow"><span class="gem"></span><span class="k">Zona Platinum</span></div>
+      <div class="boxhdr" style="margin-top:2px">
+        <div>
+          <div class="name" style="font-size:17px">Boxes</div>
+          <div class="desc">Cada box para 12 personas · Tú invitas</div>
+        </div>
+        <div class="price">S/ 1,500 <span class="cur">/box</span></div>
+      </div>
+      <div class="tiles">
+        <div class="tile sel">1</div><div class="tile">2</div><div class="tile rsv">3</div>
+        <div class="tile rsv">4</div><div class="tile">5</div><div class="tile rsv">6</div>
+        <div class="tile rsv">7</div><div class="tile rsv">8</div><div class="tile rsv">9</div>
+        <div class="tile rsv">10</div>
+      </div>
+      <div class="scarce"><span class="pulse"></span>Solo quedan 3 boxes Platinum</div>
+    </div>
+    <p class="col-note" style="margin-top:12px;max-width:520px">La banda dorada + el “ZONA PLATINUM” en eyebrow le dan jerarquía de sección premium sin volver al encabezado gris de antes. Para General (sin tier) no se pinta banda ni eyebrow.</p>
+  </div>
+
+  <div class="callout">
+    <h4>Cómo lo resuelven Posh / Eventbrite</h4>
+    <ul>
+      <li><b>Posh:</b> las mesas/boxes son tarjetas; el área (“Main Floor”, “Mezzanine”) es un <b>tag con pin</b> dentro de la tarjeta, no un encabezado. La zona es un atributo, no una sección.</li>
+      <li><b>Eventbrite:</b> lista plana de entradas. La zona/sección solo aparece cuando hay <b>asientos reservados</b> (y ahí vive sobre un mapa, no como título).</li>
+      <li><b>Para el organizador:</b> la ubicación queda <b>opcional</b> (“¿Dónde está? — ej. Platinum, Terraza”). Si la deja vacía, el comprador no ve ningún pin.</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+  // countdowns vivos para sentir el FOMO
+  function tick(el, secs){
+    function fmt(s){const h=String(Math.floor(s/3600)).padStart(2,'0');
+      const m=String(Math.floor(s%3600/60)).padStart(2,'0');
+      const x=String(s%60).padStart(2,'0');return h+':'+m+':'+x;}
+    setInterval(()=>{ if(secs>0)secs--; el.textContent=fmt(secs); },1000);
+  }
+  document.querySelectorAll('.clk').forEach((el,i)=>tick(el, i===0?10091:2529));
+</script>
+</body>
+</html>

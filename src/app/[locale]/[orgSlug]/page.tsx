@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { Link } from "@/i18n/navigation";
+import { FollowButton } from "./_components/FollowButton";
 import { supabaseOrganizationRepository } from "@/server/identity/organizations/infrastructure/repositories/SupabaseOrganizationRepository";
 import { supabaseEventRepository } from "@/server/events/infrastructure/repositories/SupabaseEventRepository";
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
@@ -24,14 +25,21 @@ export default async function BrandPublicPage({ params }: Props) {
   const org = await supabaseOrganizationRepository.findBySlug(orgSlug);
   if (!org) notFound();
 
-  const events = await supabaseEventRepository.listByOrgSlug(orgSlug);
-  const upcoming = events
-    .filter((e) => e.status === "published")
-    .filter((e) => new Date(e.startsAt).getTime() >= Date.now() - 6 * 3600 * 1000);
-
-  const minPrices = await fetchMinPricesByEvent(upcoming.map((e) => e.id));
+  const { upcoming, minPrices } = await loadUpcomingEvents(orgSlug);
 
   return <BrandPageView org={org} events={upcoming} minPrices={minPrices} />;
+}
+
+// Helper fuera del render del Server Component: aquí Date.now() es válido
+// (la regla de pureza de React solo aplica al cuerpo del componente).
+async function loadUpcomingEvents(orgSlug: string) {
+  const events = await supabaseEventRepository.listByOrgSlug(orgSlug);
+  const cutoff = Date.now() - 6 * 3600 * 1000;
+  const upcoming = events
+    .filter((e) => e.status === "published")
+    .filter((e) => new Date(e.startsAt).getTime() >= cutoff);
+  const minPrices = await fetchMinPricesByEvent(upcoming.map((e) => e.id));
+  return { upcoming, minPrices };
 }
 
 async function fetchMinPricesByEvent(eventIds: string[]): Promise<Record<string, number>> {
@@ -76,19 +84,29 @@ function BrandPageView({
 
         <div className="-mt-12 flex items-end gap-4">
           <BrandLogo name={org.name} color={brand} logoUrl={org.logoUrl} size={88} />
-          <FollowButton />
+          <FollowButton orgId={org.id} orgSlug={org.slug} />
         </div>
 
         <h1 className="mt-4 text-[28px] font-semibold leading-[1.05] tracking-[-0.02em]">
           {org.name}
         </h1>
-        <div className="mt-1 flex items-center gap-1.5 text-[13px] text-cart-ink-3">
+        <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[13px] text-cart-ink-3">
           <span className="font-mono">{handle}</span>
-          <span>·</span>
-          <span>Lima</span>
+          {org.instagram && (
+            <>
+              <span>·</span>
+              <InstagramLink handle={org.instagram} />
+            </>
+          )}
           <span>·</span>
           <span>{events.length} próximos</span>
         </div>
+
+        {org.description && (
+          <p className="mt-3 text-[14px] leading-relaxed text-cart-ink-2">
+            {org.description}
+          </p>
+        )}
 
         <SectionTitle count={events.length} />
 
@@ -106,16 +124,25 @@ function BrandPageView({
               <h1 className="text-[44px] font-semibold leading-[1] tracking-[-0.03em]">
                 {org.name}
               </h1>
-              <div className="mt-2 flex items-center gap-2 text-[14px] text-cart-ink-3">
+              <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[14px] text-cart-ink-3">
                 <span className="font-mono">{handle}</span>
-                <span>·</span>
-                <span>Lima</span>
+                {org.instagram && (
+                  <>
+                    <span>·</span>
+                    <InstagramLink handle={org.instagram} />
+                  </>
+                )}
                 <span>·</span>
                 <span>{events.length} próximos</span>
               </div>
+              {org.description && (
+                <p className="mt-3 max-w-[520px] text-[14.5px] leading-relaxed text-cart-ink-2">
+                  {org.description}
+                </p>
+              )}
             </div>
           </div>
-          <FollowButton size="lg" />
+          <FollowButton orgId={org.id} orgSlug={org.slug} size="lg" />
         </div>
 
         <SectionTitle count={events.length} variant="desktop" />
@@ -175,6 +202,24 @@ function BackButton() {
   );
 }
 
+function InstagramLink({ handle }: { handle: string }) {
+  return (
+    <a
+      href={`https://instagram.com/${handle}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-1 text-cart-ink-2 transition hover:text-white"
+    >
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden>
+        <rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" strokeWidth="1.8" />
+        <circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="1.8" />
+        <circle cx="17.5" cy="6.5" r="1.2" fill="currentColor" />
+      </svg>
+      @{handle}
+    </a>
+  );
+}
+
 function BrandLogo({
   name,
   color,
@@ -210,26 +255,6 @@ function BrandLogo({
   );
 }
 
-function FollowButton({ size = "md" }: { size?: "md" | "lg" }) {
-  const cls =
-    size === "lg"
-      ? "h-12 px-6 text-[14px]"
-      : "h-9 px-4 text-[12.5px]";
-  return (
-    <button
-      type="button"
-      className={
-        "inline-flex items-center gap-1.5 rounded-full bg-cart-accent font-semibold text-white shadow-[0_8px_24px_-8px_var(--color-cart-accent-glow-strong)] transition hover:-translate-y-[1px] " +
-        cls
-      }
-    >
-      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-        <path d="M7 2v10M2 7h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      </svg>
-      Seguir
-    </button>
-  );
-}
 
 function SectionTitle({ count, variant }: { count: number; variant?: "desktop" }) {
   return (
@@ -300,10 +325,13 @@ function EventCardMobile({
     >
       <div
         className="size-16 shrink-0 overflow-hidden rounded-xl"
-        style={{
-          background: `linear-gradient(135deg, ${brand}, #FF4D5E)`,
-        }}
-      />
+        style={!ev.coverUrl ? { background: `linear-gradient(135deg, ${brand}, #FF4D5E)` } : undefined}
+      >
+        {ev.coverUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={ev.coverUrl} alt="" className="size-full object-cover" />
+        )}
+      </div>
       <div className="min-w-0 flex-1">
         <div className="truncate text-[15px] font-semibold tracking-[-0.01em]">
           {ev.title}
@@ -345,8 +373,12 @@ function EventCardWeb({
     >
       <div
         className="relative aspect-[16/10] w-full overflow-hidden"
-        style={{ background: `linear-gradient(135deg, ${brand}, #FF4D5E)` }}
+        style={!ev.coverUrl ? { background: `linear-gradient(135deg, ${brand}, #FF4D5E)` } : undefined}
       >
+        {ev.coverUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={ev.coverUrl} alt="" className="absolute inset-0 size-full object-cover" />
+        )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
         {featured && (
           <span className="absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-full bg-black/50 px-2.5 py-1 text-[10px] font-semibold tracking-[0.14em] text-white backdrop-blur">

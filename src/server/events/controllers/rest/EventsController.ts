@@ -14,6 +14,10 @@ import { updateEvent } from "../../application/UpdateEvent";
 import { generateDoorLink, type DoorLink } from "../../application/GenerateDoorLink";
 import { exportEventReport } from "../../application/ExportEventReport";
 import {
+  getEventOrgShowcase,
+  type EventOrgShowcase,
+} from "../../application/GetEventOrgShowcase";
+import {
   createTicketType,
   deleteTicketType,
   updateTicketType,
@@ -24,8 +28,14 @@ import {
   removeEventCoOrganizer,
   type EventCoOrganizer,
 } from "../../application/EventCoOrganizers";
+import {
+  addEventPartner,
+  listEventPartners,
+  removeEventPartner,
+  type EventPartner,
+} from "../../application/EventPartners";
 import { supabaseOrganizationRepository } from "@/server/identity/organizations/infrastructure/repositories/SupabaseOrganizationRepository";
-import type { Event, TicketType } from "../../domain/Event";
+import type { Event, Promo, TicketType } from "../../domain/Event";
 import type { EventStats, ScanFeedItem } from "../../ports/EventRepository";
 
 const sanitizeHost = (raw: string): string => {
@@ -80,12 +90,16 @@ const createSchema = z.object({
     .array(
       z.object({
         name: z.string().min(1),
-        kind: z.enum(["general", "presale", "vip", "box"]).default("general"),
+        kind: z.enum(["general", "vip", "box"]).default("general"),
         priceCents: z.number().int().min(0),
         capacity: z.number().int().min(0),
         boxLabel: z.string().trim().min(1).max(40).nullable().optional(),
         zone: z.string().trim().max(60).nullable().optional(),
         unitNoun: z.string().trim().max(24).nullable().optional(),
+        saleEndsAt: z.string().datetime().nullable().optional(),
+        presalePriceCents: z.number().int().min(0).nullable().optional(),
+        presaleQty: z.number().int().min(0).nullable().optional(),
+        presaleEndsAt: z.string().datetime().nullable().optional(),
       }),
     )
     .min(1),
@@ -96,7 +110,9 @@ export const EventsController = {
     return { ok: true, value: await listPublishedEvents({ repo }) };
   },
 
-  async getBySlug(slug: string): Promise<Result<{ event: Event; ticketTypes: TicketType[] }>> {
+  async getBySlug(
+    slug: string,
+  ): Promise<Result<{ event: Event; ticketTypes: TicketType[]; promos: Promo[] }>> {
     const data = await getEventBySlug({ repo }, slug);
     if (!data) return err("not_found");
     // Si el evento está publicado, acceso libre. Si está en draft/closed/
@@ -212,7 +228,24 @@ export const EventsController = {
       zone: parsed.data.zone ?? null,
       unitNoun: parsed.data.unitNoun ?? null,
       saleEndsAt: parsed.data.saleEndsAt ?? null,
+      presalePriceCents: parsed.data.presalePriceCents ?? null,
+      presaleQty: parsed.data.presaleQty ?? null,
+      presaleEndsAt: parsed.data.presaleEndsAt ?? null,
     });
+  },
+
+  async setPromos(slug: string, input: unknown): Promise<Result<Promo[]>> {
+    const guard = await guardEventMember(slug, ["owner", "admin", "editor"]);
+    if (!guard.ok) return err(guard.error);
+    const parsed = setPromosSchema.safeParse(input);
+    if (!parsed.success) return err(parsed.error.issues[0]?.message ?? "invalid_input");
+    return repo.setPromos(guard.value.event.id, parsed.data.promos);
+  },
+
+  async listPromos(slug: string): Promise<Result<Promo[]>> {
+    const found = await repo.getBySlug(slug);
+    if (!found) return err("event_not_found");
+    return ok(found.promos);
   },
 
   async updateTicketType(
@@ -329,17 +362,59 @@ export const EventsController = {
       })),
     });
   },
+
+  async listPartners(slug: string): Promise<Result<EventPartner[]>> {
+    const found = await getEventBySlug({ repo }, slug);
+    if (!found) return err("not_found");
+    return ok(await listEventPartners(found.event.id));
+  },
+
+  async addPartner(slug: string, input: unknown): Promise<Result<EventPartner>> {
+    const guard = await guardEventMember(slug, ["owner", "admin", "editor"]);
+    if (!guard.ok) return err(guard.error);
+    const parsed = z
+      .object({
+        name: z.string().min(1).max(120),
+        logoUrl: z.string().url().nullable().optional(),
+        websiteUrl: z.string().url().nullable().optional(),
+      })
+      .safeParse(input);
+    if (!parsed.success) return err("invalid_input");
+    const partner = await addEventPartner(guard.value.event.id, parsed.data);
+    return ok(partner);
+  },
+
+  async removePartner(slug: string, partnerId: string): Promise<Result<null>> {
+    const guard = await guardEventMember(slug, ["owner", "admin", "editor"]);
+    if (!guard.ok) return err(guard.error);
+    await removeEventPartner(partnerId, guard.value.event.id);
+    return ok(null);
+  },
+
+  // Cross-sell público: productora del evento + sus otros eventos próximos.
+  async getOrgShowcase(
+    slug: string,
+  ): Promise<Result<EventOrgShowcase | null>> {
+    return { ok: true, value: await getEventOrgShowcase(slug) };
+  },
+};
+
+const presaleFields = {
+  presalePriceCents: z.number().int().min(0).nullable().optional(),
+  presaleQty: z.number().int().min(0).nullable().optional(),
+  presaleEndsAt: z.string().datetime().nullable().optional(),
 };
 
 const createTicketTypeSchema = z.object({
   name: z.string().min(1),
-  kind: z.enum(["general", "presale", "vip", "box"]).default("general"),
+  kind: z.enum(["general", "vip", "box"]).default("general"),
   priceCents: z.number().int().min(0),
   capacity: z.number().int().min(0),
   boxLabel: z.string().trim().min(1).max(40).nullable().optional(),
   zone: z.string().trim().max(60).nullable().optional(),
   unitNoun: z.string().trim().max(24).nullable().optional(),
   saleEndsAt: z.string().datetime().nullable().optional(),
+  ...presaleFields,
 });
 
 const updateTicketTypeSchema = z.object({
@@ -350,6 +425,19 @@ const updateTicketTypeSchema = z.object({
   zone: z.string().trim().max(60).nullable().optional(),
   unitNoun: z.string().trim().max(24).nullable().optional(),
   saleEndsAt: z.string().datetime().nullable().optional(),
+  ...presaleFields,
+});
+
+const setPromosSchema = z.object({
+  promos: z
+    .array(
+      z.object({
+        ticketTypeId: z.string().uuid(),
+        kind: z.enum(["2x1", "3x2"]),
+        endsAt: z.string().datetime().nullable().optional(),
+      }),
+    )
+    .max(100),
 });
 
 const updateSchema = z.object({

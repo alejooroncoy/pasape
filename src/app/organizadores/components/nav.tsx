@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "./ui/button";
 import { Icon } from "./icons";
@@ -97,7 +98,7 @@ export function Nav(_props: { waHref?: string }) {
         </nav>
         <div className="hidden items-center gap-4 lg:inline-flex">
           {/* Ver eventos como text link sutil — secundario */}
-          <a
+          <Link
             href="/"
             className="group inline-flex items-center gap-1.5 text-sm font-medium text-ink-3 transition-colors hover:text-ink"
           >
@@ -108,7 +109,7 @@ export function Nav(_props: { waHref?: string }) {
               height={13}
               className="transition-transform duration-200 group-hover:-translate-y-px group-hover:translate-x-px"
             />
-          </a>
+          </Link>
           {/* Ingresar al panel — CTA primario para organizadores */}
           <Button
             href="/es/org"
@@ -184,13 +185,13 @@ export function Nav(_props: { waHref?: string }) {
           >
             Ingresar al panel
           </Button>
-          <a
+          <Link
             href="/"
             onClick={() => setMenuOpen(false)}
             className="block w-full px-[18px] py-2 text-center text-sm font-medium text-ink-3 transition-colors hover:text-ink"
           >
             Ver eventos →
-          </a>
+          </Link>
         </div>
       </aside>
     </header>
