@@ -16,7 +16,7 @@ export const POST = async (req: NextRequest) => {
     },
   });
   if (!result.ok) {
-    // eslint-disable-next-line no-console
+     
     console.error("[mp-webhook]", result.error);
     // 401 cuando la firma es inválida — no queremos que MP reintente fake calls.
     const status = result.error === "invalid_signature" ? 401 : 500;

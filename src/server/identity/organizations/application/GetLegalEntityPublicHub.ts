@@ -76,7 +76,7 @@ export const getLegalEntityPublicHub = async (slug: string): Promise<PublicHub |
   const events = (rawEvents as EventRow[] | null) ?? [];
 
   // Min price per event (single query for everything).
-  let minPriceByEvent: Record<string, number> = {};
+  const minPriceByEvent: Record<string, number> = {};
   if (events.length > 0) {
     const { data: tts } = await db
       .from("ticket_types")

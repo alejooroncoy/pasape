@@ -95,7 +95,7 @@ function BuyFlowInner({ params }: Props) {
     }
   }, [slug, search]);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   useEffect(() => {
     const orderFromUrl = search.get("order");
     if (!orderFromUrl) return;
