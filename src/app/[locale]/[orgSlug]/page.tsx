@@ -325,10 +325,13 @@ function EventCardMobile({
     >
       <div
         className="size-16 shrink-0 overflow-hidden rounded-xl"
-        style={{
-          background: `linear-gradient(135deg, ${brand}, #FF4D5E)`,
-        }}
-      />
+        style={!ev.coverUrl ? { background: `linear-gradient(135deg, ${brand}, #FF4D5E)` } : undefined}
+      >
+        {ev.coverUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={ev.coverUrl} alt="" className="size-full object-cover" />
+        )}
+      </div>
       <div className="min-w-0 flex-1">
         <div className="truncate text-[15px] font-semibold tracking-[-0.01em]">
           {ev.title}
@@ -370,8 +373,12 @@ function EventCardWeb({
     >
       <div
         className="relative aspect-[16/10] w-full overflow-hidden"
-        style={{ background: `linear-gradient(135deg, ${brand}, #FF4D5E)` }}
+        style={!ev.coverUrl ? { background: `linear-gradient(135deg, ${brand}, #FF4D5E)` } : undefined}
       >
+        {ev.coverUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={ev.coverUrl} alt="" className="absolute inset-0 size-full object-cover" />
+        )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
         {featured && (
           <span className="absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-full bg-black/50 px-2.5 py-1 text-[10px] font-semibold tracking-[0.14em] text-white backdrop-blur">

@@ -5,7 +5,9 @@ import { useSearchParams } from "next/navigation";
 import { Link, useRouter } from "@/i18n/navigation";
 import { useEvent } from "@/lib/events/hooks/useEvents";
 import { useEventShowcase } from "@/lib/events/hooks/useEventShowcase";
+import { useEventPartners } from "@/lib/events/hooks/useEventPartners";
 import type { ShowcaseEvent, ShowcaseOrg } from "@/server/events/application/GetEventOrgShowcase";
+import type { EventPartner } from "@/server/events/application/EventPartners";
 import { formatMoney } from "@/lib/_shared/format";
 import type { TicketType } from "@/server/events/domain/Event";
 import { VenueLayoutModal } from "@/components/ui/VenueLayoutModal";
@@ -35,6 +37,7 @@ function EventDetailInner({ params }: Props) {
   const { slug } = use(params);
   const { data, isLoading, error } = useEvent(slug);
   const showcase = useEventShowcase(slug);
+  const partners = useEventPartners(slug);
   const search = useSearchParams();
   const promo = search.get("promo");
   const router = useRouter();
@@ -49,11 +52,40 @@ function EventDetailInner({ params }: Props) {
     [data],
   );
 
+  const [zoneQty, setZoneQty] = useState<Record<string, number>>({});
+
+  const liveUnits = useMemo(
+    () => Object.values(zoneQty).reduce((a, b) => a + b, 0),
+    [zoneQty],
+  );
+
+  const liveTotalCents = useMemo(
+    () =>
+      groups.reduce((sum, group) => {
+        const key = group.zone ?? "__ungrouped__";
+        const qty = zoneQty[key] ?? 0;
+        const price = summarizeZone(group).minPriceCents ?? 0;
+        return sum + qty * price;
+      }, 0),
+    [groups, zoneQty],
+  );
+
   const buyHref = (zone?: string | null) => {
-    const params = new URLSearchParams();
-    if (promo) params.set("promo", promo);
-    if (zone) params.set("zone", zone);
-    const qs = params.toString();
+    const p = new URLSearchParams();
+    if (promo) p.set("promo", promo);
+    if (zone) p.set("zone", zone);
+    const key = zone ?? "__ungrouped__";
+    const qty = zoneQty[key];
+    if (qty) p.set("qty", String(qty));
+    const qs = p.toString();
+    return `/events/${slug}/buy${qs ? `?${qs}` : ""}`;
+  };
+
+  const buyHrefAll = () => {
+    const p = new URLSearchParams();
+    if (promo) p.set("promo", promo);
+    if (liveUnits > 0) p.set("qty", String(liveUnits));
+    const qs = p.toString();
     return `/events/${slug}/buy${qs ? `?${qs}` : ""}`;
   };
 
@@ -126,10 +158,18 @@ function EventDetailInner({ params }: Props) {
               <VenueLayoutBanner url={event.venueLayoutUrl} venue={event.venue} />
             )}
 
+            {partners.data && partners.data.length > 0 && (
+              <PartnersStrip partners={partners.data} />
+            )}
+
             <div className="mt-8 lg:hidden">
               <SectionTitle>Entradas</SectionTitle>
               <ZoneCardList
                 groups={groups}
+                zoneQty={zoneQty}
+                onZoneQtyChange={(zone, qty) =>
+                  setZoneQty((prev) => ({ ...prev, [zone ?? "__ungrouped__"]: qty }))
+                }
                 onPickZone={(zone) => router.push(buyHref(zone) as never)}
               />
             </div>
@@ -149,23 +189,39 @@ function EventDetailInner({ params }: Props) {
                   <ZoneCardList
                     groups={groups}
                     compact
+                    zoneQty={zoneQty}
+                    onZoneQtyChange={(zone, qty) =>
+                      setZoneQty((prev) => ({ ...prev, [zone ?? "__ungrouped__"]: qty }))
+                    }
                     onPickZone={(zone) => router.push(buyHref(zone) as never)}
                   />
                 </div>
 
                 <button
                   type="button"
-                  onClick={() => router.push(buyHref() as never)}
+                  onClick={() => router.push(buyHrefAll() as never)}
                   disabled={allSoldOut}
                   className="mt-5 w-full rounded-full bg-cart-accent py-3.5 text-[14.5px] font-semibold text-cart-bg shadow-[0_8px_24px_-6px_var(--color-cart-accent-glow)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:bg-cart-bg-elev-2 disabled:text-cart-ink-3 disabled:shadow-none"
                 >
-                  {allSoldOut ? "Agotado" : "Comprar entradas"}
+                  {allSoldOut
+                    ? "Agotado"
+                    : liveUnits > 0
+                      ? `${liveUnits} ${liveUnits === 1 ? "entrada" : "entradas"} · ${formatMoney(liveTotalCents, "PEN")}`
+                      : "Comprar entradas"}
                 </button>
 
                 <p className="mt-3 text-center text-[11.5px] text-cart-ink-4">
                   Yape, tarjeta o transferencia · QR al instante
                 </p>
               </div>
+
+              {event.venueLayoutUrl && (
+                <SidebarVenueThumbnail url={event.venueLayoutUrl} venue={event.venue} />
+              )}
+
+              {showcase.data && showcase.data.events.length > 0 && (
+                <SidebarMoreFromOrg org={showcase.data.org} events={showcase.data.events} />
+              )}
             </div>
           </aside>
         </div>
@@ -178,11 +234,15 @@ function EventDetailInner({ params }: Props) {
         <div className="mx-auto px-5 pt-3">
           <button
             type="button"
-            onClick={() => router.push(buyHref() as never)}
+            onClick={() => router.push(buyHrefAll() as never)}
             disabled={allSoldOut}
             className="w-full rounded-full bg-cart-accent py-3.5 text-[15px] font-semibold text-cart-bg shadow-[0_8px_24px_-6px_var(--color-cart-accent-glow)] transition active:brightness-110 disabled:cursor-not-allowed disabled:bg-cart-bg-elev-2 disabled:text-cart-ink-3 disabled:shadow-none"
           >
-            {allSoldOut ? "Agotado" : "Comprar entradas"}
+            {allSoldOut
+              ? "Agotado"
+              : liveUnits > 0
+                ? `${liveUnits} ${liveUnits === 1 ? "entrada" : "entradas"} · ${formatMoney(liveTotalCents, "PEN")}`
+                : "Comprar entradas"}
           </button>
         </div>
       </div>
@@ -316,23 +376,35 @@ function AvailabilityHeader({
 function ZoneCardList({
   groups,
   compact,
+  zoneQty,
+  onZoneQtyChange,
   onPickZone,
 }: {
   groups: TicketGroup[];
   compact?: boolean;
+  zoneQty?: Record<string, number>;
+  onZoneQtyChange?: (zone: string | null, qty: number) => void;
   onPickZone: (zone: string | null) => void;
 }) {
   return (
     <div className={"flex flex-col " + (compact ? "gap-2" : "gap-2.5")}>
-      {groups.map((group, idx) => (
-        <ZoneCard
-          key={group.zone ?? `__ungrouped__-${idx}`}
-          group={group}
-          summary={summarizeZone(group)}
-          compact={compact}
-          onClick={() => onPickZone(group.zone)}
-        />
-      ))}
+      {groups.map((group, idx) => {
+        const key = group.zone ?? "__ungrouped__";
+        const summary = summarizeZone(group);
+        const maxQty = summary.freeBoxes + summary.freeSeats;
+        return (
+          <ZoneCard
+            key={group.zone ?? `__ungrouped__-${idx}`}
+            group={group}
+            summary={summary}
+            compact={compact}
+            qty={zoneQty?.[key] ?? 0}
+            maxQty={maxQty}
+            onQtyChange={onZoneQtyChange ? (q) => onZoneQtyChange(group.zone, q) : undefined}
+            onClick={() => onPickZone(group.zone)}
+          />
+        );
+      })}
     </div>
   );
 }
@@ -341,16 +413,29 @@ function ZoneCard({
   group,
   summary,
   compact,
+  qty,
+  maxQty,
+  onQtyChange,
   onClick,
 }: {
   group: TicketGroup;
   summary: ZoneSummary;
   compact?: boolean;
+  qty: number;
+  maxQty: number;
+  onQtyChange?: (qty: number) => void;
   onClick: () => void;
 }) {
   const zoneLabel = group.zone ?? "Entradas generales";
   const presaleItem = group.items.find((i) => activePricing(i).isPresale);
   const ap = presaleItem ? activePricing(presaleItem) : null;
+
+  const handleCounterClick = (e: React.MouseEvent, delta: number) => {
+    e.stopPropagation();
+    const next = Math.max(0, Math.min(maxQty, qty + delta));
+    onQtyChange?.(next);
+  };
+
   return (
     <button
       type="button"
@@ -360,7 +445,9 @@ function ZoneCard({
         "group flex w-full items-stretch rounded-2xl border bg-cart-bg-elev text-left transition " +
         (summary.isAllSoldOut
           ? "border-cart-line opacity-55"
-          : "border-cart-line hover:border-cart-line-strong hover:bg-cart-bg-elev/80") +
+          : qty > 0
+            ? "border-cart-accent/60 shadow-[0_0_16px_-6px_var(--color-cart-accent-glow)]"
+            : "border-cart-line hover:border-cart-line-strong hover:bg-cart-bg-elev/80") +
         (compact ? " px-3.5 py-3" : " px-4 py-4")
       }
     >
@@ -410,26 +497,75 @@ function ZoneCard({
               : "—"}
           </span>
         </div>
-        {/* Ver → solo en mobile: en desktop el hover indica clickabilidad. */}
-        <span
-          className={
-            "mt-2 inline-flex items-center gap-1 text-[11px] font-semibold lg:hidden " +
-            (summary.isAllSoldOut ? "text-cart-ink-3" : "text-cart-accent")
-          }
-        >
-          {summary.isAllSoldOut ? "Agotado" : (
-            <>
-              Ver
-              <svg width="9" height="9" viewBox="0 0 10 10" fill="none">
-                <path d="M3 1.5L7 5L3 8.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </>
-          )}
-        </span>
-        {summary.isAllSoldOut && (
-          <span className="mt-2 hidden text-[11px] font-semibold text-cart-ink-3 lg:inline">
-            Agotado
-          </span>
+        {/* Contador +/- cuando hay onQtyChange y no está agotado */}
+        {!summary.isAllSoldOut && onQtyChange ? (
+          <div className="mt-2 flex items-center gap-1.5">
+            {qty > 0 ? (
+              <>
+                <button
+                  type="button"
+                  onClick={(e) => handleCounterClick(e, -1)}
+                  className="grid size-7 place-items-center rounded-full border border-cart-line bg-cart-bg-elev-2 text-white transition hover:border-cart-line-strong"
+                  aria-label="Quitar una entrada"
+                >
+                  <svg width="10" height="2" viewBox="0 0 10 2" fill="none">
+                    <path d="M1 1h8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                  </svg>
+                </button>
+                <span className={compact ? "w-4 text-center text-[13px] font-bold" : "w-5 text-center text-[14px] font-bold"}>
+                  {qty}
+                </span>
+                <button
+                  type="button"
+                  onClick={(e) => handleCounterClick(e, +1)}
+                  disabled={qty >= maxQty}
+                  className="grid size-7 place-items-center rounded-full bg-cart-accent text-cart-bg transition hover:brightness-110 disabled:opacity-40"
+                  aria-label="Agregar una entrada"
+                >
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                    <path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                  </svg>
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={(e) => handleCounterClick(e, +1)}
+                className={
+                  "rounded-full border border-cart-accent/50 px-3 py-1 text-cart-accent transition hover:bg-cart-accent/10 " +
+                  (compact ? "text-[11px]" : "text-[12px]") +
+                  " font-semibold"
+                }
+                aria-label="Seleccionar esta zona"
+              >
+                + Elegir
+              </button>
+            )}
+          </div>
+        ) : (
+          <>
+            {/* Ver → solo en mobile: en desktop el hover indica clickabilidad. */}
+            <span
+              className={
+                "mt-2 inline-flex items-center gap-1 text-[11px] font-semibold lg:hidden " +
+                (summary.isAllSoldOut ? "text-cart-ink-3" : "text-cart-accent")
+              }
+            >
+              {summary.isAllSoldOut ? "Agotado" : (
+                <>
+                  Ver
+                  <svg width="9" height="9" viewBox="0 0 10 10" fill="none">
+                    <path d="M3 1.5L7 5L3 8.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </>
+              )}
+            </span>
+            {summary.isAllSoldOut && (
+              <span className="mt-2 hidden text-[11px] font-semibold text-cart-ink-3 lg:inline">
+                Agotado
+              </span>
+            )}
+          </>
         )}
       </div>
     </button>
@@ -795,6 +931,137 @@ function VenueLayoutBanner({
         url={url}
         caption={venue ? `${venue} · Ubicación referencial` : "Ubicación referencial"}
       />
+    </div>
+  );
+}
+
+/* ============================== Partners strip ============================== */
+
+function PartnersStrip({ partners }: { partners: EventPartner[] }) {
+  return (
+    <div className="mt-7">
+      <SectionTitle>Con el apoyo de</SectionTitle>
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        {partners.map((p) => (
+          p.websiteUrl ? (
+            <a
+              key={p.id}
+              href={p.websiteUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={p.name}
+              className="group flex h-10 items-center overflow-hidden rounded-xl border border-cart-line bg-cart-bg-elev px-3 transition hover:border-cart-line-strong"
+            >
+              {p.logoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={p.logoUrl}
+                  alt={p.name}
+                  className="h-6 max-w-[80px] object-contain grayscale transition group-hover:grayscale-0"
+                />
+              ) : (
+                <span className="text-[12px] font-semibold text-cart-ink-3 transition group-hover:text-white">
+                  {p.name}
+                </span>
+              )}
+            </a>
+          ) : (
+            <div
+              key={p.id}
+              title={p.name}
+              className="flex h-10 items-center overflow-hidden rounded-xl border border-cart-line bg-cart-bg-elev px-3"
+            >
+              {p.logoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={p.logoUrl}
+                  alt={p.name}
+                  className="h-6 max-w-[80px] object-contain grayscale"
+                />
+              ) : (
+                <span className="text-[12px] font-semibold text-cart-ink-3">{p.name}</span>
+              )}
+            </div>
+          )
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ============================== Sidebar extras (desktop) ============================== */
+
+function SidebarVenueThumbnail({ url, venue }: { url: string; venue: string | null }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-3">
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="group w-full overflow-hidden rounded-2xl border border-cart-line bg-cart-bg-elev transition hover:border-cart-line-strong"
+      >
+        <div className="relative aspect-[16/7] w-full">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={url}
+            alt={venue ? `Plano de ${venue}` : "Plano del local"}
+            className="absolute inset-0 size-full object-cover opacity-80 transition group-hover:opacity-100"
+          />
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+          <div className="absolute inset-x-0 bottom-0 flex items-center justify-between px-3 pb-2.5">
+            <span className="text-[11.5px] font-semibold text-white">Ver plano del local</span>
+            <span className="grid size-7 place-items-center rounded-full bg-white/15 text-white backdrop-blur-md">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                <path d="M3 7V3h4M13 9v4h-4M3 3l4.5 4.5M13 13l-4.5-4.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              </svg>
+            </span>
+          </div>
+        </div>
+      </button>
+      <VenueLayoutModal
+        open={open}
+        onOpenChange={setOpen}
+        url={url}
+        caption={venue ? `${venue} · Referencial` : "Referencial"}
+      />
+    </div>
+  );
+}
+
+function SidebarMoreFromOrg({ org, events }: { org: ShowcaseOrg; events: ShowcaseEvent[] }) {
+  const shown = events.slice(0, 3);
+  return (
+    <div className="mt-4">
+      <div className="mb-2.5 flex items-baseline justify-between">
+        <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">
+          Más de {org.name}
+        </span>
+        <Link href={`/${org.slug}` as never} className="text-[11.5px] font-medium text-cart-accent">
+          Ver todo
+        </Link>
+      </div>
+      <div className="flex flex-col gap-2">
+        {shown.map((e) => (
+          <Link
+            key={e.slug}
+            href={`/events/${e.slug}` as never}
+            className="flex items-center gap-3 rounded-2xl border border-cart-line bg-cart-bg-elev px-3 py-2.5 transition hover:border-cart-line-strong"
+          >
+            <div className="size-12 shrink-0 overflow-hidden rounded-xl bg-cart-bg-elev-2"
+              style={!e.coverUrl ? { background: `linear-gradient(135deg, ${org.brandColor ?? "#7C3AED"}, #1A0A2E)` } : undefined}
+            >
+              {e.coverUrl && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={e.coverUrl} alt={e.title} className="size-full object-cover" />
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="line-clamp-1 text-[13px] font-semibold">{e.title}</div>
+              <div className="mt-0.5 text-[11px] text-cart-ink-3">{formatShowcaseDate(e.startsAt)}</div>
+            </div>
+          </Link>
+        ))}
+      </div>
     </div>
   );
 }

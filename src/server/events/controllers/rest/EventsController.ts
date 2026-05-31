@@ -28,6 +28,12 @@ import {
   removeEventCoOrganizer,
   type EventCoOrganizer,
 } from "../../application/EventCoOrganizers";
+import {
+  addEventPartner,
+  listEventPartners,
+  removeEventPartner,
+  type EventPartner,
+} from "../../application/EventPartners";
 import { supabaseOrganizationRepository } from "@/server/identity/organizations/infrastructure/repositories/SupabaseOrganizationRepository";
 import type { Event, Promo, TicketType } from "../../domain/Event";
 import type { EventStats, ScanFeedItem } from "../../ports/EventRepository";
@@ -292,6 +298,34 @@ export const EventsController = {
     const guard = await guardEventMember(slug, ["owner", "admin", "editor"]);
     if (!guard.ok) return err(guard.error);
     return removeEventCoOrganizer(guard.value.event.id, profileId);
+  },
+
+  async listPartners(slug: string): Promise<Result<EventPartner[]>> {
+    const found = await getEventBySlug({ repo }, slug);
+    if (!found) return err("not_found");
+    return ok(await listEventPartners(found.event.id));
+  },
+
+  async addPartner(slug: string, input: unknown): Promise<Result<EventPartner>> {
+    const guard = await guardEventMember(slug, ["owner", "admin", "editor"]);
+    if (!guard.ok) return err(guard.error);
+    const parsed = z
+      .object({
+        name: z.string().min(1).max(120),
+        logoUrl: z.string().url().nullable().optional(),
+        websiteUrl: z.string().url().nullable().optional(),
+      })
+      .safeParse(input);
+    if (!parsed.success) return err("invalid_input");
+    const partner = await addEventPartner(guard.value.event.id, parsed.data);
+    return ok(partner);
+  },
+
+  async removePartner(slug: string, partnerId: string): Promise<Result<null>> {
+    const guard = await guardEventMember(slug, ["owner", "admin", "editor"]);
+    if (!guard.ok) return err(guard.error);
+    await removeEventPartner(partnerId, guard.value.event.id);
+    return ok(null);
   },
 
   // Cross-sell público: productora del evento + sus otros eventos próximos.
