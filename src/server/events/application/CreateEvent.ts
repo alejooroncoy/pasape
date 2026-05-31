@@ -8,7 +8,7 @@ type Deps = { repo: EventRepository };
 
 type TicketTypeInput = {
   name: string;
-  kind: "general" | "presale" | "vip" | "box";
+  kind: "general" | "vip" | "box";
   priceCents: number;
   capacity: number;
   /** Etiqueta del box (A, B, VIP-1). Requerido cuando kind === "box". */
@@ -17,6 +17,12 @@ type TicketTypeInput = {
   zone?: string | null;
   /** Cómo llamar a la unidad reservable (box, mesa, lounge...). Opcional. */
   unitNoun?: string | null;
+  /** Cierre de venta del tipo (no de la preventa). Opcional. */
+  saleEndsAt?: string | null;
+  /** PREVENTA: precio bajo al arrancar. null = sin preventa. */
+  presalePriceCents?: number | null;
+  presaleQty?: number | null;
+  presaleEndsAt?: string | null;
 };
 
 export const createEvent = async (
@@ -47,6 +53,10 @@ export const createEvent = async (
       zone: tt.zone?.trim() || null,
       unit_noun:
         tt.kind === "box" && tt.unitNoun?.trim() ? tt.unitNoun.trim() : null,
+      sale_ends_at: tt.saleEndsAt ?? null,
+      presale_price_cents: tt.presalePriceCents ?? null,
+      presale_qty: tt.presaleQty ?? null,
+      presale_ends_at: tt.presaleEndsAt ?? null,
     })),
   );
   if (error) return err(error.message);

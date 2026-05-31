@@ -12,6 +12,8 @@ import { AnimatePresence, motion } from "motion/react";
 import { useRouter } from "@/i18n/navigation";
 import { useCreateEvent } from "@/lib/events/hooks/useCreateEvent";
 import { useUpdateEvent } from "@/lib/events/hooks/useUpdateEvent";
+import { useEvent } from "@/lib/events/hooks/useEvents";
+import { useSetPromos, type PromoDraft } from "@/lib/events/hooks/usePromos";
 import {
   useCreateTicketType,
   useDeleteTicketType,
@@ -26,6 +28,7 @@ import { VenueInput, type VenueValue } from "@/components/ui/VenueInput";
 import type { OrgPromoter } from "@/server/promoters/domain/OrgPromoter";
 import type {
   Event as EventDomain,
+  PromoKind,
   TicketType,
   TicketTypeKind,
 } from "@/server/events/domain/Event";
@@ -50,8 +53,14 @@ type TicketRow = {
   zone: string;
   /** Cómo llama el organizador a la unidad reservable: box, mesa, lounge u otro. */
   unitNoun: string;
-  /** ISO 8601. Cierre de ventas de este tipo (solo relevante para kind=presale). */
+  /** ISO 8601. Cierre de ventas de este tipo. */
   saleEndsAt: string;
+  /** PREVENTA (form): precio en soles al arrancar. vacío = sin preventa. */
+  presalePriceSoles?: string;
+  /** PREVENTA (form): "primeras N". vacío = sin límite por stock. */
+  presaleQty?: string;
+  /** PREVENTA (form): ISO de cierre de la preventa por fecha. vacío = sin fecha. */
+  presaleEndsAt?: string;
 };
 
 export type ComposerMode = "create" | "edit";
@@ -79,9 +88,15 @@ const uid = () => Math.random().toString(36).slice(2, 9);
 const toCents = (s: string) => Math.round(Number(s || "0") * 100);
 const fromCents = (n: number) => (n / 100).toString();
 
+/** Campos de preventa del row → payload (null cuando no hay preventa). */
+const presalePayload = (t: TicketRow) => ({
+  presalePriceCents: t.presalePriceSoles?.trim() ? toCents(t.presalePriceSoles) : null,
+  presaleQty: t.presaleQty?.trim() ? Number(t.presaleQty) : null,
+  presaleEndsAt: t.presaleEndsAt?.trim() || null,
+});
+
 const TICKET_KIND_META: Record<TicketKind, { label: string; tint: string }> = {
   general: { label: "General", tint: "rgba(184,124,255,0.55)" },
-  presale: { label: "Preventa", tint: "rgba(56,189,248,0.55)" },
   vip: { label: "VIP", tint: "rgba(255,206,59,0.55)" },
   box: { label: "Box", tint: "rgba(34,209,127,0.55)" },
 };
@@ -159,6 +174,23 @@ export function EventComposer(props: EventComposerProps) {
   const createTT = useCreateTicketType(editSlug);
   const updateTT = useUpdateTicketType(editSlug);
   const deleteTT = useDeleteTicketType(editSlug);
+  const setPromosMut = useSetPromos(editSlug);
+  // Promos actuales (solo en edit; en create useEvent no fetchea por slug "").
+  const eventQuery = useEvent(editSlug);
+  const [promos, setPromos] = useState<PromoDraft[]>([]);
+  const promosSeeded = useRef(false);
+  useEffect(() => {
+    if (!promosSeeded.current && eventQuery.data?.promos) {
+      setPromos(
+        eventQuery.data.promos.map((p) => ({
+          ticketTypeId: p.ticketTypeId,
+          kind: p.kind,
+          endsAt: p.endsAt,
+        })),
+      );
+      promosSeeded.current = true;
+    }
+  }, [eventQuery.data]);
 
   // ---------- refs para focus al campo faltante ----------
   const titleRef = useRef<HTMLInputElement>(null);
@@ -188,6 +220,9 @@ export function EventComposer(props: EventComposerProps) {
       zone: tt.zone ?? "",
       unitNoun: tt.unitNoun ?? "",
       saleEndsAt: tt.saleEndsAt ?? "",
+      presalePriceSoles: tt.presalePriceCents != null ? fromCents(tt.presalePriceCents) : "",
+      presaleQty: tt.presaleQty != null ? String(tt.presaleQty) : "",
+      presaleEndsAt: tt.presaleEndsAt ?? "",
     }));
     const endDt = ev.endsAt ? isoToDateTime(ev.endsAt, ev.timezone) : null;
     return {
@@ -269,7 +304,7 @@ export function EventComposer(props: EventComposerProps) {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [publishNow, setPublishNow] = useState(seedFromEdit?.publishNow ?? true);
   const [openSheet, setOpenSheet] = useState<
-    null | "tickets" | "promoters" | "description"
+    null | "tickets" | "promoters" | "description" | "promos"
   >(null);
   const [highlight, setHighlight] = useState<
     null | "nombre" | "fecha" | "hora" | "entradas"
@@ -397,6 +432,7 @@ export function EventComposer(props: EventComposerProps) {
         zone: t.zone.trim() || null,
         unitNoun: t.kind === "box" ? t.unitNoun.trim() || null : null,
         saleEndsAt: t.saleEndsAt || null,
+        ...presalePayload(t),
       }));
 
       let venueLayoutUrl: string | null = null;
@@ -559,6 +595,7 @@ export function EventComposer(props: EventComposerProps) {
           zone: t.zone.trim() || null,
           unitNoun: t.kind === "box" ? t.unitNoun.trim() || null : null,
           saleEndsAt: t.saleEndsAt || null,
+          ...presalePayload(t),
         });
       }
 
@@ -582,6 +619,13 @@ export function EventComposer(props: EventComposerProps) {
         if (nextNoun !== orig.unitNoun) ttPatch.unitNoun = nextNoun;
         const nextSaleEndsAt = t.saleEndsAt || null;
         if (nextSaleEndsAt !== orig.saleEndsAt) ttPatch.saleEndsAt = nextSaleEndsAt;
+        const nextPresale = presalePayload(t);
+        if (nextPresale.presalePriceCents !== orig.presalePriceCents)
+          ttPatch.presalePriceCents = nextPresale.presalePriceCents;
+        if (nextPresale.presaleQty !== orig.presaleQty)
+          ttPatch.presaleQty = nextPresale.presaleQty;
+        if (nextPresale.presaleEndsAt !== orig.presaleEndsAt)
+          ttPatch.presaleEndsAt = nextPresale.presaleEndsAt;
         if (Object.keys(ttPatch).length > 0) {
           await updateTT.mutateAsync({ id: t.id!, input: ttPatch });
         }
@@ -593,6 +637,12 @@ export function EventComposer(props: EventComposerProps) {
           await deleteTT.mutateAsync(origId);
         }
       }
+
+      // Guardar promos (reemplazo total). Solo las que apuntan a una entrada real.
+      const validTicketIds = new Set(validTickets.map((t) => t.id).filter(Boolean));
+      await setPromosMut.mutateAsync(
+        promos.filter((p) => validTicketIds.has(p.ticketTypeId)),
+      );
 
       props.onClose?.();
     } catch (e) {
@@ -821,6 +871,21 @@ export function EventComposer(props: EventComposerProps) {
             highlight={highlight === "entradas"}
           />
 
+          {/* Promociones — 2x1 / 3x2. Solo en edit: requiere entradas con id. */}
+          {isEdit && (
+            <CardButton
+              icon={<IconTag />}
+              label="Promociones"
+              hint={
+                promos.length
+                  ? `${promos.length} ${promos.length === 1 ? "promo" : "promos"} activas`
+                  : "Opcional — 2x1, 3x2 para llenar más rápido"
+              }
+              onClick={() => setOpenSheet("promos")}
+              active={promos.length > 0}
+            />
+          )}
+
           {/* Promotores (solo en create — en edit usar pestaña Equipo) */}
           {!isEdit && (
             <CardButton
@@ -961,6 +1026,15 @@ export function EventComposer(props: EventComposerProps) {
         {openSheet === "description" && (
           <Sheet onClose={() => setOpenSheet(null)} title="Descripción">
             <DescriptionEditor value={description} onChange={setDescription} />
+          </Sheet>
+        )}
+        {openSheet === "promos" && (
+          <Sheet onClose={() => setOpenSheet(null)} title="Promociones">
+            <PromosEditor
+              tickets={tickets.filter((t) => t.id)}
+              promos={promos}
+              onChange={setPromos}
+            />
           </Sheet>
         )}
       </AnimatePresence>
@@ -1371,66 +1445,108 @@ function Sheet({
 }
 
 // ============================================================
-// SaleEndsAtPicker — cierre automático de ventas por tipo
+// PresalePicker — preventa pegada a cada entrada/box. Lee/escribe el TicketRow.
+// "Las primeras N a S/X" (stock) y/o "que termine antes de [fecha]". Para box
+// individual se oculta el "primeras N" (showQty=false).
 // ============================================================
-function SaleEndsAtPicker({
-  value,
+function PresalePicker({
+  row,
+  base,
+  cupos,
   onChange,
+  showQty = true,
+  leadIn = "Las primeras",
+  unitWord = "entradas",
 }: {
-  value: string;
-  onChange: (iso: string) => void;
+  row: TicketRow;
+  base: string;
+  cupos: string;
+  onChange: (patch: Partial<TicketRow>) => void;
+  showQty?: boolean;
+  leadIn?: string;
+  unitWord?: string;
 }) {
-  const [date, setDate] = useState(() => (value ? value.slice(0, 10) : ""));
-  const [time, setTime] = useState(() => {
-    if (!value) return "";
-    const d = new Date(value);
-    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-  });
-
-  const sync = (d: string, t: string) => {
-    if (d && t) onChange(new Date(`${d}T${t}:00`).toISOString());
-    else onChange("");
-  };
-
+  const price = row.presalePriceSoles ?? "";
+  const qty = row.presaleQty ?? "";
+  const untilIso = row.presaleEndsAt ?? "";
+  const [open, setOpen] = useState(() => !!price.trim());
+  const untilDate = untilIso ? untilIso.slice(0, 10) : "";
+  const numInput =
+    "w-[64px] rounded-lg bg-cart-bg-elev-2 px-2.5 py-1.5 text-right text-[13.5px] font-semibold text-white outline-none ring-1 ring-cart-line focus:ring-cart-accent";
+  const setUntilFromDate = (d: string) =>
+    onChange({ presaleEndsAt: d ? new Date(`${d}T23:59:00`).toISOString() : "" });
   return (
-    <div className="mt-2 rounded-xl bg-cart-bg-elev px-3 py-2">
-      <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-400/80">
-        Cierre de preventa
-      </div>
-      <div className="grid grid-cols-2 gap-2">
-        <DatePicker
-          value={date}
-          onChange={(v) => { setDate(v); sync(v, time); }}
-          placeholder="Fecha límite"
+    <div className="mt-2">
+      <label className="flex cursor-pointer items-center gap-2.5 rounded-xl bg-cart-bg-elev px-3 py-2.5">
+        <input
+          type="checkbox"
+          checked={open}
+          onChange={(e) => {
+            const on = e.target.checked;
+            setOpen(on);
+            if (!on) onChange({ presalePriceSoles: "", presaleQty: "", presaleEndsAt: "" });
+          }}
+          className="size-4 accent-[var(--color-cart-accent)]"
         />
-        <TimePicker
-          value={time}
-          onChange={(v) => { setTime(v); sync(date, v); }}
-          placeholder="Hora"
-        />
-      </div>
-      {date && time ? (
-        <div className="mt-2 flex items-center justify-between">
-          <span className="text-[10.5px] text-cart-ink-3">
-            Ventas cierran el{" "}
-            {new Date(`${date}T${time}:00`).toLocaleDateString("es-PE", {
-              day: "numeric",
-              month: "short",
-              year: "numeric",
-            })}
-          </span>
-          <button
-            type="button"
-            onClick={() => { setDate(""); setTime(""); onChange(""); }}
-            className="text-[10px] text-cart-ink-4 transition hover:text-white"
-          >
-            Quitar
-          </button>
+        <span className="text-[13px] font-medium text-white">
+          Preventa: precio más bajo al arrancar
+        </span>
+      </label>
+      {open && (
+        <div className="mt-1.5 rounded-xl bg-cart-bg-elev px-3 py-3">
+          {showQty ? (
+            <>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-2 text-[13px] text-cart-ink-2">
+                <span>{leadIn}</span>
+                <input
+                  inputMode="numeric"
+                  value={qty}
+                  onChange={(e) => onChange({ presaleQty: e.target.value.replace(/[^0-9]/g, "") })}
+                  placeholder={cupos || "50"}
+                  className={numInput}
+                />
+                <span>{unitWord} a</span>
+                <span className="text-cart-ink-4">S/</span>
+                <input
+                  inputMode="decimal"
+                  value={price}
+                  onChange={(e) => onChange({ presalePriceSoles: e.target.value.replace(/[^0-9.]/g, "") })}
+                  placeholder="30"
+                  className={numInput}
+                />
+              </div>
+              <p className="mt-1.5 text-[11.5px] text-cart-ink-4">
+                Cuando se agoten, sube a S/ {base || "—"}.
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-2 text-[13px] text-cart-ink-2">
+                <span>En preventa cuesta</span>
+                <span className="text-cart-ink-4">S/</span>
+                <input
+                  inputMode="decimal"
+                  value={price}
+                  onChange={(e) => onChange({ presalePriceSoles: e.target.value.replace(/[^0-9.]/g, "") })}
+                  placeholder="1500"
+                  className={numInput}
+                />
+              </div>
+              <p className="mt-1.5 text-[11.5px] text-cart-ink-4">
+                Después sube a S/ {base || "—"}.
+              </p>
+            </>
+          )}
+          <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-2 border-t border-cart-line pt-2.5 text-[13px] text-cart-ink-2">
+            <span className="text-cart-ink-3">{showQty ? "…o que termine antes de" : "Hasta el"}</span>
+            <div className="min-w-[140px] flex-1">
+              <DatePicker value={untilDate} onChange={setUntilFromDate} placeholder="elige fecha · opcional" />
+            </div>
+          </div>
+          <p className="mt-2 text-[11.5px] text-cart-ink-4">
+            El comprador verá “Preventa” mientras esté vigente.
+          </p>
         </div>
-      ) : (
-        <p className="mt-1.5 text-[10.5px] text-cart-ink-4">
-          Sin fecha límite — se vende hasta que el evento cierre o se agote.
-        </p>
       )}
     </div>
   );
@@ -1446,6 +1562,8 @@ function BoxGroupEditor({
   onUpdateOne,
   onRemove,
   onAddOne,
+  presaleRow,
+  onPresaleChange,
 }: {
   boxes: TicketRow[];
   canDelete: boolean;
@@ -1454,6 +1572,8 @@ function BoxGroupEditor({
   onUpdateOne: (rowKey: string, patch: Partial<TicketRow>) => void;
   onRemove: (rowKey: string) => void;
   onAddOne: () => void;
+  presaleRow: TicketRow;
+  onPresaleChange: (patch: Partial<TicketRow>) => void;
 }) {
   const first = boxes[0]!;
   const rawNoun = first.unitNoun || "Box";
@@ -1517,7 +1637,7 @@ function BoxGroupEditor({
         <input
           value={first.zone}
           onChange={(e) => onUpdateAll({ zone: e.target.value })}
-          placeholder="Opcional"
+          placeholder="Opcional — ej. Platinum, VIP"
           maxLength={60}
           list="box-group-zones"
           className="w-full bg-transparent text-[13.5px] text-white outline-none placeholder:text-cart-ink-4"
@@ -1595,6 +1715,15 @@ function BoxGroupEditor({
           </button>
         </div>
       </div>
+
+      {/* Preventa del grupo — precio bajo + fecha, dentro de la tarjeta. */}
+      <PresalePicker
+        row={presaleRow}
+        base={presaleRow.priceSoles}
+        cupos={String(boxes.length)}
+        showQty={false}
+        onChange={onPresaleChange}
+      />
     </div>
   );
 }
@@ -1626,7 +1755,7 @@ function TicketsEditor({
         rowKey: uid(),
         name: meta.label,
         priceSoles:
-          kind === "vip" ? "80" : kind === "box" ? "200" : kind === "presale" ? "20" : "30",
+          kind === "vip" ? "80" : kind === "box" ? "200" : "30",
         capacity: kind === "box" ? "8" : "100",
         kind,
         boxLabel:
@@ -1651,6 +1780,17 @@ function TicketsEditor({
 
   const nonBoxTickets = tickets.filter((t) => t.kind !== "box");
   const boxTickets = tickets.filter((t) => t.kind === "box");
+  // Un grupo por tipo de unidad (boxes, mesas, lounges…) — no todo en una tarjeta.
+  const boxGroups = (() => {
+    const map = new Map<string, TicketRow[]>();
+    for (const b of boxTickets) {
+      const key = b.unitNoun.trim().toLowerCase() || "box";
+      const arr = map.get(key) ?? [];
+      arr.push(b);
+      map.set(key, arr);
+    }
+    return Array.from(map.values());
+  })();
 
   return (
     <div className="flex flex-col gap-3 pb-4">
@@ -1721,48 +1861,50 @@ function TicketsEditor({
                 ))}
             </datalist>
           </label>
-          {t.kind === "presale" && (
-            <SaleEndsAtPicker
-              value={t.saleEndsAt}
-              onChange={(v) => update(t.rowKey, { saleEndsAt: v })}
-            />
-          )}
+          <PresalePicker row={t} base={t.priceSoles} cupos={t.capacity} onChange={(patch) => update(t.rowKey, patch)} />
         </div>
       ))}
 
-      {/* Boxes agrupados: 2+ → tarjeta única con edición masiva */}
-      {boxTickets.length >= 2 && (
-        <BoxGroupEditor
-          boxes={boxTickets}
-          canDelete={tickets.length > 1}
-          knownZones={knownZones}
-          onUpdateAll={(patch) => updateAll(boxTickets.map((b) => b.rowKey), patch)}
-          onUpdateOne={(rowKey, patch) => update(rowKey, patch)}
-          onRemove={(rowKey) => remove(rowKey)}
-          onAddOne={() => {
-            const next = String.fromCharCode(65 + boxTickets.length);
-            const first = boxTickets[0];
-            setTickets([
-              ...tickets,
-              {
-                rowKey: uid(),
-                name: `${first?.unitNoun ? first.unitNoun.charAt(0).toUpperCase() + first.unitNoun.slice(1) : "Box"} ${next}`,
-                priceSoles: first?.priceSoles ?? "1500",
-                capacity: first?.capacity ?? "12",
-                kind: "box",
-                boxLabel: `${first?.unitNoun ? first.unitNoun.charAt(0).toUpperCase() + first.unitNoun.slice(1) : "Box"} ${next}`,
-                zone: first?.zone ?? "",
-                unitNoun: first?.unitNoun ?? "",
-                saleEndsAt: "",
-              },
-            ]);
-          }}
-        />
-      )}
-
-      {/* Si solo hay 1 box, mostrarlo como tarjeta individual normal */}
-      {boxTickets.length === 1 &&
-        boxTickets.map((t) => (
+      {/* Un grupo por tipo de unidad (Boxes, Mesas, Lounges…), no todo en uno */}
+      {boxGroups.map((group) => {
+        const first = group[0];
+        if (group.length >= 2) {
+          return (
+            <BoxGroupEditor
+              key={first.rowKey}
+              boxes={group}
+              canDelete={tickets.length > 1}
+              knownZones={knownZones}
+              onUpdateAll={(patch) => updateAll(group.map((b) => b.rowKey), patch)}
+              onUpdateOne={(rowKey, patch) => update(rowKey, patch)}
+              onRemove={(rowKey) => remove(rowKey)}
+              presaleRow={first}
+              onPresaleChange={(patch) => updateAll(group.map((b) => b.rowKey), patch)}
+              onAddOne={() => {
+                const next = String.fromCharCode(65 + group.length);
+                const nounCap = first.unitNoun
+                  ? first.unitNoun.charAt(0).toUpperCase() + first.unitNoun.slice(1)
+                  : "Box";
+                setTickets([
+                  ...tickets,
+                  {
+                    rowKey: uid(),
+                    name: `${nounCap} ${next}`,
+                    priceSoles: first.priceSoles,
+                    capacity: first.capacity,
+                    kind: "box",
+                    boxLabel: `${nounCap} ${next}`,
+                    zone: first.zone,
+                    unitNoun: first.unitNoun,
+                    saleEndsAt: "",
+                  },
+                ]);
+              }}
+            />
+          );
+        }
+        const t = first;
+        return (
           <div
             key={t.rowKey}
             className="rounded-2xl border border-cart-line bg-cart-bg-elev-2 p-3"
@@ -1807,15 +1949,16 @@ function TicketsEditor({
             <UnitNounPicker value={t.unitNoun} onChange={(v) => update(t.rowKey, { unitNoun: v })} />
             <label className="mt-2 flex items-center gap-2 rounded-xl bg-cart-bg-elev px-3 py-2">
               <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">Zona</span>
-              <input value={t.zone} onChange={(e) => update(t.rowKey, { zone: e.target.value })} placeholder="Opcional" maxLength={60} className="w-full bg-transparent text-[13.5px] text-white outline-none placeholder:text-cart-ink-4" />
+              <input value={t.zone} onChange={(e) => update(t.rowKey, { zone: e.target.value })} placeholder="Opcional — ej. Platinum, VIP" maxLength={60} className="w-full bg-transparent text-[13.5px] text-white outline-none placeholder:text-cart-ink-4" />
             </label>
+            {/* Preventa de un box: precio bajo + fecha (un box es 1 unidad) */}
+            <PresalePicker row={t} base={t.priceSoles} cupos="1" showQty={false} onChange={(patch) => update(t.rowKey, patch)} />
           </div>
-        ))
-      }
+        );
+      })}
 
       <div className="flex flex-wrap gap-2">
         <AddKindButton kind="general" onClick={() => add("general")} />
-        <AddKindButton kind="presale" onClick={() => add("presale")} />
         <AddKindButton kind="vip" onClick={() => add("vip")} />
         <AddKindButton kind="box" onClick={() => add("box")} />
         <button
@@ -1869,7 +2012,7 @@ function KindPicker({
   onChange: (k: TicketKind) => void;
 }) {
   const meta = TICKET_KIND_META[value];
-  const order: TicketKind[] = ["general", "presale", "vip", "box"];
+  const order: TicketKind[] = ["general", "vip", "box"];
   const next = () => {
     const idx = order.indexOf(value);
     onChange(order[(idx + 1) % order.length]);
@@ -2346,7 +2489,7 @@ function BulkBoxCreator({
               <input
                 value={zone}
                 onChange={(e) => setZone(e.target.value)}
-                placeholder="Ej: Boxes Premium 1er Piso"
+                placeholder="Ej. Platinum, VIP, Terraza"
                 list="bulk-zones"
                 maxLength={60}
                 className="w-full rounded-xl border border-cart-line bg-cart-bg-elev-2 px-3 py-2.5 text-[14px] text-white outline-none placeholder:text-cart-ink-4 focus:border-cart-accent"
@@ -2667,5 +2810,130 @@ function BulkNumberField({
       />
       {hint && <span className="text-[9.5px] text-cart-ink-4">{hint}</span>}
     </label>
+  );
+}
+
+// ============================================================
+// IconTag / PromosEditor — Promociones 2x1 / 3x2 (sección aparte de preventa).
+// ============================================================
+function IconTag() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 14 14" fill="none">
+      <path
+        d="M2 2.5h4.2L12 8.3l-3.7 3.7L2.5 6.2V2.5z"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinejoin="round"
+      />
+      <circle cx="4.6" cy="4.6" r="0.9" fill="currentColor" />
+    </svg>
+  );
+}
+
+const PROMO_COPY: Record<PromoKind, string> = {
+  "2x1": "Llevan 2, pagan 1",
+  "3x2": "Llevan 3, pagan 2",
+};
+
+function PromosEditor({
+  tickets,
+  promos,
+  onChange,
+}: {
+  tickets: TicketRow[];
+  promos: PromoDraft[];
+  onChange: (next: PromoDraft[]) => void;
+}) {
+  const options = tickets.filter((t) => t.kind !== "box" && t.id);
+  const nameOf = (id: string) => options.find((o) => o.id === id)?.name || "—";
+  const add = (kind: PromoKind) =>
+    onChange([...promos, { ticketTypeId: options[0]?.id ?? "", kind, endsAt: null }]);
+  const patch = (i: number, p: Partial<PromoDraft>) =>
+    onChange(promos.map((x, idx) => (idx === i ? { ...x, ...p } : x)));
+  const remove = (i: number) => onChange(promos.filter((_, idx) => idx !== i));
+
+  return (
+    <div className="flex flex-col gap-3 pb-4">
+      {options.length === 0 && (
+        <p className="rounded-2xl border border-cart-line bg-cart-bg-elev-2 px-4 py-5 text-center text-[13px] text-cart-ink-3">
+          Primero crea una entrada. Las promos se aplican sobre una entrada.
+        </p>
+      )}
+      {promos.length === 0 && options.length > 0 && (
+        <p className="px-1 text-[12.5px] leading-relaxed text-cart-ink-4">
+          Ofertas para llenar más rápido. Ej: “2x1 en General hasta el viernes”.
+        </p>
+      )}
+
+      {promos.map((promo, i) => (
+        <div key={i} className="rounded-2xl border border-cart-line bg-cart-bg-elev-2 p-3">
+          <div className="flex items-center gap-2">
+            <span
+              className="rounded-lg px-2.5 py-1 text-[13px] font-bold tracking-wide"
+              style={{ background: "rgba(184,124,255,0.15)", color: "var(--color-cart-accent)" }}
+            >
+              {promo.kind}
+            </span>
+            <span className="text-[13px] text-cart-ink-3">en</span>
+            <select
+              value={promo.ticketTypeId}
+              onChange={(e) => patch(i, { ticketTypeId: e.target.value })}
+              className="flex-1 rounded-lg bg-cart-bg-elev px-2.5 py-1.5 text-[13.5px] font-semibold text-white outline-none ring-1 ring-cart-line focus:ring-cart-accent"
+            >
+              {options.map((o) => (
+                <option key={o.id} value={o.id!}>
+                  {o.name || "Entrada"}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => remove(i)}
+              className="grid size-7 place-items-center rounded-full text-cart-ink-3 transition hover:bg-white/5 hover:text-red-300"
+              aria-label="Eliminar promo"
+            >
+              <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
+                <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              </svg>
+            </button>
+          </div>
+          <p className="mt-2 text-[12px] text-cart-ink-3">
+            {PROMO_COPY[promo.kind]} · en {nameOf(promo.ticketTypeId)}
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-[13px] text-cart-ink-2">
+            <span className="text-cart-ink-3">Hasta</span>
+            <div className="min-w-[150px] flex-1">
+              <DatePicker
+                value={promo.endsAt ? promo.endsAt.slice(0, 10) : ""}
+                onChange={(d) =>
+                  patch(i, { endsAt: d ? new Date(`${d}T23:59:00`).toISOString() : null })
+                }
+                placeholder="elige fecha · opcional"
+              />
+            </div>
+          </div>
+          <p className="mt-1.5 text-[11px] text-cart-ink-4">Sin fecha = vale toda la venta.</p>
+        </div>
+      ))}
+
+      {options.length > 0 && (
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => add("2x1")}
+            className="flex-1 rounded-xl border border-dashed border-cart-line py-2.5 text-[13px] font-semibold text-cart-ink-2 transition hover:border-white/25 hover:text-white"
+          >
+            + 2x1
+          </button>
+          <button
+            type="button"
+            onClick={() => add("3x2")}
+            className="flex-1 rounded-xl border border-dashed border-cart-line py-2.5 text-[13px] font-semibold text-cart-ink-2 transition hover:border-white/25 hover:text-white"
+          >
+            + 3x2
+          </button>
+        </div>
+      )}
+    </div>
   );
 }

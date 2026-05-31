@@ -4,6 +4,12 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/_shared/api-client";
 import type { TicketType, TicketTypeKind } from "@/server/events/domain/Event";
 
+type PresalePayload = {
+  presalePriceCents?: number | null;
+  presaleQty?: number | null;
+  presaleEndsAt?: string | null;
+};
+
 export type CreateTicketTypePayload = {
   name: string;
   kind: TicketTypeKind;
@@ -13,7 +19,7 @@ export type CreateTicketTypePayload = {
   zone?: string | null;
   unitNoun?: string | null;
   saleEndsAt?: string | null;
-};
+} & PresalePayload;
 
 export type UpdateTicketTypePayload = {
   name?: string;
@@ -23,7 +29,7 @@ export type UpdateTicketTypePayload = {
   zone?: string | null;
   unitNoun?: string | null;
   saleEndsAt?: string | null;
-};
+} & PresalePayload;
 
 const invalidate = (qc: ReturnType<typeof useQueryClient>, slug: string) => {
   qc.invalidateQueries({ queryKey: ["events", "detail", slug] });

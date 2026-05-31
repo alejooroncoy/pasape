@@ -1,4 +1,4 @@
-import type { Event, EventStatus, TicketType } from "../domain/Event";
+import type { Event, EventStatus, Promo, PromoKind, TicketType } from "../domain/Event";
 import type { Result } from "@/server/_shared/result";
 
 export type CreateEventInput = {
@@ -98,6 +98,9 @@ export type CreateTicketTypeInput = {
   zone?: string | null;
   unitNoun?: string | null;
   saleEndsAt?: string | null;
+  presalePriceCents?: number | null;
+  presaleQty?: number | null;
+  presaleEndsAt?: string | null;
 };
 
 export type UpdateTicketTypeInput = {
@@ -108,6 +111,16 @@ export type UpdateTicketTypeInput = {
   zone?: string | null;
   unitNoun?: string | null;
   saleEndsAt?: string | null;
+  presalePriceCents?: number | null;
+  presaleQty?: number | null;
+  presaleEndsAt?: string | null;
+};
+
+/** Una promo por entrada (la última gana). null en kind = sin promo. */
+export type PromoInput = {
+  ticketTypeId: string;
+  kind: PromoKind;
+  endsAt?: string | null;
 };
 
 export type UpdateEventInput = {
@@ -163,7 +176,9 @@ export interface EventRepository {
   listPublished(limit: number, cursor: string | null): Promise<Event[]>;
   listByOrganization(orgId: string): Promise<Event[]>;
   listByOrgSlug(orgSlug: string): Promise<Event[]>;
-  getBySlug(slug: string): Promise<{ event: Event; ticketTypes: TicketType[] } | null>;
+  getBySlug(
+    slug: string,
+  ): Promise<{ event: Event; ticketTypes: TicketType[]; promos: Promo[] } | null>;
   create(input: CreateEventInput): Promise<Result<Event>>;
   publish(eventId: string, orgId: string): Promise<Result<Event>>;
   update(eventId: string, orgId: string, input: UpdateEventInput): Promise<Result<Event>>;
@@ -175,6 +190,9 @@ export interface EventRepository {
   ): Promise<Result<TicketType>>;
   deleteTicketType(ticketTypeId: string, eventId: string): Promise<Result<{ id: string }>>;
   getTicketType(ticketTypeId: string, eventId: string): Promise<TicketType | null>;
+  listPromos(eventId: string): Promise<Promo[]>;
+  /** Reemplaza todas las promos del evento por las dadas. */
+  setPromos(eventId: string, promos: PromoInput[]): Promise<Result<Promo[]>>;
   getStats(eventId: string): Promise<EventStats>;
   listScans(eventId: string, limit: number): Promise<ScanFeedItem[]>;
   exportData(eventId: string): Promise<{

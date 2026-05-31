@@ -9,6 +9,8 @@ type Row = {
   name: string;
   logo_url: string | null;
   brand_color: string | null;
+  description: string | null;
+  instagram: string | null;
   legal_entity_id: string;
   timezone: string;
   created_by: string;
@@ -21,6 +23,8 @@ const toDomain = (r: Row): Organization => ({
   name: r.name,
   logoUrl: r.logo_url,
   brandColor: r.brand_color,
+  description: r.description ?? null,
+  instagram: r.instagram ?? null,
   legalEntityId: r.legal_entity_id,
   timezone: r.timezone,
   createdBy: r.created_by,
@@ -70,6 +74,42 @@ export const supabaseOrganizationRepository: OrganizationRepository = {
     const db = supabaseAdmin();
     const { data } = await db.from("organizations").select("*").eq("slug", slug).maybeSingle<Row>();
     return data ? toDomain(data) : null;
+  },
+
+  async update(input): Promise<Result<Organization>> {
+    const db = supabaseAdmin();
+    // Verifica que el caller administre la org (owner|admin|editor) vía el
+    // resolvedor de roles efectivos por scope.
+    const mine = await this.listByMember(input.callerId);
+    const target = mine.find((o) => o.id === input.id);
+    if (!target) return err("forbidden");
+    if (!["owner", "admin", "editor"].includes(target.role)) return err("forbidden");
+
+    // Solo se incluyen las columnas presentes en el patch (undefined = no tocar).
+    const patch: Record<string, unknown> = {};
+    if (input.name !== undefined) patch.name = input.name;
+    if (input.slug !== undefined) patch.slug = input.slug;
+    if (input.logoUrl !== undefined) patch.logo_url = input.logoUrl;
+    if (input.brandColor !== undefined) patch.brand_color = input.brandColor;
+    if (input.description !== undefined) patch.description = input.description;
+    if (input.instagram !== undefined) patch.instagram = input.instagram;
+    if (Object.keys(patch).length === 0) {
+      const fresh = await this.findBySlug(target.slug);
+      return fresh ? ok(fresh) : err("org_not_found");
+    }
+
+    const { data, error } = await db
+      .from("organizations")
+      .update(patch)
+      .eq("id", input.id)
+      .select("*")
+      .single<Row>();
+    if (error || !data) {
+      // 23505 = unique_violation (slug duplicado).
+      if (error?.code === "23505") return err("slug_taken");
+      return err(error?.message ?? "org_update_failed");
+    }
+    return ok(toDomain(data));
   },
 
   async listByMember(profileId): Promise<Array<Organization & { role: OrgRole }>> {
