@@ -194,6 +194,17 @@ function BuyFlowInner({ params }: Props) {
       });
       setPreferenceId(res.preference.id);
       setOrderId(res.order.id);
+
+      // Órdenes gratuitas: la orden ya está pagada en el server.
+      // Saltar PayPhase e ir directo a processing con total=0.
+      if (total === 0) {
+        const emailQs = !isLogged && guestEmail.trim()
+          ? `&email=${encodeURIComponent(guestEmail.trim())}`
+          : "";
+        router.push(`/events/${slug}/processing?order=${res.order.id}&total=0${emailQs}`);
+        return;
+      }
+
       setPhase("pay");
       try {
         const url = new URL(window.location.href);
@@ -255,6 +266,7 @@ function BuyFlowInner({ params }: Props) {
     if (phase === "data") {
       if (!dataValid) return "Completa tus datos";
       if (!acompValid) return "Revisa los acompañantes";
+      if (total === 0) return "Confirmar entrada gratuita";
       return `Ir a pagar · ${formatMoney(total)}`;
     }
     return "Continuar";
@@ -363,7 +375,7 @@ function BuyFlowInner({ params }: Props) {
                   const emailQs = !isLogged && guestEmail.trim()
                     ? `&email=${encodeURIComponent(guestEmail.trim())}`
                     : "";
-                  router.push(`/events/${slug}/processing?order=${orderId}${emailQs}`);
+                  router.push(`/events/${slug}/processing?order=${orderId}&total=${total}&method=${payMethod}${emailQs}`);
                 }}
               />
             )}

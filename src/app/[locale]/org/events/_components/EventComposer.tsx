@@ -864,7 +864,7 @@ export function EventComposer(props: EventComposerProps) {
             label="Entradas"
             hint={
               validTickets.length
-                ? `${validTickets.length} ${validTickets.length === 1 ? "tipo" : "tipos"} · ${totalCapacity.toLocaleString("es-PE")} cupos · S/ ${totalMax.toLocaleString("es-PE")} máx`
+                ? `${validTickets.length} ${validTickets.length === 1 ? "tipo" : "tipos"} · ${totalCapacity.toLocaleString("es-PE")} cupos · hasta S/ ${totalMax.toLocaleString("es-PE")} potencial`
                 : "Crea al menos un tipo de entrada"
             }
             onClick={() => setOpenSheet("tickets")}
