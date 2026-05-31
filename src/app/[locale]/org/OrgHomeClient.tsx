@@ -3,6 +3,7 @@
 import { motion } from "motion/react";
 import { Link } from "@/i18n/navigation";
 import { useMyEvents } from "@/lib/events/hooks/useEvents";
+import { useEventStats } from "@/lib/events/hooks/useEventStats";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { useMyOrgs } from "@/lib/identity/organizations/hooks/useMyOrgs";
 import { formatDate, formatMoney } from "@/lib/_shared/format";
@@ -25,6 +26,10 @@ export function OrgHomeClient() {
   const draftCount = events.data?.filter((e) => e.status === "draft").length ?? 0;
   const totalCapacity =
     events.data?.reduce((sum, e) => sum + (e.capacity.totalCapacity ?? 0), 0) ?? 0;
+
+  // Revenue del evento activo (si hay uno publicado). Si hay varios, se suma el primero visible.
+  const liveStats = useEventStats(liveEvent?.slug ?? "");
+  const liveRevenue = liveStats.data?.revenueCents ?? 0;
 
   return (
     <OrgShell>
@@ -58,7 +63,7 @@ export function OrgHomeClient() {
             <StatCard label="Eventos" value={String(totalEvents)} hint={`${draftCount} en borrador`} />
             <StatCard label="Publicados" value={String(publishedCount)} tone="accent" />
             <StatCard label="Aforo total" value={totalCapacity.toLocaleString("es-PE")} />
-            <StatCard label="Recaudado" value={formatMoney(0)} hint="Este mes" tone="green" />
+            <StatCard label="Recaudado" value={liveEvent ? formatMoney(liveRevenue / 100) : "—"} hint={liveEvent ? liveEvent.title : "Sin evento activo"} tone="green" />
           </section>
 
           {liveEvent && (
