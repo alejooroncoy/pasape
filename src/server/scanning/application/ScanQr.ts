@@ -7,9 +7,9 @@ type Deps = { ticketRepo: TicketRepository };
 
 export const scanQr = async (
   { ticketRepo }: Deps,
-  input: { qrCode: string; scannerId: string },
+  input: { qrCode: string; scannerId: string; usedAt?: Date },
 ): Promise<Result<ScanResult>> => {
-  const result = await ticketRepo.markUsedByQr(input.qrCode, input.scannerId);
+  const result = await ticketRepo.markUsedByQr(input.qrCode, input.scannerId, input.usedAt);
   if (!result.ok) {
     return ok({
       kind: result.error === "already_used" ? "already_used" : "invalid",

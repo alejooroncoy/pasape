@@ -266,6 +266,69 @@ export const EventsController = {
     if (!guard.ok) return err(guard.error);
     return removeEventCoOrganizer(guard.value.event.id, profileId);
   },
+
+  async getScanCache(slug: string): Promise<Result<{
+    eventId: string;
+    fetchedAt: string;
+    tickets: Array<{
+      ticketId: string;
+      qrCode: string;
+      holderName: string | null;
+      holderDniLast2: string | null;
+      ticketTypeName: string;
+      boxLabel: string | null;
+      boxHostTicketId: string | null;
+      status: "active" | "used" | "void" | "refunded";
+    }>;
+  }>> {
+    const guard = await guardEventMember(slug);
+    if (!guard.ok) return err(guard.error);
+    const db = supabaseAdmin();
+    const { data, error } = await db
+      .from("tickets")
+      .select(`
+        id,
+        qr_code,
+        holder_name,
+        holder_dni_last2,
+        status,
+        box_label,
+        box_host_ticket_id,
+        orders!inner(event_id),
+        ticket_types!inner(name)
+      `)
+      .eq("orders.event_id", guard.value.event.id)
+      .in("status", ["active", "used"])
+      .returns<Array<{
+        id: string;
+        qr_code: string;
+        holder_name: string | null;
+        holder_dni_last2: string | null;
+        status: "active" | "used" | "void" | "refunded";
+        box_label: string | null;
+        box_host_ticket_id: string | null;
+        orders: { event_id: string };
+        ticket_types: { name: string };
+      }>>();
+
+    if (error) return err("database_error");
+    if (!data) return err("database_error");
+
+    return ok({
+      eventId: guard.value.event.id,
+      fetchedAt: new Date().toISOString(),
+      tickets: data.map((t) => ({
+        ticketId: t.id,
+        qrCode: t.qr_code,
+        holderName: t.holder_name,
+        holderDniLast2: t.holder_dni_last2,
+        ticketTypeName: t.ticket_types.name,
+        boxLabel: t.box_label,
+        boxHostTicketId: t.box_host_ticket_id,
+        status: t.status,
+      })),
+    });
+  },
 };
 
 const createTicketTypeSchema = z.object({

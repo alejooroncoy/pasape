@@ -1,8 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { C, FONT_DISPLAY, Phone, QrSquare } from "@/components/design";
 import { useScanQr } from "@/lib/scanning/hooks/useScanQr";
+import { refreshScanCache } from "@/lib/scanning/scanCache";
+import { useOnlineStatus } from "@/lib/_shared/useOnlineStatus";
+import { scanLocal } from "@/lib/scanning/scanLocal";
+import { countPending } from "@/lib/scanning/scanQueue";
+import { syncPending } from "@/lib/scanning/syncWorker";
 
 const SearchIcon = () => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -35,6 +41,9 @@ const getDetector = (): DetectorLike | null => {
 
 export default function ScanPage() {
   const scan = useScanQr();
+  const search = useSearchParams();
+  const eventSlug = search.get("event");
+  const online = useOnlineStatus();
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const rafRef = useRef<number | null>(null);
@@ -57,6 +66,7 @@ export default function ScanPage() {
     boxFilled: number | null;
     boxCapacity: number | null;
   } | null>(null);
+  const [pendingCount, setPendingCount] = useState(0);
 
   const stopCamera = useCallback(() => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
@@ -72,7 +82,7 @@ export default function ScanPage() {
       lastCodeRef.current = code;
       setLastCode(code);
       try {
-        const result = await scan.mutateAsync(code);
+        const result = online ? await scan.mutateAsync(code) : await scanLocal(code);
         setOverlay({
           kind: (result.kind as ScanKind) ?? "invalid",
           holder: result.holderName ?? null,
@@ -101,7 +111,7 @@ export default function ScanPage() {
         setLastCode("");
       }, 2200);
     },
-    [scan],
+    [scan, online],
   );
 
   const loop = useCallback(
@@ -148,6 +158,40 @@ export default function ScanPage() {
   }, [loop]);
 
   useEffect(() => () => stopCamera(), [stopCamera]);
+
+  useEffect(() => {
+    if (!eventSlug) return;
+    let cancel = false;
+    const sync = () => refreshScanCache(eventSlug).catch(() => {});
+    void sync();
+    const id = setInterval(() => {
+      if (!cancel && navigator.onLine) void sync();
+    }, 60_000);
+    return () => {
+      cancel = true;
+      clearInterval(id);
+    };
+  }, [eventSlug]);
+
+  useEffect(() => {
+    let cancel = false;
+    const refresh = async () => {
+      if (!cancel) setPendingCount(await countPending());
+    };
+    void refresh();
+    const id = setInterval(refresh, 2000);
+    return () => {
+      cancel = true;
+      clearInterval(id);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!online || !eventSlug) return;
+    void syncPending(eventSlug).then(() => {
+      void (async () => setPendingCount(await countPending()))();
+    });
+  }, [online, eventSlug]);
 
   const onFile = async (file: File) => {
     const detector = getDetector();
@@ -409,18 +453,23 @@ export default function ScanPage() {
           style={{
             padding: "5px 10px",
             borderRadius: 999,
-            background: C.greenSoft,
+            background:
+              !online
+                ? "rgba(217, 119, 6, 0.15)"
+                : pendingCount > 0
+                  ? "rgba(59, 130, 246, 0.15)"
+                  : C.greenSoft,
             fontSize: 10,
             fontWeight: 700,
-            color: C.green,
+            color: !online ? "#D97706" : pendingCount > 0 ? "#3B82F6" : C.green,
             display: "flex",
             alignItems: "center",
             gap: 5,
             letterSpacing: "0.04em",
           }}
         >
-          <Dot color={C.green} />
-          Online
+          <Dot color={!online ? "#D97706" : pendingCount > 0 ? "#3B82F6" : C.green} />
+          {!online ? "Sin red" : pendingCount > 0 ? `Sincronizando ${pendingCount}` : "En línea"}
         </div>
       </div>
 

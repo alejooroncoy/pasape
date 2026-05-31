@@ -4,6 +4,13 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Pasape",
   description: "Entradas digitales con beneficios",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Pasape",
+  },
+  themeColor: "#7C3AED",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -21,6 +28,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap"
           rel="stylesheet"
         />
+        <link rel="apple-touch-icon" href="/icons/logo-dark-square-180.png" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-title" content="Pasape" />
       </head>
       <body className="min-h-full">{children}</body>
     </html>

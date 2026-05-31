@@ -1,0 +1,31 @@
+{
+  "name": "Pasape Puerta",
+  "short_name": "Pasape",
+  "description": "Escáner de entradas para eventos",
+  "start_url": "/es/scan",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#050507",
+  "theme_color": "#7C3AED",
+  "icons": [
+    {
+      "src": "/icons/logo-dark-square-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/logo-dark-square-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/logo-icon-dark-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
