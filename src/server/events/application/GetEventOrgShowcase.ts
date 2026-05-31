@@ -74,7 +74,7 @@ export const getEventOrgShowcase = async (
   const rows = (rawEvents as Row[] | null) ?? [];
 
   // Precio mínimo por evento (una sola consulta).
-  let minByEvent: Record<string, number> = {};
+  const minByEvent: Record<string, number> = {};
   if (rows.length > 0) {
     const { data: tts } = await db
       .from("ticket_types")
