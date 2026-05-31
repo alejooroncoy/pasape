@@ -6,12 +6,13 @@ import type {
   CreateTicketTypeInput,
   EventRepository,
   EventStats,
+  PromoInput,
   PromoterReportRow,
   ScanFeedItem,
   UpdateEventInput,
   UpdateTicketTypeInput,
 } from "@/server/events/ports/EventRepository";
-import type { Event, TicketType } from "@/server/events/domain/Event";
+import type { Event, Promo, TicketType } from "@/server/events/domain/Event";
 import { computePromoterPayout } from "@/server/promoters/application/CommissionResolver";
 import type {
   CommissionConfig,
@@ -99,7 +100,26 @@ type TicketTypeRow = {
   zone: string | null;
   unit_noun: string | null;
   sale_ends_at: string | null;
+  presale_price_cents: number | null;
+  presale_qty: number | null;
+  presale_ends_at: string | null;
 };
+
+type PromoRow = {
+  id: string;
+  event_id: string;
+  ticket_type_id: string;
+  kind: Promo["kind"];
+  ends_at: string | null;
+};
+
+const toPromo = (r: PromoRow): Promo => ({
+  id: r.id,
+  eventId: r.event_id,
+  ticketTypeId: r.ticket_type_id,
+  kind: r.kind,
+  endsAt: r.ends_at,
+});
 
 const toEvent = (r: EventRow): Event => ({
   id: r.id,
@@ -147,6 +167,9 @@ const toTicketType = (r: TicketTypeRow): TicketType => ({
   zone: r.zone,
   unitNoun: r.unit_noun,
   saleEndsAt: r.sale_ends_at,
+  presalePriceCents: r.presale_price_cents,
+  presaleQty: r.presale_qty,
+  presaleEndsAt: r.presale_ends_at,
 });
 
 const slugify = (s: string): string =>
@@ -195,9 +218,14 @@ export const supabaseEventRepository: EventRepository = {
       .select("*")
       .eq("event_id", event.id)
       .order("position", { ascending: true });
+    const { data: promos } = await db
+      .from("ticket_promos")
+      .select("id, event_id, ticket_type_id, kind, ends_at")
+      .eq("event_id", event.id);
     return {
       event: toEvent(event),
       ticketTypes: (tts as TicketTypeRow[] | null)?.map(toTicketType) ?? [],
+      promos: (promos as PromoRow[] | null)?.map(toPromo) ?? [],
     };
   },
 
@@ -309,6 +337,35 @@ export const supabaseEventRepository: EventRepository = {
     return data ? toTicketType(data) : null;
   },
 
+  async listPromos(eventId): Promise<Promo[]> {
+    const db = supabaseAdmin();
+    const { data } = await db
+      .from("ticket_promos")
+      .select("id, event_id, ticket_type_id, kind, ends_at")
+      .eq("event_id", eventId);
+    return (data as PromoRow[] | null)?.map(toPromo) ?? [];
+  },
+
+  async setPromos(eventId, promos: PromoInput[]): Promise<Result<Promo[]>> {
+    const db = supabaseAdmin();
+    // Reemplazo total: borra las del evento y reinserta las dadas.
+    const { error: delErr } = await db.from("ticket_promos").delete().eq("event_id", eventId);
+    if (delErr) return err(delErr.message);
+    if (promos.length === 0) return ok([]);
+    const rows = promos.map((p) => ({
+      event_id: eventId,
+      ticket_type_id: p.ticketTypeId,
+      kind: p.kind,
+      ends_at: p.endsAt ?? null,
+    }));
+    const { data, error } = await db
+      .from("ticket_promos")
+      .insert(rows)
+      .select("id, event_id, ticket_type_id, kind, ends_at");
+    if (error || !data) return err(error?.message ?? "promos_set_failed");
+    return ok((data as PromoRow[]).map(toPromo));
+  },
+
   async createTicketType(eventId, input: CreateTicketTypeInput): Promise<Result<TicketType>> {
     const db = supabaseAdmin();
     // next position = max(position) + 1
@@ -336,6 +393,9 @@ export const supabaseEventRepository: EventRepository = {
             ? input.unitNoun.trim()
             : null,
         sale_ends_at: input.saleEndsAt ?? null,
+        presale_price_cents: input.presalePriceCents ?? null,
+        presale_qty: input.presaleQty ?? null,
+        presale_ends_at: input.presaleEndsAt ?? null,
       })
       .select("*")
       .single<TicketTypeRow>();
@@ -358,6 +418,9 @@ export const supabaseEventRepository: EventRepository = {
     if (input.unitNoun !== undefined)
       patch.unit_noun = input.unitNoun?.trim() || null;
     if ("saleEndsAt" in input) patch.sale_ends_at = input.saleEndsAt ?? null;
+    if ("presalePriceCents" in input) patch.presale_price_cents = input.presalePriceCents ?? null;
+    if ("presaleQty" in input) patch.presale_qty = input.presaleQty ?? null;
+    if ("presaleEndsAt" in input) patch.presale_ends_at = input.presaleEndsAt ?? null;
     if (Object.keys(patch).length === 0) return err("nothing_to_update");
     const { data, error } = await db
       .from("ticket_types")

@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/_shared/api-client";
-import type { Event, TicketType } from "@/server/events/domain/Event";
+import type { Event, Promo, TicketType } from "@/server/events/domain/Event";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 
 export const useBrowseEvents = () =>
@@ -24,6 +24,9 @@ export const useMyEvents = () => {
 export const useEvent = (slug: string) =>
   useQuery({
     queryKey: ["events", "detail", slug],
-    queryFn: () => api.get<{ event: Event; ticketTypes: TicketType[] }>(`/api/events/${slug}`),
+    queryFn: () =>
+      api.get<{ event: Event; ticketTypes: TicketType[]; promos: Promo[] }>(
+        `/api/events/${slug}`,
+      ),
     enabled: !!slug,
   });

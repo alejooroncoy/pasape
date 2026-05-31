@@ -4,9 +4,13 @@ import { Suspense, use, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Link, useRouter } from "@/i18n/navigation";
 import { useEvent } from "@/lib/events/hooks/useEvents";
+import { useEventShowcase } from "@/lib/events/hooks/useEventShowcase";
+import type { ShowcaseEvent, ShowcaseOrg } from "@/server/events/application/GetEventOrgShowcase";
 import { formatMoney } from "@/lib/_shared/format";
 import type { TicketType } from "@/server/events/domain/Event";
 import { VenueLayoutModal } from "@/components/ui/VenueLayoutModal";
+import { PresaleCountdown, shouldCountdown } from "@/components/ui/PresaleCountdown";
+import { activePricing } from "@/lib/events/pricing";
 import {
   eventAvailability,
   groupTicketTypesByZone,
@@ -30,6 +34,7 @@ export default function EventDetailPage(props: Props) {
 function EventDetailInner({ params }: Props) {
   const { slug } = use(params);
   const { data, isLoading, error } = useEvent(slug);
+  const showcase = useEventShowcase(slug);
   const search = useSearchParams();
   const promo = search.get("promo");
   const router = useRouter();
@@ -112,6 +117,9 @@ function EventDetailInner({ params }: Props) {
 
             {event.description && <DescriptionBlock text={event.description} />}
 
+            {/* Productora del evento — lleva a su vitrina (estilo Passline/Luma). */}
+            {showcase.data?.org && <OrganizerChip org={showcase.data.org} />}
+
             <FeatureGrid />
 
             {event.venueLayoutUrl && (
@@ -125,6 +133,11 @@ function EventDetailInner({ params }: Props) {
                 onPickZone={(zone) => router.push(buyHref(zone) as never)}
               />
             </div>
+
+            {/* Más eventos de la misma productora — cross-sell. */}
+            {showcase.data && showcase.data.events.length > 0 && (
+              <MoreFromOrg org={showcase.data.org} events={showcase.data.events} />
+            )}
           </div>
 
           <aside className="hidden lg:block">
@@ -175,6 +188,94 @@ function EventDetailInner({ params }: Props) {
       </div>
     </div>
   );
+}
+
+/* ============================== Productora / cross-sell ============================== */
+
+function OrganizerChip({ org }: { org: ShowcaseOrg }) {
+  const initial = (org.name || "?")[0].toUpperCase();
+  return (
+    <Link
+      href={`/${org.slug}` as never}
+      className="mt-6 flex items-center gap-3 rounded-2xl border border-cart-line bg-cart-bg-elev px-4 py-3 transition hover:border-cart-line-strong"
+    >
+      <div className="size-10 shrink-0 overflow-hidden rounded-xl bg-cart-bg-elev-2">
+        {org.logoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={org.logoUrl} alt={org.name} className="size-full object-cover" />
+        ) : (
+          <div
+            className="grid size-full place-items-center text-[16px] font-bold text-white"
+            style={{ background: `linear-gradient(135deg, ${org.brandColor ?? "#7C3AED"}, #1A0A2E)` }}
+          >
+            {initial}
+          </div>
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">
+          Organiza
+        </div>
+        <div className="truncate text-[14.5px] font-semibold">{org.name}</div>
+      </div>
+      <span className="text-[12.5px] font-medium text-cart-accent">Ver perfil →</span>
+    </Link>
+  );
+}
+
+function MoreFromOrg({ org, events }: { org: ShowcaseOrg; events: ShowcaseEvent[] }) {
+  return (
+    <section className="mt-10">
+      <div className="mb-3 flex items-baseline justify-between">
+        <SectionTitle>Más de {org.name}</SectionTitle>
+        <Link href={`/${org.slug}` as never} className="text-[12.5px] font-medium text-cart-accent">
+          Ver todo
+        </Link>
+      </div>
+      <div className="-mx-5 flex snap-x gap-3 overflow-x-auto px-5 pb-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+        {events.map((e) => (
+          <Link
+            key={e.slug}
+            href={`/events/${e.slug}` as never}
+            className="w-[180px] shrink-0 snap-start overflow-hidden rounded-2xl border border-cart-line bg-cart-bg-elev transition hover:border-cart-line-strong"
+          >
+            <div className="aspect-[4/3] w-full overflow-hidden bg-cart-bg-elev-2">
+              {e.coverUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={e.coverUrl} alt={e.title} className="size-full object-cover" />
+              ) : (
+                <div
+                  className="size-full"
+                  style={{ background: `linear-gradient(135deg, ${org.brandColor ?? "#7C3AED"}, #1A0A2E)` }}
+                />
+              )}
+            </div>
+            <div className="p-3">
+              <div className="line-clamp-2 text-[13.5px] font-semibold leading-snug">{e.title}</div>
+              <div className="mt-1.5 text-[11.5px] text-cart-ink-3">
+                {formatShowcaseDate(e.startsAt)}
+              </div>
+              {e.minPriceCents != null && (
+                <div className="mt-0.5 text-[12.5px] font-semibold">
+                  Desde {formatMoney(e.minPriceCents, "PEN")}
+                </div>
+              )}
+            </div>
+          </Link>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function formatShowcaseDate(iso: string): string {
+  try {
+    return new Date(iso)
+      .toLocaleDateString("es-PE", { day: "numeric", month: "short" })
+      .replace(".", "");
+  } catch {
+    return "";
+  }
 }
 
 /* ============================== Availability header ============================== */
@@ -248,6 +349,8 @@ function ZoneCard({
   onClick: () => void;
 }) {
   const zoneLabel = group.zone ?? "Entradas generales";
+  const presaleItem = group.items.find((i) => activePricing(i).isPresale);
+  const ap = presaleItem ? activePricing(presaleItem) : null;
   return (
     <button
       type="button"
@@ -264,32 +367,49 @@ function ZoneCard({
       <div className="min-w-0 flex-1">
         <span
           className={
-            "block font-semibold tracking-[-0.01em] " +
+            "flex items-center gap-2 font-semibold tracking-[-0.01em] " +
             (compact ? "text-[13.5px]" : "text-[15.5px]")
           }
         >
           {zoneLabel}
+          {ap?.isPresale && (
+            <span className="rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-[0.06em] text-emerald-300">
+              Preventa
+            </span>
+          )}
         </span>
         <div className={"text-cart-ink-3 " + (compact ? "mt-0.5 text-[11px]" : "mt-1 text-[12.5px]")}>
           <ZoneAvailabilityLine summary={summary} />
         </div>
+        {ap?.presaleEndsAt && shouldCountdown(ap.presaleEndsAt) && (
+          <div className="mt-1">
+            <PresaleCountdown endsAt={ap.presaleEndsAt} />
+          </div>
+        )}
         {summary.isAllBoxes && !summary.isAllSoldOut && (
           <BoxAvailabilityBar items={group.items} className={compact ? "mt-1.5" : "mt-2"} />
         )}
       </div>
       <div className="ml-3 flex flex-col items-end justify-between">
-        <span
-          className={
-            "font-bold tracking-[-0.01em] " +
-            (compact ? "text-[13.5px]" : "text-[15.5px]") +
-            " " +
-            (summary.isAllSoldOut ? "text-cart-ink-3" : "")
-          }
-        >
-          {summary.minPriceCents !== null
-            ? formatMoney(summary.minPriceCents, summary.currency)
-            : "—"}
-        </span>
+        <div className="flex flex-col items-end">
+          {ap?.isPresale && (
+            <span className="text-[11px] font-medium text-cart-ink-4 line-through">
+              {formatMoney(ap.basePriceCents, summary.currency)}
+            </span>
+          )}
+          <span
+            className={
+              "font-bold tracking-[-0.01em] " +
+              (compact ? "text-[13.5px]" : "text-[15.5px]") +
+              " " +
+              (summary.isAllSoldOut ? "text-cart-ink-3" : "")
+            }
+          >
+            {summary.minPriceCents !== null
+              ? formatMoney(summary.minPriceCents, summary.currency)
+              : "—"}
+          </span>
+        </div>
         {/* Ver → solo en mobile: en desktop el hover indica clickabilidad. */}
         <span
           className={

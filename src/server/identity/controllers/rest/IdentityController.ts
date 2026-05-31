@@ -7,6 +7,7 @@ import { completeOnboarding } from "../../application/CompleteOnboarding";
 import { updateProfile } from "../../application/UpdateProfile";
 import { listNotifications, type Notification } from "../../application/ListNotifications";
 import { listFollows, type FollowedOrg } from "../../application/ListFollows";
+import { followOrg, unfollowOrg } from "../../application/ToggleFollow";
 import { lookupProfileByPhone, type LookupResult } from "../../application/LookupProfile";
 import { supabaseUserRepository } from "../../infrastructure/repositories/SupabaseUserRepository";
 import { supabaseOrganizationRepository } from "../../organizations/infrastructure/repositories/SupabaseOrganizationRepository";
@@ -111,6 +112,22 @@ export const IdentityController = {
     const auth = await getAuthContext();
     if (!auth.ok) return err(auth.error);
     return listFollows(auth.value.profileId);
+  },
+
+  async follow(input: unknown): Promise<Result<{ following: true }>> {
+    const auth = await getAuthContext();
+    if (!auth.ok) return err(auth.error);
+    const parsed = z.object({ organizationId: z.string().uuid() }).safeParse(input);
+    if (!parsed.success) return err("invalid_input");
+    return followOrg(auth.value.profileId, parsed.data.organizationId);
+  },
+
+  async unfollow(input: unknown): Promise<Result<{ following: false }>> {
+    const auth = await getAuthContext();
+    if (!auth.ok) return err(auth.error);
+    const parsed = z.object({ organizationId: z.string().uuid() }).safeParse(input);
+    if (!parsed.success) return err("invalid_input");
+    return unfollowOrg(auth.value.profileId, parsed.data.organizationId);
   },
 
   // Lookup pública por WhatsApp — usada para confirmar al destinatario al que

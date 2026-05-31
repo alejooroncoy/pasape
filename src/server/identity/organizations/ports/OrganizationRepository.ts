@@ -10,6 +10,20 @@ export interface OrganizationRepository {
     logoUrl?: string | null;
   }): Promise<Result<Organization>>;
   findBySlug(slug: string): Promise<Organization | null>;
+  /**
+   * Actualiza campos de la marca. Verifica que `callerId` administre la org
+   * (owner|admin|editor). Campos `undefined` no se tocan; `null` los limpia.
+   */
+  update(input: {
+    id: string;
+    callerId: string;
+    name?: string;
+    slug?: string;
+    logoUrl?: string | null;
+    brandColor?: string | null;
+    description?: string | null;
+    instagram?: string | null;
+  }): Promise<Result<Organization>>;
   listByMember(profileId: string): Promise<Array<Organization & { role: OrgRole }>>;
   /**
    * Counts memberships whose role grants "real ownership" of an org

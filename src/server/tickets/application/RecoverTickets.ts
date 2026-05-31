@@ -59,7 +59,7 @@ export const startTicketRecovery = async (
   if (insertErr) return err(insertErr.message);
 
   // Mock delivery — real infra (SMS/email) plugs in here later.
-  // eslint-disable-next-line no-console
+   
   console.log(`[ticket-recovery] OTP for ${identifier}: ${code}`);
 
   const out: StartRecoveryResult = { identifierKind: kind };

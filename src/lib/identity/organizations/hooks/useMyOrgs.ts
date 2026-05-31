@@ -10,6 +10,8 @@ export type OrgWithRole = {
   name: string;
   logoUrl: string | null;
   brandColor: string | null;
+  description: string | null;
+  instagram: string | null;
   legalEntityId: string;
   role: OrgRole;
 };

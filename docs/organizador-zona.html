@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Organizador — zona / entradas (revisión)</title>
+<style>
+  :root{
+    --bg:#0a0a0b; --elev:#141417; --elev2:#1c1c20; --line:#26262b;
+    --ink:#f5f5f7; --ink2:#a9a9b2; --ink3:#73737d; --ink4:#55555e;
+    --accent:#a855f7; --accent-soft:rgba(168,85,247,.16);
+    --gold:#f5d98b; --amber:#fbbf24; --box:#7dd3fc;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:"SF Pro Display",-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;}
+  .wrap{max-width:880px;margin:0 auto;padding:36px 20px 90px}
+  h1{font-size:21px;font-weight:800;letter-spacing:-.02em;margin:0 0 4px}
+  .sub{color:var(--ink2);font-size:13px;margin:0 0 30px;line-height:1.55}
+  .grid{display:grid;gap:26px}
+  @media(min-width:760px){.grid{grid-template-columns:1fr 1fr}}
+  .pane h2{font-size:12px;font-weight:700;letter-spacing:.04em;color:var(--ink2);
+    text-transform:uppercase;margin:0 0 12px}
+  .tag{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+    padding:2px 8px;border-radius:999px;margin-right:6px}
+  .bad{color:#fca5a5;background:rgba(244,63,94,.13)}
+  .good{color:#34d399;background:rgba(52,211,153,.13)}
+
+  /* ---- card grupo de boxes (BoxGroupEditor) ---- */
+  .card{border:1px solid var(--line);background:var(--elev2);border-radius:16px;padding:13px;
+    box-shadow:inset 0 0 0 1px rgba(125,211,252,.18)}
+  .ghead{display:flex;align-items:center;gap:8px}
+  .ghead .nm{flex:1;font-size:15px;font-weight:600;letter-spacing:-.01em}
+  .ghead .nm small{color:var(--ink3);font-weight:400;font-family:ui-monospace,monospace;margin-left:6px}
+  .ghead .pill{border-radius:999px;padding:2px 8px;font-size:9.5px;font-weight:600;
+    letter-spacing:.12em;text-transform:uppercase;background:rgba(125,211,252,.13);color:var(--box)}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+  .fld{background:var(--bg);border:1px solid var(--line);border-radius:11px;padding:8px 10px}
+  .fld .lab{font-size:9px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3)}
+  .fld .val{font-size:14px;margin-top:3px;font-family:ui-monospace,monospace}
+  .fld .val.ph{color:var(--ink4);font-family:inherit}
+
+  /* zona row */
+  .zrow{display:flex;align-items:center;gap:8px;background:var(--elev);border-radius:11px;
+    padding:9px 12px;margin-top:8px}
+  .zrow .zlab{flex-shrink:0;font-size:10px;font-weight:700;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--ink3)}
+  .zrow input{flex:1;background:transparent;border:0;outline:0;color:var(--ink);font-size:13.5px}
+  .zrow input::placeholder{color:var(--ink4)}
+  .zhelp{font-size:11.5px;color:var(--ink3);margin:7px 2px 0;line-height:1.5}
+  .zhelp b{color:var(--gold)}
+
+  /* preview chip dorado */
+  .goldchip{display:inline-flex;align-items:center;gap:4px;border-radius:999px;
+    padding:2px 9px;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;
+    color:var(--gold);background:linear-gradient(180deg,rgba(245,217,139,.16),rgba(245,217,139,.05));
+    border:1px solid rgba(245,217,139,.30)}
+  .goldchip svg{width:10px;height:10px}
+
+  .arrow{display:flex;align-items:center;gap:8px;margin:12px 2px 0;color:var(--ink3);font-size:11.5px}
+  .arrow .ln{flex:1;height:1px;background:var(--line)}
+
+  /* preventa picker mini */
+  .pre{margin-top:11px;border-top:1px dashed var(--line);padding-top:11px}
+  .pre .chk{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink2)}
+  .pre .box{width:16px;height:16px;border-radius:5px;border:1.5px solid var(--accent);
+    background:var(--accent-soft);display:grid;place-items:center}
+  .pre .box svg{width:9px;height:9px;color:var(--accent)}
+  .pre .body{margin-top:9px;font-size:12.5px;color:var(--ink2);line-height:1.6}
+  .pre .body b{color:var(--ink)}
+
+  .note{margin-top:30px;border:1px solid var(--line);border-radius:14px;background:var(--elev);padding:16px 18px}
+  .note h3{margin:0 0 9px;font-size:13px}
+  .note ul{margin:0;padding-left:18px;color:var(--ink2);font-size:12.5px;line-height:1.7}
+  .note b{color:var(--ink)}
+  .old{opacity:.55}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Organizador — campo de zona</h1>
+  <p class="sub">
+    Cómo se ve al crear/editar entradas. La zona es <b style="color:var(--ink)">opcional</b> y ahora el placeholder
+    sugiere nombres de <b style="color:var(--ink)">estatus</b> (Platinum, VIP) en vez de descripciones largas — para que
+    el organizador entienda que eso se vuelve el distintivo dorado del comprador.
+  </p>
+
+  <div class="grid">
+    <!-- ANTES -->
+    <div class="pane">
+      <h2><span class="tag bad">Antes</span> placeholder genérico</h2>
+      <div class="card old">
+        <div class="ghead">
+          <span class="nm">Boxes <small>(10)</small></span>
+          <span class="pill">Box</span>
+        </div>
+        <div class="two">
+          <div class="fld"><div class="lab">Precio (todos)</div><div class="val">S/ 1500</div></div>
+          <div class="fld"><div class="lab">Aforo c/u</div><div class="val">12</div></div>
+        </div>
+        <div class="zrow">
+          <span class="zlab">Zona</span>
+          <input placeholder="Opcional" disabled>
+        </div>
+      </div>
+      <p class="zhelp">El organizador no sabía qué escribir ni para qué servía.</p>
+    </div>
+
+    <!-- AHORA -->
+    <div class="pane">
+      <h2><span class="tag good">Ahora</span> sugiere estatus</h2>
+      <div class="card">
+        <div class="ghead">
+          <span class="nm">Boxes <small>(10)</small></span>
+          <span class="pill">Box</span>
+        </div>
+        <div class="two">
+          <div class="fld"><div class="lab">Precio (todos)</div><div class="val">S/ 1500</div></div>
+          <div class="fld"><div class="lab">Aforo c/u</div><div class="val">12</div></div>
+        </div>
+        <div class="zrow">
+          <span class="zlab">Zona</span>
+          <input value="Platinum">
+        </div>
+
+        <!-- Preventa pegada (ya existe) -->
+        <div class="pre">
+          <div class="chk">
+            <span class="box"><svg viewBox="0 0 12 12" fill="none"><path d="M2.5 6.5l2.3 2.3 4.7-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+            En preventa cuesta menos
+          </div>
+          <div class="body">
+            Los primeros <b>a S/ 1200</b> · hasta el <b>15 jun</b><br>
+            <span style="color:var(--ink4)">…o que termine antes por fecha.</span>
+          </div>
+        </div>
+      </div>
+
+      <p class="zhelp">
+        <b>↑ Se vuelve el distintivo dorado</b> que ve el comprador:
+      </p>
+      <div class="arrow"><span class="ln"></span>así lo verá tu público<span class="ln"></span></div>
+      <div style="margin-top:10px;display:flex;align-items:center;gap:8px;
+                  background:var(--elev);border:1px solid var(--line);border-radius:12px;padding:11px 13px">
+        <span style="font-size:15px;font-weight:600">Boxes</span>
+        <span class="goldchip">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 6.9H21l-5.3 4 2 6.9L12 16l-5.7 3.8 2-6.9L3 8.9h6.6z"/></svg>
+          Platinum
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <div class="note">
+    <h3>Qué cambié (solo copy/placeholder — nada de lógica)</h3>
+    <ul>
+      <li>Placeholder de zona en los <b>3 lugares</b> (grupo de boxes, box individual, creador masivo): <span class="old">"Opcional" / "Boxes Premium 1er Piso"</span> → <b>"Opcional — ej. Platinum, VIP"</b> / "Ej. Platinum, VIP, Terraza".</li>
+      <li>Promociones ya decía <b>"2x1, 3x2 para llenar más rápido"</b> y "Llevan 2, pagan 1" — buen lenguaje de organizador, lo dejé igual.</li>
+      <li>La <b>preventa</b> ya está pegada a cada entrada/box con su copy ("En preventa cuesta menos"). Sin cambios.</li>
+    </ul>
+  </div>
+
+  <p class="zhelp" style="margin-top:18px">
+    Nota: no pude entrar al composer real en el navegador porque pide login. Si quieres, lo abres tú con
+    <b style="color:var(--ink)">! </b> o me logueas y te tomo el screenshot real.
+  </p>
+</div>
+</body>
+</html>

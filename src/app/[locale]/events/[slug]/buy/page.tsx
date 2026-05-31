@@ -11,6 +11,7 @@ import { useProfileLookup } from "@/lib/identity/hooks/useProfileLookup";
 import { formatMoney } from "@/lib/_shared/format";
 import { CardForm } from "@/components/payments/CardForm";
 import { YapeForm } from "@/components/payments/YapeForm";
+import { PresaleCountdown, shouldCountdown } from "@/components/ui/PresaleCountdown";
 import type { TicketType } from "@/server/events/domain/Event";
 import {
   capitalize,
@@ -20,6 +21,7 @@ import {
   unitNoun,
   unitNounPlural,
 } from "@/lib/events/ticketDisplay";
+import { activePricing, applyPromos } from "@/lib/events/pricing";
 
 type Props = { params: Promise<{ slug: string }> };
 type Phase = "pick" | "data" | "pay";
@@ -93,7 +95,7 @@ function BuyFlowInner({ params }: Props) {
     }
   }, [slug, search]);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   useEffect(() => {
     const orderFromUrl = search.get("order");
     if (!orderFromUrl) return;
@@ -128,13 +130,18 @@ function BuyFlowInner({ params }: Props) {
   );
   const total = useMemo(() => {
     if (!data) return 0;
-    return data.ticketTypes.reduce(
-      (sum, tt) => sum + tt.priceCents * (qty[tt.id] ?? 0),
-      0,
-    );
+    // Precio activo (preventa o normal) + promos 2x1/3x2.
+    const lineItems = data.ticketTypes
+      .filter((tt) => (qty[tt.id] ?? 0) > 0)
+      .map((tt) => ({
+        ticketTypeId: tt.id,
+        qty: qty[tt.id] ?? 0,
+        unitPriceCents: activePricing(tt).priceCents,
+      }));
+    return applyPromos(lineItems, data.promos ?? []).totalCents;
   }, [data, qty]);
   const totalItems = items.reduce((a, b) => a + b.qty, 0);
-  const fee = totalItems > 0 && total > 0 ? 300 : 0;
+  const fee = totalItems > 0 ? 300 : 0;
   const acompCount = Math.max(0, totalItems - 1);
 
   // Resize assignees al cambiar la cantidad — preserva las entradas ya
@@ -210,32 +217,6 @@ function BuyFlowInner({ params }: Props) {
     }
   };
 
-  const completeFreeOrder = async () => {
-    try {
-      const res = await buy.mutateAsync({
-        eventId: data.event.id,
-        items,
-        promoCode,
-        guest: isLogged
-          ? undefined
-          : {
-              email: guestEmail.trim() || null,
-              fullName: guestName.trim(),
-              dni: guestDni.trim(),
-              phone: guestPhone.replace(/\D/g, "") || null,
-            },
-      });
-      const emailQs =
-        !isLogged && guestEmail.trim()
-          ? `&email=${encodeURIComponent(guestEmail.trim())}`
-          : "";
-      router.replace(`/events/${slug}/processing?order=${res.order.id}&total=${res.order.totalCents}${emailQs}`);
-    } catch (e) {
-      const reason = encodeURIComponent((e as Error).message || "unknown");
-      router.replace(`/events/${slug}/pay-error?reason=${reason}`);
-    }
-  };
-
   const pickValid = totalItems > 0;
   const dataValid = isLogged || guestValid;
 
@@ -244,10 +225,7 @@ function BuyFlowInner({ params }: Props) {
       setPhase("data");
       return;
     }
-    if (phase === "data" && orderValid) {
-      if (total === 0) void completeFreeOrder();
-      else void startPayment();
-    }
+    if (phase === "data" && orderValid) void startPayment();
   };
 
   const onBack = () => {
@@ -262,10 +240,9 @@ function BuyFlowInner({ params }: Props) {
     router.back();
   };
 
-  const totalSteps = total === 0 ? 2 : 3;
   const phaseLabel: Record<Phase, string> = {
-    pick: `1 de ${totalSteps} · Tu pedido`,
-    data: `2 de ${totalSteps} · Tus datos`,
+    pick: "1 de 3 · Tu pedido",
+    data: "2 de 3 · Tus datos",
     pay: "3 de 3 · Pago",
   };
 
@@ -273,13 +250,11 @@ function BuyFlowInner({ params }: Props) {
     if (buy.isPending) return "Preparando…";
     if (phase === "pick") {
       if (!pickValid) return "Elige una entrada";
-      const priceLabel = total === 0 ? "Gratis" : formatMoney(total);
-      return `Continuar · ${priceLabel}`;
+      return compact ? `Continuar · ${formatMoney(total)}` : `Continuar · ${formatMoney(total)}`;
     }
     if (phase === "data") {
       if (!dataValid) return "Completa tus datos";
       if (!acompValid) return "Revisa los acompañantes";
-      if (total === 0) return "Confirmar entrada gratuita";
       return `Ir a pagar · ${formatMoney(total)}`;
     }
     return "Continuar";
@@ -382,10 +357,13 @@ function BuyFlowInner({ params }: Props) {
                   try {
                     sessionStorage.removeItem(`pasape:buy:${orderId}`);
                   } catch {}
+                  // Why: el polling de /processing necesita el email del guest
+                  // para autorizar el lookup del status (sin sesión). Sin esto
+                  // todos los polls dan 403 y termina en pay-error a los 60s.
                   const emailQs = !isLogged && guestEmail.trim()
                     ? `&email=${encodeURIComponent(guestEmail.trim())}`
                     : "";
-                  router.push(`/events/${slug}/processing?order=${orderId}&total=${total + fee}${emailQs}`);
+                  router.push(`/events/${slug}/processing?order=${orderId}${emailQs}`);
                 }}
               />
             )}
@@ -463,6 +441,12 @@ function PickPhase({
   setQty: (next: Record<string, number>) => void;
 }) {
   const groups = useMemo(() => groupTicketTypesByZone(ticketTypes), [ticketTypes]);
+  // Precio máximo del evento — define qué zona es "la top" (dorada). Usa el
+  // precio base (no preventa) para que el estatus no cambie durante la preventa.
+  const eventMaxPriceCents = useMemo(
+    () => ticketTypes.reduce((mx, t) => Math.max(mx, t.priceCents), 0),
+    [ticketTypes],
+  );
   // Tab "Todos" siempre primero. initialZone viene desde /events/[slug]
   // cuando el comprador tappeó una zone card específica.
   const tabs = useMemo(() => {
@@ -522,14 +506,13 @@ function PickPhase({
             const useGrid = allBoxes && group.items.length >= 4;
             return (
               <div key={group.zone ?? `__ungrouped__-${gi}`} className="flex flex-col gap-2.5">
-                {selectedTab === "__all" && group.zone && (
-                  <h3 className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">
-                    {group.zone}
-                  </h3>
-                )}
+                {/* La zona vive como chip dorado dentro de cada tarjeta (ZoneBadge),
+                    así que no repetimos un encabezado gris arriba. */}
                 {useGrid ? (
                   <BoxGrid
                     items={group.items}
+                    zone={group.zone}
+                    maxPriceCents={eventMaxPriceCents}
                     qty={qty}
                     onChange={(id, v) => setQty({ ...qty, [id]: v })}
                   />
@@ -538,6 +521,7 @@ function PickPhase({
                     <TicketCard
                       key={tt.id}
                       tt={tt}
+                      maxPriceCents={eventMaxPriceCents}
                       value={qty[tt.id] ?? 0}
                       onChange={(v) => setQty({ ...qty, [tt.id]: v })}
                     />
@@ -646,7 +630,7 @@ function DataPhase({
               value={guestEmail}
               onChange={setGuestEmail}
               placeholder="juan@gmail.com"
-              hint="Para notificaciones, no es obligatorio."
+              hint="Solo si pagas con tarjeta."
             />
           </div>
         )}
@@ -826,12 +810,6 @@ function TicketBadge({
         Box{boxLabel ? ` · ${boxLabel}` : ""}
       </span>
     );
-  if (kind === "presale")
-    return (
-      <span className="rounded-full bg-amber-500/15 px-1.5 py-px text-[9.5px] font-bold uppercase tracking-[0.1em] text-amber-300">
-        Preventa
-      </span>
-    );
   if (kind === "vip")
     return (
       <span className="rounded-full bg-yellow-400/15 px-1.5 py-px text-[9.5px] font-bold uppercase tracking-[0.1em] text-yellow-300">
@@ -841,12 +819,106 @@ function TicketBadge({
   return null;
 }
 
+/**
+ * Etiqueta de zona como ESTATUS, no como pin de mapa. Una zona "Platinum" o
+ * "VIP" es aspiracional: se trata en dorado para que genere deseo. Solo se
+ * muestra si el organizador definió la zona.
+ */
+/**
+ * Estilos del distintivo de zona según jerarquía de PRECIO (no por nombre):
+ * - "top": la(s) zona(s) más cara(s) del evento → dorado con estrella.
+ * - "mid": el resto de zonas con nombre → plateado con diamante (visible, no gris
+ *   apagado, pero subordinado al dorado). Las entradas sin zona no llevan chip.
+ * Decidir por precio es honesto y automático: lo caro brilla más.
+ */
+const ZONE_TIER_STYLE = {
+  top: {
+    color: "#f5d98b",
+    background:
+      "linear-gradient(180deg, rgba(245,217,139,0.16), rgba(245,217,139,0.05))",
+    border: "1px solid rgba(245,217,139,0.32)",
+  },
+  mid: {
+    color: "#cfd8ee",
+    background:
+      "linear-gradient(180deg, rgba(207,216,238,0.16), rgba(207,216,238,0.05))",
+    border: "1px solid rgba(207,216,238,0.34)",
+  },
+} as const;
+
+function ZoneBadge({ label, tier = "top" }: { label: string; tier?: "top" | "mid" }) {
+  // Quita el prefijo "Zona " redundante: el chip ya comunica que es zona.
+  const clean = label.replace(/^zona\s+/i, "").trim() || label;
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-[0.07em]"
+      style={ZONE_TIER_STYLE[tier]}
+    >
+      <svg viewBox="0 0 24 24" className="h-2.5 w-2.5 shrink-0" fill="currentColor" aria-hidden>
+        {tier === "top" ? (
+          /* estrella — máximo estatus */
+          <path d="M12 2l2.4 6.9H21l-5.3 4 2 6.9L12 16l-5.7 3.8 2-6.9L3 8.9h6.6z" />
+        ) : (
+          /* diamante — premium subordinado */
+          <path d="M12 2l7 10-7 10-7-10z" />
+        )}
+      </svg>
+      {clean}
+    </span>
+  );
+}
+
+/** Tier de una zona según su precio vs el máximo del evento. */
+function zoneTier(priceCents: number, eventMaxPriceCents: number): "top" | "mid" {
+  return priceCents >= eventMaxPriceCents ? "top" : "mid";
+}
+
+/** Escasez por umbral porcentual: solo "enciende" cuando queda ≤30% del stock. */
+function lowStock(sold: number, capacity: number) {
+  const remaining = Math.max(0, capacity - sold);
+  const pct = capacity > 0 ? remaining / capacity : 0;
+  return { remaining, pct, low: capacity > 0 && remaining > 0 && pct <= 0.3 };
+}
+
+/**
+ * Línea de FOMO de disponibilidad. Con `noun` (boxes/mesas) muestra la cuenta
+ * exacta ("Solo quedan 3 boxes"); sin él, el porcentaje ("Solo queda 22%").
+ */
+function ScarcityNote({
+  remaining,
+  pct,
+  noun,
+}: {
+  remaining: number;
+  pct: number;
+  noun?: string;
+}) {
+  const label = noun
+    ? `Solo ${remaining === 1 ? "queda" : "quedan"} ${remaining} ${
+        remaining === 1 ? noun : unitNounPlural(noun)
+      }`
+    : `Solo queda ${Math.round(pct * 100)}% disponible`;
+  return (
+    <div className="mt-2 inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-rose-300">
+      <span className="relative flex h-1.5 w-1.5">
+        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-400 opacity-70" />
+        <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-rose-400" />
+      </span>
+      {label}
+    </div>
+  );
+}
+
 function BoxGrid({
   items,
+  zone,
+  maxPriceCents,
   qty,
   onChange,
 }: {
   items: TicketType[];
+  zone: string | null;
+  maxPriceCents: number;
   qty: Record<string, number>;
   onChange: (ticketTypeId: string, value: number) => void;
 }) {
@@ -865,9 +937,21 @@ function BoxGrid({
   const currency = items[0].currency;
   // Noun más usado en la zona (los items suelen compartirlo). Default "box".
   const noun = unitNoun(items[0]);
+  // Espacios libres de la zona (cada box/mesa es una unidad reservable).
+  const freeCount = items.filter((tt) => ticketStatus(tt).kind !== "soldout").length;
+  // Tier del distintivo según el precio más alto del grupo vs el del evento.
+  const groupPriceCents = items.reduce((mx, i) => Math.max(mx, i.priceCents), 0);
+  const tier = zoneTier(groupPriceCents, maxPriceCents);
 
   return (
     <div className="rounded-2xl border border-cart-line bg-cart-bg-elev p-4">
+      {/* Título de la tarjeta + zona como estatus (dorado) — consistente con las entradas */}
+      <div className="mb-2 flex items-center gap-2">
+        <span className="text-[15.5px] font-semibold tracking-[-0.01em]">
+          {capitalize(unitNounPlural(noun))}
+        </span>
+        {zone ? <ZoneBadge label={zone} tier={tier} /> : null}
+      </div>
       {/* Header común — info que se repetía en cada card */}
       <div className="flex items-baseline justify-between">
         <p className="text-[12.5px] text-cart-ink-2">
@@ -882,6 +966,11 @@ function BoxGrid({
           </p>
         )}
       </div>
+
+      {/* Escasez por unidad: solo enciende cuando quedan ≤30% de los espacios */}
+      {freeCount > 0 && freeCount / items.length <= 0.3 ? (
+        <ScarcityNote remaining={freeCount} pct={freeCount / items.length} noun={noun} />
+      ) : null}
 
       {/* Grid de tiles */}
       <div className="mt-4 grid grid-cols-[repeat(auto-fill,minmax(56px,1fr))] gap-2">
@@ -988,10 +1077,12 @@ function tileLabel(tt: TicketType): string {
 
 function TicketCard({
   tt,
+  maxPriceCents,
   value,
   onChange,
 }: {
   tt: TicketType;
+  maxPriceCents: number;
   value: number;
   onChange: (v: number) => void;
 }) {
@@ -1002,6 +1093,8 @@ function TicketCard({
   const isBox = tt.kind === "box";
   const remaining = status.kind === "available" ? status.remaining : 0;
   const selected = value > 0;
+  const ap = activePricing(tt);
+  const stock = lowStock(tt.sold, tt.capacity);
 
   const saleDeadline =
     tt.saleEndsAt && status.kind !== "expired"
@@ -1031,18 +1124,40 @@ function TicketCard({
               {tt.name}
             </span>
             <TicketBadge kind={tt.kind} boxLabel={tt.boxLabel} />
+            {tt.zone ? <ZoneBadge label={tt.zone} tier={zoneTier(tt.priceCents, maxPriceCents)} /> : null}
+            {ap.isPresale && (
+              <span className="rounded-md bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.06em] text-emerald-300">
+                Preventa
+              </span>
+            )}
           </div>
           <div className="mt-1 text-[12px] text-cart-ink-3">
             {ticketSubtitle(tt)}
+            {ap.isPresale && (
+              <span className="text-cart-ink-4"> · luego {formatMoney(ap.basePriceCents, tt.currency)}</span>
+            )}
           </div>
-          {saleDeadline && (
-            <div className="mt-1 text-[11px] text-amber-400/80">
-              Válida hasta el {saleDeadline}
+          {ap.isPresale && ap.presaleEndsAt && shouldCountdown(ap.presaleEndsAt) ? (
+            <div className="mt-1">
+              <PresaleCountdown endsAt={ap.presaleEndsAt} />
+            </div>
+          ) : saleDeadline ? (
+            <div className="mt-1 text-[11px] text-amber-400/80">Válida hasta el {saleDeadline}</div>
+          ) : null}
+          {/* Escasez: solo entradas no-box; los boxes muestran su escasez en BoxGrid */}
+          {!isBox && stock.low ? (
+            <ScarcityNote remaining={stock.remaining} pct={stock.pct} />
+          ) : null}
+        </div>
+        <div className="text-right">
+          {ap.isPresale && (
+            <div className="text-[12px] font-medium text-cart-ink-4 line-through">
+              {formatMoney(ap.basePriceCents, tt.currency)}
             </div>
           )}
-        </div>
-        <div className="text-right text-[16px] font-bold tracking-[-0.01em]">
-          {tt.priceCents === 0 ? "Gratis" : formatMoney(tt.priceCents, tt.currency)}
+          <div className="text-[16px] font-bold tracking-[-0.01em]">
+            {formatMoney(ap.priceCents, tt.currency)}
+          </div>
         </div>
       </div>
       <div className="mt-4 flex items-center justify-between">
@@ -1434,9 +1549,7 @@ function OrderSummary({
                 {tt.name} <span className="text-cart-ink-3">× {qty[tt.id]}</span>
               </span>
               <span className="text-[13px] font-semibold tabular-nums">
-                {tt.priceCents === 0
-                  ? "Gratis"
-                  : formatMoney(tt.priceCents * (qty[tt.id] ?? 0), tt.currency)}
+                {formatMoney(tt.priceCents * (qty[tt.id] ?? 0), tt.currency)}
               </span>
             </div>
           ))}
@@ -1458,7 +1571,7 @@ function OrderSummary({
           Total
         </span>
         <span className="text-[22px] font-bold tabular-nums tracking-[-0.02em]">
-          {total + fee === 0 ? "Gratis" : formatMoney(total + fee)}
+          {formatMoney(total + fee)}
         </span>
       </div>
 
