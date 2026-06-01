@@ -16,6 +16,7 @@ export async function syncPending(slug: string): Promise<{ ok: number; failed: n
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             qrCode: item.qrCode,
+            eventSlug: slug,
             offlineScannedAt: item.scannedAt,
           }),
         });

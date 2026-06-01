@@ -68,9 +68,9 @@ export default function ScanPage() {
 }
 
 function Inner() {
-  const scan      = useScanQr();
   const search    = useSearchParams();
   const eventSlug = search.get("event");
+  const scan      = useScanQr(eventSlug ?? "");
   const online    = useOnlineStatus();
 
   const { data: eventData } = useEvent(eventSlug ?? "");
