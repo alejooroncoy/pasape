@@ -13,7 +13,8 @@ export const GET = async (
 
   const auth = await getAuthContext();
   if (!auth.ok) return json(err("unauthorized"));
-  if (q.length < 2) return json({ ok: true, value: [] });
+  // q vacío = cargar todos (hasta 60) para la lista web
+  const isEmpty = q.length === 0;
 
   const db = await createSupabaseServerClient();
 
@@ -35,17 +36,17 @@ export const GET = async (
     )
     .eq("ticket_type.event_id", ev.id)
     .neq("status", "void")
-    .limit(20);
+    .order("used_at", { ascending: false, nullsFirst: false })
+    .limit(isEmpty ? 60 : 20);
 
-  if (isNumeric) {
-    // Buscar por últimos dígitos del DNI
-    query = query.ilike("holder_dni_last2", `%${q.slice(-2)}%`);
-  } else {
-    // Buscar por nombre
-    query = query.ilike("holder_name", `%${q}%`);
+  if (!isEmpty) {
+    if (isNumeric) {
+      query = query.ilike("holder_dni_last2", `%${q.slice(-2)}%`);
+    } else {
+      query = query.ilike("holder_name", `%${q}%`);
+    }
   }
 
-  // También buscar en orders.guest_name si no hay holder_name en ticket
   const { data: tickets } = await query;
 
   const results = (tickets ?? []).map((t) => ({
