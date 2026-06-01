@@ -33,7 +33,7 @@ export interface TicketRepository {
     toProfile: string | null;
     toContact: string | null;
   }): Promise<Result<Ticket>>;
-  markUsedByQr(qrCode: string, scannerId: string): Promise<Result<{
+  markUsedByQr(qrCode: string, scannerId: string, usedAt?: Date): Promise<Result<{
     ticket: Ticket;
     eventId: string;
     holderName: string | null;

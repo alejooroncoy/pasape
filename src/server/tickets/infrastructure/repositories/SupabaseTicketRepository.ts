@@ -465,7 +465,7 @@ export const supabaseTicketRepository: TicketRepository = {
     return ok(toTicket(updated));
   },
 
-  async markUsedByQr(qrCode, scannerId) {
+  async markUsedByQr(qrCode, scannerId, usedAt?: Date) {
     const db = supabaseAdmin();
 
     // Si el código viene en formato rotante (ticketId.window.code), lo
@@ -481,7 +481,7 @@ export const supabaseTicketRepository: TicketRepository = {
 
     const { data: updatedRow, error: upErr } = await db
       .from("tickets")
-      .update({ status: "used", used_at: new Date().toISOString() })
+      .update({ status: "used", used_at: usedAt ? usedAt.toISOString() : new Date().toISOString() })
       .eq("qr_code", effectiveQrCode)
       .eq("status", "active")
       .select("*, ticket_type:ticket_types!inner(event_id, name)")
