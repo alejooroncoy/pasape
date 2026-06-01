@@ -10,6 +10,13 @@ import { scanLocal } from "@/lib/scanning/scanLocal";
 import { countPending } from "@/lib/scanning/scanQueue";
 import { syncPending } from "@/lib/scanning/syncWorker";
 
+const haptic = (kind: "valid" | "already_used" | "invalid") => {
+  if (typeof navigator === "undefined" || !("vibrate" in navigator)) return;
+  if (kind === "valid")        navigator.vibrate([50]);
+  else if (kind === "already_used") navigator.vibrate([30, 30, 30]);
+  else                         navigator.vibrate([100, 50, 100]);
+};
+
 const SearchIcon = () => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
     <circle cx="7" cy="7" r="5" stroke="rgba(255,255,255,0.5)" strokeWidth="1.6" />
@@ -83,8 +90,10 @@ export default function ScanPage() {
       setLastCode(code);
       try {
         const result = online ? await scan.mutateAsync(code) : await scanLocal(code);
+        const kind = (result.kind as ScanKind) ?? "invalid";
+        haptic(kind);
         setOverlay({
-          kind: (result.kind as ScanKind) ?? "invalid",
+          kind,
           holder: result.holderName ?? null,
           typeName: result.ticketTypeName ?? null,
           dniLast2: result.holderDniLast2 ?? null,
@@ -94,6 +103,7 @@ export default function ScanPage() {
           boxCapacity: result.boxCapacity ?? null,
         });
       } catch (e) {
+        haptic("invalid");
         setOverlay({
           kind: "invalid",
           holder: null,
@@ -208,7 +218,18 @@ export default function ScanPage() {
   // SCAN VALID / INVALID overlays
   if (overlay) {
     const isValid = overlay.kind === "valid";
-    const tone = isValid ? C.green : C.red;
+    const isAlreadyUsed = overlay.kind === "already_used";
+    const tone = isValid ? C.green : isAlreadyUsed ? C.yellow : C.red;
+    const bgGrad = isValid
+      ? "radial-gradient(80% 60% at 50% 40%, #1a1620 0%, #050507 70%)"
+      : isAlreadyUsed
+        ? "radial-gradient(80% 60% at 50% 40%, #1f1a0a 0%, #050507 70%)"
+        : "radial-gradient(80% 60% at 50% 40%, #2a1518 0%, #050507 70%)";
+    const cardBg = isValid
+      ? "rgba(34,209,127,0.18)"
+      : isAlreadyUsed
+        ? "rgba(255,206,59,0.15)"
+        : "rgba(255,77,94,0.2)";
     return (
       <Phone>
         <div style={{ position: "absolute", inset: 0, background: "#000" }}>
@@ -216,9 +237,7 @@ export default function ScanPage() {
             style={{
               position: "absolute",
               inset: 0,
-              background: isValid
-                ? "radial-gradient(80% 60% at 50% 40%, #1a1620 0%, #050507 70%)"
-                : "radial-gradient(80% 60% at 50% 40%, #2a1518 0%, #050507 70%)",
+              background: bgGrad,
             }}
           />
           <div
@@ -340,7 +359,7 @@ export default function ScanPage() {
               right: 22,
               padding: "18px 20px",
               borderRadius: 22,
-              background: isValid ? "rgba(34,209,127,0.18)" : "rgba(255,77,94,0.2)",
+              background: cardBg,
               backdropFilter: "blur(20px)",
               boxShadow: `0 0 0 1.5px ${tone} inset, 0 20px 60px ${tone}44`,
               display: "flex",
@@ -364,6 +383,11 @@ export default function ScanPage() {
                 <svg width="22" height="22" viewBox="0 0 22 22">
                   <path d="M4 11l5 5 9-11" stroke="#062315" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none" />
                 </svg>
+              ) : isAlreadyUsed ? (
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                  <circle cx="10" cy="10" r="7" stroke="#000" strokeWidth="1.5" opacity="0.3" />
+                  <path d="M10 6v4l2.5 2.5" stroke="#000" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
               ) : (
                 <svg width="20" height="20" viewBox="0 0 20 20">
                   <path d="M5 5l10 10M15 5L5 15" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" />
@@ -379,7 +403,7 @@ export default function ScanPage() {
                     : "QR inválido"}
               </div>
               <div style={{ fontSize: 13, color: "rgba(255,255,255,0.75)" }}>
-                {overlay.typeName ?? (isValid ? "Entrada confirmada" : "No dejes pasar")}
+                {overlay.typeName ?? (isValid ? "Entrada confirmada" : isAlreadyUsed ? "Ya pasó antes" : "No dejes pasar")}
               </div>
               {isValid && (
                 <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 8 }}>
@@ -424,7 +448,7 @@ export default function ScanPage() {
   // SCAN HOME
   return (
     <Phone>
-      <div style={{ padding: "10px 22px 0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <div style={{ padding: "calc(env(safe-area-inset-top, 0px) + 10px) 22px 0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <div
             style={{
@@ -497,7 +521,13 @@ export default function ScanPage() {
             />
           )}
           {!active && (
-            <div style={{ position: "absolute", inset: 0, background: "rgba(255,255,255,0.02)", borderRadius: 18 }} />
+            <div style={{ position: "absolute", inset: 0, background: "rgba(255,255,255,0.02)", borderRadius: 18, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10 }}>
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                <circle cx="12" cy="13" r="4" />
+              </svg>
+              <span style={{ fontSize: 12, color: "rgba(255,255,255,0.2)", fontFamily: FONT_DISPLAY }}>Apunta al código QR</span>
+            </div>
           )}
           {[
             { top: 0, left: 0 },
@@ -568,7 +598,7 @@ export default function ScanPage() {
         </div>
       </div>
 
-      <div style={{ padding: "20px 22px 32px", display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ padding: "20px 22px calc(env(safe-area-inset-bottom, 0px) + 32px)", display: "flex", flexDirection: "column", gap: 10 }}>
         <button
           type="button"
           onClick={active ? stopCamera : startCamera}

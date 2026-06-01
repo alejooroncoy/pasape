@@ -24,6 +24,7 @@ function Inner({ params }: Props) {
   const search = useSearchParams();
   const orderId = search.get("order");
   const guestEmail = search.get("email");
+  const payMethod = search.get("method") ?? "yape";
   const { data: eventData } = useEvent(slug);
   const tickets = useMyTickets();
   const [startedAt] = useState(() => Date.now());
@@ -82,7 +83,7 @@ function Inner({ params }: Props) {
     if (match && new Date(match.createdAt).getTime() >= startedAt - 60_000) {
       router.replace(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        `/tickets/${match.id}` as any,
+        `/tickets` as any,
       );
     }
   }, [orderId, tickets.data, slug, router, startedAt]);
@@ -185,18 +186,26 @@ function Inner({ params }: Props) {
               }}
             />
             <div className="absolute inset-[20px] grid place-items-center rounded-full border border-cart-line bg-cart-bg-elev">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/brand/yape.png"
-                alt="Yape"
-                width={64}
-                height={64}
-                className="rounded-xl"
-              />
+              {payMethod === "mp" ? (
+                <svg width="32" height="32" viewBox="0 0 22 22" fill="none" className="text-white">
+                  <rect x="2" y="4" width="18" height="14" rx="2.5" stroke="currentColor" strokeWidth="1.6" />
+                  <rect x="2" y="7.5" width="18" height="2.5" fill="currentColor" />
+                  <rect x="5" y="13" width="4" height="2" rx="0.5" fill="currentColor" opacity="0.7" />
+                </svg>
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src="/brand/yape.png"
+                  alt="Yape"
+                  width={64}
+                  height={64}
+                  className="rounded-xl"
+                />
+              )}
             </div>
           </div>
           <h1 className="mt-8 text-[22px] font-bold tracking-[-0.02em]">
-            Procesando tu pago…
+            {summary?.price === "Gratis" ? "Confirmando entrada…" : "Procesando tu pago…"}
           </h1>
           <p className="mt-2 text-[14px] leading-[1.5] text-cart-ink-2">
             No cierres esta ventana.

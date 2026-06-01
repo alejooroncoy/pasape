@@ -6,7 +6,9 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type Dispatch,
   type ReactNode,
+  type SetStateAction,
 } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { useRouter } from "@/i18n/navigation";
@@ -864,7 +866,7 @@ export function EventComposer(props: EventComposerProps) {
             label="Entradas"
             hint={
               validTickets.length
-                ? `${validTickets.length} ${validTickets.length === 1 ? "tipo" : "tipos"} · ${totalCapacity.toLocaleString("es-PE")} cupos · S/ ${totalMax.toLocaleString("es-PE")} máx`
+                ? `${validTickets.length} ${validTickets.length === 1 ? "tipo" : "tipos"} · ${totalCapacity.toLocaleString("es-PE")} cupos · hasta S/ ${totalMax.toLocaleString("es-PE")} potencial`
                 : "Crea al menos un tipo de entrada"
             }
             onClick={() => setOpenSheet("tickets")}
@@ -1737,13 +1739,13 @@ function TicketsEditor({
   setTickets,
 }: {
   tickets: TicketRow[];
-  setTickets: (rows: TicketRow[]) => void;
+  setTickets: Dispatch<SetStateAction<TicketRow[]>>;
 }) {
   const update = (rowKey: string, patch: Partial<TicketRow>) => {
-    setTickets(tickets.map((t) => (t.rowKey === rowKey ? { ...t, ...patch } : t)));
+    setTickets((prev) => prev.map((t) => (t.rowKey === rowKey ? { ...t, ...patch } : t)));
   };
   const updateAll = (keys: string[], patch: Partial<TicketRow>) => {
-    setTickets(tickets.map((t) => (keys.includes(t.rowKey) ? { ...t, ...patch } : t)));
+    setTickets((prev) => prev.map((t) => (keys.includes(t.rowKey) ? { ...t, ...patch } : t)));
   };
   const remove = (rowKey: string) => {
     if (tickets.length === 1) return;
