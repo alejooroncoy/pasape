@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { C, FONT_DISPLAY } from "@/components/design";
+import { C, FONT_DISPLAY, FONT_MONO } from "@/components/design";
 import { useScanQr } from "@/lib/scanning/hooks/useScanQr";
 import { refreshScanCache } from "@/lib/scanning/scanCache";
 import { useOnlineStatus } from "@/lib/_shared/useOnlineStatus";
@@ -10,90 +10,74 @@ import { scanLocal } from "@/lib/scanning/scanLocal";
 import { countPending } from "@/lib/scanning/scanQueue";
 import { syncPending } from "@/lib/scanning/syncWorker";
 import { useEvent } from "@/lib/events/hooks/useEvents";
-import { useEventStats } from "@/lib/events/hooks/useEventStats";
 
-// ─── Haptic feedback ───────────────────────────────────────────────────────
+// ─── Haptic ────────────────────────────────────────────────────────────────
 const haptic = (kind: "valid" | "already_used" | "invalid") => {
   if (typeof navigator === "undefined" || !("vibrate" in navigator)) return;
-  if (kind === "valid")             navigator.vibrate([50]);
-  else if (kind === "already_used") navigator.vibrate([30, 30, 30]);
-  else                              navigator.vibrate([100, 50, 100]);
+  if (kind === "valid")             navigator.vibrate([60]);
+  else if (kind === "already_used") navigator.vibrate([40, 60, 40]);
+  else                              navigator.vibrate([120, 60, 120]);
 };
 
 // ─── Tipos ─────────────────────────────────────────────────────────────────
 type ScanKind = "valid" | "already_used" | "invalid";
+
 type ScanResult = {
   kind: ScanKind;
-  holderName: string | null;
-  typeName: string | null;
-  dniLast2: string | null;
-  boxLabel: string | null;
-  scannedAt?: string | null;
+  holderName:    string | null;
+  typeName:      string | null;
+  dniLast2:      string | null;
+  boxLabel:      string | null;
+  boxHostName:   string | null;
+  scannedAt:     string | null;
 };
 
 type DetectorLike = {
-  detect: (source: CanvasImageSource | ImageBitmapSource) => Promise<Array<{ rawValue: string }>>;
+  detect: (src: CanvasImageSource | ImageBitmapSource) => Promise<{ rawValue: string }[]>;
 };
 
-const getDetector = (): DetectorLike | null => {
+function getDetector(): DetectorLike | null {
   if (typeof window === "undefined") return null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const Ctor = (window as any).BarcodeDetector;
   if (!Ctor) return null;
-  try {
-    return new Ctor({ formats: ["qr_code"] }) as DetectorLike;
-  } catch {
-    return null;
-  }
-};
+  try { return new Ctor({ formats: ["qr_code"] }) as DetectorLike; } catch { return null; }
+}
 
-function formatTime(iso: string) {
+function fmtTime(iso: string) {
   return new Date(iso).toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit" });
 }
 
-// ─── Colores por resultado ─────────────────────────────────────────────────
-function toneFor(kind: ScanKind) {
-  if (kind === "valid")        return "#22C55E"; // green-500
-  if (kind === "already_used") return "#EF4444"; // red-500
-  return "#EF4444";
-}
-
-// ─── Componente principal ───────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 export default function ScanPage() {
   return (
     <Suspense fallback={null}>
-      <ScanPageInner />
+      <Inner />
     </Suspense>
   );
 }
 
-function ScanPageInner() {
-  const scan       = useScanQr();
-  const search     = useSearchParams();
-  const eventSlug  = search.get("event");
-  const online     = useOnlineStatus();
+function Inner() {
+  const scan      = useScanQr();
+  const search    = useSearchParams();
+  const eventSlug = search.get("event");
+  const online    = useOnlineStatus();
 
-  // Hooks de datos del evento
-  const eventData  = useEvent(eventSlug ?? "");
-  const statsData  = useEventStats(eventSlug ?? "");
-
-  const ev         = eventData.data?.event;
-  const validated  = statsData.data?.validated ?? 0;
-  const capacity   = statsData.data?.capacity ?? 0;
-  const aforo      = capacity > 0 ? Math.round((validated / capacity) * 100) : 0;
-  const afoWarning = capacity > 0 && aforo >= 90;
+  // Datos del evento (nombre para el header)
+  const { data: eventData } = useEvent(eventSlug ?? "");
+  const ev = eventData?.event;
 
   // Refs de cámara
   const videoRef    = useRef<HTMLVideoElement | null>(null);
   const streamRef   = useRef<MediaStream | null>(null);
   const rafRef      = useRef<number | null>(null);
-  const lastCodeRef = useRef<string>("");
+  const lastCodeRef = useRef("");
+  const clearTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [active,       setActive]       = useState(false);
+  const [cameraError,  setCameraError]  = useState(false);
   const [result,       setResult]       = useState<ScanResult | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
-  const [cornerColor,  setCornerColor]  = useState<string>(C.purple);
-  const resultTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Funciones de cámara ──────────────────────────────────────────────────
   const stopCamera = useCallback(() => {
@@ -104,73 +88,72 @@ function ScanPageInner() {
     setActive(false);
   }, []);
 
-  const showResult = useCallback((r: ScanResult) => {
-    setResult(r);
-    setCornerColor(toneFor(r.kind));
-    haptic(r.kind);
-    if (resultTimer.current) clearTimeout(resultTimer.current);
-    resultTimer.current = setTimeout(() => {
-      setResult(null);
-      setCornerColor(C.purple);
-      lastCodeRef.current = "";
-    }, 3000);
+  const dismissResult = useCallback(() => {
+    if (clearTimer.current) clearTimeout(clearTimer.current);
+    setResult(null);
+    lastCodeRef.current = "";
   }, []);
 
-  const runScan = useCallback(
-    async (code: string) => {
-      if (!code || code === lastCodeRef.current) return;
-      lastCodeRef.current = code;
-      try {
-        const raw = online ? await scan.mutateAsync(code) : await scanLocal(code);
-        showResult({
-          kind:       (raw.kind as ScanKind) ?? "invalid",
-          holderName: raw.holderName ?? null,
-          typeName:   raw.ticketTypeName ?? null,
-          dniLast2:   raw.holderDniLast2 ?? null,
-          boxLabel:   raw.boxLabel ?? null,
-          scannedAt:  ("scannedAt" in raw ? raw.scannedAt : null) ?? null,
-        });
-      } catch {
-        showResult({ kind: "invalid", holderName: null, typeName: "QR no reconocido", dniLast2: null, boxLabel: null });
-      }
-    },
-    [scan, online, showResult],
-  );
+  const showResult = useCallback((r: ScanResult) => {
+    setResult(r);
+    haptic(r.kind);
+    if (clearTimer.current) clearTimeout(clearTimer.current);
+    clearTimer.current = setTimeout(dismissResult, 2800);
+  }, [dismissResult]);
 
-  const loop = useCallback(
-    async function scanLoop(detector: DetectorLike) {
-      const video = videoRef.current;
-      if (!video || video.readyState < 2) {
-        rafRef.current = requestAnimationFrame(() => void scanLoop(detector));
-        return;
-      }
-      try {
-        const codes = await detector.detect(video);
-        if (codes[0]?.rawValue) await runScan(codes[0].rawValue);
-      } catch {}
+  const runScan = useCallback(async (code: string) => {
+    if (!code || code === lastCodeRef.current) return;
+    lastCodeRef.current = code;
+    try {
+      const raw = online ? await scan.mutateAsync(code) : await scanLocal(code);
+      showResult({
+        kind:        (raw.kind as ScanKind) ?? "invalid",
+        holderName:  raw.holderName ?? null,
+        typeName:    raw.ticketTypeName ?? null,
+        dniLast2:    raw.holderDniLast2 ?? null,
+        boxLabel:    raw.boxLabel ?? null,
+        boxHostName: raw.boxHostName ?? null,
+        scannedAt:   ("scannedAt" in raw ? raw.scannedAt : null) ?? null,
+      });
+    } catch {
+      showResult({ kind: "invalid", holderName: null, typeName: null, dniLast2: null, boxLabel: null, boxHostName: null, scannedAt: null });
+    }
+  }, [scan, online, showResult]);
+
+  const loop = useCallback(async function scanLoop(detector: DetectorLike) {
+    const video = videoRef.current;
+    if (!video || video.readyState < 2) {
       rafRef.current = requestAnimationFrame(() => void scanLoop(detector));
-    },
-    [runScan],
-  );
+      return;
+    }
+    try {
+      const codes = await detector.detect(video);
+      if (codes[0]?.rawValue) await runScan(codes[0].rawValue);
+    } catch {}
+    rafRef.current = requestAnimationFrame(() => void scanLoop(detector));
+  }, [runScan]);
 
   const startCamera = useCallback(async () => {
+    setCameraError(false);
     const detector = getDetector();
-    if (!detector) return;
+    if (!detector) { setCameraError(true); return; }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
       streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
+      if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play(); }
       setActive(true);
       rafRef.current = requestAnimationFrame(() => loop(detector));
-    } catch {}
+    } catch { setCameraError(true); }
   }, [loop]);
 
-  useEffect(() => () => { stopCamera(); if (resultTimer.current) clearTimeout(resultTimer.current); }, [stopCamera]);
+  // Auto-start cuando hay event slug
+  useEffect(() => {
+    void startCamera();
+    return () => { stopCamera(); if (clearTimer.current) clearTimeout(clearTimer.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  // ── Sync offline cache ───────────────────────────────────────────────────
+  // Sync offline cache
   useEffect(() => {
     if (!eventSlug) return;
     let cancel = false;
@@ -184,7 +167,7 @@ function ScanPageInner() {
     let cancel = false;
     const refresh = async () => { if (!cancel) setPendingCount(await countPending()); };
     void refresh();
-    const id = setInterval(refresh, 2000);
+    const id = setInterval(refresh, 3000);
     return () => { cancel = true; clearInterval(id); };
   }, []);
 
@@ -194,316 +177,398 @@ function ScanPageInner() {
   }, [online, eventSlug]);
 
   // ─────────────────────────────────────────────────────────────────────────
+  // Colores del resultado
+  // ─────────────────────────────────────────────────────────────────────────
+  const tone =
+    result?.kind === "valid"        ? C.green  :
+    result?.kind === "already_used" ? C.yellow :
+    C.red;
+
+  const toneSoft =
+    result?.kind === "valid"        ? C.greenSoft  :
+    result?.kind === "already_used" ? C.yellowSoft :
+    C.redSoft;
+
+  // ─────────────────────────────────────────────────────────────────────────
   // RENDER
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <div
+      onClick={result ? dismissResult : undefined}
       style={{
-        minHeight: "100dvh",
-        background: "#09090B",
+        position: "fixed", inset: 0,
+        background: C.bg,
         display: "flex",
         flexDirection: "column",
         fontFamily: FONT_DISPLAY,
+        color: C.text,
         paddingTop: "env(safe-area-inset-top, 0px)",
         paddingBottom: "env(safe-area-inset-bottom, 0px)",
-        color: "#fff",
+        userSelect: "none",
+        WebkitUserSelect: "none",
+        cursor: result ? "pointer" : "default",
       }}
     >
-      {/* ── Header ─────────────────────────────────────────────────────── */}
-      <div style={{ padding: "14px 18px 0", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 32, height: 32, borderRadius: 10, background: C.purple, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 0 1px rgba(255,255,255,0.12) inset, 0 6px 18px -4px rgba(124,58,237,0.6)` }}>
-            <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M7 1L13 7L7 13L1 7L7 1Z" fill="#fff" /></svg>
+      {/* ── OVERLAY FULLSCREEN al escanear ──────────────────────────────── */}
+      {result && (
+        <div
+          style={{
+            position: "absolute", inset: 0, zIndex: 20,
+            display: "flex", flexDirection: "column",
+            alignItems: "center", justifyContent: "center",
+            background:
+              result.kind === "valid"
+                ? `radial-gradient(70% 60% at 50% 45%, rgba(34,209,127,0.22) 0%, ${C.bg} 80%)`
+                : result.kind === "already_used"
+                  ? `radial-gradient(70% 60% at 50% 45%, rgba(255,206,59,0.18) 0%, ${C.bg} 80%)`
+                  : `radial-gradient(70% 60% at 50% 45%, rgba(255,77,94,0.22) 0%, ${C.bg} 80%)`,
+            padding: "0 32px",
+          }}
+        >
+          {/* Ícono grande */}
+          <div
+            style={{
+              width: 96, height: 96, borderRadius: "50%",
+              background: tone,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              boxShadow: `0 0 0 20px ${toneSoft}, 0 0 60px ${tone}55`,
+              animation: "pop 360ms cubic-bezier(0.34,1.56,0.64,1)",
+              flexShrink: 0,
+            }}
+          >
+            {result.kind === "valid" ? (
+              <svg width="44" height="44" viewBox="0 0 44 44" fill="none">
+                <path d="M9 22l10 10 17-22" stroke={C.bg} strokeWidth="5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            ) : result.kind === "already_used" ? (
+              <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+                <circle cx="20" cy="20" r="14" stroke={C.bg} strokeWidth="3.5"/>
+                <path d="M20 12v9l5 4" stroke={C.bg} strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            ) : (
+              <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+                <path d="M10 10l20 20M30 10L10 30" stroke={C.bg} strokeWidth="4.5" strokeLinecap="round"/>
+              </svg>
+            )}
           </div>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: "-0.02em", lineHeight: 1.1 }}>pasape</div>
-            <div style={{ fontSize: 10, color: "rgba(255,255,255,0.45)", letterSpacing: "0.02em" }}>Modo puerta</div>
+
+          {/* Título — nombre o estado */}
+          <div
+            style={{
+              marginTop: 28,
+              fontSize: result.holderName ? 42 : 34,
+              fontWeight: 800,
+              letterSpacing: "-0.03em",
+              lineHeight: 1.0,
+              textAlign: "center",
+              color: C.text,
+              animation: "fadeUp 300ms ease-out 80ms both",
+            }}
+          >
+            {result.kind === "valid"
+              ? (result.holderName ?? "Entrada válida")
+              : result.kind === "already_used"
+                ? (result.scannedAt ? `Ya ingresó · ${fmtTime(result.scannedAt)}` : "Ya ingresó antes")
+                : "QR inválido"}
+          </div>
+
+          {/* Subtítulo */}
+          {(result.typeName || result.dniLast2 || result.boxLabel || (result.kind === "already_used" && result.holderName)) && (
+            <div
+              style={{
+                marginTop: 10,
+                fontSize: 18,
+                fontWeight: 500,
+                color: C.dim,
+                textAlign: "center",
+                letterSpacing: "-0.01em",
+                animation: "fadeUp 300ms ease-out 160ms both",
+              }}
+            >
+              {result.kind === "already_used"
+                ? result.holderName
+                : [
+                    result.typeName,
+                    result.dniLast2 ? `DNI ··${result.dniLast2}` : null,
+                    result.boxLabel ? `Box ${result.boxLabel}` : null,
+                    result.boxHostName ? `por ${result.boxHostName}` : null,
+                  ].filter(Boolean).join("  ·  ")}
+            </div>
+          )}
+
+          {/* Toca para continuar */}
+          <div
+            style={{
+              position: "absolute",
+              bottom: "calc(env(safe-area-inset-bottom, 0px) + 32px)",
+              fontSize: 13,
+              color: C.dimmer,
+              letterSpacing: "0.04em",
+              fontWeight: 500,
+              animation: "fadeUp 300ms ease-out 400ms both",
+            }}
+          >
+            Toca para continuar
           </div>
         </div>
-        {/* Online / Offline + pending */}
+      )}
+
+      {/* ── HEADER ─────────────────────────────────────────────────────── */}
+      <div style={{
+        padding: "12px 20px 0",
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        flexShrink: 0, zIndex: 10,
+      }}>
+        {/* Logo + evento */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{
+            width: 34, height: 34, borderRadius: 11,
+            background: C.purple,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            boxShadow: `0 0 0 1px rgba(255,255,255,0.1) inset, 0 4px 16px ${C.purpleEdge}`,
+          }}>
+            {/* Diamante Pasape */}
+            <svg width="15" height="15" viewBox="0 0 14 14" fill="none">
+              <path d="M7 1L13 7L7 13L1 7L7 1Z" fill="#fff"/>
+            </svg>
+          </div>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: "-0.02em", lineHeight: 1.15 }}>
+              {ev?.title ?? "pasape"}
+            </div>
+            <div style={{ fontSize: 10, color: C.dimmer, letterSpacing: "0.03em" }}>
+              Modo puerta
+            </div>
+          </div>
+        </div>
+
+        {/* Estado de conexión */}
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           {pendingCount > 0 && (
-            <div style={{ padding: "3px 9px", borderRadius: 999, background: "rgba(251,191,36,0.15)", fontSize: 10, fontWeight: 700, color: "#FCD34D", letterSpacing: "0.06em" }}>
+            <div style={{
+              padding: "3px 8px", borderRadius: 999,
+              background: C.yellowSoft, fontSize: 10,
+              fontWeight: 700, color: C.yellow, letterSpacing: "0.06em",
+            }}>
               {pendingCount} pend.
             </div>
           )}
-          <div style={{ padding: "4px 10px", borderRadius: 999, background: online ? "rgba(34,197,94,0.12)" : "rgba(255,255,255,0.06)", fontSize: 10, fontWeight: 700, color: online ? "#4ADE80" : "rgba(255,255,255,0.35)", display: "flex", alignItems: "center", gap: 5, letterSpacing: "0.06em" }}>
-            <span style={{ width: 6, height: 6, borderRadius: 999, background: online ? "#4ADE80" : "rgba(255,255,255,0.3)", boxShadow: online ? "0 0 6px #4ADE80" : "none", display: "inline-block" }} />
+          <div style={{
+            padding: "4px 10px", borderRadius: 999,
+            background: online ? C.greenSoft : "rgba(255,255,255,0.06)",
+            fontSize: 10, fontWeight: 700,
+            color: online ? C.green : C.dimmer,
+            display: "flex", alignItems: "center", gap: 5,
+            letterSpacing: "0.06em",
+          }}>
+            <span style={{
+              width: 6, height: 6, borderRadius: 999,
+              background: online ? C.green : C.dimmer,
+              boxShadow: online ? `0 0 6px ${C.green}` : "none",
+              display: "inline-block",
+            }}/>
             {online ? "Online" : "Offline"}
           </div>
         </div>
       </div>
 
-      {/* ── Aforo warning banner ────────────────────────────────────────── */}
-      {afoWarning && (
-        <div style={{ margin: "10px 18px 0", padding: "8px 14px", borderRadius: 12, background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.25)", display: "flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 600, color: "#FCA5A5" }}>
-          <span style={{ width: 6, height: 6, borderRadius: 999, background: "#EF4444", boxShadow: "0 0 6px #EF4444", flexShrink: 0, display: "inline-block" }} />
-          AFORO {aforo}% · cuidado al dejar entrar · {validated}/{capacity}
-        </div>
-      )}
-
-      {/* ── Info del evento (solo en idle) ──────────────────────────────── */}
-      {ev && !result && (
-        <div style={{ padding: "14px 18px 0", flexShrink: 0 }}>
-          <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: "-0.03em", lineHeight: 1.1, color: "#fff" }}>
-            {ev.title}
-          </div>
-          {ev.venue && (
-            <div style={{ marginTop: 4, fontSize: 12, color: "rgba(255,255,255,0.45)", fontWeight: 500 }}>
-              {typeof ev.venue === "string" ? ev.venue : (ev.venue as { label?: string }).label ?? ""} · {new Date(ev.startsAt).toLocaleDateString("es-PE", { weekday: "short", day: "numeric", month: "short" })}
-            </div>
-          )}
-
-          {/* Stats */}
-          {capacity > 0 && (
-            <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-              <div style={{ padding: "10px 14px", borderRadius: 14, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.07)" }}>
-                <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", color: "rgba(255,255,255,0.35)", textTransform: "uppercase", marginBottom: 4 }}>Ingresadas</div>
-                <div style={{ display: "flex", alignItems: "baseline", gap: 3 }}>
-                  <span style={{ fontSize: 26, fontWeight: 800, letterSpacing: "-0.04em" }}>{validated}</span>
-                  <span style={{ fontSize: 13, color: "rgba(255,255,255,0.4)", fontWeight: 500 }}>/ {capacity}</span>
-                </div>
-              </div>
-              <div style={{ padding: "10px 14px", borderRadius: 14, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.07)" }}>
-                <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", color: "rgba(255,255,255,0.35)", textTransform: "uppercase", marginBottom: 4 }}>Aforo</div>
-                <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: "-0.04em", color: aforo >= 90 ? "#FCA5A5" : aforo >= 70 ? "#FCD34D" : "#4ADE80" }}>
-                  {aforo}%
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── Counter (solo mientras hay resultado) ───────────────────────── */}
-      {result && (
-        <div style={{ padding: "14px 18px 0", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
-          <div style={{ fontSize: 16, fontWeight: 700, color: "rgba(255,255,255,0.7)" }}>
-            {validated + 1} ingresadas
-          </div>
-          <button
-            type="button"
-            onClick={() => { setResult(null); setCornerColor(C.purple); lastCodeRef.current = ""; }}
-            style={{ width: 32, height: 32, borderRadius: 999, background: "rgba(255,255,255,0.08)", border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
-          </button>
-        </div>
-      )}
-
-      {/* ── Viewfinder (cámara / placeholder) ───────────────────────────── */}
-      <div style={{ flex: 1, padding: "14px 18px", minHeight: 0, display: "flex", flexDirection: "column" }}>
-        <div
-          style={{
-            position: "relative",
-            flex: 1,
-            borderRadius: 22,
-            overflow: "hidden",
-            background: "#0A0A0C",
-          }}
-        >
+      {/* ── VIEWFINDER ─────────────────────────────────────────────────── */}
+      <div style={{ flex: 1, padding: "14px 20px", minHeight: 0, display: "flex", flexDirection: "column" }}>
+        <div style={{
+          flex: 1, position: "relative",
+          borderRadius: 24,
+          overflow: "hidden",
+          background: C.bg2,
+          border: `1px solid ${C.line}`,
+        }}>
           {/* Video */}
           <video
             ref={videoRef}
-            playsInline
-            muted
+            playsInline muted
             style={{
               position: "absolute", inset: 0,
               width: "100%", height: "100%",
               objectFit: "cover",
               opacity: active ? 1 : 0,
-              transition: "opacity 0.3s",
+              transition: "opacity 0.4s ease",
             }}
           />
 
-          {/* Idle placeholder */}
+          {/* Placeholder idle */}
           {!active && (
-            <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10 }}>
-              {/* Grid de cuadros oscuros como en la imagen */}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 3, opacity: 0.15 }}>
-                {Array.from({ length: 9 }).map((_, i) => (
-                  <div key={i} style={{ width: 56, height: 56, borderRadius: 8, background: "rgba(255,255,255,0.12)" }} />
-                ))}
-              </div>
-              <div style={{ position: "absolute", bottom: 16, fontSize: 12, color: "rgba(255,255,255,0.3)", fontWeight: 500, letterSpacing: "0.02em" }}>
-                Apunta al código QR
-              </div>
+            <div style={{
+              position: "absolute", inset: 0,
+              display: "flex", flexDirection: "column",
+              alignItems: "center", justifyContent: "center",
+              gap: 12,
+            }}>
+              {cameraError ? (
+                <>
+                  <div style={{ fontSize: 32 }}>📵</div>
+                  <div style={{ fontSize: 14, color: C.dim, textAlign: "center", padding: "0 24px" }}>
+                    Sin acceso a la cámara
+                  </div>
+                  <button
+                    type="button"
+                    onClick={startCamera}
+                    style={{
+                      marginTop: 8, padding: "10px 20px", borderRadius: 12,
+                      border: `1px solid ${C.line2}`,
+                      background: C.bg3, color: C.text,
+                      fontFamily: FONT_DISPLAY, fontSize: 14, fontWeight: 600,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Reintentar
+                  </button>
+                </>
+              ) : (
+                <>
+                  {/* Indicador de carga */}
+                  <div style={{ display: "flex", gap: 4 }}>
+                    {[0,1,2].map((i) => (
+                      <div key={i} style={{
+                        width: 6, height: 6, borderRadius: 999,
+                        background: C.purple,
+                        animation: `pulse 1.2s ease-in-out ${i * 0.2}s infinite`,
+                      }}/>
+                    ))}
+                  </div>
+                  <div style={{ fontSize: 13, color: C.dimmer, fontWeight: 500 }}>
+                    Iniciando cámara…
+                  </div>
+                </>
+              )}
             </div>
           )}
 
-          {/* Scanline animada */}
-          {active && (
-            <div
-              style={{
-                position: "absolute",
-                left: "10%", right: "10%",
-                height: 2,
-                borderRadius: 999,
-                background: result
-                  ? `linear-gradient(90deg, transparent, ${toneFor(result.kind)}, transparent)`
-                  : "linear-gradient(90deg, transparent, #22C55E, transparent)",
-                boxShadow: result
-                  ? `0 0 12px 3px ${toneFor(result.kind)}88`
-                  : "0 0 12px 3px rgba(34,197,94,0.6)",
-                top: "50%",
-                animation: "scan-slide 2s ease-in-out infinite",
-              }}
-            />
+          {/* Scanline activa */}
+          {active && !result && (
+            <div style={{
+              position: "absolute",
+              left: "8%", right: "8%",
+              height: 2,
+              background: `linear-gradient(90deg, transparent, ${C.green}, transparent)`,
+              boxShadow: `0 0 16px 4px ${C.green}66`,
+              borderRadius: 999,
+              animation: "scanline 2.4s ease-in-out infinite",
+            }}/>
           )}
 
-          {/* Esquinas del viewfinder */}
-          {[
-            { top: 14, left: 14 },
-            { top: 14, right: 14 },
-            { bottom: 14, left: 14 },
-            { bottom: 14, right: 14 },
-          ].map((pos, i) => {
-            const isRight  = "right" in pos;
-            const isBottom = "bottom" in pos;
+          {/* Esquinas del frame */}
+          {(["tl","tr","bl","br"] as const).map((pos) => {
+            const isRight  = pos.includes("r");
+            const isBottom = pos.includes("b");
+            const color = result ? tone : C.purple;
             return (
               <div
-                key={i}
+                key={pos}
                 style={{
-                  position: "absolute", ...pos,
-                  width: 24, height: 24,
-                  borderTop:    !isBottom ? `2.5px solid ${cornerColor}` : "none",
-                  borderBottom: isBottom  ? `2.5px solid ${cornerColor}` : "none",
-                  borderLeft:   !isRight  ? `2.5px solid ${cornerColor}` : "none",
-                  borderRight:  isRight   ? `2.5px solid ${cornerColor}` : "none",
-                  transition: "border-color 0.2s ease",
+                  position: "absolute",
+                  top:    isBottom ? undefined : 16,
+                  bottom: isBottom ? 16        : undefined,
+                  left:   isRight  ? undefined : 16,
+                  right:  isRight  ? 16        : undefined,
+                  width: 28, height: 28,
+                  borderTop:    !isBottom ? `3px solid ${color}` : "none",
+                  borderBottom: isBottom  ? `3px solid ${color}` : "none",
+                  borderLeft:   !isRight  ? `3px solid ${color}` : "none",
+                  borderRight:  isRight   ? `3px solid ${color}` : "none",
+                  transition: "border-color 0.25s ease",
                 }}
               />
             );
           })}
+
+          {/* Label inferior cuando está activo */}
+          {active && !result && (
+            <div style={{
+              position: "absolute", bottom: 16, left: 0, right: 0,
+              textAlign: "center", fontSize: 12,
+              color: C.dimmer, fontWeight: 500, letterSpacing: "0.03em",
+            }}>
+              Apunta al código QR
+            </div>
+          )}
         </div>
       </div>
 
-      {/* ── Resultado card ──────────────────────────────────────────────── */}
-      {result && (
-        <div style={{ padding: "0 18px 12px", flexShrink: 0 }}>
-          <div
-            style={{
-              padding: "14px 16px",
-              borderRadius: 18,
-              background: result.kind === "valid"
-                ? "rgba(34,197,94,0.15)"
-                : "rgba(239,68,68,0.15)",
-              border: `1px solid ${result.kind === "valid" ? "rgba(34,197,94,0.3)" : "rgba(239,68,68,0.3)"}`,
-              display: "flex",
-              alignItems: "center",
-              gap: 14,
-            }}
-          >
-            {/* Ícono */}
-            <div
+      {/* ── FOOTER ─────────────────────────────────────────────────────── */}
+      {!result && (
+        <div style={{
+          padding: "0 20px calc(env(safe-area-inset-bottom, 0px) + 20px)",
+          flexShrink: 0,
+        }}>
+          {active ? (
+            /* Barra de estado mientras escanea */
+            <div style={{
+              height: 50,
+              borderRadius: 14,
+              background: C.bg2,
+              border: `1px solid ${C.line}`,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              gap: 8,
+            }}>
+              <span style={{
+                width: 8, height: 8, borderRadius: 999,
+                background: C.green,
+                boxShadow: `0 0 8px ${C.green}`,
+                display: "inline-block",
+                animation: "pulse 1.4s ease-in-out infinite",
+              }}/>
+              <span style={{ fontSize: 14, fontWeight: 600, color: C.dim }}>
+                Escaneando…
+              </span>
+            </div>
+          ) : !cameraError && (
+            /* Botón de inicio (solo si la cámara no arrancó sola) */
+            <button
+              type="button"
+              onClick={startCamera}
               style={{
-                width: 42, height: 42, borderRadius: 999, flexShrink: 0,
-                background: result.kind === "valid" ? "#22C55E" : "#EF4444",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                boxShadow: `0 0 16px ${result.kind === "valid" ? "#22C55E" : "#EF4444"}66`,
+                width: "100%", height: 54,
+                borderRadius: 16, border: 0,
+                background: C.purple,
+                color: C.text,
+                fontFamily: FONT_DISPLAY,
+                fontSize: 16, fontWeight: 700,
+                letterSpacing: "-0.01em",
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+                cursor: "pointer",
+                boxShadow: `0 0 0 1px rgba(255,255,255,0.1) inset, 0 12px 32px -8px ${C.purpleEdge}`,
               }}
             >
-              {result.kind === "valid" ? (
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                  <path d="M4 10l4 4 8-10" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              ) : (
-                <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                  <path d="M4 4l10 10M14 4L4 14" stroke="#fff" strokeWidth="2.5" strokeLinecap="round"/>
-                </svg>
-              )}
-            </div>
-
-            {/* Texto */}
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 17, fontWeight: 700, letterSpacing: "-0.01em", lineHeight: 1.2, color: "#fff" }}>
-                {result.kind === "valid"
-                  ? (result.holderName ?? "Entrada válida")
-                  : result.kind === "already_used"
-                    ? `Ya ingresó${result.scannedAt ? ` a las ${formatTime(result.scannedAt)}` : ""}`
-                    : "QR inválido"}
-              </div>
-              <div style={{ marginTop: 3, fontSize: 13, color: "rgba(255,255,255,0.6)", lineHeight: 1.3 }}>
-                {result.kind === "valid"
-                  ? [result.typeName, result.boxLabel ? `Box ${result.boxLabel}` : null].filter(Boolean).join(" · ")
-                  : result.kind === "already_used"
-                    ? (result.holderName ?? "")
-                    : (result.typeName ?? "")}
-              </div>
-            </div>
-          </div>
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                <rect x="1" y="1" width="5" height="5" rx="1.5" stroke="currentColor" strokeWidth="1.6"/>
+                <rect x="12" y="1" width="5" height="5" rx="1.5" stroke="currentColor" strokeWidth="1.6"/>
+                <rect x="1" y="12" width="5" height="5" rx="1.5" stroke="currentColor" strokeWidth="1.6"/>
+                <path d="M12 12h2v2h-2zM14 14h2v2h-2z" stroke="currentColor" strokeWidth="1.2"/>
+              </svg>
+              Iniciar escaneo
+            </button>
+          )}
         </div>
       )}
 
-      {/* ── Botones inferiores ──────────────────────────────────────────── */}
-      <div style={{ padding: "0 18px calc(env(safe-area-inset-bottom, 0px) + 20px)", display: "flex", flexDirection: "column", gap: 10, flexShrink: 0 }}>
-        {/* Botón principal */}
-        <button
-          type="button"
-          onClick={active ? stopCamera : startCamera}
-          style={{
-            height: 56,
-            borderRadius: 18,
-            border: 0,
-            background: active ? "rgba(255,255,255,0.08)" : C.purple,
-            color: "#fff",
-            fontFamily: FONT_DISPLAY,
-            fontSize: 16,
-            fontWeight: 700,
-            letterSpacing: "-0.01em",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 10,
-            cursor: "pointer",
-            boxShadow: active ? "none" : "0 0 0 1px rgba(255,255,255,0.1) inset, 0 12px 32px -8px rgba(124,58,237,0.65)",
-            transition: "background 0.2s, box-shadow 0.2s",
-          }}
-        >
-          {/* Ícono de scanner */}
-          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-            <rect x="1" y="1" width="5" height="5" rx="1.5" stroke="currentColor" strokeWidth="1.6"/>
-            <rect x="12" y="1" width="5" height="5" rx="1.5" stroke="currentColor" strokeWidth="1.6"/>
-            <rect x="1" y="12" width="5" height="5" rx="1.5" stroke="currentColor" strokeWidth="1.6"/>
-            <path d="M12 12h2M14 12v2M12 14h2M16 14v2M14 16h2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
-          </svg>
-          {active ? "Detener escaneo" : "Iniciar escaneo"}
-        </button>
-
-        {/* Buscar por nombre o DNI */}
-        <button
-          type="button"
-          style={{
-            height: 46,
-            borderRadius: 14,
-            border: "1px solid rgba(255,255,255,0.09)",
-            background: "rgba(255,255,255,0.04)",
-            color: "rgba(255,255,255,0.45)",
-            fontFamily: FONT_DISPLAY,
-            fontSize: 14,
-            fontWeight: 600,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 8,
-            cursor: "pointer",
-          }}
-          onClick={() => {/* TODO: abrir busqueda */}}
-        >
-          <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
-            <circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" strokeWidth="1.5"/>
-            <path d="M10 10l4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-          </svg>
-          Buscar por nombre o DNI
-        </button>
-      </div>
-
-      {/* Animación scanline */}
+      {/* Animaciones */}
       <style>{`
-        @keyframes scan-slide {
-          0%   { top: 20%; }
-          50%  { top: 80%; }
-          100% { top: 20%; }
+        @keyframes scanline {
+          0%   { top: 18%; }
+          50%  { top: 78%; }
+          100% { top: 18%; }
+        }
+        @keyframes pop {
+          0%   { transform: scale(0.5); opacity: 0; }
+          60%  { transform: scale(1.08); opacity: 1; }
+          100% { transform: scale(1); }
+        }
+        @keyframes fadeUp {
+          from { opacity: 0; transform: translateY(10px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50%       { opacity: 0.35; }
         }
       `}</style>
     </div>
