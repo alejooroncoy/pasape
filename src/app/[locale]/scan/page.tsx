@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { C, FONT_DISPLAY, FONT_MONO } from "@/components/design";
+import { C, FONT_DISPLAY } from "@/components/design";
 import { useScanQr } from "@/lib/scanning/hooks/useScanQr";
 import { refreshScanCache } from "@/lib/scanning/scanCache";
 import { useOnlineStatus } from "@/lib/_shared/useOnlineStatus";
@@ -10,6 +10,7 @@ import { scanLocal } from "@/lib/scanning/scanLocal";
 import { countPending } from "@/lib/scanning/scanQueue";
 import { syncPending } from "@/lib/scanning/syncWorker";
 import { useEvent } from "@/lib/events/hooks/useEvents";
+import { api } from "@/lib/_shared/api-client";
 
 // ─── Haptic ────────────────────────────────────────────────────────────────
 const haptic = (kind: "valid" | "already_used" | "invalid") => {
@@ -23,13 +24,23 @@ const haptic = (kind: "valid" | "already_used" | "invalid") => {
 type ScanKind = "valid" | "already_used" | "invalid";
 
 type ScanResult = {
-  kind: ScanKind;
-  holderName:    string | null;
-  typeName:      string | null;
-  dniLast2:      string | null;
-  boxLabel:      string | null;
-  boxHostName:   string | null;
-  scannedAt:     string | null;
+  kind:        ScanKind;
+  holderName:  string | null;
+  typeName:    string | null;
+  dniLast2:    string | null;
+  boxLabel:    string | null;
+  boxHostName: string | null;
+  scannedAt:   string | null;
+};
+
+type Attendee = {
+  ticketId:   string;
+  qrCode:     string;
+  status:     "active" | "used" | "void";
+  holderName: string | null;
+  dniLast2:   string | null;
+  usedAt:     string | null;
+  ticketType: string;
 };
 
 type DetectorLike = {
@@ -48,13 +59,16 @@ function fmtTime(iso: string) {
   return new Date(iso).toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit" });
 }
 
+function toneFor(kind: ScanKind) {
+  return kind === "valid" ? C.green : kind === "already_used" ? C.yellow : C.red;
+}
+function toneSoftFor(kind: ScanKind) {
+  return kind === "valid" ? C.greenSoft : kind === "already_used" ? C.yellowSoft : C.redSoft;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 export default function ScanPage() {
-  return (
-    <Suspense fallback={null}>
-      <Inner />
-    </Suspense>
-  );
+  return <Suspense fallback={null}><Inner /></Suspense>;
 }
 
 function Inner() {
@@ -63,7 +77,6 @@ function Inner() {
   const eventSlug = search.get("event");
   const online    = useOnlineStatus();
 
-  // Datos del evento (nombre para el header)
   const { data: eventData } = useEvent(eventSlug ?? "");
   const ev = eventData?.event;
 
@@ -78,6 +91,47 @@ function Inner() {
   const [cameraError,  setCameraError]  = useState(false);
   const [result,       setResult]       = useState<ScanResult | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
+
+  // ── Búsqueda por nombre/DNI ──────────────────────────────────────────────
+  const [searchOpen,    setSearchOpen]    = useState(false);
+  const [searchQuery,   setSearchQuery]   = useState("");
+  const [searchResults, setSearchResults] = useState<Attendee[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const searchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inputRef  = useRef<HTMLInputElement | null>(null);
+
+  const openSearch = () => {
+    setSearchOpen(true);
+    setSearchQuery("");
+    setSearchResults([]);
+    setTimeout(() => inputRef.current?.focus(), 80);
+  };
+  const closeSearch = () => {
+    setSearchOpen(false);
+    setSearchQuery("");
+    setSearchResults([]);
+  };
+
+  useEffect(() => {
+    if (!searchOpen || !eventSlug || searchQuery.length < 2) {
+      setSearchResults([]);
+      return;
+    }
+    if (searchRef.current) clearTimeout(searchRef.current);
+    searchRef.current = setTimeout(async () => {
+      setSearchLoading(true);
+      try {
+        const res = await api.get<Attendee[]>(
+          `/api/events/${eventSlug}/attendees?q=${encodeURIComponent(searchQuery)}`
+        );
+        setSearchResults(res);
+      } catch {
+        setSearchResults([]);
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 300);
+  }, [searchQuery, searchOpen, eventSlug]);
 
   // ── Funciones de cámara ──────────────────────────────────────────────────
   const stopCamera = useCallback(() => {
@@ -98,7 +152,7 @@ function Inner() {
     setResult(r);
     haptic(r.kind);
     if (clearTimer.current) clearTimeout(clearTimer.current);
-    clearTimer.current = setTimeout(dismissResult, 2800);
+    clearTimer.current = setTimeout(dismissResult, 3000);
   }, [dismissResult]);
 
   const runScan = useCallback(async (code: string) => {
@@ -116,7 +170,7 @@ function Inner() {
         scannedAt:   ("scannedAt" in raw ? raw.scannedAt : null) ?? null,
       });
     } catch {
-      showResult({ kind: "invalid", holderName: null, typeName: null, dniLast2: null, boxLabel: null, boxHostName: null, scannedAt: null });
+      showResult({ kind: "invalid", holderName: null, typeName: "QR no reconocido", dniLast2: null, boxLabel: null, boxHostName: null, scannedAt: null });
     }
   }, [scan, online, showResult]);
 
@@ -146,14 +200,20 @@ function Inner() {
     } catch { setCameraError(true); }
   }, [loop]);
 
-  // Auto-start cuando hay event slug
+  // Escanear desde búsqueda (escanea el QR del asistente encontrado)
+  const scanFromSearch = useCallback(async (attendee: Attendee) => {
+    closeSearch();
+    await runScan(attendee.qrCode);
+  }, [runScan]);
+
+  // Auto-start
   useEffect(() => {
     void startCamera();
     return () => { stopCamera(); if (clearTimer.current) clearTimeout(clearTimer.current); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Sync offline cache
+  // Sync offline
   useEffect(() => {
     if (!eventSlug) return;
     let cancel = false;
@@ -177,179 +237,43 @@ function Inner() {
   }, [online, eventSlug]);
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Colores del resultado
-  // ─────────────────────────────────────────────────────────────────────────
-  const tone =
-    result?.kind === "valid"        ? C.green  :
-    result?.kind === "already_used" ? C.yellow :
-    C.red;
-
-  const toneSoft =
-    result?.kind === "valid"        ? C.greenSoft  :
-    result?.kind === "already_used" ? C.yellowSoft :
-    C.redSoft;
-
-  // ─────────────────────────────────────────────────────────────────────────
   // RENDER
   // ─────────────────────────────────────────────────────────────────────────
+  const tone     = result ? toneFor(result.kind)     : C.purple;
+  const toneSoft = result ? toneSoftFor(result.kind) : C.purpleSoft;
+
   return (
-    <div
-      onClick={result ? dismissResult : undefined}
-      style={{
-        position: "fixed", inset: 0,
-        background: C.bg,
-        display: "flex",
-        flexDirection: "column",
-        fontFamily: FONT_DISPLAY,
-        color: C.text,
-        paddingTop: "env(safe-area-inset-top, 0px)",
-        paddingBottom: "env(safe-area-inset-bottom, 0px)",
-        userSelect: "none",
-        WebkitUserSelect: "none",
-        cursor: result ? "pointer" : "default",
-      }}
-    >
-      {/* ── OVERLAY FULLSCREEN al escanear ──────────────────────────────── */}
-      {result && (
-        <div
-          style={{
-            position: "absolute", inset: 0, zIndex: 20,
-            display: "flex", flexDirection: "column",
-            alignItems: "center", justifyContent: "center",
-            background:
-              result.kind === "valid"
-                ? `radial-gradient(70% 60% at 50% 45%, rgba(34,209,127,0.22) 0%, ${C.bg} 80%)`
-                : result.kind === "already_used"
-                  ? `radial-gradient(70% 60% at 50% 45%, rgba(255,206,59,0.18) 0%, ${C.bg} 80%)`
-                  : `radial-gradient(70% 60% at 50% 45%, rgba(255,77,94,0.22) 0%, ${C.bg} 80%)`,
-            padding: "0 32px",
-          }}
-        >
-          {/* Ícono grande */}
-          <div
-            style={{
-              width: 96, height: 96, borderRadius: "50%",
-              background: tone,
-              display: "flex", alignItems: "center", justifyContent: "center",
-              boxShadow: `0 0 0 20px ${toneSoft}, 0 0 60px ${tone}55`,
-              animation: "pop 360ms cubic-bezier(0.34,1.56,0.64,1)",
-              flexShrink: 0,
-            }}
-          >
-            {result.kind === "valid" ? (
-              <svg width="44" height="44" viewBox="0 0 44 44" fill="none">
-                <path d="M9 22l10 10 17-22" stroke={C.bg} strokeWidth="5" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            ) : result.kind === "already_used" ? (
-              <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
-                <circle cx="20" cy="20" r="14" stroke={C.bg} strokeWidth="3.5"/>
-                <path d="M20 12v9l5 4" stroke={C.bg} strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            ) : (
-              <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
-                <path d="M10 10l20 20M30 10L10 30" stroke={C.bg} strokeWidth="4.5" strokeLinecap="round"/>
-              </svg>
-            )}
-          </div>
-
-          {/* Título — nombre o estado */}
-          <div
-            style={{
-              marginTop: 28,
-              fontSize: result.holderName ? 42 : 34,
-              fontWeight: 800,
-              letterSpacing: "-0.03em",
-              lineHeight: 1.0,
-              textAlign: "center",
-              color: C.text,
-              animation: "fadeUp 300ms ease-out 80ms both",
-            }}
-          >
-            {result.kind === "valid"
-              ? (result.holderName ?? "Entrada válida")
-              : result.kind === "already_used"
-                ? (result.scannedAt ? `Ya ingresó · ${fmtTime(result.scannedAt)}` : "Ya ingresó antes")
-                : "QR inválido"}
-          </div>
-
-          {/* Subtítulo */}
-          {(result.typeName || result.dniLast2 || result.boxLabel || (result.kind === "already_used" && result.holderName)) && (
-            <div
-              style={{
-                marginTop: 10,
-                fontSize: 18,
-                fontWeight: 500,
-                color: C.dim,
-                textAlign: "center",
-                letterSpacing: "-0.01em",
-                animation: "fadeUp 300ms ease-out 160ms both",
-              }}
-            >
-              {result.kind === "already_used"
-                ? result.holderName
-                : [
-                    result.typeName,
-                    result.dniLast2 ? `DNI ··${result.dniLast2}` : null,
-                    result.boxLabel ? `Box ${result.boxLabel}` : null,
-                    result.boxHostName ? `por ${result.boxHostName}` : null,
-                  ].filter(Boolean).join("  ·  ")}
-            </div>
-          )}
-
-          {/* Toca para continuar */}
-          <div
-            style={{
-              position: "absolute",
-              bottom: "calc(env(safe-area-inset-bottom, 0px) + 32px)",
-              fontSize: 13,
-              color: C.dimmer,
-              letterSpacing: "0.04em",
-              fontWeight: 500,
-              animation: "fadeUp 300ms ease-out 400ms both",
-            }}
-          >
-            Toca para continuar
-          </div>
-        </div>
-      )}
+    <div style={{
+      position: "fixed", inset: 0,
+      background: C.bg,
+      display: "flex", flexDirection: "column",
+      fontFamily: FONT_DISPLAY, color: C.text,
+      paddingTop:    "env(safe-area-inset-top, 0px)",
+      paddingBottom: "env(safe-area-inset-bottom, 0px)",
+      userSelect: "none", WebkitUserSelect: "none",
+    }}>
 
       {/* ── HEADER ─────────────────────────────────────────────────────── */}
-      <div style={{
-        padding: "12px 20px 0",
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        flexShrink: 0, zIndex: 10,
-      }}>
-        {/* Logo + evento */}
+      <div style={{ padding: "12px 18px 0", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{
-            width: 34, height: 34, borderRadius: 11,
-            background: C.purple,
+            width: 34, height: 34, borderRadius: 11, background: C.purple, flexShrink: 0,
             display: "flex", alignItems: "center", justifyContent: "center",
             boxShadow: `0 0 0 1px rgba(255,255,255,0.1) inset, 0 4px 16px ${C.purpleEdge}`,
           }}>
-            {/* Diamante Pasape */}
-            <svg width="15" height="15" viewBox="0 0 14 14" fill="none">
-              <path d="M7 1L13 7L7 13L1 7L7 1Z" fill="#fff"/>
-            </svg>
+            <svg width="15" height="15" viewBox="0 0 14 14" fill="none"><path d="M7 1L13 7L7 13L1 7L7 1Z" fill="#fff"/></svg>
           </div>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: "-0.02em", lineHeight: 1.15 }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, letterSpacing: "-0.02em", lineHeight: 1.15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 200 }}>
               {ev?.title ?? "pasape"}
             </div>
-            <div style={{ fontSize: 10, color: C.dimmer, letterSpacing: "0.03em" }}>
-              Modo puerta
-            </div>
+            <div style={{ fontSize: 10, color: C.dimmer, letterSpacing: "0.03em" }}>Modo puerta</div>
           </div>
         </div>
 
-        {/* Estado de conexión */}
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
           {pendingCount > 0 && (
-            <div style={{
-              padding: "3px 8px", borderRadius: 999,
-              background: C.yellowSoft, fontSize: 10,
-              fontWeight: 700, color: C.yellow, letterSpacing: "0.06em",
-            }}>
+            <div style={{ padding: "3px 8px", borderRadius: 999, background: C.yellowSoft, fontSize: 10, fontWeight: 700, color: C.yellow }}>
               {pendingCount} pend.
             </div>
           )}
@@ -359,29 +283,23 @@ function Inner() {
             fontSize: 10, fontWeight: 700,
             color: online ? C.green : C.dimmer,
             display: "flex", alignItems: "center", gap: 5,
-            letterSpacing: "0.06em",
           }}>
-            <span style={{
-              width: 6, height: 6, borderRadius: 999,
-              background: online ? C.green : C.dimmer,
-              boxShadow: online ? `0 0 6px ${C.green}` : "none",
-              display: "inline-block",
-            }}/>
+            <span style={{ width: 6, height: 6, borderRadius: 999, background: online ? C.green : C.dimmer, boxShadow: online ? `0 0 6px ${C.green}` : "none", display: "inline-block" }}/>
             {online ? "Online" : "Offline"}
           </div>
         </div>
       </div>
 
       {/* ── VIEWFINDER ─────────────────────────────────────────────────── */}
-      <div style={{ flex: 1, padding: "14px 20px", minHeight: 0, display: "flex", flexDirection: "column" }}>
+      <div style={{ flex: 1, padding: "12px 18px", minHeight: 0, display: "flex", flexDirection: "column" }}>
         <div style={{
           flex: 1, position: "relative",
-          borderRadius: 24,
-          overflow: "hidden",
-          background: C.bg2,
-          border: `1px solid ${C.line}`,
+          borderRadius: 22, overflow: "hidden",
+          background: C.bg2, border: `1px solid ${C.line}`,
+          // Borde coloreado cuando hay resultado
+          boxShadow: result ? `0 0 0 2px ${tone}` : "none",
+          transition: "box-shadow 0.2s ease",
         }}>
-          {/* Video */}
           <video
             ref={videoRef}
             playsInline muted
@@ -390,164 +308,313 @@ function Inner() {
               width: "100%", height: "100%",
               objectFit: "cover",
               opacity: active ? 1 : 0,
-              transition: "opacity 0.4s ease",
+              transition: "opacity 0.3s ease",
             }}
           />
 
-          {/* Placeholder idle */}
+          {/* Idle placeholder */}
           {!active && (
-            <div style={{
-              position: "absolute", inset: 0,
-              display: "flex", flexDirection: "column",
-              alignItems: "center", justifyContent: "center",
-              gap: 12,
-            }}>
+            <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10 }}>
               {cameraError ? (
                 <>
-                  <div style={{ fontSize: 32 }}>📵</div>
-                  <div style={{ fontSize: 14, color: C.dim, textAlign: "center", padding: "0 24px" }}>
-                    Sin acceso a la cámara
-                  </div>
-                  <button
-                    type="button"
-                    onClick={startCamera}
-                    style={{
-                      marginTop: 8, padding: "10px 20px", borderRadius: 12,
-                      border: `1px solid ${C.line2}`,
-                      background: C.bg3, color: C.text,
-                      fontFamily: FONT_DISPLAY, fontSize: 14, fontWeight: 600,
-                      cursor: "pointer",
-                    }}
-                  >
+                  <div style={{ fontSize: 13, color: C.dim, textAlign: "center", padding: "0 24px" }}>Sin acceso a cámara</div>
+                  <button type="button" onClick={startCamera} style={{ padding: "8px 18px", borderRadius: 10, border: `1px solid ${C.line2}`, background: C.bg3, color: C.text, fontFamily: FONT_DISPLAY, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
                     Reintentar
                   </button>
                 </>
               ) : (
-                <>
-                  {/* Indicador de carga */}
-                  <div style={{ display: "flex", gap: 4 }}>
-                    {[0,1,2].map((i) => (
-                      <div key={i} style={{
-                        width: 6, height: 6, borderRadius: 999,
-                        background: C.purple,
-                        animation: `pulse 1.2s ease-in-out ${i * 0.2}s infinite`,
-                      }}/>
-                    ))}
-                  </div>
-                  <div style={{ fontSize: 13, color: C.dimmer, fontWeight: 500 }}>
-                    Iniciando cámara…
-                  </div>
-                </>
+                <div style={{ display: "flex", gap: 5 }}>
+                  {[0,1,2].map((i) => (
+                    <div key={i} style={{ width: 6, height: 6, borderRadius: 999, background: C.purple, animation: `pulse 1.2s ease-in-out ${i * 0.2}s infinite` }}/>
+                  ))}
+                </div>
               )}
             </div>
           )}
 
-          {/* Scanline activa */}
+          {/* Scanline */}
           {active && !result && (
             <div style={{
-              position: "absolute",
-              left: "8%", right: "8%",
-              height: 2,
+              position: "absolute", left: "8%", right: "8%", height: 2, borderRadius: 999,
               background: `linear-gradient(90deg, transparent, ${C.green}, transparent)`,
-              boxShadow: `0 0 16px 4px ${C.green}66`,
-              borderRadius: 999,
+              boxShadow: `0 0 14px 4px ${C.green}55`,
               animation: "scanline 2.4s ease-in-out infinite",
             }}/>
           )}
 
-          {/* Esquinas del frame */}
+          {/* Esquinas — cambian de color según resultado */}
           {(["tl","tr","bl","br"] as const).map((pos) => {
-            const isRight  = pos.includes("r");
-            const isBottom = pos.includes("b");
-            const color = result ? tone : C.purple;
+            const isR = pos.includes("r"), isB = pos.includes("b");
             return (
-              <div
-                key={pos}
-                style={{
-                  position: "absolute",
-                  top:    isBottom ? undefined : 16,
-                  bottom: isBottom ? 16        : undefined,
-                  left:   isRight  ? undefined : 16,
-                  right:  isRight  ? 16        : undefined,
-                  width: 28, height: 28,
-                  borderTop:    !isBottom ? `3px solid ${color}` : "none",
-                  borderBottom: isBottom  ? `3px solid ${color}` : "none",
-                  borderLeft:   !isRight  ? `3px solid ${color}` : "none",
-                  borderRight:  isRight   ? `3px solid ${color}` : "none",
-                  transition: "border-color 0.25s ease",
-                }}
-              />
+              <div key={pos} style={{
+                position: "absolute",
+                top:    isB ? undefined : 14, bottom: isB ? 14 : undefined,
+                left:   isR ? undefined : 14, right:  isR ? 14 : undefined,
+                width: 26, height: 26,
+                borderTop:    !isB ? `2.5px solid ${tone}` : "none",
+                borderBottom: isB  ? `2.5px solid ${tone}` : "none",
+                borderLeft:   !isR ? `2.5px solid ${tone}` : "none",
+                borderRight:  isR  ? `2.5px solid ${tone}` : "none",
+                transition: "border-color 0.2s ease",
+              }}/>
             );
           })}
 
-          {/* Label inferior cuando está activo */}
+          {/* Label inferior */}
           {active && !result && (
-            <div style={{
-              position: "absolute", bottom: 16, left: 0, right: 0,
-              textAlign: "center", fontSize: 12,
-              color: C.dimmer, fontWeight: 500, letterSpacing: "0.03em",
-            }}>
+            <div style={{ position: "absolute", bottom: 14, left: 0, right: 0, textAlign: "center", fontSize: 12, color: C.dimmer, fontWeight: 500 }}>
               Apunta al código QR
             </div>
           )}
         </div>
       </div>
 
-      {/* ── FOOTER ─────────────────────────────────────────────────────── */}
-      {!result && (
-        <div style={{
-          padding: "0 20px calc(env(safe-area-inset-bottom, 0px) + 20px)",
-          flexShrink: 0,
-        }}>
-          {active ? (
-            /* Barra de estado mientras escanea */
+      {/* ── RESULTADO CARD (reemplaza botones cuando hay scan) ──────────── */}
+      {result && (
+        <div
+          onClick={dismissResult}
+          style={{ padding: "0 18px 10px", flexShrink: 0, cursor: "pointer" }}
+        >
+          <div style={{
+            padding: "14px 16px",
+            borderRadius: 18,
+            background: toneSoft,
+            border: `1.5px solid ${tone}44`,
+            display: "flex", alignItems: "center", gap: 14,
+            animation: "slideUp 220ms cubic-bezier(0.34,1.2,0.64,1)",
+          }}>
+            {/* Ícono */}
             <div style={{
-              height: 50,
-              borderRadius: 14,
-              background: C.bg2,
-              border: `1px solid ${C.line}`,
+              width: 44, height: 44, borderRadius: "50%", flexShrink: 0,
+              background: tone,
               display: "flex", alignItems: "center", justifyContent: "center",
-              gap: 8,
+              boxShadow: `0 0 20px ${tone}66`,
             }}>
-              <span style={{
-                width: 8, height: 8, borderRadius: 999,
-                background: C.green,
-                boxShadow: `0 0 8px ${C.green}`,
-                display: "inline-block",
-                animation: "pulse 1.4s ease-in-out infinite",
-              }}/>
-              <span style={{ fontSize: 14, fontWeight: 600, color: C.dim }}>
-                Escaneando…
-              </span>
+              {result.kind === "valid" ? (
+                <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+                  <path d="M4 11l5 5 9-10" stroke={C.bg} strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              ) : result.kind === "already_used" ? (
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                  <circle cx="10" cy="10" r="7" stroke={C.bg} strokeWidth="2"/>
+                  <path d="M10 7v4l2.5 2" stroke={C.bg} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              ) : (
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                  <path d="M5 5l10 10M15 5L5 15" stroke={C.bg} strokeWidth="2.8" strokeLinecap="round"/>
+                </svg>
+              )}
             </div>
-          ) : !cameraError && (
-            /* Botón de inicio (solo si la cámara no arrancó sola) */
-            <button
-              type="button"
-              onClick={startCamera}
-              style={{
-                width: "100%", height: 54,
-                borderRadius: 16, border: 0,
-                background: C.purple,
-                color: C.text,
-                fontFamily: FONT_DISPLAY,
-                fontSize: 16, fontWeight: 700,
-                letterSpacing: "-0.01em",
-                display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
-                cursor: "pointer",
-                boxShadow: `0 0 0 1px rgba(255,255,255,0.1) inset, 0 12px 32px -8px ${C.purpleEdge}`,
-              }}
-            >
-              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+
+            {/* Texto principal */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: "-0.02em", lineHeight: 1.15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {result.kind === "valid"
+                  ? (result.holderName ?? "Entrada válida")
+                  : result.kind === "already_used"
+                    ? `Ya ingresó${result.scannedAt ? ` · ${fmtTime(result.scannedAt)}` : ""}`
+                    : "QR inválido"}
+              </div>
+              <div style={{ marginTop: 3, fontSize: 13, color: C.dim, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {result.kind === "valid"
+                  ? [result.typeName, result.boxLabel ? `Box ${result.boxLabel}` : null, result.dniLast2 ? `DNI ··${result.dniLast2}` : null].filter(Boolean).join("  ·  ")
+                  : result.kind === "already_used"
+                    ? (result.holderName ?? "")
+                    : (result.typeName ?? "QR no pertenece a este evento")}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── BOTONES (siempre visibles, debajo de la card) ───────────────── */}
+      {!result && (
+        <div style={{ padding: "0 18px calc(env(safe-area-inset-bottom, 0px) + 16px)", display: "flex", flexDirection: "column", gap: 8, flexShrink: 0 }}>
+          {/* Estado de escaneo o botón de inicio */}
+          {active ? (
+            <div style={{ height: 50, borderRadius: 14, background: C.bg2, border: `1px solid ${C.line}`, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+              <span style={{ width: 8, height: 8, borderRadius: 999, background: C.green, boxShadow: `0 0 8px ${C.green}`, display: "inline-block", animation: "pulse 1.4s ease-in-out infinite" }}/>
+              <span style={{ fontSize: 14, fontWeight: 600, color: C.dim }}>Escaneando…</span>
+            </div>
+          ) : (
+            <button type="button" onClick={startCamera} style={{
+              height: 52, borderRadius: 16, border: 0, background: C.purple, color: C.text,
+              fontFamily: FONT_DISPLAY, fontSize: 15, fontWeight: 700, letterSpacing: "-0.01em",
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 9, cursor: "pointer",
+              boxShadow: `0 0 0 1px rgba(255,255,255,0.1) inset, 0 10px 28px -8px ${C.purpleEdge}`,
+            }}>
+              <svg width="17" height="17" viewBox="0 0 18 18" fill="none">
                 <rect x="1" y="1" width="5" height="5" rx="1.5" stroke="currentColor" strokeWidth="1.6"/>
                 <rect x="12" y="1" width="5" height="5" rx="1.5" stroke="currentColor" strokeWidth="1.6"/>
                 <rect x="1" y="12" width="5" height="5" rx="1.5" stroke="currentColor" strokeWidth="1.6"/>
-                <path d="M12 12h2v2h-2zM14 14h2v2h-2z" stroke="currentColor" strokeWidth="1.2"/>
+                <circle cx="15" cy="15" r="2" stroke="currentColor" strokeWidth="1.4"/>
               </svg>
               Iniciar escaneo
             </button>
           )}
+
+          {/* Buscar por nombre o DNI */}
+          <button type="button" onClick={openSearch} style={{
+            height: 44, borderRadius: 13, border: `1px solid ${C.line2}`,
+            background: "rgba(255,255,255,0.04)", color: C.dim,
+            fontFamily: FONT_DISPLAY, fontSize: 14, fontWeight: 600,
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 8, cursor: "pointer",
+          }}>
+            <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+              <circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" strokeWidth="1.5"/>
+              <path d="M10 10l4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
+            Buscar por nombre o DNI
+          </button>
         </div>
+      )}
+
+      {/* Botón de búsqueda también visible cuando hay resultado */}
+      {result && (
+        <div style={{ padding: "0 18px calc(env(safe-area-inset-bottom, 0px) + 16px)", flexShrink: 0 }}>
+          <button type="button" onClick={openSearch} style={{
+            width: "100%", height: 44, borderRadius: 13, border: `1px solid ${C.line2}`,
+            background: "rgba(255,255,255,0.04)", color: C.dim,
+            fontFamily: FONT_DISPLAY, fontSize: 14, fontWeight: 600,
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 8, cursor: "pointer",
+          }}>
+            <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+              <circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" strokeWidth="1.5"/>
+              <path d="M10 10l4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
+            Buscar por nombre o DNI
+          </button>
+        </div>
+      )}
+
+      {/* ── BÚSQUEDA (bottom sheet) ─────────────────────────────────────── */}
+      {searchOpen && (
+        <>
+          {/* Backdrop */}
+          <div
+            onClick={closeSearch}
+            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 30, backdropFilter: "blur(4px)" }}
+          />
+          {/* Sheet */}
+          <div style={{
+            position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 40,
+            background: C.bg2,
+            borderRadius: "22px 22px 0 0",
+            border: `1px solid ${C.line}`,
+            paddingBottom: "env(safe-area-inset-bottom, 0px)",
+            maxHeight: "80dvh",
+            display: "flex", flexDirection: "column",
+            animation: "slideUp 240ms cubic-bezier(0.34,1.1,0.64,1)",
+          }}>
+            {/* Handle */}
+            <div style={{ display: "flex", justifyContent: "center", padding: "12px 0 8px" }}>
+              <div style={{ width: 36, height: 4, borderRadius: 2, background: C.line2 }}/>
+            </div>
+
+            {/* Header del sheet */}
+            <div style={{ padding: "0 18px 12px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div style={{ fontSize: 17, fontWeight: 700, letterSpacing: "-0.02em" }}>Buscar asistente</div>
+              <button type="button" onClick={closeSearch} style={{ width: 30, height: 30, borderRadius: 999, background: C.bg3, border: "none", color: C.dim, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+              </button>
+            </div>
+
+            {/* Input de búsqueda */}
+            <div style={{ padding: "0 18px 12px" }}>
+              <div style={{ position: "relative" }}>
+                <svg width="16" height="16" viewBox="0 0 15 15" fill="none" style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: C.dim, pointerEvents: "none" }}>
+                  <circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" strokeWidth="1.5"/>
+                  <path d="M10 10l4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                </svg>
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Nombre o últimos dígitos del DNI"
+                  autoComplete="off"
+                  style={{
+                    width: "100%", height: 48, borderRadius: 14, border: `1px solid ${C.line2}`,
+                    background: C.bg3, color: C.text,
+                    fontFamily: FONT_DISPLAY, fontSize: 15,
+                    paddingLeft: 42, paddingRight: 14,
+                    outline: "none", boxSizing: "border-box",
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Resultados */}
+            <div style={{ flex: 1, overflowY: "auto", padding: "0 18px 18px" }}>
+              {searchLoading ? (
+                <div style={{ display: "flex", justifyContent: "center", padding: "24px 0" }}>
+                  <div style={{ display: "flex", gap: 5 }}>
+                    {[0,1,2].map((i) => (
+                      <div key={i} style={{ width: 6, height: 6, borderRadius: 999, background: C.purple, animation: `pulse 1.2s ease-in-out ${i * 0.2}s infinite` }}/>
+                    ))}
+                  </div>
+                </div>
+              ) : searchQuery.length >= 2 && searchResults.length === 0 ? (
+                <div style={{ padding: "24px 0", textAlign: "center", fontSize: 14, color: C.dimmer }}>
+                  Sin resultados para "{searchQuery}"
+                </div>
+              ) : searchQuery.length < 2 ? (
+                <div style={{ padding: "16px 0", textAlign: "center", fontSize: 13, color: C.dimmer }}>
+                  Escribe al menos 2 caracteres
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {searchResults.map((attendee) => (
+                    <button
+                      key={attendee.ticketId}
+                      type="button"
+                      onClick={() => void scanFromSearch(attendee)}
+                      style={{
+                        width: "100%", padding: "12px 14px", borderRadius: 14,
+                        border: `1px solid ${attendee.status === "used" ? C.line : C.line2}`,
+                        background: attendee.status === "used" ? C.bg3 : C.bg2,
+                        color: C.text,
+                        fontFamily: FONT_DISPLAY,
+                        display: "flex", alignItems: "center", gap: 12,
+                        cursor: "pointer", textAlign: "left",
+                        opacity: attendee.status === "used" ? 0.7 : 1,
+                      }}
+                    >
+                      {/* Status badge */}
+                      <div style={{
+                        width: 10, height: 10, borderRadius: 999, flexShrink: 0,
+                        background: attendee.status === "active" ? C.green : attendee.status === "used" ? C.yellow : C.red,
+                        boxShadow: `0 0 6px ${attendee.status === "active" ? C.green : attendee.status === "used" ? C.yellow : C.red}`,
+                      }}/>
+
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: "-0.01em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {attendee.holderName ?? "Sin nombre"}
+                        </div>
+                        <div style={{ fontSize: 12, color: C.dim, marginTop: 2 }}>
+                          {attendee.ticketType}
+                          {attendee.dniLast2 ? ` · DNI ··${attendee.dniLast2}` : ""}
+                          {attendee.status === "used" && attendee.usedAt ? ` · Ingresó ${fmtTime(attendee.usedAt)}` : ""}
+                        </div>
+                      </div>
+
+                      {/* Acción */}
+                      <div style={{
+                        fontSize: 11, fontWeight: 700, letterSpacing: "0.04em",
+                        padding: "4px 10px", borderRadius: 8, flexShrink: 0,
+                        background: attendee.status === "active" ? C.purpleSoft : C.bg3,
+                        color: attendee.status === "active" ? C.purple : C.dim,
+                        textTransform: "uppercase",
+                      }}>
+                        {attendee.status === "active" ? "Validar" : attendee.status === "used" ? "Ya ingresó" : "Anulada"}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </>
       )}
 
       {/* Animaciones */}
@@ -557,18 +624,13 @@ function Inner() {
           50%  { top: 78%; }
           100% { top: 18%; }
         }
-        @keyframes pop {
-          0%   { transform: scale(0.5); opacity: 0; }
-          60%  { transform: scale(1.08); opacity: 1; }
-          100% { transform: scale(1); }
-        }
-        @keyframes fadeUp {
-          from { opacity: 0; transform: translateY(10px); }
-          to   { opacity: 1; transform: translateY(0); }
+        @keyframes slideUp {
+          from { transform: translateY(100%); opacity: 0; }
+          to   { transform: translateY(0);    opacity: 1; }
         }
         @keyframes pulse {
           0%, 100% { opacity: 1; }
-          50%       { opacity: 0.35; }
+          50%       { opacity: 0.3; }
         }
       `}</style>
     </div>
