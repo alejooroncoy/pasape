@@ -41,37 +41,20 @@ const formatDate = (iso: string, timezone?: string): string => {
 const formatTime = (iso: string): string =>
   new Date(iso).toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit" });
 
-// Cuándo es el evento relativo a ahora.
-const eventTiming = (
-  iso: string,
-): { label: string; bucket: "live" | "upcoming" | "past"; daysUntil: number } => {
-  const now = Date.now();
-  const t = new Date(iso).getTime();
-  const diffMs = t - now;
+const timingLabel = (iso: string, status: "live" | "upcoming" | "closed"): string => {
+  if (status === "live") return "Hoy";
+  if (status === "closed") {
+    return new Intl.DateTimeFormat("es-PE", { day: "2-digit", month: "short" })
+      .format(new Date(iso))
+      .replace(/\./g, "");
+  }
+  const diffMs = new Date(iso).getTime() - Date.now();
   const daysUntil = Math.round(diffMs / (24 * 60 * 60 * 1000));
-  if (diffMs < -6 * 60 * 60 * 1000) {
-    return {
-      label: new Date(iso).toLocaleDateString("es-PE", {
-        day: "2-digit",
-        month: "short",
-      }),
-      bucket: "past",
-      daysUntil,
-    };
-  }
-  if (diffMs < 6 * 60 * 60 * 1000 && diffMs > -6 * 60 * 60 * 1000) {
-    return { label: "Hoy", bucket: "live", daysUntil: 0 };
-  }
-  if (daysUntil === 1) return { label: "Mañana", bucket: "upcoming", daysUntil };
-  if (daysUntil <= 7) return { label: `En ${daysUntil} días`, bucket: "upcoming", daysUntil };
-  return {
-    label: new Date(iso).toLocaleDateString("es-PE", {
-      day: "2-digit",
-      month: "short",
-    }),
-    bucket: "upcoming",
-    daysUntil,
-  };
+  if (daysUntil === 1) return "Mañana";
+  if (daysUntil <= 7) return `En ${daysUntil} días`;
+  return new Intl.DateTimeFormat("es-PE", { day: "2-digit", month: "short" })
+    .format(new Date(iso))
+    .replace(/\./g, "");
 };
 
 export default function PromoHomePage() {
@@ -86,13 +69,10 @@ export default function PromoHomePage() {
     const up: typeof items = [];
     const pa: typeof items = [];
     for (const l of items) {
-      const t = eventTiming(l.eventStartsAt);
-      if (t.bucket === "past") pa.push(l);
+      if (l.eventStatus === "closed") pa.push(l);
       else up.push(l);
     }
-    // Próximos: más cercano primero.
     up.sort((a, b) => new Date(a.eventStartsAt).getTime() - new Date(b.eventStartsAt).getTime());
-    // Pasados: más reciente primero.
     pa.sort((a, b) => new Date(b.eventStartsAt).getTime() - new Date(a.eventStartsAt).getTime());
     return { upcoming: up, past: pa };
   }, [items]);
@@ -153,9 +133,8 @@ export default function PromoHomePage() {
         <div className="-mx-1 mb-5 flex gap-2 overflow-x-auto px-1 pb-1">
           {visible.map((l) => {
             const active = l.eventSlug === (activeLink?.eventSlug ?? "");
-            const timing = eventTiming(l.eventStartsAt);
-            const isPast = timing.bucket === "past";
-            const isLive = timing.bucket === "live";
+            const isPast = l.eventStatus === "closed";
+            const isLive = l.eventStatus === "live";
             return (
               <button
                 key={l.id}
@@ -188,7 +167,7 @@ export default function PromoHomePage() {
                           : "text-cart-ink-3")
                   }
                 >
-                  {timing.label}
+                  {timingLabel(l.eventStartsAt, l.eventStatus)}
                 </div>
               </button>
             );

@@ -22,16 +22,16 @@ export type ActivePricing = {
 /** Campos mínimos para resolver el precio activo (sirve a TicketType y a rows snake-mapeados). */
 export type PricingInput = Pick<
   TicketType,
-  "priceCents" | "presalePriceCents" | "presaleQty" | "presaleEndsAt" | "sold"
+  "priceCents" | "presalePriceCents" | "presaleQty" | "presaleEndsAt" | "sold" | "isPresaleActive"
 >;
 
 /**
- * Regla única de preventa: vigente si hay precio de preventa y no se agotó el
- * cupo (`sold < presaleQty`) ni se pasó la fecha (`now < presaleEndsAt`).
+ * Regla única de preventa: vigente si el backend marcó `isPresaleActive = true`.
+ * El frontend no compara fechas ni stock; esa lógica vive en el backend.
  */
-export function activePricing(tt: PricingInput, now: Date = new Date()): ActivePricing {
+export function activePricing(tt: PricingInput): ActivePricing {
   const base = tt.priceCents;
-  if (tt.presalePriceCents == null) {
+  if (!tt.isPresaleActive || tt.presalePriceCents == null) {
     return {
       priceCents: base,
       basePriceCents: base,
@@ -40,13 +40,10 @@ export function activePricing(tt: PricingInput, now: Date = new Date()): ActiveP
       presaleEndsAt: null,
     };
   }
-  const qtyOk = tt.presaleQty == null || tt.sold < tt.presaleQty;
-  const dateOk = tt.presaleEndsAt == null || now < new Date(tt.presaleEndsAt);
-  const active = qtyOk && dateOk;
   return {
-    priceCents: active ? tt.presalePriceCents : base,
+    priceCents: tt.presalePriceCents,
     basePriceCents: base,
-    isPresale: active,
+    isPresale: true,
     presaleRemaining: tt.presaleQty == null ? null : Math.max(0, tt.presaleQty - tt.sold),
     presaleEndsAt: tt.presaleEndsAt,
   };
@@ -78,15 +75,15 @@ export function chargedUnits(qty: number, promo: PromoKind | null): number {
 /**
  * Aplica las promos activas a los items del carrito. Asume como máximo una promo
  * por entrada (si hubiera varias, gana la última de la lista).
+ * Usa `p.isActive` precomputado por el backend — el frontend no compara fechas.
  */
 export function applyPromos(
   items: PromoLineInput[],
   promos: Promo[],
-  now: Date = new Date(),
 ): PromoResult {
   const activeByTt = new Map<string, PromoKind>();
   for (const p of promos) {
-    if (p.endsAt && now >= new Date(p.endsAt)) continue;
+    if (!p.isActive) continue;
     activeByTt.set(p.ticketTypeId, p.kind);
   }
   let total = 0;

@@ -12,7 +12,7 @@ import type {
   UpdateEventInput,
   UpdateTicketTypeInput,
 } from "@/server/events/ports/EventRepository";
-import type { Event, Promo, TicketType } from "@/server/events/domain/Event";
+import type { Event, EventCategory, Promo, TicketType } from "@/server/events/domain/Event";
 import { computePromoterPayout } from "@/server/promoters/application/CommissionResolver";
 import type {
   CommissionConfig,
@@ -76,6 +76,7 @@ type EventRow = {
   ends_at: string | null;
   timezone: string;
   status: Event["status"];
+  category: EventCategory | null;
   total_capacity: number | null;
   overbook_pct: number;
   transfers_enabled: boolean;
@@ -103,6 +104,7 @@ type TicketTypeRow = {
   presale_price_cents: number | null;
   presale_qty: number | null;
   presale_ends_at: string | null;
+  description: string | null;
 };
 
 type PromoRow = {
@@ -113,12 +115,29 @@ type PromoRow = {
   ends_at: string | null;
 };
 
-const toPromo = (r: PromoRow): Promo => ({
+const computeSaleStatus = (
+  r: TicketTypeRow,
+  now: Date,
+): "available" | "expired" | "soldout" => {
+  if (r.sale_ends_at && new Date(r.sale_ends_at) < now) return "expired";
+  if (r.kind === "box") return r.sold > 0 ? "soldout" : "available";
+  return r.capacity - r.sold > 0 ? "available" : "soldout";
+};
+
+const computeIsPresaleActive = (r: TicketTypeRow, now: Date): boolean => {
+  if (r.presale_price_cents == null) return false;
+  const qtyOk = r.presale_qty == null || r.sold < r.presale_qty;
+  const dateOk = r.presale_ends_at == null || now < new Date(r.presale_ends_at);
+  return qtyOk && dateOk;
+};
+
+const toPromo = (r: PromoRow, now: Date = new Date()): Promo => ({
   id: r.id,
   eventId: r.event_id,
   ticketTypeId: r.ticket_type_id,
   kind: r.kind,
   endsAt: r.ends_at,
+  isActive: r.ends_at == null || new Date(r.ends_at) > now,
 });
 
 const toEvent = (r: EventRow): Event => ({
@@ -139,6 +158,7 @@ const toEvent = (r: EventRow): Event => ({
   endsAt: r.ends_at,
   timezone: r.timezone,
   status: r.status,
+  category: r.category,
   capacity: {
     totalCapacity: r.total_capacity,
     overbookPct: r.overbook_pct,
@@ -153,7 +173,7 @@ const toEvent = (r: EventRow): Event => ({
   createdAt: r.created_at,
 });
 
-const toTicketType = (r: TicketTypeRow): TicketType => ({
+const toTicketType = (r: TicketTypeRow, now: Date = new Date()): TicketType => ({
   id: r.id,
   eventId: r.event_id,
   name: r.name,
@@ -170,6 +190,9 @@ const toTicketType = (r: TicketTypeRow): TicketType => ({
   presalePriceCents: r.presale_price_cents,
   presaleQty: r.presale_qty,
   presaleEndsAt: r.presale_ends_at,
+  description: r.description,
+  saleStatus: computeSaleStatus(r, now),
+  isPresaleActive: computeIsPresaleActive(r, now),
 });
 
 const slugify = (s: string): string =>
@@ -182,7 +205,7 @@ const slugify = (s: string): string =>
     .slice(0, 60) || `evt-${Math.random().toString(36).slice(2, 8)}`;
 
 export const supabaseEventRepository: EventRepository = {
-  async listPublished(limit, cursor) {
+  async listPublished(limit, cursor, category) {
     const db = supabaseAdmin();
     let q = db
       .from("events")
@@ -191,6 +214,7 @@ export const supabaseEventRepository: EventRepository = {
       .order("starts_at", { ascending: true })
       .limit(limit);
     if (cursor) q = q.gt("starts_at", cursor);
+    if (category) q = q.eq("category", category);
     const { data } = await q;
     return (data as EventRow[] | null)?.map(toEvent) ?? [];
   },
@@ -224,8 +248,8 @@ export const supabaseEventRepository: EventRepository = {
       .eq("event_id", event.id);
     return {
       event: toEvent(event),
-      ticketTypes: (tts as TicketTypeRow[] | null)?.map(toTicketType) ?? [],
-      promos: (promos as PromoRow[] | null)?.map(toPromo) ?? [],
+      ticketTypes: (tts as TicketTypeRow[] | null)?.map((r) => toTicketType(r)) ?? [],
+      promos: (promos as PromoRow[] | null)?.map((r) => toPromo(r)) ?? [],
     };
   },
 
@@ -249,6 +273,7 @@ export const supabaseEventRepository: EventRepository = {
         starts_at: input.startsAt,
         ends_at: input.endsAt,
         timezone: input.timezone,
+        category: input.category ?? null,
         total_capacity: input.totalCapacity,
         overbook_pct: input.overbookPct,
         transfers_enabled: input.transfersEnabled,
@@ -292,6 +317,23 @@ export const supabaseEventRepository: EventRepository = {
     return (data as EventRow[] | null)?.map(toEvent) ?? [];
   },
 
+  async listPublishedByOrgSlug(orgSlug) {
+    const db = supabaseAdmin();
+    const { data: org } = await db
+      .from("organizations")
+      .select("id")
+      .eq("slug", orgSlug)
+      .maybeSingle<{ id: string }>();
+    if (!org) return [];
+    const { data } = await db
+      .from("events")
+      .select("*")
+      .eq("organization_id", org.id)
+      .eq("status", "published")
+      .order("starts_at", { ascending: true });
+    return (data as EventRow[] | null)?.map(toEvent) ?? [];
+  },
+
   async update(eventId, orgId, input: UpdateEventInput): Promise<Result<Event>> {
     const db = supabaseAdmin();
     const patch: Record<string, unknown> = {};
@@ -306,6 +348,8 @@ export const supabaseEventRepository: EventRepository = {
     if (input.venueLayoutUrl !== undefined) patch.venue_layout_url = input.venueLayoutUrl;
     if (input.coverUrl !== undefined) patch.cover_url = input.coverUrl;
     if (input.startsAt !== undefined) patch.starts_at = input.startsAt;
+    if ("endsAt" in input) patch.ends_at = input.endsAt ?? null;
+    if (input.category !== undefined) patch.category = input.category;
     if (input.totalCapacity !== undefined) patch.total_capacity = input.totalCapacity;
     if (input.overbookPct !== undefined) patch.overbook_pct = input.overbookPct;
     if (input.transfersEnabled !== undefined) patch.transfers_enabled = input.transfersEnabled;
@@ -343,7 +387,7 @@ export const supabaseEventRepository: EventRepository = {
       .from("ticket_promos")
       .select("id, event_id, ticket_type_id, kind, ends_at")
       .eq("event_id", eventId);
-    return (data as PromoRow[] | null)?.map(toPromo) ?? [];
+    return (data as PromoRow[] | null)?.map((r) => toPromo(r)) ?? [];
   },
 
   async setPromos(eventId, promos: PromoInput[]): Promise<Result<Promo[]>> {
@@ -363,7 +407,7 @@ export const supabaseEventRepository: EventRepository = {
       .insert(rows)
       .select("id, event_id, ticket_type_id, kind, ends_at");
     if (error || !data) return err(error?.message ?? "promos_set_failed");
-    return ok((data as PromoRow[]).map(toPromo));
+    return ok((data as PromoRow[]).map((r) => toPromo(r)));
   },
 
   async createTicketType(eventId, input: CreateTicketTypeInput): Promise<Result<TicketType>> {
@@ -396,6 +440,7 @@ export const supabaseEventRepository: EventRepository = {
         presale_price_cents: input.presalePriceCents ?? null,
         presale_qty: input.presaleQty ?? null,
         presale_ends_at: input.presaleEndsAt ?? null,
+        description: input.description ?? null,
       })
       .select("*")
       .single<TicketTypeRow>();
@@ -421,6 +466,7 @@ export const supabaseEventRepository: EventRepository = {
     if ("presalePriceCents" in input) patch.presale_price_cents = input.presalePriceCents ?? null;
     if ("presaleQty" in input) patch.presale_qty = input.presaleQty ?? null;
     if ("presaleEndsAt" in input) patch.presale_ends_at = input.presaleEndsAt ?? null;
+    if ("description" in input) patch.description = input.description ?? null;
     if (Object.keys(patch).length === 0) return err("nothing_to_update");
     const { data, error } = await db
       .from("ticket_types")

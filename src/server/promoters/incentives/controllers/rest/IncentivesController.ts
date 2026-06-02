@@ -59,14 +59,25 @@ async function readGuard(slug: string) {
       .maybeSingle<{ id: string }>(),
   ]);
   if (!membership && !promoterLink) return { ok: false as const, error: "forbidden" };
-  return { ok: true as const, value: detail };
+  return { ok: true as const, value: detail, promoterLink };
 }
 
 export const IncentivesController = {
-  async list(slug: string): Promise<Result<Array<Incentive & { unlockedCount: number }>>> {
+  async list(slug: string): Promise<Result<Array<Incentive & { unlockedCount: number; isUnlockedByMe: boolean }>>> {
     const g = await readGuard(slug);
     if (!g.ok) return err(g.error);
-    return ok(await listIncentivesForEvent({ repo }, g.value.event.id));
+    let soldCount = 0;
+    if (g.promoterLink) {
+      const db = supabaseAdmin();
+      const { count } = await db
+        .from("orders")
+        .select("id", { count: "exact", head: true })
+        .eq("promoter_link_id", g.promoterLink.id)
+        .eq("status", "paid");
+      soldCount = count ?? 0;
+    }
+    const incentives = await listIncentivesForEvent({ repo }, g.value.event.id);
+    return ok(incentives.map((inc) => ({ ...inc, isUnlockedByMe: soldCount >= inc.goalValue })));
   },
 
   async create(slug: string, input: unknown): Promise<Result<Incentive>> {

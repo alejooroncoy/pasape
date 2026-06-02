@@ -103,12 +103,14 @@ export const supabaseTicketRepository: TicketRepository = {
       .from("ticket_promos")
       .select("id, event_id, ticket_type_id, kind, ends_at")
       .eq("event_id", input.eventId);
+    const now = new Date();
     const promos: Promo[] = (promoRows ?? []).map((r) => ({
       id: r.id,
       eventId: r.event_id,
       ticketTypeId: r.ticket_type_id,
       kind: r.kind as Promo["kind"],
       endsAt: r.ends_at,
+      isActive: r.ends_at == null || new Date(r.ends_at) > now,
     }));
 
     // Why: el precio NO se confía del cliente. Se resuelve el precio activo
@@ -119,12 +121,17 @@ export const supabaseTicketRepository: TicketRepository = {
       if (!tt) return err("ticket_type_missing");
       if (tt.sale_ends_at && new Date(tt.sale_ends_at) < new Date()) return err("ticket_type_sales_closed");
       if (tt.sold + item.qty > tt.capacity) return err("sold_out");
+      const isPresaleActive =
+        tt.presale_price_cents != null &&
+        (tt.presale_qty == null || tt.sold < tt.presale_qty) &&
+        (tt.presale_ends_at == null || now < new Date(tt.presale_ends_at));
       const ap = activePricing({
         priceCents: tt.price_cents,
         presalePriceCents: tt.presale_price_cents,
         presaleQty: tt.presale_qty,
         presaleEndsAt: tt.presale_ends_at,
         sold: tt.sold,
+        isPresaleActive,
       });
       priceItems.push({ ticketTypeId: tt.id, qty: item.qty, unitPriceCents: ap.priceCents });
     }
@@ -359,7 +366,7 @@ export const supabaseTicketRepository: TicketRepository = {
     const { data } = await db
       .from("tickets")
       .select(
-        "*, ticket_type:ticket_types!inner(id,name,kind,event_id,event:events!inner(id,slug,title,starts_at,venue,timezone))",
+        "*, ticket_type:ticket_types!inner(id,name,kind,event_id,event:events!inner(id,slug,title,starts_at,venue,timezone,status))",
       )
       .eq("current_holder", buyerId)
       .order("created_at", { ascending: false });
@@ -377,6 +384,7 @@ export const supabaseTicketRepository: TicketRepository = {
           starts_at: string;
           venue: string | null;
           timezone: string;
+          status: string;
         };
       };
     };
@@ -389,6 +397,7 @@ export const supabaseTicketRepository: TicketRepository = {
         startsAt: row.ticket_type.event.starts_at,
         venue: row.ticket_type.event.venue,
         timezone: row.ticket_type.event.timezone,
+        status: row.ticket_type.event.status,
       },
       ticketType: {
         id: row.ticket_type.id,

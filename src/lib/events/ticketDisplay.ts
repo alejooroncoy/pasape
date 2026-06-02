@@ -35,18 +35,11 @@ export type TicketStatus =
   | { kind: "expired" };
 
 export function ticketStatus(tt: TicketType): TicketStatus {
-  if (tt.saleEndsAt && new Date(tt.saleEndsAt) < new Date()) {
-    return { kind: "expired" };
-  }
-  if (tt.kind === "box") {
-    return tt.sold > 0
-      ? { kind: "soldout" }
-      : { kind: "available", remaining: 1 };
-  }
+  if (tt.saleStatus === "expired") return { kind: "expired" };
+  if (tt.saleStatus === "soldout") return { kind: "soldout" };
+  if (tt.kind === "box") return { kind: "available", remaining: 1 };
   const remaining = Math.max(0, tt.capacity - tt.sold);
-  return remaining > 0
-    ? { kind: "available", remaining }
-    : { kind: "soldout" };
+  return { kind: "available", remaining };
 }
 
 /**

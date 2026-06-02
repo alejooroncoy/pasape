@@ -2,8 +2,6 @@ import { describe, expect, it } from "vitest";
 import type { Promo, TicketType } from "@/server/events/domain/Event";
 import { activePricing, applyPromos, chargedUnits } from "./pricing";
 
-const NOW = new Date("2026-06-01T12:00:00.000Z");
-
 const tt = (over: Partial<TicketType>): TicketType => ({
   id: "tt",
   eventId: "ev",
@@ -21,58 +19,42 @@ const tt = (over: Partial<TicketType>): TicketType => ({
   presalePriceCents: null,
   presaleQty: null,
   presaleEndsAt: null,
+  description: null,
+  saleStatus: "available",
+  isPresaleActive: false,
   ...over,
 });
 
 describe("activePricing", () => {
   it("sin preventa → precio normal", () => {
-    const r = activePricing(tt({}), NOW);
+    const r = activePricing(tt({}));
     expect(r.priceCents).toBe(3000);
     expect(r.isPresale).toBe(false);
   });
 
-  it("preventa sin límites → vigente", () => {
-    const r = activePricing(tt({ presalePriceCents: 2000 }), NOW);
+  it("preventa activa → precio de preventa", () => {
+    const r = activePricing(tt({ presalePriceCents: 2000, isPresaleActive: true }));
     expect(r.priceCents).toBe(2000);
     expect(r.isPresale).toBe(true);
     expect(r.basePriceCents).toBe(3000);
-    expect(r.presaleRemaining).toBeNull();
   });
 
-  it("preventa por stock: quedan cupos → vigente", () => {
-    const r = activePricing(tt({ presalePriceCents: 2000, presaleQty: 50, sold: 30 }), NOW);
+  it("preventa con stock → presaleRemaining correcto", () => {
+    const r = activePricing(tt({ presalePriceCents: 2000, presaleQty: 50, sold: 30, isPresaleActive: true }));
     expect(r.priceCents).toBe(2000);
-    expect(r.isPresale).toBe(true);
     expect(r.presaleRemaining).toBe(20);
   });
 
-  it("preventa por stock: agotada → precio normal", () => {
-    const r = activePricing(tt({ presalePriceCents: 2000, presaleQty: 50, sold: 50 }), NOW);
+  it("preventa inactiva (agotada por stock) → precio normal", () => {
+    const r = activePricing(tt({ presalePriceCents: 2000, presaleQty: 50, sold: 50, isPresaleActive: false }));
     expect(r.priceCents).toBe(3000);
     expect(r.isPresale).toBe(false);
-    expect(r.presaleRemaining).toBe(0);
+    expect(r.presaleRemaining).toBeNull();
   });
 
-  it("preventa por fecha: futura → vigente; pasada → normal", () => {
-    const future = activePricing(
-      tt({ presalePriceCents: 2000, presaleEndsAt: "2026-06-02T00:00:00.000Z" }),
-      NOW,
-    );
-    expect(future.isPresale).toBe(true);
-    const past = activePricing(
-      tt({ presalePriceCents: 2000, presaleEndsAt: "2026-05-30T00:00:00.000Z" }),
-      NOW,
-    );
-    expect(past.isPresale).toBe(false);
-    expect(past.priceCents).toBe(3000);
-  });
-
-  it("stock y fecha: lo que falle primero corta la preventa", () => {
-    // stock OK pero fecha pasada
-    const r = activePricing(
-      tt({ presalePriceCents: 2000, presaleQty: 50, sold: 10, presaleEndsAt: "2026-05-30T00:00:00.000Z" }),
-      NOW,
-    );
+  it("preventa inactiva (vencida por fecha) → precio normal", () => {
+    const r = activePricing(tt({ presalePriceCents: 2000, presaleEndsAt: "2026-05-30T00:00:00.000Z", isPresaleActive: false }));
+    expect(r.priceCents).toBe(3000);
     expect(r.isPresale).toBe(false);
   });
 });
@@ -101,6 +83,7 @@ describe("applyPromos", () => {
     ticketTypeId: "gen",
     kind: "2x1",
     endsAt: null,
+    isActive: true,
     ...over,
   });
 
@@ -108,18 +91,16 @@ describe("applyPromos", () => {
     const r = applyPromos(
       [{ ticketTypeId: "gen", qty: 4, unitPriceCents: 2000 }],
       [promo({})],
-      NOW,
     );
     expect(r.totalCents).toBe(4000); // cobra 2 de 4
     expect(r.lines[0].chargedQty).toBe(2);
     expect(r.lines[0].promo).toBe("2x1");
   });
 
-  it("promo vencida no aplica", () => {
+  it("promo vencida (isActive: false) no aplica", () => {
     const r = applyPromos(
       [{ ticketTypeId: "gen", qty: 2, unitPriceCents: 2000 }],
-      [promo({ endsAt: "2026-05-30T00:00:00.000Z" })],
-      NOW,
+      [promo({ isActive: false })],
     );
     expect(r.totalCents).toBe(4000);
     expect(r.lines[0].promo).toBeNull();
@@ -129,7 +110,6 @@ describe("applyPromos", () => {
     const r = applyPromos(
       [{ ticketTypeId: "vip", qty: 3, unitPriceCents: 8000 }],
       [promo({ ticketTypeId: "gen" })],
-      NOW,
     );
     expect(r.totalCents).toBe(24000);
   });
