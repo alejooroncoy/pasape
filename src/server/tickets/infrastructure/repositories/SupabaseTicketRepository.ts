@@ -570,12 +570,18 @@ export const supabaseTicketRepository: TicketRepository = {
     type ExistingRow = { id: string; status: Ticket["status"]; ticket_type: { event_id: string } };
     const ex = existing as unknown as ExistingRow;
     const result = ex.status === "used" ? "already_used" : "invalid";
+    // Detección de doble-ingreso offline: si este scan venía de la cola offline
+    // (usedAt = offlineScannedAt) y el ticket YA estaba usado, dos puertas sin
+    // coordinador dejaron pasar el mismo ticket. El primer-scan-gana ya marcó
+    // 'valid'; este se registra como dup_offline para alertar en el dashboard.
+    const flag = result === "already_used" && usedAt ? "dup_offline" : "ok";
     await db.from("scan_events").insert({
       ticket_id: ex.id,
       event_id: ex.ticket_type.event_id,
       scanned_by: scannerId,
       result,
       raw_token: qrCode,
+      flag,
     });
     return err(result);
   },
