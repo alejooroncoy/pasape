@@ -12,7 +12,7 @@ import type {
   UpdateEventInput,
   UpdateTicketTypeInput,
 } from "@/server/events/ports/EventRepository";
-import type { Event, EventCategory, Promo, TicketType } from "@/server/events/domain/Event";
+import type { Event, EventCategory, Promo, PresaleTier, TicketType } from "@/server/events/domain/Event";
 import { computePromoterPayout } from "@/server/promoters/application/CommissionResolver";
 import type {
   CommissionConfig,
@@ -115,6 +115,14 @@ type PromoRow = {
   ends_at: string | null;
 };
 
+type PresaleTierRow = {
+  id: string;
+  ticket_type_id: string;
+  price_cents: number;
+  ends_at: string;
+  position: number;
+};
+
 const computeSaleStatus = (
   r: TicketTypeRow,
   now: Date,
@@ -124,11 +132,10 @@ const computeSaleStatus = (
   return r.capacity - r.sold > 0 ? "available" : "soldout";
 };
 
-const computeIsPresaleActive = (r: TicketTypeRow, now: Date): boolean => {
-  if (r.presale_price_cents == null) return false;
-  const qtyOk = r.presale_qty == null || r.sold < r.presale_qty;
-  const dateOk = r.presale_ends_at == null || now < new Date(r.presale_ends_at);
-  return qtyOk && dateOk;
+/** Devuelve el tramo de preventa activo (el más próximo a vencer que aún no venció). */
+const activePresaleTier = (tiers: PresaleTierRow[], now: Date): PresaleTierRow | null => {
+  const sorted = [...tiers].sort((a, b) => new Date(a.ends_at).getTime() - new Date(b.ends_at).getTime());
+  return sorted.find(t => new Date(t.ends_at) > now) ?? null;
 };
 
 const toPromo = (r: PromoRow, now: Date = new Date()): Promo => ({
@@ -173,27 +180,40 @@ const toEvent = (r: EventRow): Event => ({
   createdAt: r.created_at,
 });
 
-const toTicketType = (r: TicketTypeRow, now: Date = new Date()): TicketType => ({
-  id: r.id,
-  eventId: r.event_id,
-  name: r.name,
-  kind: r.kind,
-  priceCents: r.price_cents,
-  currency: r.currency,
-  capacity: r.capacity,
-  sold: r.sold,
-  position: r.position,
-  boxLabel: r.box_label,
-  zone: r.zone,
-  unitNoun: r.unit_noun,
-  saleEndsAt: r.sale_ends_at,
-  presalePriceCents: r.presale_price_cents,
-  presaleQty: r.presale_qty,
-  presaleEndsAt: r.presale_ends_at,
-  description: r.description,
-  saleStatus: computeSaleStatus(r, now),
-  isPresaleActive: computeIsPresaleActive(r, now),
-});
+const toTicketType = (r: TicketTypeRow, tiers: PresaleTierRow[] = [], now: Date = new Date()): TicketType => {
+  const myTiers = tiers.filter(t => t.ticket_type_id === r.id);
+  const active = activePresaleTier(myTiers, now);
+  const sorted = [...myTiers].sort((a, b) => new Date(a.ends_at).getTime() - new Date(b.ends_at).getTime());
+  return {
+    id: r.id,
+    eventId: r.event_id,
+    name: r.name,
+    kind: r.kind,
+    priceCents: r.price_cents,
+    currency: r.currency,
+    capacity: r.capacity,
+    sold: r.sold,
+    position: r.position,
+    boxLabel: r.box_label,
+    zone: r.zone,
+    unitNoun: r.unit_noun,
+    saleEndsAt: r.sale_ends_at,
+    // presalePriceCents e isPresaleActive ahora vienen de los tiers
+    presalePriceCents: active?.price_cents ?? null,
+    presaleQty: r.presale_qty,
+    presaleEndsAt: active?.ends_at ?? null,
+    description: r.description,
+    saleStatus: computeSaleStatus(r, now),
+    isPresaleActive: active != null,
+    presaleTiers: sorted.map(t => ({
+      id: t.id,
+      ticketTypeId: t.ticket_type_id,
+      priceCents: t.price_cents,
+      endsAt: t.ends_at,
+      position: t.position,
+    })),
+  };
+};
 
 const slugify = (s: string): string =>
   s
@@ -246,9 +266,16 @@ export const supabaseEventRepository: EventRepository = {
       .from("ticket_promos")
       .select("id, event_id, ticket_type_id, kind, ends_at")
       .eq("event_id", event.id);
+    const ttIds = (tts ?? []).map((t: TicketTypeRow) => t.id);
+    const { data: tierRows } = ttIds.length > 0
+      ? await db.from("ticket_type_presales").select("*").in("ticket_type_id", ttIds).order("position")
+      : { data: [] };
+    const now = new Date();
     return {
       event: toEvent(event),
-      ticketTypes: (tts as TicketTypeRow[] | null)?.map((r) => toTicketType(r)) ?? [],
+      ticketTypes: (tts as TicketTypeRow[] | null)?.map((r) =>
+        toTicketType(r, (tierRows as PresaleTierRow[] | null) ?? [], now),
+      ) ?? [],
       promos: (promos as PromoRow[] | null)?.map((r) => toPromo(r)) ?? [],
     };
   },
@@ -445,7 +472,17 @@ export const supabaseEventRepository: EventRepository = {
       .select("*")
       .single<TicketTypeRow>();
     if (error || !data) return err(error?.message ?? "ticket_type_create_failed");
-    return ok(toTicketType(data));
+    // Insertar tramos de preventa si se proporcionaron
+    const tiers = input.presaleTiers ?? [];
+    if (tiers.length > 0) {
+      await db.from("ticket_type_presales").insert(
+        tiers.map((t, i) => ({ ticket_type_id: data.id, price_cents: t.priceCents, ends_at: t.endsAt, position: i })),
+      );
+    }
+    const { data: tierRows } = tiers.length > 0
+      ? await db.from("ticket_type_presales").select("*").eq("ticket_type_id", data.id).order("position")
+      : { data: [] };
+    return ok(toTicketType(data, (tierRows as PresaleTierRow[] | null) ?? []));
   },
 
   async updateTicketType(
@@ -467,16 +504,42 @@ export const supabaseEventRepository: EventRepository = {
     if ("presaleQty" in input) patch.presale_qty = input.presaleQty ?? null;
     if ("presaleEndsAt" in input) patch.presale_ends_at = input.presaleEndsAt ?? null;
     if ("description" in input) patch.description = input.description ?? null;
-    if (Object.keys(patch).length === 0) return err("nothing_to_update");
-    const { data, error } = await db
-      .from("ticket_types")
-      .update(patch)
-      .eq("id", ticketTypeId)
-      .eq("event_id", eventId)
-      .select("*")
-      .single<TicketTypeRow>();
-    if (error || !data) return err(error?.message ?? "ticket_type_update_failed");
-    return ok(toTicketType(data));
+    // presaleTiers se gestiona por separado (delete+insert)
+    const hasTierUpdate = "presaleTiers" in input;
+    if (Object.keys(patch).length === 0 && !hasTierUpdate) return err("nothing_to_update");
+    let data: TicketTypeRow | null = null;
+    if (Object.keys(patch).length > 0) {
+      const { data: d, error } = await db
+        .from("ticket_types")
+        .update(patch)
+        .eq("id", ticketTypeId)
+        .eq("event_id", eventId)
+        .select("*")
+        .single<TicketTypeRow>();
+      if (error || !d) return err(error?.message ?? "ticket_type_update_failed");
+      data = d;
+    } else {
+      const { data: d } = await db
+        .from("ticket_types")
+        .select("*")
+        .eq("id", ticketTypeId)
+        .eq("event_id", eventId)
+        .single<TicketTypeRow>();
+      data = d;
+    }
+    if (!data) return err("ticket_type_not_found");
+    // Reemplazar tiers si se proporcionaron
+    if (hasTierUpdate) {
+      await db.from("ticket_type_presales").delete().eq("ticket_type_id", ticketTypeId);
+      const newTiers = (input.presaleTiers ?? []);
+      if (newTiers.length > 0) {
+        await db.from("ticket_type_presales").insert(
+          newTiers.map((t, i) => ({ ticket_type_id: ticketTypeId, price_cents: t.priceCents, ends_at: t.endsAt, position: i })),
+        );
+      }
+    }
+    const { data: tierRows } = await db.from("ticket_type_presales").select("*").eq("ticket_type_id", ticketTypeId).order("position");
+    return ok(toTicketType(data, (tierRows as PresaleTierRow[] | null) ?? []));
   },
 
   async deleteTicketType(ticketTypeId, eventId): Promise<Result<{ id: string }>> {
@@ -810,5 +873,39 @@ export const supabaseEventRepository: EventRepository = {
         scannedBy: r.scanned_by,
       })) ?? []
     );
+  },
+
+  async getDoorHealth(eventId) {
+    const db = supabaseAdmin();
+    const nowIso = new Date().toISOString();
+    const [sessionsRes, dupRes] = await Promise.all([
+      db
+        .from("scanner_sessions")
+        .select("device_id, last_sync_at, expires_at, zones(name)")
+        .eq("event_id", eventId)
+        .eq("revoked", false)
+        .gt("expires_at", nowIso)
+        .order("last_sync_at", { ascending: true }),
+      db
+        .from("scan_events")
+        .select("id", { count: "exact", head: true })
+        .eq("event_id", eventId)
+        .eq("flag", "dup_offline"),
+    ]);
+
+    type SessionRow = {
+      device_id: string;
+      last_sync_at: string | null;
+      expires_at: string;
+      zones: { name: string } | null;
+    };
+    const doors = ((sessionsRes.data as SessionRow[] | null) ?? []).map((s) => ({
+      deviceId: s.device_id,
+      zoneName: s.zones?.name ?? null,
+      lastSyncAt: s.last_sync_at,
+      expiresAt: s.expires_at,
+    }));
+
+    return { doors, dupOffline: dupRes.count ?? 0 };
   },
 };

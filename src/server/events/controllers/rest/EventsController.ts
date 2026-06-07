@@ -8,7 +8,7 @@ import { listPublishedEvents } from "../../application/ListPublishedEvents";
 import { getEventBySlug } from "../../application/GetEventBySlug";
 import { listEventsByOrganization } from "../../application/ListEventsByOrganization";
 import { createEvent } from "../../application/CreateEvent";
-import { getEventStats } from "../../application/GetEventStats";
+import { getEventStats, type EventStatsResult } from "../../application/GetEventStats";
 import { listEventAccesos } from "../../application/ListEventAccesos";
 import { updateEvent } from "../../application/UpdateEvent";
 import { generateDoorLink, type DoorLink } from "../../application/GenerateDoorLink";
@@ -186,7 +186,7 @@ export const EventsController = {
     return repo.publish(guard.value.event.id, guard.value.event.organizationId);
   },
 
-  async stats(slug: string): Promise<Result<EventStats & { scansRecent: ScanFeedItem[] }>> {
+  async stats(slug: string): Promise<Result<EventStatsResult>> {
     const guard = await guardEventMember(slug);
     if (!guard.ok) return err(guard.error);
     return ok(await getEventStats({ repo }, guard.value.event.id));

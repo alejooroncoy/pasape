@@ -4,6 +4,7 @@ import { use, useRef, useState } from "react";
 import { Link } from "@/i18n/navigation";
 import { useEvent } from "@/lib/events/hooks/useEvents";
 import { useEventStats } from "@/lib/events/hooks/useEventStats";
+import { useScanRealtime } from "@/lib/scanning/hooks/useScanRealtime";
 import { useEventPartners, useAddEventPartner, useRemoveEventPartner } from "@/lib/events/hooks/useEventPartners";
 import { formatMoney } from "@/lib/_shared/format";
 import { EventShell } from "./_shell/EventShell";
@@ -18,14 +19,12 @@ export default function OrgEventPanelPage({ params }: { params: Params }) {
   const { slug } = use(params);
   const event = useEvent(slug);
   const stats = useEventStats(slug);
+  useScanRealtime(slug);
 
   const ev = event.data?.event;
   const status = ev?.status ?? "draft";
 
-  const isFinished =
-    status === "closed" ||
-    status === "cancelled" ||
-    (status === "published" && ev?.endsAt != null && new Date(ev.endsAt) < new Date());
+  const isFinished = status === "closed" || status === "cancelled";
 
   return (
     <EventShell slug={slug} active="panel">
@@ -59,6 +58,9 @@ function LivePanel({
 
   return (
     <>
+      {/* Banner de honestidad: duplicados offline + puertas sin sincronizar */}
+      <DoorHealthBanner doors={stats?.doors ?? []} dupOffline={stats?.dupOffline ?? 0} />
+
       {/* KPIs */}
       <section data-tour="kpis" className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:gap-4">
         <KpiCard
@@ -565,6 +567,70 @@ function ScanRow({
 
 function EmptyRow({ label }: { label: string }) {
   return <div className="px-4 py-8 text-center text-[13px] text-cart-ink-3 lg:px-5">{label}</div>;
+}
+
+// Banner de honestidad: alerta de doble-ingreso offline y puertas que llevan
+// rato sin sincronizar. Solo aparece si hay algo que reportar — silencioso en
+// operación normal.
+function DoorHealthBanner({
+  doors,
+  dupOffline,
+}: {
+  doors: EventStatsPayload["doors"];
+  dupOffline: number;
+}) {
+  const STALE_MIN = 3;
+  const now = Date.now();
+  const minsSince = (iso: string | null): number | null =>
+    iso === null ? null : Math.floor((now - new Date(iso).getTime()) / 60000);
+
+  const stale = doors
+    .map((d) => ({ ...d, mins: minsSince(d.lastSyncAt) }))
+    .filter((d) => d.mins === null || d.mins >= STALE_MIN);
+
+  if (dupOffline === 0 && stale.length === 0) return null;
+
+  const RED = "#FF4D5E";
+  const YELLOW = "#FFCE3B";
+
+  return (
+    <div className="mb-4 grid gap-2">
+      {dupOffline > 0 && (
+        <div
+          className="flex items-center gap-2.5 rounded-xl px-3.5 py-2.5 text-[13px]"
+          style={{ border: `1px solid ${RED}66`, background: `${RED}1a`, color: RED }}
+        >
+          <span
+            className="grid size-5 shrink-0 place-items-center rounded-full text-[11px] font-bold"
+            style={{ background: `${RED}33` }}
+          >
+            !
+          </span>
+          <span>
+            <strong>{dupOffline}</strong>{" "}
+            {dupOffline === 1 ? "ingreso duplicado detectado" : "ingresos duplicados detectados"}{" "}
+            entre puertas sin sincronizar. Revisa la lista de accesos.
+          </span>
+        </div>
+      )}
+      {stale.map((d) => (
+        <div
+          key={d.deviceId}
+          className="flex items-center gap-2.5 rounded-xl px-3.5 py-2.5 text-[13px]"
+          style={{ border: `1px solid ${YELLOW}66`, background: `${YELLOW}14`, color: YELLOW }}
+        >
+          <span className="size-1.5 shrink-0 rounded-full" style={{ background: YELLOW }} />
+          <span>
+            Puerta {d.zoneName ?? "sin zona"}{" "}
+            {d.mins === null
+              ? "aún no ha sincronizado"
+              : `sin sincronizar hace ${d.mins} min`}
+            .
+          </span>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function formatMoneyClean(cents: number): string {
