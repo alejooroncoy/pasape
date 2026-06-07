@@ -50,12 +50,37 @@ type DetectorLike = {
   detect: (src: CanvasImageSource | ImageBitmapSource) => Promise<{ rawValue: string }[]>;
 };
 
+// Fallback jsQR para WebViews sin BarcodeDetector (WKWebView / iOS): procesa
+// los frames del video por canvas. Downscale a ~640px de ancho por rendimiento.
+function makeJsQrDetector(): DetectorLike {
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  let jsQRmod: typeof import("jsqr").default | null = null;
+  void import("jsqr").then((m) => { jsQRmod = m.default; });
+  return {
+    async detect(src) {
+      const video = src as HTMLVideoElement;
+      const vw = video.videoWidth, vh = video.videoHeight;
+      if (!vw || !vh || !ctx || !jsQRmod) return [];
+      const scale = Math.min(1, 640 / vw);
+      const w = Math.round(vw * scale), h = Math.round(vh * scale);
+      canvas.width = w; canvas.height = h;
+      ctx.drawImage(video, 0, 0, w, h);
+      const img = ctx.getImageData(0, 0, w, h);
+      const res = jsQRmod(img.data, w, h, { inversionAttempts: "dontInvert" });
+      return res?.data ? [{ rawValue: res.data }] : [];
+    },
+  };
+}
+
 function getDetector(): DetectorLike | null {
   if (typeof window === "undefined") return null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const Ctor = (window as any).BarcodeDetector;
-  if (!Ctor) return null;
-  try { return new Ctor({ formats: ["qr_code"] }) as DetectorLike; } catch { return null; }
+  if (Ctor) {
+    try { return new Ctor({ formats: ["qr_code"] }) as DetectorLike; } catch { /* cae al fallback */ }
+  }
+  return makeJsQrDetector();
 }
 
 function fmtTime(iso: string) {

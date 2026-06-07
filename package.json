@@ -41,6 +41,7 @@
     "exceljs": "^4.4.0",
     "idb": "^8.0.3",
     "jose": "^6.2.3",
+    "jsqr": "^1.4.0",
     "lucide-react": "^1.16.0",
     "mercadopago": "^2.12.1",
     "motion": "^12.40.0",
