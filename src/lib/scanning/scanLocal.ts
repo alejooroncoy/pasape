@@ -6,6 +6,7 @@ import {
 } from "./scanCache";
 import { enqueuePendingScan } from "./scanQueue";
 import { isSignedQr, verifySignedScan } from "./verifySignedQr";
+import { arbitrateTicket } from "./coordination/registry";
 
 export type ScanLocalResult = {
   kind: "valid" | "already_used" | "invalid";
@@ -61,6 +62,18 @@ async function scanSignedLocal(raw: string): Promise<ScanLocalResult> {
     };
   }
 
+  // Arbitraje entre puertas: si otra puerta de la zona ya tomó este ticket, es
+  // un duplicado en vivo. Sin coordinador (BLE caído), concede y detecta al sync.
+  if ((await arbitrateTicket(ticketId)) === "denied") {
+    return {
+      ...empty("already_used"),
+      holderName: holderName ?? cached?.holderName ?? null,
+      holderDniLast2: dniLast2 ?? cached?.holderDniLast2 ?? null,
+      ticketTypeName: cached?.ticketTypeName ?? null,
+      boxLabel: cached?.boxLabel ?? null,
+    };
+  }
+
   if (cached) await markUsedLocalById(ticketId);
   // Encolamos el qr_code estático cacheado: al sincronizar evita el problema de
   // window viejo (pass-through legacy). Si no está en cache, va el raw firmado.
@@ -83,6 +96,15 @@ async function scanStaticLocal(qrCode: string): Promise<ScanLocalResult> {
   const t = await lookupTicket(qrCode);
   if (!t) return empty("invalid");
   if (t.status === "used") {
+    return {
+      ...empty("already_used"),
+      holderName: t.holderName,
+      holderDniLast2: t.holderDniLast2,
+      ticketTypeName: t.ticketTypeName,
+      boxLabel: t.boxLabel,
+    };
+  }
+  if ((await arbitrateTicket(t.ticketId)) === "denied") {
     return {
       ...empty("already_used"),
       holderName: t.holderName,
