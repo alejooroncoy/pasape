@@ -1,18 +1,18 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import {
+  WINDOW_SECONDS,
+  WINDOW_TOLERANCE,
+  currentWindow,
+} from "@/lib/tickets/signedQr";
 
-// Sistema de QR rotante. Cada 10 segundos el código cambia. El secreto vive
-// en DB (tickets.rotation_secret) y nunca se expone al cliente. El cliente
-// pide el código actual al server cada N segundos; el escáner de puerta
-// valida el código contra el secreto recomputando el HMAC.
+// Sistema de QR rotante HMAC (legacy). Cada 10 segundos el código cambia. El
+// secreto vive en DB (tickets.rotation_secret) y nunca se expone al cliente.
+// Los tickets nuevos usan firma asimétrica (signedQr.ts); esto se mantiene para
+// validar tickets emitidos antes de la migración (coexistencia). Las constantes
+// de window son la única fuente de verdad en signedQr.
 
-export const WINDOW_SECONDS = 10;
-// Tolerancia ±1 window para clock skew (puerta vs cliente). Total 30s de
-// vida útil efectiva por código.
-export const WINDOW_TOLERANCE = 1;
+export { WINDOW_SECONDS, WINDOW_TOLERANCE, currentWindow };
 export const CODE_LENGTH = 12;
-
-export const currentWindow = (now: number = Date.now()): number =>
-  Math.floor(now / 1000 / WINDOW_SECONDS);
 
 export const computeRotatingCode = (
   secret: Buffer,
