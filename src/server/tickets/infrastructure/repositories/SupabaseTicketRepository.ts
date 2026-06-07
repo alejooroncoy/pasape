@@ -582,13 +582,65 @@ export const supabaseTicketRepository: TicketRepository = {
 };
 
 // Resuelve un input de escaneo a un qr_code estático.
-// Soporta tres formas:
-//   1) `ticketId.window.code` → valida HMAC + window + anti-replay
-//   2) JWT (qr_code legacy estilo TOTP firmado por evento) — pass-through
-//   3) base64url plano (qr_code estático actual)              — pass-through
+// Soporta cuatro formas:
+//   1) `cert~window~sig` → QR firmado ECDSA: valida cert del evento + window
+//   2) `ticketId.window.code` → valida HMAC + window + anti-replay (legacy)
+//   3) JWT (qr_code legacy estilo TOTP firmado por evento) — pass-through
+//   4) base64url plano (qr_code estático actual)              — pass-through
 async function resolveScanInput(
   raw: string,
 ): Promise<Result<{ qrCode: string }>> {
+  // QR firmado asimétrico: cert~window~sig.
+  if (raw.includes("~")) {
+    const { parseSignedQrPayload, verifySignedQr } = await import(
+      "@/lib/tickets/signedQr"
+    );
+    const { decodeJwt } = await import("jose");
+    const parsed = parseSignedQrPayload(raw);
+    if (!parsed) return err("invalid_payload");
+    let ticketId: string;
+    try {
+      ticketId = decodeJwt(parsed.cert).sub ?? "";
+    } catch {
+      return err("invalid_payload");
+    }
+    if (!ticketId) return err("invalid_payload");
+    const db = supabaseAdmin();
+    const { data: row } = await db
+      .from("tickets")
+      .select(
+        "id, qr_code, last_used_window, status, ticket_types!inner(event_id)",
+      )
+      .eq("id", ticketId)
+      .maybeSingle<{
+        id: string;
+        qr_code: string;
+        last_used_window: number | null;
+        status: string;
+        ticket_types: { event_id: string };
+      }>();
+    if (!row) return err("invalid");
+    if (
+      row.last_used_window != null &&
+      row.last_used_window === parsed.windowIdx
+    ) {
+      return err("code_replay");
+    }
+    const { data: keyRow } = await db
+      .from("event_signing_keys")
+      .select("public_key_jwk")
+      .eq("event_id", row.ticket_types.event_id)
+      .maybeSingle<{ public_key_jwk: import("jose").JWK }>();
+    if (!keyRow) return err("invalid_code");
+    const result = await verifySignedQr(keyRow.public_key_jwk, raw);
+    if (!result.valid) return err("invalid_code");
+    await db
+      .from("tickets")
+      .update({ last_used_window: result.window })
+      .eq("id", row.id);
+    return ok({ qrCode: row.qr_code });
+  }
+
   // Heurística: si tiene exactamente 2 puntos y la primera parte parece uuid,
   // lo tratamos como rotante.
   const parts = raw.split(".");
