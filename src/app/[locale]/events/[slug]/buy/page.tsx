@@ -26,6 +26,12 @@ import { activePricing, applyPromos } from "@/lib/events/pricing";
 type Props = { params: Promise<{ slug: string }> };
 type Phase = "pick" | "data" | "pay";
 
+const BUY_ERRORS: Record<string, string> = {
+  promoter_quota_exceeded: "El promotor ya agotó su cuota de entradas. Ingresa directo al evento.",
+  self_purchase_blocked: "No puedes comprar con tu propio código de promotor.",
+};
+const buyErrorMsg = (raw: string) => BUY_ERRORS[raw] ?? raw;
+
 export default function BuyFlowPage(props: Props) {
   return (
     <Suspense fallback={<PageLoader />}>
@@ -79,16 +85,17 @@ function BuyFlowInner({ params }: Props) {
     const key = `pasape:promo:${slug}`;
     const fromUrl = search.get("promo");
     let next: string | null = null;
-    if (fromUrl) {
-      next = fromUrl;
-      try {
+    try {
+      const stored = window.localStorage.getItem(key);
+      if (stored) {
+        // First-click wins: si ya hay un código guardado para este evento, lo respetamos.
+        next = stored;
+      } else if (fromUrl) {
+        // Primera vez que llega con código: lo guardamos.
+        next = fromUrl;
         window.localStorage.setItem(key, fromUrl);
-      } catch {}
-    } else {
-      try {
-        next = window.localStorage.getItem(key);
-      } catch {}
-    }
+      }
+    } catch {}
     if (next) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setPromoCode(next);
@@ -404,7 +411,7 @@ function BuyFlowInner({ params }: Props) {
               )}
               {buy.error && (
                 <p className="mt-3 text-center text-[12px] text-rose-300">
-                  {(buy.error as Error).message}
+                  {buyErrorMsg((buy.error as Error).message)}
                 </p>
               )}
             </div>
@@ -421,7 +428,7 @@ function BuyFlowInner({ params }: Props) {
           <div className="mx-auto w-full max-w-[640px] px-5 pt-3">
             {buy.error && (
               <p className="mb-2 text-center text-[12px] text-rose-300">
-                {(buy.error as Error).message}
+                {buyErrorMsg((buy.error as Error).message)}
               </p>
             )}
             <button
