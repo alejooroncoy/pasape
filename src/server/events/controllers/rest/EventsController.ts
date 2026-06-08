@@ -108,7 +108,7 @@ const createSchema = z.object({
 });
 
 export const EventsController = {
-  async listPublic(opts: { category?: EventCategory | null } = {}): Promise<Result<Event[]>> {
+  async listPublic(opts: { limit?: number; cursor?: string | null; category?: EventCategory | null } = {}): Promise<Result<Event[]>> {
     const events = await listPublishedEvents({ repo }, opts);
     return ok(events);
   },
