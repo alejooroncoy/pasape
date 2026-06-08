@@ -59,14 +59,9 @@ export async function refreshScanCache(slug: string): Promise<number> {
   try {
     await cacheEventSigningKey(slug);
   } catch {
-    // sin red o evento sin clave aún: el lookup estático sigue funcionando
+    // sin red o evento sin clave aún: best-effort, no bloquea el cache
   }
   return json.tickets.length;
-}
-
-export async function lookupTicket(qrCode: string): Promise<CachedTicket | null> {
-  const d = await db();
-  return (await d.get(STORE, qrCode)) ?? null;
 }
 
 export async function lookupTicketById(
@@ -138,11 +133,6 @@ export async function searchCachedTickets(query: string, limit = 30): Promise<Ca
   return scored.slice(0, limit).map((x) => x.t);
 }
 
-export async function markUsedLocal(qrCode: string): Promise<void> {
-  const d = await db();
-  const t = await d.get(STORE, qrCode);
-  if (t) await d.put(STORE, { ...t, status: "used" });
-}
 
 export async function lastSyncAt(): Promise<string | null> {
   const d = await db();

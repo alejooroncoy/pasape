@@ -2,6 +2,7 @@ import { z } from "zod";
 import { err, ok, type Result } from "@/server/_shared/result";
 import { supabaseTicketRepository } from "@/server/tickets/infrastructure/repositories/SupabaseTicketRepository";
 import { scanQr } from "../../application/ScanQr";
+import { admitTicket } from "../../application/AdmitTicket";
 import {
   verifyScanAccess,
   type ScanAccessContext,
@@ -22,6 +23,11 @@ const joinSchema = z.object({
   deviceId: z.string().min(1),
   fullName: z.string().nullish(),
   dniLast2: z.string().nullish(),
+});
+
+const admitSchema = z.object({
+  ticketId:  z.string().min(1),
+  eventSlug: z.string().min(1),
 });
 
 export const ScanningController = {
@@ -46,6 +52,32 @@ export const ScanningController = {
       { ticketRepo: supabaseTicketRepository },
       {
         qrCode:    parsed.data.qrCode,
+        scannerId: access.value.profileId,
+        usedAt:    context?.offlineScannedAt ? new Date(context.offlineScannedAt) : undefined,
+      },
+    );
+  },
+
+  // Admisión confiable por ticketId (alta manual desde la lista o sync offline).
+  async admit(
+    input: unknown,
+    context?: { offlineScannedAt?: string; deviceId?: string },
+  ): Promise<Result<ScanResult>> {
+    const parsed = admitSchema.safeParse(input);
+    if (!parsed.success) return err("invalid_input");
+
+    const access = await verifyScanAccess(parsed.data.eventSlug, {
+      deviceId: context?.deviceId,
+    });
+    if (!access.ok) return err(access.error);
+    if (access.value.via === "session" && access.value.sessionId) {
+      void touchScannerSync(access.value.sessionId);
+    }
+
+    return admitTicket(
+      { ticketRepo: supabaseTicketRepository },
+      {
+        ticketId:  parsed.data.ticketId,
         scannerId: access.value.profileId,
         usedAt:    context?.offlineScannedAt ? new Date(context.offlineScannedAt) : undefined,
       },

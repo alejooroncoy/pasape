@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import type { JWK } from "jose";
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
 import { verifyTicketLink } from "@/server/notifications/domain/TicketLinkToken";
-import { WINDOW_SECONDS } from "@/server/tickets/domain/RotatingQr";
+import { WINDOW_SECONDS } from "@/lib/tickets/signedQr";
 import { signTicketCert } from "@/server/tickets/domain/EventSignature";
 import { getOrCreateEventSigningKeys } from "@/server/tickets/application/EventSigningKeys";
 import { getAuthContext } from "@/server/_shared/AuthContext";

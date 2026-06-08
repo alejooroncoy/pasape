@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { exportJWK, type JWK } from "jose";
-import { WINDOW_SECONDS } from "./RotatingQr";
+import { WINDOW_SECONDS } from "@/lib/tickets/signedQr";
 import {
   buildSignedQrPayload,
   generateEventKeypair,

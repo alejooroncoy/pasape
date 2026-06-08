@@ -14,3 +14,14 @@ export const useScanQr = (eventSlug: string) =>
         { headers: deviceHeaders() },
       ),
   });
+
+// Admisión confiable por ticketId (alta manual desde la lista de asistentes).
+export const useAdmitTicket = (eventSlug: string) =>
+  useMutation({
+    mutationFn: (ticketId: string) =>
+      api.post<ScanResult>(
+        "/api/scanning/admit",
+        { ticketId, eventSlug },
+        { headers: deviceHeaders() },
+      ),
+  });

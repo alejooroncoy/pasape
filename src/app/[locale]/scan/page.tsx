@@ -3,10 +3,10 @@
 import { useCallback, useEffect, useRef, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { C, FONT_DISPLAY, FONT_MONO } from "@/components/design";
-import { useScanQr } from "@/lib/scanning/hooks/useScanQr";
+import { useScanQr, useAdmitTicket } from "@/lib/scanning/hooks/useScanQr";
 import { refreshScanCache, searchCachedTickets } from "@/lib/scanning/scanCache";
 import { useOnlineStatus } from "@/lib/_shared/useOnlineStatus";
-import { scanLocal } from "@/lib/scanning/scanLocal";
+import { scanLocal, admitLocal } from "@/lib/scanning/scanLocal";
 import { countPending } from "@/lib/scanning/scanQueue";
 import { syncPending } from "@/lib/scanning/syncWorker";
 import { useEvent } from "@/lib/events/hooks/useEvents";
@@ -112,6 +112,7 @@ function Inner() {
   const search    = useSearchParams();
   const eventSlug = search.get("event");
   const scan      = useScanQr(eventSlug ?? "");
+  const admit     = useAdmitTicket(eventSlug ?? "");
   const online    = useOnlineStatus();
 
   const { data: eventData } = useEvent(eventSlug ?? "");
@@ -284,10 +285,33 @@ function Inner() {
     } catch { setCameraError(true); }
   }, [loop]);
 
+  // Alta manual desde la lista: admisión confiable por ticketId (no por QR
+  // estático). El portero admite deliberadamente a quien buscó por nombre/DNI.
+  const runAdmit = useCallback(async (attendee: Attendee) => {
+    if (attendee.ticketId === lastCodeRef.current) return;
+    lastCodeRef.current = attendee.ticketId;
+    try {
+      const raw = online
+        ? await admit.mutateAsync(attendee.ticketId)
+        : await admitLocal(attendee.ticketId);
+      showResult({
+        kind:        (raw.kind as ScanKind) ?? "invalid",
+        holderName:  raw.holderName ?? attendee.holderName ?? null,
+        typeName:    raw.ticketTypeName ?? attendee.ticketType ?? null,
+        dniLast2:    raw.holderDniLast2 ?? attendee.dniLast2 ?? null,
+        boxLabel:    raw.boxLabel ?? null,
+        boxHostName: raw.boxHostName ?? null,
+        scannedAt:   ("scannedAt" in raw ? raw.scannedAt : null) ?? null,
+      });
+    } catch {
+      showResult({ kind: "invalid", holderName: null, typeName: "No se pudo admitir", dniLast2: null, boxLabel: null, boxHostName: null, scannedAt: null });
+    }
+  }, [admit, online, showResult]);
+
   const scanFromList = useCallback(async (attendee: Attendee) => {
     if (searchOpen) closeMobileSearch();
-    await runScan(attendee.qrCode);
-  }, [runScan, searchOpen]);
+    await runAdmit(attendee);
+  }, [runAdmit, searchOpen]);
 
   useEffect(() => {
     void startCamera();
