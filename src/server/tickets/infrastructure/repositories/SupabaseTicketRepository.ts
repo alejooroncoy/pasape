@@ -6,7 +6,7 @@ import type {
   TicketRepository,
 } from "@/server/tickets/ports/TicketRepository";
 import type { Order, Ticket, WalletTicket } from "@/server/tickets/domain/Ticket";
-import type { Promo } from "@/server/events/domain/Event";
+import type { EventStatus, Promo } from "@/server/events/domain/Event";
 import { activePricing, applyPromos, type PromoLineInput } from "@/lib/events/pricing";
 import { createPreference } from "@/server/payments/application/CreatePreference";
 import { dispatchTicketDelivery } from "@/server/notifications/application/DispatchTicketDelivery";
@@ -384,7 +384,7 @@ export const supabaseTicketRepository: TicketRepository = {
           starts_at: string;
           venue: string | null;
           timezone: string;
-          status: string;
+          status: EventStatus;
         };
       };
     };

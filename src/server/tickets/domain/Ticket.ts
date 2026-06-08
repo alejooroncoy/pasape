@@ -1,3 +1,5 @@
+import type { EventStatus } from "@/server/events/domain/Event";
+
 export type TicketStatus = "active" | "used" | "void" | "refunded";
 export type OrderStatus = "pending" | "paid" | "failed" | "expired" | "refunded";
 
@@ -31,6 +33,6 @@ export type Ticket = {
 };
 
 export type WalletTicket = Ticket & {
-  event: { id: string; slug: string; title: string; startsAt: string; venue: string | null; timezone: string };
+  event: { id: string; slug: string; title: string; startsAt: string; venue: string | null; timezone: string; status: EventStatus };
   ticketType: { id: string; name: string; kind: string };
 };
