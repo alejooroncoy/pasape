@@ -86,14 +86,12 @@ function BuyFlowInner({ params }: Props) {
     const fromUrl = search.get("promo");
     let next: string | null = null;
     try {
-      const stored = window.localStorage.getItem(key);
-      if (stored) {
-        // First-click wins: si ya hay un código guardado para este evento, lo respetamos.
-        next = stored;
-      } else if (fromUrl) {
-        // Primera vez que llega con código: lo guardamos.
+      if (fromUrl) {
+        // Last-click wins: el último promotor que convenció al comprador gana.
         next = fromUrl;
         window.localStorage.setItem(key, fromUrl);
+      } else {
+        next = window.localStorage.getItem(key);
       }
     } catch {}
     if (next) {
