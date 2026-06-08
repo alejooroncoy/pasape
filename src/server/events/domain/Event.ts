@@ -1,5 +1,13 @@
 export type EventStatus = "draft" | "published" | "closed" | "cancelled";
 
+export type PresaleTier = {
+  id: string;
+  ticketTypeId: string;
+  priceCents: number;
+  endsAt: string;
+  position: number;
+};
+
 export type EventCategory =
   | "musica"
   | "dj_sets"
@@ -113,6 +121,8 @@ export type TicketType = {
   description: string | null;
   /** Backend-computed: estado de venta. El frontend NO lo recalcula desde fechas. */
   saleStatus: "available" | "expired" | "soldout";
-  /** Backend-computed: si la preventa está vigente ahora (precio + stock + fecha). */
+  /** Backend-computed: si la preventa está vigente ahora. */
   isPresaleActive: boolean;
+  /** Tramos de preventa ordenados por ends_at asc. El backend elige el activo. */
+  presaleTiers: PresaleTier[];
 };

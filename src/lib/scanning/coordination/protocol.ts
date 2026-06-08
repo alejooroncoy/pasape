@@ -27,17 +27,16 @@ export class InMemoryBus {
   private subs = new Set<(m: DoorMsg) => void>();
 
   endpoint(): Transport {
-    const self = this;
     let mine: ((m: DoorMsg) => void) | null = null;
     return {
-      send(msg) {
-        for (const s of self.subs) if (s !== mine) s(msg);
+      send: (msg) => {
+        for (const s of this.subs) if (s !== mine) s(msg);
       },
-      subscribe(cb) {
+      subscribe: (cb) => {
         mine = cb;
-        self.subs.add(cb);
+        this.subs.add(cb);
         return () => {
-          self.subs.delete(cb);
+          this.subs.delete(cb);
           if (mine === cb) mine = null;
         };
       },

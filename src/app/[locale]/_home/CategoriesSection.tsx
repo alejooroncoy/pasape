@@ -1,51 +1,65 @@
+"use client";
+
+import type { EventCategory } from "@/server/events/domain/Event";
 import { AfterIcon, ComedyIcon, CultureIcon, DjIcon, MusicIcon, SportIcon } from "./icons";
 
-const CATS = [
-  { name: "Música", note: "Próximamente", Icon: MusicIcon },
-  { name: "DJ Sets", note: "Próximamente", Icon: DjIcon },
-  { name: "After-office", note: "Próximamente", Icon: AfterIcon },
-  { name: "Comedia", note: "Próximamente", Icon: ComedyIcon },
-  { name: "Cultura", note: "Próximamente", Icon: CultureIcon },
-  { name: "Deportes", note: "Próximamente", Icon: SportIcon },
+type CatDef = { id: EventCategory; name: string; Icon: React.FC };
+
+const CATS: CatDef[] = [
+  { id: "musica",       name: "Música",       Icon: MusicIcon   },
+  { id: "dj_sets",      name: "DJ Sets",      Icon: DjIcon      },
+  { id: "after_office", name: "After-office",  Icon: AfterIcon   },
+  { id: "comedia",      name: "Comedia",       Icon: ComedyIcon  },
+  { id: "cultura",      name: "Cultura",       Icon: CultureIcon },
+  { id: "deportes",     name: "Deportes",      Icon: SportIcon   },
 ];
 
-export function CategoriesSection() {
-  return (
-    <section id="categorias" className="relative pt-[clamp(56px,8vw,96px)]">
-      <div className="mx-auto max-w-[1320px] px-[clamp(20px,4vw,56px)]">
-        <div className="mb-[clamp(20px,3vw,32px)] flex items-end justify-between gap-6 max-[560px]:flex-col max-[560px]:items-start max-[560px]:gap-3.5">
-          <div>
-            <p className="m-0 mb-2 font-serif text-base italic font-normal text-cart-accent">
-              Explora
-            </p>
-            <h2 className="m-0 font-sans text-[clamp(32px,4.4vw,52px)] font-semibold leading-none tracking-[-0.02em]">
-              Por{" "}
-              <em
-                className="font-serif italic font-normal text-cart-accent"
-                style={{ textShadow: "0 0 28px var(--color-cart-accent-glow)" }}
-              >
-                categoría
-              </em>
-            </h2>
-          </div>
-        </div>
+type Props = {
+  selected: EventCategory | null;
+  onChange: (cat: EventCategory | null) => void;
+};
 
-        <div className="grid grid-cols-6 gap-3 max-[900px]:grid-cols-3 max-[560px]:grid-cols-2">
-          {CATS.map(({ name, note, Icon }) => (
-            <div
-              key={name}
-              className="group relative flex cursor-default flex-col gap-3.5 overflow-hidden rounded-[14px] border border-cart-line bg-cart-bg-elev px-[18px] py-[22px] opacity-90 transition-all duration-200 hover:-translate-y-0.5 hover:border-cart-accent/35 hover:opacity-100 hover:shadow-[0_16px_40px_-20px_var(--color-cart-accent-glow)]"
+export function CategoriesSection({ selected, onChange }: Props) {
+  return (
+    <section id="categorias" className="pt-[clamp(24px,3vw,36px)] pb-2">
+      <div
+        className="flex gap-2 overflow-x-auto"
+        style={{
+          paddingLeft: "calc(clamp(20px, 4vw, 56px) + max(0px, (100vw - 1320px) / 2))",
+          paddingRight: "clamp(20px, 4vw, 56px)",
+          scrollbarWidth: "none",
+        }}
+      >
+        <button
+          onClick={() => onChange(null)}
+          className={`flex-shrink-0 rounded-full border px-4 py-[7px] text-[13px] font-medium transition-colors duration-150 ${
+            selected === null
+              ? "border-cart-accent bg-cart-accent/15 text-white"
+              : "border-cart-line bg-transparent text-white/50 hover:border-white/25 hover:text-white/75"
+          }`}
+        >
+          Todos
+        </button>
+
+        {CATS.map(({ id, name, Icon }) => {
+          const active = selected === id;
+          return (
+            <button
+              key={id}
+              onClick={() => onChange(active ? null : id)}
+              className={`flex flex-shrink-0 items-center gap-1.5 rounded-full border px-4 py-[7px] text-[13px] font-medium transition-colors duration-150 ${
+                active
+                  ? "border-cart-accent bg-cart-accent/15 text-white"
+                  : "border-cart-line bg-transparent text-white/50 hover:border-white/25 hover:text-white/75"
+              }`}
             >
-              <span className="grid size-[38px] place-items-center rounded-[10px] border border-cart-line bg-cart-bg-elev-2 text-cart-accent">
+              <span className={`text-[14px] ${active ? "text-cart-accent" : "text-white/40"}`}>
                 <Icon />
               </span>
-              <div>
-                <div className="text-[17px] font-semibold leading-[1.1] text-white">{name}</div>
-                <div className="mt-0.5 font-serif text-sm italic text-cart-ink-3">{note}</div>
-              </div>
-            </div>
-          ))}
-        </div>
+              {name}
+            </button>
+          );
+        })}
       </div>
     </section>
   );

@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import type { EventCategory } from "@/server/events/domain/Event";
 import { Nav } from "./_home/Nav";
-import { HeroComingSoon } from "./_home/HeroComingSoon";
-import { CategoriesSection } from "./_home/CategoriesSection";
+import { HeroCarousel } from "./_home/HeroCarousel";
+import { EventsSection } from "./_home/EventsSection";
 import { Footer } from "./_home/Footer";
 import { WaFloat } from "./_home/WaFloat";
 import { MobileTabbar } from "./_home/MobileTabbar";
@@ -13,6 +14,16 @@ import { SignInDrawer } from "./_home/SignInDrawer";
 export default function HomePage() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [signInOpen, setSignInOpen] = useState(false);
+  const [category, setCategory] = useState<EventCategory | null>(null);
+  const [search, setSearch] = useState("");
+  const eventsSectionRef = useRef<HTMLElement>(null);
+
+  const selectCategoryFromNav = (cat: EventCategory | null) => {
+    setCategory(cat);
+    setTimeout(() => {
+      eventsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 50);
+  };
 
   return (
     <div className="cart-grain relative min-h-screen overflow-hidden bg-cart-bg text-white font-sans">
@@ -39,10 +50,13 @@ export default function HomePage() {
       <Nav
         onOpenDrawer={() => setDrawerOpen(true)}
         onOpenSignIn={() => setSignInOpen(true)}
+        onSearch={setSearch}
+        onSelectCategory={selectCategoryFromNav}
+        selectedCategory={category}
       />
       <main className="max-[560px]:pb-[72px]">
-        <HeroComingSoon />
-        <CategoriesSection />
+        <HeroCarousel />
+        <EventsSection sectionRef={eventsSectionRef} category={category} onCategoryChange={setCategory} search={search} />
       </main>
       <Footer />
       <WaFloat />

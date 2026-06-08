@@ -19,6 +19,8 @@ export type CreateTicketTypePayload = {
   zone?: string | null;
   unitNoun?: string | null;
   saleEndsAt?: string | null;
+  description?: string | null;
+  presaleTiers?: Array<{ priceCents: number; endsAt: string }>;
 } & PresalePayload;
 
 export type UpdateTicketTypePayload = {
@@ -29,6 +31,8 @@ export type UpdateTicketTypePayload = {
   zone?: string | null;
   unitNoun?: string | null;
   saleEndsAt?: string | null;
+  description?: string | null;
+  presaleTiers?: Array<{ priceCents: number; endsAt: string }>;
 } & PresalePayload;
 
 const invalidate = (qc: ReturnType<typeof useQueryClient>, slug: string) => {

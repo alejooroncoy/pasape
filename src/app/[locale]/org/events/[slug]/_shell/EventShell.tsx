@@ -84,9 +84,8 @@ export function EventShell({
     : "—";
 
   const status = ev?.status ?? "draft";
-  const isLive = status === "published" && new Date(ev?.startsAt ?? 0).getTime() < Date.now() + 6 * 3600 * 1000;
-  const finished = status === "published" && ev?.endsAt != null && new Date(ev.endsAt) < new Date();
-  const isOver = status === "closed" || status === "cancelled" || finished;
+  const isLive = status === "published";
+  const isOver = status === "closed" || status === "cancelled";
 
   return (
     <OrgShell>
@@ -197,7 +196,7 @@ export function EventShell({
             <EventThumb title={ev?.title ?? ""} />
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <StatusPill status={status} live={isLive} finished={finished} />
+                <StatusPill status={status} live={isLive} finished={isOver} />
                 <span className="truncate text-[11.5px] font-medium uppercase tracking-[0.14em] text-cart-ink-3">
                   {dateLabel}
                 </span>

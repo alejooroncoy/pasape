@@ -16,7 +16,10 @@ export const GET = async (
   if (!access.ok) return json(err(access.error));
 
   const isEmpty = q.length === 0;
+  // Detectar si la búsqueda es numérica (DNI) o por nombre
   const isNumeric = /^\d+$/.test(q);
+  // Para DNI usamos los últimos 2 dígitos — coincide con lo que almacenamos
+  const dniQuery = isNumeric ? q.slice(-2) : null;
 
   const db = supabaseAdmin();
 
@@ -31,10 +34,13 @@ export const GET = async (
     .limit(isEmpty ? 60 : 20);
 
   if (!isEmpty) {
-    if (isNumeric) {
-      query = query.ilike("holder_dni_last2", `%${q.slice(-2)}%`);
+    if (dniQuery) {
+      // Búsqueda exacta por últimos 2 dígitos → usa índice btree tickets_holder_dni_last2_idx
+      query = query.eq("holder_dni_last2", dniQuery);
     } else {
-      query = query.ilike("holder_name", `%${q}%`);
+      // Búsqueda por nombre con prefijo → usa índice GIN trigrama tickets_holder_name_trgm
+      // ilike con prefijo (q%) es más selectivo que %q% y permite usar el índice
+      query = query.ilike("holder_name", `${q}%`);
     }
   }
 

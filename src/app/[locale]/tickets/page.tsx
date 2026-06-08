@@ -56,14 +56,14 @@ export default function WalletPage() {
     const up: typeof all = [];
     const ps: typeof all = [];
     for (const t of all) {
-      const eventTime = new Date(t.event.startsAt).getTime();
-      if (t.status === "used" || eventTime < now) ps.push(t);
+      const eventDone = t.event.status === "closed" || t.event.status === "cancelled";
+      if (t.status === "used" || t.status === "void" || t.status === "refunded" || eventDone) ps.push(t);
       else up.push(t);
     }
     up.sort((a, b) => new Date(a.event.startsAt).getTime() - new Date(b.event.startsAt).getTime());
     ps.sort((a, b) => new Date(b.event.startsAt).getTime() - new Date(a.event.startsAt).getTime());
     return { upcoming: up, past: ps };
-  }, [all, now]);
+  }, [all]);
 
   // Empty state — pixel-perfect BuyerTicketsEmpty
   if (!tickets.isLoading && all.length === 0) {

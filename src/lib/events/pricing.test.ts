@@ -22,6 +22,7 @@ const tt = (over: Partial<TicketType>): TicketType => ({
   description: null,
   saleStatus: "available",
   isPresaleActive: false,
+  presaleTiers: [],
   ...over,
 });
 

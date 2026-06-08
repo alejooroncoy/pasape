@@ -33,11 +33,7 @@ export default async function BrandPublicPage({ params }: Props) {
 // Helper fuera del render del Server Component: aquí Date.now() es válido
 // (la regla de pureza de React solo aplica al cuerpo del componente).
 async function loadUpcomingEvents(orgSlug: string) {
-  const events = await supabaseEventRepository.listByOrgSlug(orgSlug);
-  const cutoff = Date.now() - 6 * 3600 * 1000;
-  const upcoming = events
-    .filter((e) => e.status === "published")
-    .filter((e) => new Date(e.startsAt).getTime() >= cutoff);
+  const upcoming = await supabaseEventRepository.listPublishedByOrgSlug(orgSlug);
   const minPrices = await fetchMinPricesByEvent(upcoming.map((e) => e.id));
   return { upcoming, minPrices };
 }

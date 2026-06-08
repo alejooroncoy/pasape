@@ -2,13 +2,14 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/_shared/api-client";
-import type { Event, Promo, TicketType } from "@/server/events/domain/Event";
+import type { Event, EventCategory, Promo, TicketType } from "@/server/events/domain/Event";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 
-export const useBrowseEvents = () =>
+export const useBrowseEvents = (category?: EventCategory | null) =>
   useQuery({
-    queryKey: ["events", "browse"],
-    queryFn: () => api.get<Event[]>("/api/events"),
+    queryKey: ["events", "browse", category ?? null],
+    queryFn: () =>
+      api.get<Event[]>(category ? `/api/events?category=${category}` : "/api/events"),
   });
 
 export const useMyEvents = () => {
