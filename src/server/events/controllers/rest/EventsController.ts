@@ -109,7 +109,8 @@ const createSchema = z.object({
 
 export const EventsController = {
   async listPublic(opts: { category?: EventCategory | null } = {}): Promise<Result<Event[]>> {
-    return { ok: true, value: await listPublishedEvents({ repo }, opts) };
+    const events = await listPublishedEvents({ repo }, opts);
+    return ok(events);
   },
 
   async getBySlug(
@@ -412,7 +413,8 @@ export const EventsController = {
   async getOrgShowcase(
     slug: string,
   ): Promise<Result<EventOrgShowcase | null>> {
-    return { ok: true, value: await getEventOrgShowcase(slug) };
+    const showcase = await getEventOrgShowcase(slug);
+    return ok(showcase);
   },
 };
 
