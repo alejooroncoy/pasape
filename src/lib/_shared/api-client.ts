@@ -1,9 +1,19 @@
 export type ApiResponse<T> = { data?: T; error?: string };
 
-const request = async <T>(method: string, path: string, body?: unknown): Promise<T> => {
+type ReqOpts = { headers?: Record<string, string> };
+
+const request = async <T>(
+  method: string,
+  path: string,
+  body?: unknown,
+  opts?: ReqOpts,
+): Promise<T> => {
   const res = await fetch(path, {
     method,
-    headers: body ? { "content-type": "application/json" } : undefined,
+    headers: {
+      ...(body ? { "content-type": "application/json" } : {}),
+      ...(opts?.headers ?? {}),
+    },
     body: body ? JSON.stringify(body) : undefined,
     credentials: "same-origin",
   });
@@ -15,9 +25,9 @@ const request = async <T>(method: string, path: string, body?: unknown): Promise
 };
 
 export const api = {
-  get: <T>(path: string) => request<T>("GET", path),
-  post: <T>(path: string, body?: unknown) => request<T>("POST", path, body),
-  put: <T>(path: string, body?: unknown) => request<T>("PUT", path, body),
-  patch: <T>(path: string, body?: unknown) => request<T>("PATCH", path, body),
-  del: <T>(path: string, body?: unknown) => request<T>("DELETE", path, body),
+  get: <T>(path: string, opts?: ReqOpts) => request<T>("GET", path, undefined, opts),
+  post: <T>(path: string, body?: unknown, opts?: ReqOpts) => request<T>("POST", path, body, opts),
+  put: <T>(path: string, body?: unknown, opts?: ReqOpts) => request<T>("PUT", path, body, opts),
+  patch: <T>(path: string, body?: unknown, opts?: ReqOpts) => request<T>("PATCH", path, body, opts),
+  del: <T>(path: string, body?: unknown, opts?: ReqOpts) => request<T>("DELETE", path, body, opts),
 };

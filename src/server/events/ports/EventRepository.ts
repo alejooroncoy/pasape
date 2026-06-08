@@ -1,4 +1,4 @@
-import type { Event, EventStatus, Promo, PromoKind, TicketType } from "../domain/Event";
+import type { Event, EventCategory, EventStatus, Promo, PromoKind, PresaleTier, TicketType } from "../domain/Event";
 import type { Result } from "@/server/_shared/result";
 
 export type CreateEventInput = {
@@ -15,6 +15,7 @@ export type CreateEventInput = {
   startsAt: string;
   endsAt: string | null;
   timezone: string;
+  category?: EventCategory | null;
   totalCapacity: number | null;
   overbookPct: number;
   transfersEnabled: boolean;
@@ -89,6 +90,14 @@ export type ScanFeedItem = {
   scannedBy: string;
 };
 
+// Salud de las puertas (porteros) para el banner de honestidad del dashboard.
+export type DoorHealth = {
+  deviceId: string;
+  zoneName: string | null;
+  lastSyncAt: string | null;
+  expiresAt: string;
+};
+
 export type CreateTicketTypeInput = {
   name: string;
   kind: TicketType["kind"];
@@ -101,6 +110,9 @@ export type CreateTicketTypeInput = {
   presalePriceCents?: number | null;
   presaleQty?: number | null;
   presaleEndsAt?: string | null;
+  description?: string | null;
+  /** Tramos de preventa. Si se pasa, reemplaza todos los existentes. */
+  presaleTiers?: Array<Pick<PresaleTier, "priceCents" | "endsAt">>;
 };
 
 export type UpdateTicketTypeInput = {
@@ -114,6 +126,9 @@ export type UpdateTicketTypeInput = {
   presalePriceCents?: number | null;
   presaleQty?: number | null;
   presaleEndsAt?: string | null;
+  description?: string | null;
+  /** Tramos de preventa. Si se pasa, reemplaza todos los existentes. */
+  presaleTiers?: Array<Pick<PresaleTier, "priceCents" | "endsAt">>;
 };
 
 /** Una promo por entrada (la última gana). null en kind = sin promo. */
@@ -135,6 +150,7 @@ export type UpdateEventInput = {
   venueLayoutUrl?: string | null;
   coverUrl?: string | null;
   startsAt?: string;
+  category?: EventCategory | null;
   totalCapacity?: number | null;
   overbookPct?: number;
   transfersEnabled?: boolean;
@@ -173,9 +189,11 @@ export type EventExportData = {
 };
 
 export interface EventRepository {
-  listPublished(limit: number, cursor: string | null): Promise<Event[]>;
+  listPublished(limit: number, cursor: string | null, category?: EventCategory | null): Promise<Event[]>;
   listByOrganization(orgId: string): Promise<Event[]>;
   listByOrgSlug(orgSlug: string): Promise<Event[]>;
+  /** Solo eventos publicados de una org, ordenados por startsAt asc. */
+  listPublishedByOrgSlug(orgSlug: string): Promise<Event[]>;
   getBySlug(
     slug: string,
   ): Promise<{ event: Event; ticketTypes: TicketType[]; promos: Promo[] } | null>;
@@ -195,6 +213,10 @@ export interface EventRepository {
   setPromos(eventId: string, promos: PromoInput[]): Promise<Result<Promo[]>>;
   getStats(eventId: string): Promise<EventStats>;
   listScans(eventId: string, limit: number): Promise<ScanFeedItem[]>;
+  /** Puertas activas + conteo de duplicados offline para el dashboard. */
+  getDoorHealth(
+    eventId: string,
+  ): Promise<{ doors: DoorHealth[]; dupOffline: number }>;
   exportData(eventId: string): Promise<{
     attendees: AttendeeRow[];
     promoters: PromoterReportRow[];

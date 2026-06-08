@@ -6,7 +6,7 @@ import type {
   TicketRepository,
 } from "@/server/tickets/ports/TicketRepository";
 import type { Order, Ticket, WalletTicket } from "@/server/tickets/domain/Ticket";
-import type { Promo } from "@/server/events/domain/Event";
+import type { EventStatus, Promo } from "@/server/events/domain/Event";
 import { activePricing, applyPromos, type PromoLineInput } from "@/lib/events/pricing";
 import { createPreference } from "@/server/payments/application/CreatePreference";
 import { dispatchTicketDelivery } from "@/server/notifications/application/DispatchTicketDelivery";
@@ -103,12 +103,14 @@ export const supabaseTicketRepository: TicketRepository = {
       .from("ticket_promos")
       .select("id, event_id, ticket_type_id, kind, ends_at")
       .eq("event_id", input.eventId);
+    const now = new Date();
     const promos: Promo[] = (promoRows ?? []).map((r) => ({
       id: r.id,
       eventId: r.event_id,
       ticketTypeId: r.ticket_type_id,
       kind: r.kind as Promo["kind"],
       endsAt: r.ends_at,
+      isActive: r.ends_at == null || new Date(r.ends_at) > now,
     }));
 
     // Why: el precio NO se confía del cliente. Se resuelve el precio activo
@@ -119,12 +121,17 @@ export const supabaseTicketRepository: TicketRepository = {
       if (!tt) return err("ticket_type_missing");
       if (tt.sale_ends_at && new Date(tt.sale_ends_at) < new Date()) return err("ticket_type_sales_closed");
       if (tt.sold + item.qty > tt.capacity) return err("sold_out");
+      const isPresaleActive =
+        tt.presale_price_cents != null &&
+        (tt.presale_qty == null || tt.sold < tt.presale_qty) &&
+        (tt.presale_ends_at == null || now < new Date(tt.presale_ends_at));
       const ap = activePricing({
         priceCents: tt.price_cents,
         presalePriceCents: tt.presale_price_cents,
         presaleQty: tt.presale_qty,
         presaleEndsAt: tt.presale_ends_at,
         sold: tt.sold,
+        isPresaleActive,
       });
       priceItems.push({ ticketTypeId: tt.id, qty: item.qty, unitPriceCents: ap.priceCents });
     }
@@ -359,7 +366,7 @@ export const supabaseTicketRepository: TicketRepository = {
     const { data } = await db
       .from("tickets")
       .select(
-        "*, ticket_type:ticket_types!inner(id,name,kind,event_id,event:events!inner(id,slug,title,starts_at,venue,timezone))",
+        "*, ticket_type:ticket_types!inner(id,name,kind,event_id,event:events!inner(id,slug,title,starts_at,venue,timezone,status))",
       )
       .eq("current_holder", buyerId)
       .order("created_at", { ascending: false });
@@ -377,6 +384,7 @@ export const supabaseTicketRepository: TicketRepository = {
           starts_at: string;
           venue: string | null;
           timezone: string;
+          status: EventStatus;
         };
       };
     };
@@ -389,6 +397,7 @@ export const supabaseTicketRepository: TicketRepository = {
         startsAt: row.ticket_type.event.starts_at,
         venue: row.ticket_type.event.venue,
         timezone: row.ticket_type.event.timezone,
+        status: row.ticket_type.event.status,
       },
       ticketType: {
         id: row.ticket_type.id,
@@ -467,18 +476,40 @@ export const supabaseTicketRepository: TicketRepository = {
 
   async markUsedByQr(qrCode, scannerId, usedAt?: Date) {
     const db = supabaseAdmin();
-
-    // Si el código viene en formato rotante (ticketId.window.code), lo
-    // resolvemos al qr_code estático del ticket validando HMAC + ventana
-    // temporal + anti-replay del window. Si es legacy (token plano), va
-    // directo al lookup por qr_code.
-    const resolved = await resolveScanInput(qrCode);
+    // Solo QR firmado ECDSA (cert~window~sig). Offline (usedAt presente) omite
+    // la frescura del window: ya se verificó en la puerta al escanear.
+    const resolved = await resolveScanInput(qrCode, { offline: !!usedAt });
     if (!resolved.ok) {
       // No registramos scan_event acá porque no tenemos ticket_id ni event_id.
       return err(resolved.error);
     }
-    const effectiveQrCode = resolved.value.qrCode;
+    return markByQrCode(db, resolved.value.qrCode, scannerId, usedAt, qrCode);
+  },
 
+  async markUsedByTicketId(ticketId, scannerId, usedAt?: Date) {
+    const db = supabaseAdmin();
+    // Admisión confiable por ticketId: alta manual desde la lista (el portero
+    // admite deliberadamente a alguien que buscó por nombre/DNI) o sync de un
+    // scan ya verificado offline. No requiere firma.
+    const { data: row } = await db
+      .from("tickets")
+      .select("qr_code")
+      .eq("id", ticketId)
+      .maybeSingle<{ qr_code: string }>();
+    if (!row) return err("invalid");
+    return markByQrCode(db, row.qr_code, scannerId, usedAt, ticketId);
+  },
+};
+
+// Núcleo de marcado por qr_code estático (interno). Lo comparten markUsedByQr
+// (tras resolver la firma) y markUsedByTicketId (admisión confiable).
+async function markByQrCode(
+  db: ReturnType<typeof supabaseAdmin>,
+  effectiveQrCode: string,
+  scannerId: string,
+  usedAt: Date | undefined,
+  rawToken: string,
+) {
     const { data: updatedRow, error: upErr } = await db
       .from("tickets")
       .update({ status: "used", used_at: usedAt ? usedAt.toISOString() : new Date().toISOString() })
@@ -497,7 +528,7 @@ export const supabaseTicketRepository: TicketRepository = {
         event_id: joined.ticket_type.event_id,
         scanned_by: scannerId,
         result: "valid",
-        raw_token: qrCode,
+        raw_token: rawToken,
       });
 
       // Why: el portero debe ver inmediatamente "BOX A · invitado por José ·
@@ -561,69 +592,92 @@ export const supabaseTicketRepository: TicketRepository = {
     type ExistingRow = { id: string; status: Ticket["status"]; ticket_type: { event_id: string } };
     const ex = existing as unknown as ExistingRow;
     const result = ex.status === "used" ? "already_used" : "invalid";
+    // Detección de doble-ingreso offline: si este scan venía de la cola offline
+    // (usedAt = offlineScannedAt) y el ticket YA estaba usado, dos puertas sin
+    // coordinador dejaron pasar el mismo ticket. El primer-scan-gana ya marcó
+    // 'valid'; este se registra como dup_offline para alertar en el dashboard.
+    const flag = result === "already_used" && usedAt ? "dup_offline" : "ok";
     await db.from("scan_events").insert({
       ticket_id: ex.id,
       event_id: ex.ticket_type.event_id,
       scanned_by: scannerId,
       result,
-      raw_token: qrCode,
+      raw_token: rawToken,
+      flag,
     });
     return err(result);
-  },
-};
+}
 
-// Resuelve un input de escaneo a un qr_code estático.
-// Soporta tres formas:
-//   1) `ticketId.window.code` → valida HMAC + window + anti-replay
-//   2) JWT (qr_code legacy estilo TOTP firmado por evento) — pass-through
-//   3) base64url plano (qr_code estático actual)              — pass-through
+// Resuelve un QR FIRMADO (cert~window~sig) a su qr_code estático interno.
+// No hay fallback a QR estático ni a HMAC: el único input válido de cámara es la
+// firma ECDSA. La admisión manual usa markUsedByTicketId, no este resolver.
+//   - online (offline=false): verifica cert + frescura del window + anti-replay.
+//   - offline (offline=true): verifica solo el cert (el window ya se validó en
+//     la puerta al escanear; al sincronizar estaría vencido).
 async function resolveScanInput(
   raw: string,
+  opts: { offline?: boolean } = {},
 ): Promise<Result<{ qrCode: string }>> {
-  // Heurística: si tiene exactamente 2 puntos y la primera parte parece uuid,
-  // lo tratamos como rotante.
-  const parts = raw.split(".");
-  if (parts.length === 3 && /^[0-9a-f-]{36}$/i.test(parts[0]!)) {
-    const { parseRotatingPayload, verifyRotatingCode } = await import(
-      "@/server/tickets/domain/RotatingQr"
-    );
-    const parsed = parseRotatingPayload(raw);
-    if (!parsed) return err("invalid_payload");
-    const db = supabaseAdmin();
-    const { data: row } = await db
-      .from("tickets")
-      .select("id, qr_code, rotation_secret, last_used_window, status")
-      .eq("id", parsed.ticketId)
-      .maybeSingle<{
-        id: string;
-        qr_code: string;
-        rotation_secret: string;
-        last_used_window: number | null;
-        status: string;
-      }>();
-    if (!row) return err("invalid");
-    // Anti-replay: si ya se aceptó este mismo window, rechazar.
-    if (row.last_used_window != null && row.last_used_window === parsed.windowIdx) {
+  const { parseSignedQrPayload, verifyCert, verifyWindow } = await import(
+    "@/lib/tickets/signedQr"
+  );
+  const { decodeJwt } = await import("jose");
+
+  const parsed = parseSignedQrPayload(raw);
+  if (!parsed) return err("invalid_payload");
+
+  let ticketId: string;
+  try {
+    ticketId = decodeJwt(parsed.cert).sub ?? "";
+  } catch {
+    return err("invalid_payload");
+  }
+  if (!ticketId) return err("invalid_payload");
+
+  const db = supabaseAdmin();
+  const { data: row } = await db
+    .from("tickets")
+    .select("id, qr_code, last_used_window, ticket_types!inner(event_id)")
+    .eq("id", ticketId)
+    .maybeSingle<{
+      id: string;
+      qr_code: string;
+      last_used_window: number | null;
+      ticket_types: { event_id: string };
+    }>();
+  if (!row) return err("invalid");
+
+  const { data: keyRow } = await db
+    .from("event_signing_keys")
+    .select("public_key_jwk")
+    .eq("event_id", row.ticket_types.event_id)
+    .maybeSingle<{ public_key_jwk: import("jose").JWK }>();
+  if (!keyRow) return err("invalid_code");
+
+  // Cert siempre: prueba autenticidad y liga el ticket al evento.
+  const claims = await verifyCert(keyRow.public_key_jwk, parsed.cert);
+  if (!claims || claims.ticketId !== ticketId) return err("invalid_code");
+
+  if (!opts.offline) {
+    // Anti-replay del window + frescura (anti-screenshot del QR firmado).
+    if (
+      row.last_used_window != null &&
+      row.last_used_window === parsed.windowIdx
+    ) {
       return err("code_replay");
     }
-    const hex = row.rotation_secret.startsWith("\\x")
-      ? row.rotation_secret.slice(2)
-      : row.rotation_secret;
-    const secret = Buffer.from(hex, "hex");
-    const verification = verifyRotatingCode(
-      secret,
-      parsed.ticketId,
+    const fresh = await verifyWindow(
+      claims.ticketPub,
+      ticketId,
       parsed.windowIdx,
-      parsed.code,
+      parsed.sig,
     );
-    if (!verification.valid) return err("invalid_code");
-    // Marcar window aceptado para anti-replay (best-effort, no bloqueante).
+    if (!fresh) return err("invalid_code");
     await db
       .from("tickets")
-      .update({ last_used_window: verification.window })
+      .update({ last_used_window: parsed.windowIdx })
       .eq("id", row.id);
-    return ok({ qrCode: row.qr_code });
   }
-  // Legacy: token plano.
-  return ok({ qrCode: raw });
+
+  return ok({ qrCode: row.qr_code });
 }

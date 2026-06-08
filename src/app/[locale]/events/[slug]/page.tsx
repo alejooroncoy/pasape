@@ -215,10 +215,6 @@ function EventDetailInner({ params }: Props) {
                 </p>
               </div>
 
-              {event.venueLayoutUrl && (
-                <SidebarVenueThumbnail url={event.venueLayoutUrl} venue={event.venue} />
-              )}
-
               {showcase.data && showcase.data.events.length > 0 && (
                 <SidebarMoreFromOrg org={showcase.data.org} events={showcase.data.events} />
               )}
@@ -437,17 +433,19 @@ function ZoneCard({
   };
 
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={summary.isAllSoldOut}
+    <div
+      role="button"
+      tabIndex={summary.isAllSoldOut ? -1 : 0}
+      onClick={summary.isAllSoldOut ? undefined : onClick}
+      onKeyDown={summary.isAllSoldOut ? undefined : (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } }}
+      aria-disabled={summary.isAllSoldOut}
       className={
         "group flex w-full items-stretch rounded-2xl border bg-cart-bg-elev text-left transition " +
         (summary.isAllSoldOut
-          ? "border-cart-line opacity-55"
+          ? "border-cart-line opacity-55 cursor-not-allowed"
           : qty > 0
-            ? "border-cart-accent/60 shadow-[0_0_16px_-6px_var(--color-cart-accent-glow)]"
-            : "border-cart-line hover:border-cart-line-strong hover:bg-cart-bg-elev/80") +
+            ? "border-cart-accent/60 shadow-[0_0_16px_-6px_var(--color-cart-accent-glow)] cursor-pointer"
+            : "border-cart-line hover:border-cart-line-strong hover:bg-cart-bg-elev/80 cursor-pointer") +
         (compact ? " px-3.5 py-3" : " px-4 py-4")
       }
     >
@@ -468,6 +466,11 @@ function ZoneCard({
         <div className={"text-cart-ink-3 " + (compact ? "mt-0.5 text-[11px]" : "mt-1 text-[12.5px]")}>
           <ZoneAvailabilityLine summary={summary} />
         </div>
+        {!compact && group.items[0]?.description && (
+          <p className="mt-1 text-[11.5px] leading-snug text-cart-ink-3">
+            {group.items[0].description}
+          </p>
+        )}
         {ap?.presaleEndsAt && shouldCountdown(ap.presaleEndsAt) && (
           <div className="mt-1">
             <PresaleCountdown endsAt={ap.presaleEndsAt} />
@@ -568,7 +571,7 @@ function ZoneCard({
           </>
         )}
       </div>
-    </button>
+    </div>
   );
 }
 

@@ -82,11 +82,11 @@ export const TicketView = ({
   isBoxHost,
   event,
 }: Props) => {
-  const secretUrl =
-    status === "active"
-      ? `/api/t/${ticketId}/secret?k=${encodeURIComponent(k)}`
-      : null;
-  const { payload, secondsLeft, loading, error } = useLocalRotatingQr(secretUrl);
+  const activeTicketId = status === "active" ? ticketId : null;
+  const { payload, secondsLeft, loading, error } = useLocalRotatingQr(
+    activeTicketId,
+    k,
+  );
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const { signIn, pending: signInPending, error: signInError } = useGoogleSignIn();

@@ -8,7 +8,7 @@ import { listPublishedEvents } from "../../application/ListPublishedEvents";
 import { getEventBySlug } from "../../application/GetEventBySlug";
 import { listEventsByOrganization } from "../../application/ListEventsByOrganization";
 import { createEvent } from "../../application/CreateEvent";
-import { getEventStats } from "../../application/GetEventStats";
+import { getEventStats, type EventStatsResult } from "../../application/GetEventStats";
 import { listEventAccesos } from "../../application/ListEventAccesos";
 import { updateEvent } from "../../application/UpdateEvent";
 import { generateDoorLink, type DoorLink } from "../../application/GenerateDoorLink";
@@ -35,7 +35,8 @@ import {
   type EventPartner,
 } from "../../application/EventPartners";
 import { supabaseOrganizationRepository } from "@/server/identity/organizations/infrastructure/repositories/SupabaseOrganizationRepository";
-import type { Event, Promo, TicketType } from "../../domain/Event";
+import { getOrCreateEventSigningKeys } from "@/server/tickets/application/EventSigningKeys";
+import type { Event, EventCategory, Promo, TicketType } from "../../domain/Event";
 import type { EventStats, ScanFeedItem } from "../../ports/EventRepository";
 
 const sanitizeHost = (raw: string): string => {
@@ -80,6 +81,7 @@ const createSchema = z.object({
   startsAt: z.string().min(1),
   endsAt: z.string().nullable().optional(),
   timezone: z.string().default("America/Lima"),
+  category: z.enum(["musica","dj_sets","after_office","comedia","cultura","deportes"]).nullable().optional(),
   totalCapacity: z.number().int().nullable().optional(),
   overbookPct: z.number().int().min(0).max(100).default(0),
   transfersEnabled: z.boolean().default(true),
@@ -106,8 +108,9 @@ const createSchema = z.object({
 });
 
 export const EventsController = {
-  async listPublic(): Promise<Result<Event[]>> {
-    return { ok: true, value: await listPublishedEvents({ repo }) };
+  async listPublic(opts: { limit?: number; cursor?: string | null; category?: EventCategory | null } = {}): Promise<Result<Event[]>> {
+    const events = await listPublishedEvents({ repo }, opts);
+    return ok(events);
   },
 
   async getBySlug(
@@ -160,6 +163,7 @@ export const EventsController = {
         startsAt: parsed.data.startsAt,
         endsAt: parsed.data.endsAt ?? null,
         timezone: parsed.data.timezone,
+        category: parsed.data.category ?? null,
         totalCapacity: parsed.data.totalCapacity ?? null,
         overbookPct: parsed.data.overbookPct,
         transfersEnabled: parsed.data.transfersEnabled,
@@ -183,7 +187,7 @@ export const EventsController = {
     return repo.publish(guard.value.event.id, guard.value.event.organizationId);
   },
 
-  async stats(slug: string): Promise<Result<EventStats & { scansRecent: ScanFeedItem[] }>> {
+  async stats(slug: string): Promise<Result<EventStatsResult>> {
     const guard = await guardEventMember(slug);
     if (!guard.ok) return err(guard.error);
     return ok(await getEventStats({ repo }, guard.value.event.id));
@@ -228,6 +232,8 @@ export const EventsController = {
       zone: parsed.data.zone ?? null,
       unitNoun: parsed.data.unitNoun ?? null,
       saleEndsAt: parsed.data.saleEndsAt ?? null,
+      description: parsed.data.description ?? null,
+      presaleTiers: parsed.data.presaleTiers,
       presalePriceCents: parsed.data.presalePriceCents ?? null,
       presaleQty: parsed.data.presaleQty ?? null,
       presaleEndsAt: parsed.data.presaleEndsAt ?? null,
@@ -363,6 +369,18 @@ export const EventsController = {
     });
   },
 
+  // Sirve la pública ECDSA del evento al portero (la cachea para verificar QR
+  // firmados offline). Genera el par perezosamente si aún no existe.
+  async getEventSigningKey(
+    slug: string,
+  ): Promise<Result<{ eventId: string; publicKey: unknown }>> {
+    const guard = await guardEventMember(slug);
+    if (!guard.ok) return err(guard.error);
+    const db = supabaseAdmin();
+    const keys = await getOrCreateEventSigningKeys(db, guard.value.event.id);
+    return ok({ eventId: guard.value.event.id, publicKey: keys.publicJwk });
+  },
+
   async listPartners(slug: string): Promise<Result<EventPartner[]>> {
     const found = await getEventBySlug({ repo }, slug);
     if (!found) return err("not_found");
@@ -395,7 +413,8 @@ export const EventsController = {
   async getOrgShowcase(
     slug: string,
   ): Promise<Result<EventOrgShowcase | null>> {
-    return { ok: true, value: await getEventOrgShowcase(slug) };
+    const showcase = await getEventOrgShowcase(slug);
+    return ok(showcase);
   },
 };
 
@@ -414,6 +433,11 @@ const createTicketTypeSchema = z.object({
   zone: z.string().trim().max(60).nullable().optional(),
   unitNoun: z.string().trim().max(24).nullable().optional(),
   saleEndsAt: z.string().datetime().nullable().optional(),
+  description: z.string().max(300).nullable().optional(),
+  presaleTiers: z.array(z.object({
+    priceCents: z.number().int().min(0),
+    endsAt: z.string().datetime(),
+  })).max(10).optional(),
   ...presaleFields,
 });
 
@@ -425,6 +449,11 @@ const updateTicketTypeSchema = z.object({
   zone: z.string().trim().max(60).nullable().optional(),
   unitNoun: z.string().trim().max(24).nullable().optional(),
   saleEndsAt: z.string().datetime().nullable().optional(),
+  description: z.string().max(300).nullable().optional(),
+  presaleTiers: z.array(z.object({
+    priceCents: z.number().int().min(0),
+    endsAt: z.string().datetime(),
+  })).max(10).optional(),
   ...presaleFields,
 });
 
@@ -452,6 +481,8 @@ const updateSchema = z.object({
   venueLayoutUrl: z.string().nullable().optional(),
   coverUrl: z.string().nullable().optional(),
   startsAt: z.string().min(1).optional(),
+  endsAt: z.string().nullable().optional(),
+  category: z.enum(["musica","dj_sets","after_office","comedia","cultura","deportes"]).nullable().optional(),
   totalCapacity: z.number().int().nullable().optional(),
   overbookPct: z.number().int().min(0).max(100).optional(),
   transfersEnabled: z.boolean().optional(),

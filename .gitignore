@@ -54,3 +54,7 @@ pasape/
 .vscode/
 package-lock.json
 .playwright-mcp/
+
+# Capacitor — APK de prueba (se distribuye fuera de git)
+pasape-debug.apk
+DerivedData/

@@ -1,5 +1,21 @@
 export type EventStatus = "draft" | "published" | "closed" | "cancelled";
 
+export type PresaleTier = {
+  id: string;
+  ticketTypeId: string;
+  priceCents: number;
+  endsAt: string;
+  position: number;
+};
+
+export type EventCategory =
+  | "musica"
+  | "dj_sets"
+  | "after_office"
+  | "comedia"
+  | "cultura"
+  | "deportes";
+
 export type TransferPolicy = {
   enabled: boolean;
   deadlineHours: number | null;
@@ -30,6 +46,7 @@ export type Event = {
   endsAt: string | null;
   timezone: string;
   status: EventStatus;
+  category: EventCategory | null;
   capacity: CapacityPolicy;
   transferPolicy: TransferPolicy;
   version: number;
@@ -50,6 +67,8 @@ export type Promo = {
   kind: PromoKind;
   /** ISO 8601. Si está definido, la promo deja de aplicar al pasar esta fecha. */
   endsAt: string | null;
+  /** Backend-computed: si la promo está vigente ahora. */
+  isActive: boolean;
 };
 
 export type TicketType = {
@@ -98,4 +117,12 @@ export type TicketType = {
   presaleQty: number | null;
   /** ISO 8601. Cierre de la preventa por fecha (≠ saleEndsAt, que cierra la venta). */
   presaleEndsAt: string | null;
+  /** Descripción corta visible al comprador: beneficios, restricciones, qué incluye. */
+  description: string | null;
+  /** Backend-computed: estado de venta. El frontend NO lo recalcula desde fechas. */
+  saleStatus: "available" | "expired" | "soldout";
+  /** Backend-computed: si la preventa está vigente ahora. */
+  isPresaleActive: boolean;
+  /** Tramos de preventa ordenados por ends_at asc. El backend elige el activo. */
+  presaleTiers: PresaleTier[];
 };

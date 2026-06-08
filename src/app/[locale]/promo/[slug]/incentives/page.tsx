@@ -40,7 +40,7 @@ export default function PromoIncentivesPage({ params }: Props) {
               const accent = accentFor(idx);
               const pct = Math.min(1, progress / inc.goalValue);
               const remaining = Math.max(0, inc.goalValue - progress);
-              const unlocked = progress >= inc.goalValue;
+              const unlocked = inc.isUnlockedByMe;
               const active = !unlocked && progress > 0;
               const card = (
                 <div

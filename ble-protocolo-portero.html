@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Protocolo BLE — Porteros Pasape</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    background:#0a0a12; color:#fff; line-height:1.5;
+    padding:32px 20px 80px; max-width:980px; margin:0 auto;
+  }
+  h1 { font-size:28px; letter-spacing:-0.03em; margin-bottom:6px; }
+  h2 { font-size:18px; letter-spacing:-0.02em; margin:36px 0 14px; color:#c9a8ff; }
+  .sub { color:rgba(255,255,255,0.5); font-size:15px; margin-bottom:24px; }
+  .purple{color:#b87cff;} .green{color:#22d17f;} .red{color:#ff4d5e;} .yellow{color:#ffce3b;} .blue{color:#7aa5ff;}
+
+  /* Escenario de los 2 teléfonos */
+  .stage {
+    background:#12121c; border:1px solid rgba(255,255,255,0.08);
+    border-radius:20px; padding:28px 20px; margin-bottom:20px;
+    position:relative; overflow:hidden;
+  }
+  .net-banner {
+    text-align:center; font-size:12px; font-weight:700; letter-spacing:0.04em;
+    color:#ff4d5e; background:rgba(255,77,94,0.1); border:1px solid rgba(255,77,94,0.25);
+    border-radius:999px; padding:5px 14px; display:inline-block;
+    position:absolute; top:16px; left:50%; transform:translateX(-50%);
+  }
+  .phones { display:flex; justify-content:space-between; align-items:center; gap:16px; margin-top:42px; }
+  .phone {
+    flex:1; max-width:200px; background:#1c1c28; border:2px solid rgba(255,255,255,0.1);
+    border-radius:22px; padding:16px 12px; transition:all 0.3s; position:relative;
+  }
+  .phone.win { border-color:#22d17f; box-shadow:0 0 30px rgba(34,209,127,0.3); }
+  .phone.lose { border-color:#ff4d5e; opacity:0.7; }
+  .phone-os { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:rgba(255,255,255,0.4); margin-bottom:4px; }
+  .phone-name { font-size:15px; font-weight:800; letter-spacing:-0.02em; margin-bottom:2px; }
+  .phone-zone { font-size:11px; color:#b87cff; margin-bottom:10px; }
+  .phone-screen {
+    background:#0a0a12; border-radius:12px; min-height:90px; padding:10px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center; font-size:13px; font-weight:600;
+  }
+  .phone-state { font-size:9px; color:rgba(255,255,255,0.35); margin-top:8px; text-transform:uppercase; letter-spacing:0.06em; }
+  .phone-id { font-family:monospace; font-size:9px; color:rgba(255,255,255,0.25); margin-top:2px; }
+
+  /* Canal BLE central */
+  .channel { flex:0 0 130px; display:flex; flex-direction:column; align-items:center; gap:6px; position:relative; }
+  .ble-icon { font-size:22px; opacity:0.5; }
+  .ble-label { font-size:9px; color:rgba(255,255,255,0.3); text-transform:uppercase; letter-spacing:0.08em; }
+  .wire { width:100%; height:2px; background:rgba(255,255,255,0.08); border-radius:2px; position:relative; }
+  .wire.linked { background:rgba(34,209,127,0.4); }
+
+  /* Burbuja de mensaje que viaja */
+  .msg-bubble {
+    position:absolute; top:50%; transform:translateY(-50%);
+    padding:3px 10px; border-radius:999px; font-size:10px; font-weight:800;
+    font-family:monospace; letter-spacing:0.04em; white-space:nowrap; z-index:5;
+    opacity:0; pointer-events:none;
+  }
+
+  .log {
+    background:#0a0a12; border:1px solid rgba(255,255,255,0.06); border-radius:12px;
+    padding:14px 16px; margin-top:18px; font-family:monospace; font-size:12px;
+    min-height:120px; max-height:200px; overflow-y:auto;
+  }
+  .log-line { padding:2px 0; color:rgba(255,255,255,0.7); }
+  .log-line .arrow { color:rgba(255,255,255,0.3); }
+
+  .controls { display:flex; gap:10px; flex-wrap:wrap; margin-top:18px; }
+  .btn {
+    border:none; border-radius:12px; padding:12px 18px; font-size:14px; font-weight:700;
+    cursor:pointer; font-family:inherit; transition:filter 0.15s;
+  }
+  .btn:hover { filter:brightness(1.12); }
+  .btn-green { background:#22d17f; color:#04140a; }
+  .btn-purple { background:#7c3aed; color:#fff; }
+  .btn-red { background:#ff4d5e; color:#fff; }
+  .btn-ghost { background:rgba(255,255,255,0.06); color:rgba(255,255,255,0.7); border:1px solid rgba(255,255,255,0.12); }
+  .btn:disabled { opacity:0.35; cursor:not-allowed; filter:none; }
+
+  /* Tablas y secciones */
+  table { width:100%; border-collapse:collapse; margin:10px 0; font-size:13px; }
+  th,td { text-align:left; padding:8px 10px; border-bottom:1px solid rgba(255,255,255,0.07); }
+  th { color:rgba(255,255,255,0.4); font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:0.06em; }
+  td code { background:rgba(184,124,255,0.12); color:#c9a8ff; padding:1px 6px; border-radius:5px; font-size:12px; }
+
+  .msg-card { background:#12121c; border:1px solid rgba(255,255,255,0.08); border-radius:14px; padding:16px 18px; margin-bottom:10px; }
+  .msg-card .mname { font-family:monospace; font-weight:800; font-size:14px; }
+  .msg-card .mdesc { font-size:13px; color:rgba(255,255,255,0.55); margin-top:3px; }
+
+  .states { display:flex; flex-wrap:wrap; gap:8px; align-items:center; font-family:monospace; font-size:13px; margin:12px 0; }
+  .state-box { padding:8px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.12); background:#12121c; }
+  .state-box.s1 { border-color:#ffce3b; color:#ffce3b; }
+  .state-box.s2 { border-color:#22d17f; color:#22d17f; }
+  .state-box.s3 { border-color:#ff4d5e; color:#ff4d5e; }
+  .state-arrow { color:rgba(255,255,255,0.3); font-size:11px; }
+
+  .compat { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin:12px 0; }
+  @media(max-width:600px){ .compat{grid-template-columns:1fr;} .phones{flex-direction:column;} .channel{flex-direction:row; width:100%;} .wire{width:60px;} }
+  .compat-card { border-radius:14px; padding:16px; text-align:center; }
+  .compat-card.ok { background:rgba(34,209,127,0.08); border:1px solid rgba(34,209,127,0.25); }
+  .compat-card.warn { background:rgba(255,206,59,0.08); border:1px solid rgba(255,206,59,0.3); }
+  .compat-card .big { font-size:24px; margin-bottom:6px; }
+  .compat-card .lbl { font-size:13px; font-weight:700; }
+  .compat-card .why { font-size:11px; color:rgba(255,255,255,0.5); margin-top:5px; }
+
+  .note { font-size:13px; color:rgba(255,255,255,0.55); padding:14px 16px; background:rgba(34,209,127,0.06); border-left:3px solid #22d17f; border-radius:0 10px 10px 0; margin-top:14px; }
+  .note.warn { background:rgba(255,206,59,0.06); border-left-color:#ffce3b; }
+</style>
+</head>
+<body>
+
+<h1>Protocolo BLE <span class="purple">·</span> Porteros Pasape</h1>
+<p class="sub">Cómo dos porteros de la misma zona se coordinan por Bluetooth, sin internet, para que nadie entre dos veces. Tocá los botones para verlo en movimiento.</p>
+
+<!-- ESCENARIO INTERACTIVO -->
+<div class="stage">
+  <div class="net-banner">📴 SIN INTERNET — solo Bluetooth entre los dos</div>
+  <div class="phones">
+    <div class="phone" id="phoneN">
+      <div class="phone-os" id="osN">🤖 Android</div>
+      <div class="phone-name">Puerta Norte</div>
+      <div class="phone-zone">Zona General</div>
+      <div class="phone-screen" id="screenN">Escaneando…</div>
+      <div class="phone-state" id="stateN">EMPAREJADO</div>
+      <div class="phone-id">dev:norte-a1</div>
+    </div>
+
+    <div class="channel">
+      <div class="ble-icon">📶</div>
+      <div class="ble-label" id="bleLabel">enlace BLE</div>
+      <div class="wire linked" id="wire"></div>
+      <div class="msg-bubble" id="bubble"></div>
+    </div>
+
+    <div class="phone" id="phoneS">
+      <div class="phone-os" id="osS">🍎 iPhone</div>
+      <div class="phone-name">Puerta Sur</div>
+      <div class="phone-zone">Zona General</div>
+      <div class="phone-screen" id="screenS">Escaneando…</div>
+      <div class="phone-state" id="stateS">EMPAREJADO</div>
+      <div class="phone-id">dev:sur-b2</div>
+    </div>
+  </div>
+
+  <div class="log" id="log"></div>
+
+  <div class="controls">
+    <button class="btn btn-green" id="btnNormal" onclick="scenarioNormal()">▶ Norte escanea un ticket</button>
+    <button class="btn btn-red" id="btnRace" onclick="scenarioRace()">⚡ Ambos escanean el MISMO QR a la vez</button>
+    <button class="btn btn-purple" id="btnAlready" onclick="scenarioAlready()">🔁 Sur ya validó, Norte lo intenta</button>
+    <button class="btn btn-ghost" id="btnDrop" onclick="toggleLink()">📴 Cortar / reconectar Bluetooth</button>
+    <button class="btn btn-ghost" onclick="resetStage()">↺ Reiniciar</button>
+  </div>
+</div>
+
+<!-- ESTRUCTURA GATT -->
+<h2>1. Cómo se "ven" los dos teléfonos (GATT)</h2>
+<p class="sub" style="margin-bottom:12px;">
+  Cada teléfono expone un <strong>servicio Bluetooth con un UUID fijo de Pasape</strong>. Uno anuncia ese servicio
+  (peripheral), el otro lo encuentra y se conecta (central). Todos los mensajes pasan por un solo "buzón" (characteristic).
+</p>
+<table>
+  <tr><th>Pieza</th><th>Qué es</th></tr>
+  <tr><td><code>Service UUID</code></td><td>Identificador fijo "pasape-door-sync" — solo apps Pasape se reconocen entre sí</td></tr>
+  <tr><td><code>Characteristic "msg"</code></td><td>El buzón por donde viajan todos los mensajes (write + notify)</td></tr>
+  <tr><td><code>peripheral</code></td><td>El teléfono que anuncia el servicio (espera conexión)</td></tr>
+  <tr><td><code>central</code></td><td>El teléfono que encuentra y se conecta al otro</td></tr>
+</table>
+
+<!-- LOS 6 MENSAJES -->
+<h2>2. Los 6 mensajes del protocolo</h2>
+<div class="msg-card"><span class="mname green">HELLO</span><div class="mdesc">"Soy portero del evento X, zona General, device norte-a1". Handshake inicial al emparejarse.</div></div>
+<div class="msg-card"><span class="mname blue">HEARTBEAT</span><div class="mdesc">"Sigo vivo" cada 3 segundos. Si dejan de oírse → el enlace se cae → cada uno sigue solo.</div></div>
+<div class="msg-card"><span class="mname yellow">CLAIM</span><div class="mdesc">"Voy a dejar entrar al ticket T, ¿lo viste?". Lleva un <code>nonce</code> único para evitar duplicados.</div></div>
+<div class="msg-card"><span class="mname green">ACK</span><div class="mdesc">"No lo vi, adelante". El otro reserva T y deja que entre.</div></div>
+<div class="msg-card"><span class="mname red">DENY</span><div class="mdesc">"Yo ya validé T". El que escaneó rechaza: "ya ingresó en otra puerta".</div></div>
+<div class="msg-card"><span class="mname purple">COMMIT</span><div class="mdesc">"Confirmado, entró". Ambos marcan T como usado en su teléfono.</div></div>
+
+<!-- MÁQUINA DE ESTADOS -->
+<h2>3. Máquina de estados del enlace</h2>
+<div class="states">
+  <span class="state-box s1">BUSCANDO</span>
+  <span class="state-arrow">──HELLO ok──▶</span>
+  <span class="state-box s2">EMPAREJADO</span>
+  <span class="state-arrow">──sin latido 8s──▶</span>
+  <span class="state-box s3">SOLO (degradado)</span>
+  <span class="state-arrow">──re-descubre──▶</span>
+  <span class="state-box s2">EMPAREJADO</span>
+</div>
+<table>
+  <tr><th>Evento</th><th>Tiempo</th><th>Si falla</th></tr>
+  <tr><td>Descubrimiento</td><td>reintenta c/5s</td><td>sigue solo mientras tanto</td></tr>
+  <tr><td>Heartbeat</td><td>c/3s</td><td>sin 3 latidos (8s) → modo SOLO</td></tr>
+  <tr><td>CLAIM → respuesta</td><td>500ms</td><td>valida solo + marca para reconciliar al sincronizar</td></tr>
+  <tr><td>Reenvío</td><td>mismo <code>nonce</code></td><td>el receptor ignora duplicados (idempotente)</td></tr>
+</table>
+
+<!-- COMPATIBILIDAD -->
+<h2>4. Honestidad: los 3 casos de hardware</h2>
+<div class="compat">
+  <div class="compat-card ok"><div class="big">🤖↔🤖</div><div class="lbl green">Android ↔ Android</div><div class="why">Sólido. Ambos anuncian sin restricción.</div></div>
+  <div class="compat-card ok"><div class="big">🍎↔🍎</div><div class="lbl green">iPhone ↔ iPhone</div><div class="why">Funciona bien entre sí.</div></div>
+  <div class="compat-card warn"><div class="big">🍎↔🤖</div><div class="lbl yellow">iPhone ↔ Android</div><div class="why">Frágil: iOS limita el "anunciar" en segundo plano.</div></div>
+</div>
+<div class="note warn">
+  <strong>Por eso el sistema "degrada limpio":</strong> si el Bluetooth no logra conectar (el peor caso es iPhone↔Android),
+  el portero <strong>no se bloquea</strong> — sigue validando con la firma del QR offline, marca local, y el doble-uso
+  se <strong>detecta al sincronizar</strong> (el backend ve 2 scans del mismo ticket → alerta a Paula). El BLE es una
+  <strong>capa extra de prevención, no un requisito para operar</strong>.
+</div>
+
+<script>
+const log = document.getElementById('log');
+const bubble = document.getElementById('bubble');
+const wire = document.getElementById('wire');
+const bleLabel = document.getElementById('bleLabel');
+let linked = true;
+let busy = false;
+
+function addLog(html) {
+  const d = document.createElement('div');
+  d.className = 'log-line';
+  d.innerHTML = html;
+  log.appendChild(d);
+  log.scrollTop = log.scrollHeight;
+}
+function clearLog(){ log.innerHTML = ''; }
+
+function setScreen(side, html, cls) {
+  document.getElementById('screen'+side).innerHTML = html;
+}
+function setPhoneClass(side, cls) {
+  const el = document.getElementById('phone'+side);
+  el.classList.remove('win','lose');
+  if (cls) el.classList.add(cls);
+}
+function setState(side, txt){ document.getElementById('state'+side).textContent = txt; }
+
+// Anima una burbuja de mensaje viajando entre teléfonos
+function fly(label, color, dir, cb) {
+  bubble.textContent = label;
+  bubble.style.background = color;
+  bubble.style.color = '#04140a';
+  const from = dir === 'NS' ? '6px' : 'calc(100% - 6px)';
+  const to   = dir === 'NS' ? 'calc(100% - 6px)' : '6px';
+  bubble.style.transition = 'none';
+  bubble.style.left = from;
+  bubble.style.transform = dir === 'NS' ? 'translate(-100%,-50%)' : 'translate(0,-50%)';
+  bubble.style.opacity = '1';
+  void bubble.offsetWidth;
+  bubble.style.transition = 'left 0.7s ease, opacity 0.7s';
+  bubble.style.left = to;
+  setTimeout(() => { bubble.style.opacity = '0'; if (cb) cb(); }, 720);
+}
+
+function lock(state){ busy = state; document.querySelectorAll('.controls .btn').forEach(b=>{ if(!b.textContent.includes('Reiniciar')&&!b.textContent.includes('Bluetooth')) b.disabled = state; }); }
+
+function resetStage(){
+  clearLog();
+  setScreen('N','Escaneando…'); setScreen('S','Escaneando…');
+  setPhoneClass('N',null); setPhoneClass('S',null);
+  setState('N', linked?'EMPAREJADO':'SOLO'); setState('S', linked?'EMPAREJADO':'SOLO');
+}
+
+function toggleLink(){
+  linked = !linked;
+  wire.classList.toggle('linked', linked);
+  bleLabel.textContent = linked ? 'enlace BLE' : 'enlace caído';
+  bleLabel.style.color = linked ? 'rgba(255,255,255,0.3)' : '#ff4d5e';
+  setState('N', linked?'EMPAREJADO':'SOLO'); setState('S', linked?'EMPAREJADO':'SOLO');
+  addLog(linked ? '<span class="green">● Bluetooth reconectado — re-emparejados</span>' : '<span class="red">✕ Bluetooth cortado — cada uno opera SOLO</span>');
+}
+
+// ── Escenario 1: flujo normal ──
+function scenarioNormal(){
+  if(busy) return; resetStage(); lock(true);
+  addLog('<span class="yellow">🎫 Norte escanea ticket #T-204 (Alejandro)</span>');
+  setScreen('N','Verificando…');
+  setTimeout(()=> addLog('Norte: firma del QR válida ✓ (verificada offline con clave pública)'), 400);
+
+  if(!linked){
+    setTimeout(()=>{
+      addLog('<span class="arrow">Norte → Sur: CLAIM(T-204) … sin respuesta (enlace caído)</span>');
+      setTimeout(()=>{
+        addLog('<span class="yellow">Norte espera 500ms → modo SOLO → valida igual + marca para reconciliar</span>');
+        setScreen('N','<span style="color:#22d17f">✓ Alejandro</span><br><span style="font-size:10px;color:rgba(255,255,255,.5)">entró (degradado)</span>');
+        setPhoneClass('N','win');
+        addLog('<span class="green">✓ Entró. Al sincronizar, el backend revisa si hubo doble-uso.</span>');
+        lock(false);
+      },900);
+    },700); return;
+  }
+
+  setTimeout(()=> fly('CLAIM T-204','#ffce3b','NS', ()=>{
+    addLog('<span class="arrow">Norte → Sur:</span> <span class="yellow">CLAIM(T-204, nonce=x1)</span>');
+    setTimeout(()=> fly('ACK','#22d17f','SN', ()=>{
+      addLog('<span class="arrow">Sur → Norte:</span> <span class="green">ACK</span> — "no lo vi, adelante"');
+      setTimeout(()=> fly('COMMIT','#b87cff','NS', ()=>{
+        addLog('<span class="arrow">Norte → Sur:</span> <span class="purple">COMMIT</span> — ambos marcan T-204 usado');
+        setScreen('N','<span style="color:#22d17f">✓ Alejandro</span><br><span style="font-size:10px;color:rgba(255,255,255,.5)">VIP · entró</span>');
+        setPhoneClass('N','win');
+        addLog('<span class="green">✓ Entró por Norte. Sur ya sabe que T-204 está usado.</span>');
+        lock(false);
+      }), 400);
+    }), 500);
+  }), 700);
+}
+
+// ── Escenario 2: ambos escanean el mismo QR a la vez ──
+function scenarioRace(){
+  if(busy) return; resetStage(); lock(true);
+  addLog('<span class="red">⚡ Alguien compartió su QR. Dos amigos llegan a las 2 puertas EN EL MISMO SEGUNDO.</span>');
+  setScreen('N','Verificando…'); setScreen('S','Verificando…');
+
+  if(!linked){
+    setTimeout(()=>{
+      addLog('<span class="red">Sin Bluetooth: ninguno sabe del otro → ambos validan</span>');
+      setScreen('N','<span style="color:#22d17f">✓ entró</span>'); setScreen('S','<span style="color:#22d17f">✓ entró</span>');
+      setPhoneClass('N','win'); setPhoneClass('S','win');
+      addLog('<span class="yellow">⚠ Doble-uso NO prevenido en vivo. Se DETECTA al sincronizar → alerta a Paula.</span>');
+      lock(false);
+    },800); return;
+  }
+
+  setTimeout(()=>{
+    addLog('<span class="arrow">Norte → Sur:</span> <span class="yellow">CLAIM(T-204, nonce=x1)</span>');
+    addLog('<span class="arrow">Sur → Norte:</span> <span class="yellow">CLAIM(T-204, nonce=y2)</span> &nbsp;<span style="color:rgba(255,255,255,.4)">(choque)</span>');
+    setTimeout(()=>{
+      addLog('<span class="purple">Regla determinista: gana el deviceId menor → "norte-a1" &lt; "sur-b2"</span>');
+      setTimeout(()=>{
+        fly('ACK→Norte','#22d17f','SN', ()=>{
+          setScreen('N','<span style="color:#22d17f">✓ entró</span>');
+          setPhoneClass('N','win');
+          setScreen('S','<span style="color:#ff4d5e">✕ ya validado</span><br><span style="font-size:10px;color:rgba(255,255,255,.5)">en otra puerta</span>');
+          setPhoneClass('S','lose');
+          addLog('<span class="green">✓ Norte deja entrar.</span> <span class="red">✕ Sur rechaza — solo UNO entra.</span>');
+          addLog('<span style="color:rgba(255,255,255,.5)">La misma regla corre en ambos teléfonos → nunca entran los dos.</span>');
+          lock(false);
+        });
+      },700);
+    },800);
+  },500);
+}
+
+// ── Escenario 3: Sur ya validó, Norte lo intenta ──
+function scenarioAlready(){
+  if(busy) return; resetStage(); lock(true);
+  setScreen('S','<span style="color:rgba(255,255,255,.5)">T-204 ya entró aquí</span>');
+  addLog('<span style="color:rgba(255,255,255,.5)">Sur ya validó T-204 hace un rato.</span>');
+  addLog('<span class="yellow">🎫 Ahora alguien intenta T-204 en Norte</span>');
+  setScreen('N','Verificando…');
+
+  if(!linked){
+    setTimeout(()=>{
+      addLog('<span class="yellow">Sin Bluetooth, Norte no sabe que Sur ya lo usó → valida → se detecta al sincronizar</span>');
+      setScreen('N','<span style="color:#22d17f">✓ entró</span>'); setPhoneClass('N','win');
+      lock(false);
+    },800); return;
+  }
+
+  setTimeout(()=> fly('CLAIM T-204','#ffce3b','NS', ()=>{
+    addLog('<span class="arrow">Norte → Sur:</span> <span class="yellow">CLAIM(T-204)</span>');
+    setTimeout(()=> fly('DENY','#ff4d5e','SN', ()=>{
+      addLog('<span class="arrow">Sur → Norte:</span> <span class="red">DENY</span> — "yo ya lo validé"');
+      setScreen('N','<span style="color:#ff4d5e">✕ Ya ingresó</span><br><span style="font-size:10px;color:rgba(255,255,255,.5)">en Puerta Sur</span>');
+      setPhoneClass('N','lose');
+      addLog('<span class="red">✕ Norte rechaza al instante. Sin internet, sin servidor.</span>');
+      lock(false);
+    }), 500);
+  }), 700);
+}
+
+resetStage();
+</script>
+
+</body>
+</html>

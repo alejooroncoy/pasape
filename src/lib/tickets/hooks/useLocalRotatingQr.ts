@@ -2,13 +2,21 @@
 
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/_shared/api-client";
+import {
+  buildSignedQrPayload,
+  signWindow,
+  WINDOW_SECONDS,
+} from "@/lib/tickets/signedQr";
+import {
+  getCachedCert,
+  getOrCreateTicketKey,
+  saveCert,
+} from "@/lib/tickets/ticketKeyStore";
 
-type SecretResp = {
+type CertResp = {
   ticketId: string;
-  secretB64: string;
-  validUntil: number;
+  cert: string;
   windowSeconds: number;
-  codeLength: number;
 };
 
 type State = {
@@ -19,36 +27,20 @@ type State = {
   error: string | null;
 };
 
-const base64ToBytes = (b64: string): Uint8Array => {
-  const bin = atob(b64);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
-};
-
-const bytesToBase64Url = (bytes: Uint8Array): string => {
-  let bin = "";
-  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]!);
-  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-};
-
-const computeCode = async (
-  key: CryptoKey,
-  ticketId: string,
-  windowIdx: number,
-  codeLength: number,
-): Promise<string> => {
-  const data = new TextEncoder().encode(`${ticketId}|${windowIdx}`);
-  const sig = await crypto.subtle.sign("HMAC", key, data);
-  return bytesToBase64Url(new Uint8Array(sig)).slice(0, codeLength);
-};
+const CERT_REFRESH_MS = 24 * 60 * 60 * 1000; // refrescar cert si tiene >24h y hay red
 
 /**
- * Hook que reemplaza el polling al server por TOTP local. Fetch del secret
- * UNA vez (TTL 30min), después computa el HMAC en el browser cada window.
- * Si el secret expira o el ticket pasa a inactive, refetch automático.
+ * Genera el QR rotativo firmado (ECDSA P-256) en el device, 100% offline tras la
+ * primera carga online. La privada del ticket es no-extraíble (IndexedDB); el
+ * server solo entregó un cert que liga la pública al evento. Cada window (10s)
+ * se firma localmente: payload = cert ~ windowIdx ~ sign(priv, "ticketId|window").
+ *
+ * Reemplaza el HMAC simétrico anterior: la clave ya no viaja al cliente.
  */
-export const useLocalRotatingQr = (secretUrl: string | null): State => {
+export const useLocalRotatingQr = (
+  ticketId: string | null,
+  k?: string | null,
+): State => {
   const [state, setState] = useState<State>({
     payload: null,
     windowIdx: null,
@@ -56,11 +48,11 @@ export const useLocalRotatingQr = (secretUrl: string | null): State => {
     loading: true,
     error: null,
   });
-  const cryptoKeyRef = useRef<CryptoKey | null>(null);
-  const metaRef = useRef<SecretResp | null>(null);
+  const privRef = useRef<CryptoKey | null>(null);
+  const certRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!secretUrl) {
+    if (!ticketId) {
       setState({
         payload: null,
         windowIdx: null,
@@ -73,46 +65,68 @@ export const useLocalRotatingQr = (secretUrl: string | null): State => {
 
     let cancelled = false;
     let interval: ReturnType<typeof setInterval> | null = null;
+    const windowSeconds = WINDOW_SECONDS;
 
     const tick = async () => {
-      const meta = metaRef.current;
-      const key = cryptoKeyRef.current;
-      if (!meta || !key) return;
+      const priv = privRef.current;
+      const cert = certRef.current;
+      if (!priv || !cert) return;
       const now = Date.now();
-      // Si el secret expiró, refetch.
-      if (now >= meta.validUntil) {
-        await loadSecret();
-        return;
-      }
-      const windowIdx = Math.floor(now / 1000 / meta.windowSeconds);
-      const code = await computeCode(key, meta.ticketId, windowIdx, meta.codeLength);
-      const payload = `${meta.ticketId}.${windowIdx}.${code}`;
+      const windowIdx = Math.floor(now / 1000 / windowSeconds);
+      const sig = await signWindow(priv, ticketId, windowIdx);
+      const payload = buildSignedQrPayload(cert, windowIdx, sig);
       const secondsLeft =
-        meta.windowSeconds - Math.floor((now / 1000) % meta.windowSeconds);
+        windowSeconds - Math.floor((now / 1000) % windowSeconds);
       if (cancelled) return;
-      setState({
-        payload,
-        windowIdx,
-        secondsLeft,
-        loading: false,
-        error: null,
-      });
+      setState({ payload, windowIdx, secondsLeft, loading: false, error: null });
     };
 
-    const loadSecret = async () => {
+    const fetchCert = async (pubJwk: JsonWebKey): Promise<string> => {
+      const path = k
+        ? `/api/t/${ticketId}/secret?k=${encodeURIComponent(k)}`
+        : `/api/t/${ticketId}/secret`;
+      const resp = await api.post<CertResp>(path, { publicJwk: pubJwk });
+      await saveCert(ticketId, resp.cert);
+      return resp.cert;
+    };
+
+    const init = async () => {
       try {
-        const meta = await api.get<SecretResp>(secretUrl);
-        const keyBytes = base64ToBytes(meta.secretB64);
-        const key = await crypto.subtle.importKey(
-          "raw",
-          keyBytes as BufferSource,
-          { name: "HMAC", hash: "SHA-256" },
-          false,
-          ["sign"],
-        );
+        const { priv, pubJwk } = await getOrCreateTicketKey(ticketId);
         if (cancelled) return;
-        metaRef.current = meta;
-        cryptoKeyRef.current = key;
+        privRef.current = priv;
+
+        const cached = await getCachedCert(ticketId);
+        const online =
+          typeof navigator === "undefined" ? true : navigator.onLine;
+        const stale = !cached || Date.now() - cached.fetchedAt > CERT_REFRESH_MS;
+
+        if (cached) certRef.current = cached.cert;
+
+        // Sin cert cacheado: necesitamos red la primera vez.
+        if (!cached) {
+          if (!online) {
+            if (cancelled) return;
+            setState({
+              payload: null,
+              windowIdx: null,
+              secondsLeft: 0,
+              loading: false,
+              error: "offline_no_cert",
+            });
+            return;
+          }
+          certRef.current = await fetchCert(pubJwk);
+        } else if (stale && online) {
+          // Refresco oportunista en background; el cert viejo sigue sirviendo.
+          fetchCert(pubJwk)
+            .then((c) => {
+              certRef.current = c;
+            })
+            .catch(() => {});
+        }
+
+        if (cancelled) return;
         await tick();
       } catch (e) {
         if (cancelled) return;
@@ -121,21 +135,21 @@ export const useLocalRotatingQr = (secretUrl: string | null): State => {
           windowIdx: null,
           secondsLeft: 0,
           loading: false,
-          error: (e as Error).message ?? "secret_load_failed",
+          error: (e as Error).message ?? "cert_load_failed",
         });
       }
     };
 
-    void loadSecret();
-    // Refresh visible cada segundo para el countdown ring; el code real
-    // solo cambia cuando crosses window boundary.
+    void init();
+    // Refresh cada segundo para el countdown ring; el code real solo cambia al
+    // cruzar el límite de window.
     interval = setInterval(() => void tick(), 1000);
 
     return () => {
       cancelled = true;
       if (interval) clearInterval(interval);
     };
-  }, [secretUrl]);
+  }, [ticketId, k]);
 
   return state;
 };

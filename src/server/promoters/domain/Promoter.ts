@@ -13,6 +13,8 @@ export type PromoterLink = {
   commissionPct: number;
   active: boolean;
   createdAt: string;
+  /** Backend-computed: estado del evento relativo al momento de fetch. */
+  eventStatus: "live" | "upcoming" | "closed";
 };
 
 export type PromoterEventEarning = {

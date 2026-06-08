@@ -33,15 +33,19 @@ export interface TicketRepository {
     toProfile: string | null;
     toContact: string | null;
   }): Promise<Result<Ticket>>;
-  markUsedByQr(qrCode: string, scannerId: string, usedAt?: Date): Promise<Result<{
-    ticket: Ticket;
-    eventId: string;
-    holderName: string | null;
-    holderDniLast2: string | null;
-    ticketTypeName: string | null;
-    boxLabel: string | null;
-    boxHostName: string | null;
-    boxFilled: number | null;
-    boxCapacity: number | null;
-  }>>;
+  markUsedByQr(qrCode: string, scannerId: string, usedAt?: Date): Promise<Result<MarkUsedResult>>;
+  /** Admisión confiable por ticketId (alta manual o sync de scan ya verificado). */
+  markUsedByTicketId(ticketId: string, scannerId: string, usedAt?: Date): Promise<Result<MarkUsedResult>>;
 }
+
+export type MarkUsedResult = {
+  ticket: Ticket;
+  eventId: string;
+  holderName: string | null;
+  holderDniLast2: string | null;
+  ticketTypeName: string | null;
+  boxLabel: string | null;
+  boxHostName: string | null;
+  boxFilled: number | null;
+  boxCapacity: number | null;
+};

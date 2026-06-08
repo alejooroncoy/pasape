@@ -19,7 +19,7 @@ const withPWA = withPWAInit({
       options: { cacheName: "scan-cache", networkTimeoutSeconds: 5 },
     },
     {
-      urlPattern: ({ request }) => request.mode === "navigate",
+      urlPattern: ({ request }: { request: Request }) => request.mode === "navigate",
       handler: "NetworkFirst",
       options: { cacheName: "pages", networkTimeoutSeconds: 3 },
     },

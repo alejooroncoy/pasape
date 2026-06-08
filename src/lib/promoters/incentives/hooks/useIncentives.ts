@@ -5,7 +5,7 @@ import { api } from "@/lib/_shared/api-client";
 import type { Incentive } from "@/server/promoters/incentives/domain/Incentive";
 import type { CreateIncentiveInput } from "@/server/promoters/incentives/ports/IncentiveRepository";
 
-export type IncentiveWithUnlocks = Incentive & { unlockedCount: number };
+export type IncentiveWithUnlocks = Incentive & { unlockedCount: number; isUnlockedByMe: boolean };
 
 export const useEventIncentives = (slug: string) =>
   useQuery({

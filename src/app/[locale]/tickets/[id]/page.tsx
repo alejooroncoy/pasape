@@ -20,13 +20,11 @@ export default function TicketDetailPage({ params }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [recipient, setRecipient] = useState("");
-  // TOTP local: fetch secret una vez, compute HMAC en browser cada window.
-  // Reemplaza el polling /rotating cada 10s. Si el ticket está used/void,
-  // null evita carga.
-  const secretUrl = data && data.status === "active"
-    ? `/api/t/${id}/secret`
-    : null;
-  const rotating = useLocalRotatingQr(secretUrl);
+  // QR firmado (ECDSA): clave no-extraíble en el device + cert del evento.
+  // Genera el QR rotativo 100% offline tras la primera carga. Si el ticket está
+  // used/void, null evita carga.
+  const activeTicketId = data && data.status === "active" ? id : null;
+  const rotating = useLocalRotatingQr(activeTicketId);
   const isBoxTicket = !!data?.boxLabel;
   const isHost = isBoxTicket && !data?.boxHostTicketId;
   const boxQuery = useBoxForTicket(isHost ? id : "");

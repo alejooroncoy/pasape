@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { BackBtn, C, FONT_DISPLAY, Phone, ProfileMenu, TopBar } from "@/components/design";
 import { Link, useRouter } from "@/i18n/navigation";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
@@ -148,14 +148,13 @@ export default function BuyerTicketsPastPage() {
   const me = useCurrentUser();
   const tickets = useMyTickets();
   const router = useRouter();
-  const [now] = useState(() => Date.now());
 
   const { past, upcomingCount, totalSpentCents, boxesCount, grouped } = useMemo(() => {
     const all = tickets.data ?? [];
     const past: WalletTicket[] = [];
     let upcoming = 0;
     for (const t of all) {
-      const isPast = new Date(t.event.startsAt).getTime() < now || t.status === "used";
+      const isPast = t.event.status === "closed" || t.event.status === "cancelled" || t.status === "used";
       if (isPast) past.push(t);
       else upcoming++;
     }
@@ -177,7 +176,7 @@ export default function BuyerTicketsPastPage() {
       boxesCount,
       grouped,
     };
-  }, [tickets.data, now]);
+  }, [tickets.data]);
 
   void totalSpentCents;
 

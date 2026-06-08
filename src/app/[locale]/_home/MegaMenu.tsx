@@ -1,52 +1,65 @@
 "use client";
 
 import { ArrowRightIcon } from "./icons";
+import type { EventCategory } from "@/server/events/domain/Event";
+import { useBrowseEvents } from "@/lib/events/hooks/useEvents";
 
-const COLS = [
+type CatKey = EventCategory | null;
+
+const COLS: Array<{ title: string; items: Array<[string, CatKey]> }> = [
   {
     title: "Música",
     items: [
-      ["Conciertos", "68"],
-      ["Cumbia", "14"],
-      ["Reggaetón", "22"],
-      ["Jazz & Blues", "9"],
-      ["K-Pop", "6"],
-      ["Electrónica", "17"],
+      ["Conciertos",   "musica"],
+      ["Cumbia",       "musica"],
+      ["Reggaetón",    "musica"],
+      ["Jazz & Blues", "musica"],
+      ["K-Pop",        "musica"],
+      ["Electrónica",  "musica"],
     ],
   },
   {
     title: "Noche",
     items: [
-      ["DJ Sets", "42"],
-      ["After-office", "19"],
-      ["Karaoke", "8"],
-      ["Open mic", "5"],
-      ["Rooftop", "11"],
+      ["DJ Sets",      "dj_sets"],
+      ["After-office", "after_office"],
+      ["Karaoke",      null],
+      ["Open mic",     null],
+      ["Rooftop",      null],
     ],
   },
   {
     title: "Cultura",
     items: [
-      ["Teatro", "12"],
-      ["Comedia", "14"],
-      ["Cine", "24"],
-      ["Arte & expo", "31"],
-      ["Charlas", "7"],
+      ["Teatro",     "cultura"],
+      ["Comedia",    "comedia"],
+      ["Cine",       "cultura"],
+      ["Arte & expo","cultura"],
+      ["Charlas",    "cultura"],
     ],
   },
   {
     title: "Comida & deporte",
     items: [
-      ["Gastronomía", "42"],
-      ["Cata de vino", "9"],
-      ["Pisco & mixología", "11"],
-      ["Carreras & runs", "8"],
-      ["Deportes", "19"],
+      ["Gastronomía",      null],
+      ["Cata de vino",     null],
+      ["Pisco & mixología",null],
+      ["Carreras & runs",  "deportes"],
+      ["Deportes",         "deportes"],
     ],
   },
 ];
 
-export function MegaMenu({ open, onClose }: { open: boolean; onClose: () => void }) {
+type Props = {
+  open: boolean;
+  onClose: () => void;
+  onSelectCategory: (cat: EventCategory | null) => void;
+};
+
+export function MegaMenu({ open, onClose, onSelectCategory }: Props) {
+  const events = useBrowseEvents();
+  const featured = events.data?.[0];
+
   return (
     <div
       id="cart-mega"
@@ -66,40 +79,53 @@ export function MegaMenu({ open, onClose }: { open: boolean; onClose: () => void
                 {col.title}
               </h6>
               <ul className="flex flex-col gap-2 list-none p-0 m-0">
-                {col.items.map(([label, count]) => (
+                {col.items.map(([label, cat]) => (
                   <li key={label}>
-                    <a
-                      href="#"
-                      className="inline-flex justify-between gap-3 whitespace-nowrap py-1 text-[14.5px] text-cart-ink-2 transition-colors hover:text-cart-accent"
+                    <button
+                      type="button"
+                      onClick={() => { onSelectCategory(cat); onClose(); }}
+                      className="inline-flex w-full justify-between gap-3 whitespace-nowrap py-1 text-[14.5px] text-cart-ink-2 transition-colors hover:text-cart-accent"
                     >
                       {label}
-                      <span className="text-[12.5px] text-cart-ink-4">{count}</span>
-                    </a>
+                      {cat === null && (
+                        <span className="text-[11px] text-cart-ink-4 italic">pronto</span>
+                      )}
+                    </button>
                   </li>
                 ))}
               </ul>
             </div>
           ))}
+
+          {/* Panel destacado */}
           <div
             onClick={(e) => e.stopPropagation()}
             className="flex flex-col justify-between border-l border-cart-line pl-8 max-[1024px]:col-span-full max-[1024px]:flex-row max-[1024px]:items-center max-[1024px]:justify-between max-[1024px]:border-l-0 max-[1024px]:border-t max-[1024px]:pl-0 max-[1024px]:pt-6"
           >
-            <div>
-              <h6 className="font-serif italic text-sm text-cart-accent">
-                Destacado de la semana
-              </h6>
-              <p className="mt-1.5 max-w-[26ch] text-[22px] font-semibold leading-[1.2] tracking-[-0.015em] text-white">
-                Festival <em className="font-serif italic font-normal text-cart-accent">Verano del Mar</em>
-                {" "}· 9 artistas en Costa Verde.
-              </p>
-            </div>
-            <a
-              href="#"
-              className="mt-3.5 inline-flex items-center gap-2 self-start border-b border-cart-accent pb-1 text-sm font-medium text-cart-accent"
-            >
-              Ver entradas
-              <ArrowRightIcon className="w-3 h-3" />
-            </a>
+            {featured ? (
+              <>
+                <div>
+                  <h6 className="font-serif italic text-sm text-cart-accent">
+                    Destacado
+                  </h6>
+                  <p className="mt-1.5 max-w-[26ch] text-[22px] font-semibold leading-[1.2] tracking-[-0.015em] text-white">
+                    {featured.title}
+                  </p>
+                  {featured.venue && (
+                    <p className="mt-1 text-[13px] text-cart-ink-3">{featured.venue}</p>
+                  )}
+                </div>
+                <a
+                  href={`/events/${featured.slug}`}
+                  className="mt-3.5 inline-flex items-center gap-2 self-start border-b border-cart-accent pb-1 text-sm font-medium text-cart-accent"
+                >
+                  Ver entradas
+                  <ArrowRightIcon className="w-3 h-3" />
+                </a>
+              </>
+            ) : (
+              <p className="text-[13px] text-cart-ink-4 italic">Cargando…</p>
+            )}
           </div>
         </div>
       </div>

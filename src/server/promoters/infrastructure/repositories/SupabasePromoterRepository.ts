@@ -24,10 +24,22 @@ type LinkRow = {
     starts_at: string;
     venue: string | null;
     organization_id: string;
+    status: string;
   };
 };
 
-const toLink = (r: LinkRow): PromoterLink => ({
+const computeEventStatus = (
+  startsAt: string,
+  status: string,
+  now: Date,
+): "live" | "upcoming" | "closed" => {
+  if (status === "closed" || status === "cancelled") return "closed";
+  const diffMs = new Date(startsAt).getTime() - now.getTime();
+  if (Math.abs(diffMs) <= 6 * 60 * 60 * 1000) return "live";
+  return "upcoming";
+};
+
+const toLink = (r: LinkRow, now: Date = new Date()): PromoterLink => ({
   id: r.id,
   eventId: r.event_id,
   eventSlug: r.event.slug,
@@ -40,6 +52,7 @@ const toLink = (r: LinkRow): PromoterLink => ({
   commissionPct: r.commission_pct,
   active: r.active,
   createdAt: r.created_at,
+  eventStatus: computeEventStatus(r.event.starts_at, r.event.status, now),
 });
 
 const slugCode = (full: string) =>
@@ -57,11 +70,11 @@ export const supabasePromoterRepository: PromoterRepository = {
     const { data } = await db
       .from("promoter_links")
       .select(
-        "*, event:events!inner(id, slug, title, starts_at, venue, organization_id)",
+        "*, event:events!inner(id, slug, title, starts_at, venue, organization_id, status)",
       )
       .eq("promoter_id", promoterId)
       .order("created_at", { ascending: false });
-    return (data as unknown as LinkRow[] | null)?.map(toLink) ?? [];
+    return (data as unknown as LinkRow[] | null)?.map((r) => toLink(r)) ?? [];
   },
 
   async getHomeData(promoterId, slug) {
@@ -69,7 +82,7 @@ export const supabasePromoterRepository: PromoterRepository = {
     const { data: link } = await db
       .from("promoter_links")
       .select(
-        "*, event:events!inner(id, slug, title, starts_at, venue, organization_id)",
+        "*, event:events!inner(id, slug, title, starts_at, venue, organization_id, status)",
       )
       .eq("promoter_id", promoterId)
       .eq("event.slug", slug)

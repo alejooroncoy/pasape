@@ -13,11 +13,17 @@ import {
 } from "./icons";
 import { MegaMenu } from "./MegaMenu";
 import { WA_HREF } from "./wa";
+import type { EventCategory } from "@/server/events/domain/Event";
 
-export function Nav({ onOpenDrawer, onOpenSignIn }: {
+type NavProps = {
   onOpenDrawer: () => void;
   onOpenSignIn: () => void;
-}) {
+  onSearch: (q: string) => void;
+  onSelectCategory: (cat: EventCategory | null) => void;
+  selectedCategory: EventCategory | null;
+};
+
+export function Nav({ onOpenDrawer, onOpenSignIn, onSearch, onSelectCategory, selectedCategory }: NavProps) {
   const [scrolled, setScrolled] = useState(false);
   const [megaOpen, setMegaOpen] = useState(false);
 
@@ -145,6 +151,7 @@ export function Nav({ onOpenDrawer, onOpenSignIn }: {
             placeholder="Buscar eventos, artistas, lugares…"
             aria-label="Buscar eventos"
             className="min-w-0 flex-1 border-0 bg-transparent text-[14.5px] text-white outline-none placeholder:text-cart-ink-4 max-[560px]:text-sm"
+            onChange={(e) => onSearch(e.target.value)}
           />
           <kbd className="shrink-0 rounded-md border border-cart-line bg-cart-bg-elev-2 px-1.5 py-0.5 font-mono text-[11px] text-cart-ink-3 max-[560px]:hidden">
             ⌘K
@@ -189,15 +196,31 @@ export function Nav({ onOpenDrawer, onOpenSignIn }: {
         </div>
       </div>
 
-      <MobileContextStrip />
-      <MegaMenu open={megaOpen} onClose={() => setMegaOpen(false)} />
+      <MobileContextStrip selectedCategory={selectedCategory} onSelectCategory={onSelectCategory} />
+      <MegaMenu open={megaOpen} onClose={() => setMegaOpen(false)} onSelectCategory={onSelectCategory} />
     </header>
   );
 }
 
-function MobileContextStrip() {
-  const [active, setActive] = useState(0);
-  const chips = ["Esta noche", "Este finde", "Música", "DJ Sets", "Comedia", "Gratis"];
+type StripChip = { label: string; cat: EventCategory | null };
+
+const STRIP_CHIPS: StripChip[] = [
+  { label: "Todos",        cat: null          },
+  { label: "Música",       cat: "musica"      },
+  { label: "DJ Sets",      cat: "dj_sets"     },
+  { label: "After-office", cat: "after_office"},
+  { label: "Comedia",      cat: "comedia"     },
+  { label: "Cultura",      cat: "cultura"     },
+  { label: "Deportes",     cat: "deportes"    },
+];
+
+function MobileContextStrip({
+  selectedCategory,
+  onSelectCategory,
+}: {
+  selectedCategory: EventCategory | null;
+  onSelectCategory: (cat: EventCategory | null) => void;
+}) {
   return (
     <div
       className="hidden items-center gap-2 overflow-x-auto border-t border-cart-line-2 px-[clamp(20px,4vw,56px)] py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden max-[560px]:flex"
@@ -212,20 +235,23 @@ function MobileContextStrip() {
         Lima
       </a>
       <span className="h-4 w-px shrink-0 bg-cart-line" aria-hidden />
-      {chips.map((label, i) => (
-        <button
-          key={label}
-          type="button"
-          onClick={() => setActive(i)}
-          className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12.5px] whitespace-nowrap ${
-            active === i
-              ? "border-cart-accent bg-cart-accent text-white shadow-[0_0_12px_var(--color-cart-accent-glow)]"
-              : "border-cart-line bg-transparent text-cart-ink-2"
-          }`}
-        >
-          {label}
-        </button>
-      ))}
+      {STRIP_CHIPS.map(({ label, cat }) => {
+        const active = selectedCategory === cat;
+        return (
+          <button
+            key={label}
+            type="button"
+            onClick={() => onSelectCategory(cat)}
+            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12.5px] whitespace-nowrap ${
+              active
+                ? "border-cart-accent bg-cart-accent text-white shadow-[0_0_12px_var(--color-cart-accent-glow)]"
+                : "border-cart-line bg-transparent text-cart-ink-2"
+            }`}
+          >
+            {label}
+          </button>
+        );
+      })}
     </div>
   );
 }

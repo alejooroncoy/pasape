@@ -1,4 +1,5 @@
 import { listPending, markSynced, recordSyncError } from "./scanQueue";
+import { deviceHeaders } from "./deviceId";
 
 let inFlight = false;
 
@@ -11,13 +12,15 @@ export async function syncPending(slug: string): Promise<{ ok: number; failed: n
     let failed = 0;
     for (const item of items) {
       try {
-        const res = await fetch("/api/scanning/scan", {
+        // "signed" → /scan con el token firmado; "manual" → /admit por ticketId.
+        const [url, payload] =
+          item.kind === "manual"
+            ? ["/api/scanning/admit", { ticketId: item.ticketId, eventSlug: slug, offlineScannedAt: item.scannedAt }]
+            : ["/api/scanning/scan", { qrCode: item.token, eventSlug: slug, offlineScannedAt: item.scannedAt }];
+        const res = await fetch(url, {
           method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            qrCode: item.qrCode,
-            offlineScannedAt: item.scannedAt,
-          }),
+          headers: { "content-type": "application/json", ...deviceHeaders() },
+          body: JSON.stringify(payload),
         });
         if (res.ok) {
           await markSynced(item.id!);
