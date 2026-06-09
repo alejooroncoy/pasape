@@ -26,6 +26,13 @@ export interface OrganizationRepository {
   }): Promise<Result<Organization>>;
   listByMember(profileId: string): Promise<Array<Organization & { role: OrgRole }>>;
   /**
+   * Persiste la última marca activa del usuario en su perfil (fuente de verdad
+   * para restaurarla en cualquier dispositivo tras re-login). Idempotente.
+   */
+  setLastActiveOrg(profileId: string, orgId: string): Promise<void>;
+  /** Lee el id de la última marca activa guardada en el perfil (o null). */
+  getLastActiveOrgId(profileId: string): Promise<string | null>;
+  /**
    * Counts memberships whose role grants "real ownership" of an org
    * (owner | admin | editor). Excludes operational-only roles (door, reporter).
    * Used to enforce the 5-org-per-account cap.

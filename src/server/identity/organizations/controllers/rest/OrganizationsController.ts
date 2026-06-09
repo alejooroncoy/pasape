@@ -98,6 +98,8 @@ export const OrganizationsController = {
     );
     if (!result.ok) return result;
     await setActiveCookie(result.value.slug);
+    // La marca recién creada queda como la activa también en el perfil (cross-device).
+    await repo.setLastActiveOrg(auth.value.profileId, result.value.id);
     return { ok: true, value: { id: result.value.id, slug: result.value.slug } };
   },
 

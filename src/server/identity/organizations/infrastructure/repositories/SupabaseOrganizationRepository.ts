@@ -199,6 +199,24 @@ export const supabaseOrganizationRepository: OrganizationRepository = {
     return all.filter((o) => ["owner", "admin", "editor"].includes(o.role)).length;
   },
 
+  async setLastActiveOrg(profileId, orgId): Promise<void> {
+    const db = supabaseAdmin();
+    await db
+      .from("profiles")
+      .update({ last_active_org_id: orgId, last_active_org_at: new Date().toISOString() })
+      .eq("id", profileId);
+  },
+
+  async getLastActiveOrgId(profileId): Promise<string | null> {
+    const db = supabaseAdmin();
+    const { data } = await db
+      .from("profiles")
+      .select("last_active_org_id")
+      .eq("id", profileId)
+      .maybeSingle<{ last_active_org_id: string | null }>();
+    return data?.last_active_org_id ?? null;
+  },
+
   async listMembers(organizationId) {
     const db = supabaseAdmin();
     const { data: orgRow } = await db

@@ -12,5 +12,7 @@ export const switchActiveOrg = async (
   if (!org) return err("org_not_found");
   const memberships = await repo.listByMember(input.profileId);
   if (!memberships.some((m) => m.id === org.id)) return err("not_a_member");
+  // Persiste la marca elegida en el perfil → se restaura en cualquier dispositivo.
+  await repo.setLastActiveOrg(input.profileId, org.id);
   return ok({ slug: org.slug });
 };

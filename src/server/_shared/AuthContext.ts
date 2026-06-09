@@ -32,18 +32,8 @@ export const getActiveOrgSlug = async (): Promise<string | null> => {
   return store.get(ACTIVE_ORG_COOKIE)?.value ?? null;
 };
 
-export const resolveActiveOrgSlug = async (profileId: string): Promise<string | null> => {
+const writeActiveCookie = async (slug: string) => {
   const store = await cookies();
-  const orgs = await supabaseOrganizationRepository.listByMember(profileId);
-  if (orgs.length === 0) return null;
-
-  // La cookie persiste entre logins (así recordamos la última marca). Solo
-  // confiamos en ella si la marca pertenece al usuario — si en el mismo
-  // navegador entra otro usuario, su slug no estará y caemos a su primera marca.
-  const existing = store.get(ACTIVE_ORG_COOKIE)?.value;
-  if (existing && orgs.some((o) => o.slug === existing)) return existing;
-
-  const slug = orgs[0].slug; // determinista: la marca más antigua (ver listByMember)
   store.set(ACTIVE_ORG_COOKIE, slug, {
     httpOnly: true,
     sameSite: "lax",
@@ -51,5 +41,28 @@ export const resolveActiveOrgSlug = async (profileId: string): Promise<string | 
     path: "/",
     maxAge: 60 * 60 * 24 * 365,
   });
+};
+
+/**
+ * Resuelve la marca activa del usuario. Fuente de verdad: `profiles.last_active_org_id`
+ * (persiste entre logins y dispositivos — ej. el celular). La cookie es solo un
+ * caché de lectura rápida en el mismo navegador. Orden:
+ *   1. última marca guardada en el perfil (si sigue siendo miembro)
+ *   2. cookie (si es una marca suya) — cubre el mismo navegador sin perfil aún
+ *   3. primera marca (determinista, la más antigua)
+ */
+export const resolveActiveOrgSlug = async (profileId: string): Promise<string | null> => {
+  const store = await cookies();
+  const orgs = await supabaseOrganizationRepository.listByMember(profileId);
+  if (orgs.length === 0) return null;
+
+  const lastId = await supabaseOrganizationRepository.getLastActiveOrgId(profileId);
+  const fromProfile = lastId ? orgs.find((o) => o.id === lastId)?.slug : undefined;
+
+  const cookieSlug = store.get(ACTIVE_ORG_COOKIE)?.value;
+  const fromCookie = cookieSlug && orgs.some((o) => o.slug === cookieSlug) ? cookieSlug : undefined;
+
+  const slug = fromProfile ?? fromCookie ?? orgs[0].slug;
+  if (slug !== cookieSlug) await writeActiveCookie(slug);
   return slug;
 };
