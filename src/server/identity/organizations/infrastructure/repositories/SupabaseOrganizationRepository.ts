@@ -168,7 +168,13 @@ export const supabaseOrganizationRepository: OrganizationRepository = {
       }
     }
 
-    return Array.from(orgsById.values()).map((org) => {
+    // Orden determinista por fecha de creación (la marca más antigua primero).
+    // Why: el frontend usa `orgs[0]` como default cuando el usuario aún no eligió
+    // marca. Sin ORDER BY, `.in()` devuelve filas en orden arbitrario y el default
+    // "primera marca" cambiaba entre requests. Ordenar acá lo fija.
+    return Array.from(orgsById.values())
+      .sort((a, b) => a.created_at.localeCompare(b.created_at))
+      .map((org) => {
       const candidates: Array<{ scopeType: string; role: OrgRole }> = [];
       for (const m of memberships) {
         if (m.scope_type === "organization" && m.scope_id === org.id) {
