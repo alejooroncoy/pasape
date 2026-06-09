@@ -34,11 +34,16 @@ export const getActiveOrgSlug = async (): Promise<string | null> => {
 
 export const resolveActiveOrgSlug = async (profileId: string): Promise<string | null> => {
   const store = await cookies();
-  const existing = store.get(ACTIVE_ORG_COOKIE)?.value;
-  if (existing) return existing;
   const orgs = await supabaseOrganizationRepository.listByMember(profileId);
   if (orgs.length === 0) return null;
-  const slug = orgs[0].slug;
+
+  // La cookie persiste entre logins (así recordamos la última marca). Solo
+  // confiamos en ella si la marca pertenece al usuario — si en el mismo
+  // navegador entra otro usuario, su slug no estará y caemos a su primera marca.
+  const existing = store.get(ACTIVE_ORG_COOKIE)?.value;
+  if (existing && orgs.some((o) => o.slug === existing)) return existing;
+
+  const slug = orgs[0].slug; // determinista: la marca más antigua (ver listByMember)
   store.set(ACTIVE_ORG_COOKIE, slug, {
     httpOnly: true,
     sameSite: "lax",
