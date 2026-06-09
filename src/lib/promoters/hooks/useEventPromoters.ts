@@ -29,8 +29,20 @@ export const useAssignPromotersToEvent = (slug: string) => {
 export const useUpdateAssignmentCommission = (slug: string) => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ linkId, commissionPct }: { linkId: string; commissionPct: number }) =>
-      api.patch<true>(`/api/events/${slug}/promoters/${linkId}`, { commissionPct }),
+    mutationFn: ({
+      linkId,
+      commissionPct,
+      quota,
+    }: {
+      linkId: string;
+      commissionPct?: number;
+      quota?: number | null;
+    }) => {
+      const body: Record<string, unknown> = {};
+      if (commissionPct !== undefined) body.commissionPct = commissionPct;
+      if (quota !== undefined) body.quota = quota;
+      return api.patch<true>(`/api/events/${slug}/promoters/${linkId}`, body);
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: key(slug) }),
   });
 };

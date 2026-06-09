@@ -374,6 +374,9 @@ function PromotersSection({ slug }: { slug: string }) {
                 onChangeCommission={(pct) =>
                   updateCommission.mutate({ linkId: a.promoterLinkId, commissionPct: pct })
                 }
+                onChangeQuota={(quota) =>
+                  updateCommission.mutate({ linkId: a.promoterLinkId, quota })
+                }
               />
             ))}
           </div>
@@ -404,10 +407,12 @@ function AssignmentRow({
   assignment,
   onRemove,
   onChangeCommission,
+  onChangeQuota,
 }: {
   assignment: EventPromoterAssignment;
   onRemove: () => void;
   onChangeCommission: (pct: number) => void;
+  onChangeQuota: (quota: number | null) => void;
 }) {
   const [copied, setCopied] = useState(false);
   // Why: assignment.url puede venir absoluta (con origin) o relativa (/r/code).
@@ -437,7 +442,7 @@ function AssignmentRow({
     window.open(`https://wa.me/${phone}?text=${text}`, "_blank");
   };
   return (
-    <div className="grid grid-cols-1 gap-3 px-4 py-3 lg:grid-cols-[auto_1fr_auto_auto_auto] lg:items-center lg:px-5">
+    <div className="grid grid-cols-1 gap-3 px-4 py-3 lg:grid-cols-[auto_1fr_auto_auto_auto_auto] lg:items-center lg:px-5">
       <div className="flex items-center gap-3">
         <div className="grid size-10 shrink-0 place-items-center rounded-full bg-cart-accent-soft text-[14px] font-semibold text-cart-accent">
           {(assignment.name[0] ?? "?").toUpperCase()}
@@ -463,6 +468,7 @@ function AssignmentRow({
       </div>
 
       <CommissionEditor value={assignment.eventCommissionPct} onChange={onChangeCommission} />
+      <QuotaEditor value={assignment.quota} onChange={onChangeQuota} />
 
       <div className="flex items-center gap-2">
         <button
@@ -540,6 +546,63 @@ function CommissionEditor({
         type="button"
         onClick={() => {
           onChange(local);
+          setEditing(false);
+        }}
+        className="rounded-lg bg-cart-accent px-2 py-1 text-[11px] font-semibold text-white"
+      >
+        OK
+      </button>
+      <button
+        type="button"
+        onClick={() => setEditing(false)}
+        className="rounded-lg px-1 py-1 text-[11px] text-cart-ink-3 hover:text-white"
+      >
+        ✕
+      </button>
+    </div>
+  );
+}
+
+function QuotaEditor({
+  value,
+  onChange,
+}: {
+  value: number | null;
+  onChange: (v: number | null) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [local, setLocal] = useState<string>("");
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          setLocal(value !== null ? String(value) : "");
+          setEditing(true);
+        }}
+        className="rounded-full bg-white/8 px-2.5 py-1 text-[11.5px] font-semibold text-cart-ink-2 transition hover:bg-white/12"
+      >
+        {value === null ? "∞" : `${value} ent.`}
+      </button>
+    );
+  }
+  return (
+    <div className="flex items-center gap-1.5">
+      <input
+        type="number"
+        min={1}
+        value={local}
+        placeholder="∞"
+        onChange={(e) => setLocal(e.target.value)}
+        autoFocus
+        className="w-16 rounded-lg bg-cart-bg-elev-2 px-2 py-1 text-center font-mono text-[12px] outline-none"
+      />
+      <button
+        type="button"
+        onClick={() => {
+          const num = parseInt(local, 10);
+          onChange(local.trim() === "" || isNaN(num) || num < 1 ? null : num);
           setEditing(false);
         }}
         className="rounded-lg bg-cart-accent px-2 py-1 text-[11px] font-semibold text-white"
