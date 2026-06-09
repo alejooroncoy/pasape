@@ -10,6 +10,7 @@ export type EventPromoterAssignment = {
   profileId: string | null;
   defaultCommissionPct: number;
   eventCommissionPct: number;
+  quota: number | null;
   code: string;
   url: string;
   active: boolean;
@@ -32,7 +33,7 @@ export const listAssignmentsForEvent = async (
   const { data } = await db
     .from("promoter_links")
     .select(
-      "id, code, commission_pct, active, org_promoter_id, promoter_id, org_promoter:org_promoters(id, name, whatsapp, default_commission_pct, profile_id)",
+      "id, code, commission_pct, quota, active, org_promoter_id, promoter_id, org_promoter:org_promoters(id, name, whatsapp, default_commission_pct, profile_id)",
     )
     .eq("event_id", eventId)
     .not("org_promoter_id", "is", null);
@@ -41,6 +42,7 @@ export const listAssignmentsForEvent = async (
     id: string;
     code: string;
     commission_pct: number;
+    quota: number | null;
     active: boolean;
     org_promoter_id: string;
     promoter_id: string | null;
@@ -63,6 +65,7 @@ export const listAssignmentsForEvent = async (
       profileId: r.promoter_id ?? r.org_promoter!.profile_id,
       defaultCommissionPct: r.org_promoter!.default_commission_pct,
       eventCommissionPct: r.commission_pct,
+      quota: r.quota ?? null,
       code: r.code,
       url: `${origin.replace(/\/$/, "")}/r/${r.code}`,
       active: r.active,
@@ -119,7 +122,7 @@ export const assignOrgPromotersToEvent = async (
     .from("promoter_links")
     .insert(rows)
     .select(
-      "id, code, commission_pct, active, org_promoter_id, promoter_id, org_promoter:org_promoters(id, name, whatsapp, default_commission_pct, profile_id)",
+      "id, code, commission_pct, quota, active, org_promoter_id, promoter_id, org_promoter:org_promoters(id, name, whatsapp, default_commission_pct, profile_id)",
     );
   if (error || !data) return err(error?.message ?? "assignment_failed");
 
@@ -127,6 +130,7 @@ export const assignOrgPromotersToEvent = async (
     id: string;
     code: string;
     commission_pct: number;
+    quota: number | null;
     active: boolean;
     org_promoter_id: string;
     promoter_id: string | null;
@@ -149,6 +153,7 @@ export const assignOrgPromotersToEvent = async (
         profileId: r.promoter_id ?? r.org_promoter!.profile_id,
         defaultCommissionPct: r.org_promoter!.default_commission_pct,
         eventCommissionPct: r.commission_pct,
+        quota: r.quota ?? null,
         code: r.code,
         url: `/r/${r.code}`,
         active: r.active,
@@ -188,12 +193,16 @@ export const removeAssignment = async (
 export const updateAssignmentCommission = async (
   promoterLinkId: string,
   eventId: string,
-  commissionPct: number,
+  fields: { commissionPct?: number; quota?: number | null },
 ): Promise<Result<true>> => {
   const db = supabaseAdmin();
+  const patch: Record<string, unknown> = {};
+  if (fields.commissionPct !== undefined) patch.commission_pct = fields.commissionPct;
+  if (fields.quota !== undefined) patch.quota = fields.quota;
+  if (Object.keys(patch).length === 0) return ok(true);
   const { error } = await db
     .from("promoter_links")
-    .update({ commission_pct: commissionPct })
+    .update(patch)
     .eq("id", promoterLinkId)
     .eq("event_id", eventId);
   if (error) return err(error.message);

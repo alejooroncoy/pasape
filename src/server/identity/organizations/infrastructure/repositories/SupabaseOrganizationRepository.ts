@@ -168,7 +168,13 @@ export const supabaseOrganizationRepository: OrganizationRepository = {
       }
     }
 
-    return Array.from(orgsById.values()).map((org) => {
+    // Orden determinista por fecha de creación (la marca más antigua primero).
+    // Why: el frontend usa `orgs[0]` como default cuando el usuario aún no eligió
+    // marca. Sin ORDER BY, `.in()` devuelve filas en orden arbitrario y el default
+    // "primera marca" cambiaba entre requests. Ordenar acá lo fija.
+    return Array.from(orgsById.values())
+      .sort((a, b) => a.created_at.localeCompare(b.created_at))
+      .map((org) => {
       const candidates: Array<{ scopeType: string; role: OrgRole }> = [];
       for (const m of memberships) {
         if (m.scope_type === "organization" && m.scope_id === org.id) {
@@ -191,6 +197,24 @@ export const supabaseOrganizationRepository: OrganizationRepository = {
     // Cuenta orgs únicas alcanzadas con roles que dan operación real.
     const all = await this.listByMember(profileId);
     return all.filter((o) => ["owner", "admin", "editor"].includes(o.role)).length;
+  },
+
+  async setLastActiveOrg(profileId, orgId): Promise<void> {
+    const db = supabaseAdmin();
+    await db
+      .from("profiles")
+      .update({ last_active_org_id: orgId, last_active_org_at: new Date().toISOString() })
+      .eq("id", profileId);
+  },
+
+  async getLastActiveOrgId(profileId): Promise<string | null> {
+    const db = supabaseAdmin();
+    const { data } = await db
+      .from("profiles")
+      .select("last_active_org_id")
+      .eq("id", profileId)
+      .maybeSingle<{ last_active_org_id: string | null }>();
+    return data?.last_active_org_id ?? null;
   },
 
   async listMembers(organizationId) {

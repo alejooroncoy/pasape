@@ -120,8 +120,8 @@ function SuccessContent() {
         </button>
       </div>
 
-      {/* MOBILE LAYOUT — estilo iOS */}
-      <div className="relative z-10 mx-auto flex w-full max-w-[460px] flex-col px-5 pb-8 pt-8 lg:hidden">
+      {/* MOBILE LAYOUT — estilo iOS, centrado vertical */}
+      <div className="relative z-10 mx-auto flex min-h-[calc(100dvh-72px)] w-full max-w-[460px] flex-col justify-center px-5 pb-8 pt-4 lg:hidden">
         <Hero variant="mobile" isLive={isLive} />
         <ShareCard
           shareLabel={shareLabel}

@@ -1436,8 +1436,14 @@ function SmartCta({
             : "border border-cart-line-strong bg-cart-bg-elev hover:border-white/40 ")
       }
     >
+      {isPending ? (
+        <svg width="15" height="15" viewBox="0 0 14 14" fill="none" className="animate-spin">
+          <circle cx="7" cy="7" r="5" stroke="currentColor" strokeWidth="1.6" opacity="0.3" />
+          <path d="M12 7a5 5 0 00-5-5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        </svg>
+      ) : null}
       {label}
-      {ready && (
+      {ready && !isPending && (
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
           <path d="M5 2l5 5-5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
         </svg>

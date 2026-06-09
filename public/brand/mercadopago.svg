@@ -1,0 +1,7 @@
+<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Mercado Pago">
+  <rect width="48" height="48" rx="12" fill="#009EE3"/>
+  <!-- Isotipo: apretón de manos amarillo formando una sonrisa -->
+  <path d="M10 22c0-4 6-7 14-7s14 3 14 7c0 6.5-6.6 11-14 11S10 28.5 10 22Z" fill="#2D3277" opacity="0.0"/>
+  <path d="M24 16.5c-6.6 0-12 3-12 7.2 0 1.6 1.5 2.2 2.8 1.4l4.2-2.6c.7-.4 1.5-.3 2.1.2l1.7 1.5c.7.6 1.7.6 2.4 0l1.7-1.5c.6-.5 1.4-.6 2.1-.2l4.2 2.6c1.3.8 2.8.2 2.8-1.4 0-4.2-5.4-7.2-12-7.2Z" fill="#FFE600"/>
+  <path d="M16.6 26.6c2 2.2 4.6 3.4 7.4 3.4s5.4-1.2 7.4-3.4c.5-.6-.1-1.4-.9-1.2-2 .6-4.2 1-6.5 1s-4.5-.4-6.5-1c-.8-.2-1.4.6-.9 1.2Z" fill="#FFE600"/>
+</svg>

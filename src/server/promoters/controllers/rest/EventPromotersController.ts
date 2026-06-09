@@ -95,10 +95,13 @@ export const EventPromotersController = {
     const g = await guard(slug);
     if (!g.ok) return err(g.error);
     const parsed = z
-      .object({ commissionPct: z.number().int().min(0).max(100) })
+      .object({
+        commissionPct: z.number().int().min(0).max(100).optional(),
+        quota: z.number().int().min(1).nullable().optional(),
+      })
       .safeParse(input);
     if (!parsed.success) return err(parsed.error.issues[0]?.message ?? "invalid_input");
-    return updateAssignmentCommission(promoterLinkId, g.value.eventId, parsed.data.commissionPct);
+    return updateAssignmentCommission(promoterLinkId, g.value.eventId, parsed.data);
   },
 
   async remove(slug: string, promoterLinkId: string): Promise<Result<true>> {

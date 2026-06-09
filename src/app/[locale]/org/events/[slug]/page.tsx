@@ -5,6 +5,7 @@ import { Link } from "@/i18n/navigation";
 import { useEvent } from "@/lib/events/hooks/useEvents";
 import { useEventStats } from "@/lib/events/hooks/useEventStats";
 import { useScanRealtime } from "@/lib/scanning/hooks/useScanRealtime";
+import { useRealtimeEventStats } from "@/lib/events/hooks/useRealtimeEventStats";
 import { useEventPartners, useAddEventPartner, useRemoveEventPartner } from "@/lib/events/hooks/useEventPartners";
 import { formatMoney } from "@/lib/_shared/format";
 import { EventShell } from "./_shell/EventShell";
@@ -20,6 +21,8 @@ export default function OrgEventPanelPage({ params }: { params: Params }) {
   const event = useEvent(slug);
   const stats = useEventStats(slug);
   useScanRealtime(slug);
+  // Refresca KPIs al instante cuando entra/cambia una venta (Broadcast desde DB).
+  useRealtimeEventStats(event.data?.event?.id, slug);
 
   const ev = event.data?.event;
   const status = ev?.status ?? "draft";
@@ -50,11 +53,16 @@ function LivePanel({
   stats: EventStatsPayload | undefined;
 }) {
   const sold = stats?.sold ?? 0;
+  const reserved = stats?.reserved ?? 0;
   const validated = stats?.validated ?? 0;
   const revenue = stats?.revenueCents ?? 0;
   const capacity = ev?.capacity.totalCapacity ?? 0;
   const soldPct = capacity ? Math.min(100, Math.round((sold / capacity) * 100)) : 0;
   const validatedPct = sold ? Math.round((validated / sold) * 100) : 0;
+  // Reservadas = en proceso de pago (orden pending <30min). No son ventas aún.
+  const soldHint = capacity
+    ? `${soldPct}% del aforo (${capacity.toLocaleString("es-PE")})`
+    : "Sin aforo definido";
 
   return (
     <>
@@ -66,7 +74,11 @@ function LivePanel({
         <KpiCard
           label="Vendidas"
           value={sold.toLocaleString("es-PE")}
-          hint={capacity ? `${soldPct}% del aforo (${capacity.toLocaleString("es-PE")})` : "Sin aforo definido"}
+          hint={
+            reserved > 0
+              ? `${soldHint} · ${reserved} reservada${reserved === 1 ? "" : "s"}`
+              : soldHint
+          }
           progress={capacity ? soldPct : null}
           tone="accent"
         />

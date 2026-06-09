@@ -122,8 +122,12 @@ export default function TicketDetailPage({ params }: Props) {
               {rotating.payload ? (
                 <QrSquare code={rotating.payload} size={240} />
               ) : (
-                <div className="grid size-[240px] place-items-center text-[13px] text-cart-ink-3">
-                  {rotating.error ? "Error generando QR" : "Generando QR…"}
+                <div className="grid size-[240px] place-items-center px-4 text-center text-[13px] text-cart-ink-3">
+                  {rotating.error
+                    ? rotating.error === "offline_no_cert"
+                      ? "Necesitas conexión la primera vez para activar tu QR. Conéctate y recarga."
+                      : "No pudimos generar el QR. Recarga la página."
+                    : "Generando QR…"}
                 </div>
               )}
               {rotating.payload && <CountdownRing seconds={rotating.secondsLeft} />}

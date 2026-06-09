@@ -116,7 +116,11 @@ export const OrgSwitcherButton = ({ onBeforeOpen }: Props = {}) => {
         open={open}
         onOpenChange={setOpen}
         triggerRef={triggerRef}
-        activeSlug={activeSlug}
+        // Why: usamos el slug RESUELTO (active.slug), no el crudo de la sesión.
+        // Si el usuario aún no eligió marca, activeOrgSlug es null y el dropdown
+        // no resaltaba ninguna; con el default determinista (primera org) el
+        // botón y el dropdown muestran/resaltan siempre lo mismo.
+        activeSlug={active.slug}
         orgs={orgs.data}
         legalEntities={legalEntities.data ?? []}
         onSelect={async (slug) => {

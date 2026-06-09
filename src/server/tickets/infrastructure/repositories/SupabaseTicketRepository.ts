@@ -142,13 +142,39 @@ export const supabaseTicketRepository: TicketRepository = {
     if (input.promoCode) {
       const { data: link } = await db
         .from("promoter_links")
-        .select("id, promoter_id")
+        .select("id, promoter_id, quota")
         .eq("code", input.promoCode)
         .eq("event_id", input.eventId)
         .eq("active", true)
-        .maybeSingle<{ id: string; promoter_id: string }>();
-      promoterLinkId = link?.id ?? null;
-      promoterId = link?.promoter_id ?? null;
+        .maybeSingle<{ id: string; promoter_id: string; quota: number | null }>();
+
+      if (link) {
+        // Verificar cuota si está seteada (cuenta tickets activos/usados de este link).
+        if (link.quota != null) {
+          const { data: paidOrders } = await db
+            .from("orders")
+            .select("id")
+            .eq("promoter_link_id", link.id)
+            .eq("status", "paid")
+            .returns<Array<{ id: string }>>();
+          const orderIds = (paidOrders ?? []).map((o) => o.id);
+          const usedCount =
+            orderIds.length === 0
+              ? 0
+              : (
+                  await db
+                    .from("tickets")
+                    .select("id", { count: "exact", head: true })
+                    .in("order_id", orderIds)
+                    .in("status", ["active", "used"])
+                ).count ?? 0;
+          if (usedCount >= link.quota) {
+            return err("promoter_quota_exceeded");
+          }
+        }
+        promoterLinkId = link.id;
+        promoterId = link.promoter_id;
+      }
     }
 
     // Why: si el comprador es guest, resolvemos (o creamos) un profile usando

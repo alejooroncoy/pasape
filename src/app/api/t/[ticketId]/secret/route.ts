@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import type { JWK } from "jose";
+import * as Sentry from "@sentry/nextjs";
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
 import { verifyTicketLink } from "@/server/notifications/domain/TicketLinkToken";
 import { WINDOW_SECONDS } from "@/lib/tickets/signedQr";
@@ -54,13 +55,24 @@ export const POST = async (
   }
 
   const db = supabaseAdmin();
-  const { data: ticket } = await db
+  const { data: ticket, error: ticketErr } = await db
     .from("tickets")
     .select(
       "id, status, current_holder, holder_name, holder_dni_last2, ticket_type_id, ticket_types(event_id, zone_id)",
     )
     .eq("id", ticketId)
     .maybeSingle<TicketRow>();
+  // Why: antes el error del select se ignoraba y un fallo de query (ej. relación
+  // PostgREST rota, columna faltante) se enmascaraba como 404. Ahora lo
+  // diferenciamos: error real → 500 reportado a Sentry; fila ausente → 404.
+  if (ticketErr) {
+    Sentry.captureException(ticketErr, {
+      tags: { route: "ticket-secret" },
+      extra: { ticketId, op: "select_ticket" },
+    });
+    console.error("[ticket-secret] ticket select failed:", ticketErr.message);
+    return NextResponse.json({ error: "ticket_lookup_failed" }, { status: 500 });
+  }
   if (!ticket) return NextResponse.json({ error: "not_found" }, { status: 404 });
   if (ticket.status !== "active") {
     return NextResponse.json({ error: "ticket_inactive" }, { status: 410 });
@@ -73,14 +85,26 @@ export const POST = async (
     return NextResponse.json({ error: "event_not_found" }, { status: 404 });
   }
 
-  const keys = await getOrCreateEventSigningKeys(db, eventId);
-  const cert = await signTicketCert(keys.privateJwk, {
-    ticketId: ticket.id,
-    holderName: ticket.holder_name,
-    dniLast2: ticket.holder_dni_last2,
-    zoneId: ticket.ticket_types?.zone_id ?? null,
-    ticketPub: publicJwk,
-  });
+  // Firma del cert: si las llaves del evento o la firma fallan, lo reportamos
+  // como 500 con causa real (antes podía caer en un 500 genérico sin contexto).
+  let cert: string;
+  try {
+    const keys = await getOrCreateEventSigningKeys(db, eventId);
+    cert = await signTicketCert(keys.privateJwk, {
+      ticketId: ticket.id,
+      holderName: ticket.holder_name,
+      dniLast2: ticket.holder_dni_last2,
+      zoneId: ticket.ticket_types?.zone_id ?? null,
+      ticketPub: publicJwk,
+    });
+  } catch (e) {
+    Sentry.captureException(e, {
+      tags: { route: "ticket-secret" },
+      extra: { ticketId: ticket.id, eventId, op: "sign_cert" },
+    });
+    console.error("[ticket-secret] cert signing failed:", (e as Error).message);
+    return NextResponse.json({ error: "cert_signing_failed" }, { status: 500 });
+  }
 
   // Persistimos cert + pública del ticket (server-side, para auditoría/dashboard).
   await db

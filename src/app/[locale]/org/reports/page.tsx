@@ -5,9 +5,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useMotionValue, useTransform, animate } from "motion/react";
 import { useMyEvents } from "@/lib/events/hooks/useEvents";
 import { useEventStats } from "@/lib/events/hooks/useEventStats";
+import { useRealtimeEventStats } from "@/lib/events/hooks/useRealtimeEventStats";
 import { formatMoney } from "@/lib/_shared/format";
 import { OrgShell } from "../_shell/OrgShell";
-import type { Event } from "@/server/events/domain/Event";
+import type { Event, TicketTypeKind } from "@/server/events/domain/Event";
 
 type RangeKey = "today" | "7d" | "30d" | "all";
 
@@ -62,14 +63,17 @@ export default function OrgReportsPage() {
 
   const stats = useEventStats(eventSlug ?? "");
   const data = stats.data;
+  // Refresca el reporte al instante ante ventas/scans (Broadcast desde DB).
+  useRealtimeEventStats(selectedEvent?.id, eventSlug ?? "");
 
   const kpis = useMemo(() => {
     const revenue = (data?.revenueCents ?? 0) / 100;
     const sold = data?.sold ?? 0;
+    const reserved = data?.reserved ?? 0;
     const validated = data?.validated ?? 0;
     const capacity = data?.capacity ?? 0;
     const conversion = capacity > 0 ? (sold / capacity) * 100 : 0;
-    return { revenue, sold, validated, conversion };
+    return { revenue, sold, reserved, validated, conversion };
   }, [data]);
 
   const series = useMemo(
@@ -135,6 +139,11 @@ export default function OrgReportsPage() {
               value={kpis.sold}
               format={(v) => v.toLocaleString("es-PE")}
               delta={null}
+              subnote={
+                kpis.reserved > 0
+                  ? `${kpis.reserved} reservada${kpis.reserved === 1 ? "" : "s"}`
+                  : undefined
+              }
             />
             <KpiCard
               index={2}
@@ -212,6 +221,7 @@ export default function OrgReportsPage() {
               const grouped = groupTicketRows(
                 (data?.ticketTypes ?? []).map((t) => ({
                   name: t.name,
+                  kind: t.kind,
                   price: t.priceCents / 100,
                   sold: t.sold,
                   capacity: t.capacity,
@@ -517,6 +527,7 @@ function KpiCard({
   format,
   delta,
   tone,
+  subnote,
 }: {
   index: number;
   label: string;
@@ -524,6 +535,8 @@ function KpiCard({
   format: (v: number) => string;
   delta: number | null;
   tone?: "accent" | "green";
+  /** Nota secundaria opcional (ej. "3 reservadas") — reemplaza el delta cuando este es null. */
+  subnote?: string;
 }) {
   const mv = useMotionValue(0);
   const display = useTransform(mv, (v) => format(v));
@@ -569,7 +582,11 @@ function KpiCard({
         </motion.div>
         <div className="mt-2 flex items-center gap-1.5 text-[11px] text-cart-ink-4">
           {delta === null ? (
-            <span>—</span>
+            subnote ? (
+              <span className="text-cart-ink-3">{subnote}</span>
+            ) : (
+              <span>—</span>
+            )
           ) : delta >= 0 ? (
             <span className="inline-flex items-center gap-1 text-emerald-300">
               <Arrow up /> {delta.toFixed(1)}%
@@ -579,7 +596,9 @@ function KpiCard({
               <Arrow /> {Math.abs(delta).toFixed(1)}%
             </span>
           )}
-          <span className="text-cart-ink-4">vs. periodo previo</span>
+          {!(delta === null && subnote) && (
+            <span className="text-cart-ink-4">vs. periodo previo</span>
+          )}
         </div>
       </div>
     </motion.div>
@@ -830,20 +849,27 @@ type BreakdownRow = {
 };
 
 /**
- * Agrupa tipos con el mismo "tronco" de nombre (ej. "Box 1", "Box 2"... → "Box"
- * x14). Útil cuando un evento define cada box/mesa como un ticket_type
- * separado y el listado se infla a 30+ filas redundantes.
+ * Agrupa SOLO familias de boxes/mesas numeradas (ej. "Box 1", "Box 2"... → "Box"
+ * x14), que es cuando un evento define cada unidad como un ticket_type separado
+ * y el listado se infla a 30+ filas redundantes.
+ *
+ * Why: antes se agrupaba por nombre para CUALQUIER tipo, lo que juntaba un
+ * "General" de pago con otro "General" gratis en una sola fila y mostraba el
+ * precio mínimo (S/0). Las entradas sueltas (general/vip) NO se agrupan: cada
+ * ticket_type es su propia fila con su precio real.
  */
 function groupTicketRows(
-  rows: { name: string; price: number; sold: number; capacity: number }[],
+  rows: { name: string; kind: TicketTypeKind; price: number; sold: number; capacity: number }[],
 ): BreakdownRow[] {
   const groups = new Map<string, BreakdownRow>();
-  for (const r of rows) {
-    const base = baseName(r.name);
-    const existing = groups.get(base);
+  rows.forEach((r, i) => {
+    // Solo los boxes colapsan por tronco de nombre; el resto queda como fila
+    // única (clave irrepetible) para no fusionar tipos distintos.
+    const key = r.kind === "box" ? `box:${baseName(r.name)}` : `solo:${i}`;
+    const existing = groups.get(key);
     if (!existing) {
-      groups.set(base, {
-        name: base,
+      groups.set(key, {
+        name: r.kind === "box" ? baseName(r.name) : r.name,
         price: r.price,
         priceMax: r.price,
         sold: r.sold,
@@ -859,7 +885,7 @@ function groupTicketRows(
       existing.price = Math.min(existing.price, r.price);
       existing.priceMax = Math.max(existing.priceMax ?? existing.price, r.price);
     }
-  }
+  });
   return Array.from(groups.values());
 }
 

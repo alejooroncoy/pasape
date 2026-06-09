@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { cookies } from "next/headers";
 import { err, type Result } from "@/server/_shared/result";
-import { ACTIVE_ORG_COOKIE, getAuthContext } from "@/server/_shared/AuthContext";
+import { ACTIVE_ORG_COOKIE, getAuthContext, resolveActiveOrgSlug } from "@/server/_shared/AuthContext";
 import { getCurrentUser } from "../../application/GetCurrentUser";
 import { completeOnboarding } from "../../application/CompleteOnboarding";
 import { updateProfile } from "../../application/UpdateProfile";
@@ -46,8 +46,8 @@ export const IdentityController = {
     if (auth.ok) {
       const user = await getCurrentUser({ repo }, auth.value.profileId);
       if (user) {
-        const store = await cookies();
-        const slug = store.get(ACTIVE_ORG_COOKIE)?.value ?? null;
+        // Fuente de verdad = perfil (cross-device), no la cookie cruda.
+        const slug = await resolveActiveOrgSlug(auth.value.profileId);
         return { ok: true, value: { user, activeOrgSlug: slug } };
       }
     }

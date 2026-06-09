@@ -4,6 +4,7 @@ import { motion } from "motion/react";
 import { Link } from "@/i18n/navigation";
 import { useMyEvents } from "@/lib/events/hooks/useEvents";
 import { useEventStats } from "@/lib/events/hooks/useEventStats";
+import { useRealtimeEventStats } from "@/lib/events/hooks/useRealtimeEventStats";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { useMyOrgs } from "@/lib/identity/organizations/hooks/useMyOrgs";
 import { formatDate, formatMoney } from "@/lib/_shared/format";
@@ -30,6 +31,8 @@ export function OrgHomeClient() {
   // Revenue del evento activo (si hay uno publicado). Si hay varios, se suma el primero visible.
   const liveStats = useEventStats(liveEvent?.slug ?? "");
   const liveRevenue = liveStats.data?.revenueCents ?? 0;
+  // KPIs del evento en vivo al instante (Broadcast desde DB).
+  useRealtimeEventStats(liveEvent?.id, liveEvent?.slug ?? "");
 
   return (
     <OrgShell>

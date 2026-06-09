@@ -74,10 +74,11 @@ function BrandPageView({
       {/* Hero cover */}
       <Cover brand={brand} />
 
+      {/* Volver: va SOBRE el cover (arriba), no sobre el logo */}
+      <BackButton />
+
       {/* Mobile: iOS-style stacked */}
       <div className="relative mx-auto w-full max-w-[480px] px-5 pb-20 lg:hidden">
-        <BackButton />
-
         <div className="-mt-12 flex items-end gap-4">
           <BrandLogo name={org.name} color={brand} logoUrl={org.logoUrl} size={88} />
           <FollowButton orgId={org.id} orgSlug={org.slug} />
@@ -111,8 +112,6 @@ function BrandPageView({
 
       {/* Desktop: wider hero + grid */}
       <div className="relative mx-auto hidden w-full max-w-[1120px] px-10 pb-24 lg:block">
-        <BackButton />
-
         <div className="-mt-16 flex items-end justify-between gap-6">
           <div className="flex items-end gap-6">
             <BrandLogo name={org.name} color={brand} logoUrl={org.logoUrl} size={132} />
@@ -184,7 +183,7 @@ function Cover({ brand }: { brand: string }) {
 
 function BackButton() {
   return (
-    <div className="absolute left-5 top-5 z-10 lg:left-10 lg:top-8">
+    <div className="absolute left-5 top-5 z-20 lg:left-10 lg:top-8">
       <Link
         href="/"
         className="grid size-10 place-items-center rounded-full border border-white/15 bg-black/40 text-white backdrop-blur transition hover:bg-black/60"

@@ -26,6 +26,16 @@ import { activePricing, applyPromos } from "@/lib/events/pricing";
 type Props = { params: Promise<{ slug: string }> };
 type Phase = "pick" | "data" | "pay";
 
+// Ventana de reserva del checkout — debe coincidir con el cron de expiración del
+// backend (migración 20260608110000_event_stats_and_order_expiry.sql).
+const RESERVATION_MS = 30 * 60 * 1000;
+
+const BUY_ERRORS: Record<string, string> = {
+  promoter_quota_exceeded: "El promotor ya agotó su cuota de entradas. Ingresa directo al evento.",
+  self_purchase_blocked: "No puedes comprar con tu propio código de promotor.",
+};
+const buyErrorMsg = (raw: string) => BUY_ERRORS[raw] ?? raw;
+
 export default function BuyFlowPage(props: Props) {
   return (
     <Suspense fallback={<PageLoader />}>
@@ -46,6 +56,11 @@ function BuyFlowInner({ params }: Props) {
   const [promoCode, setPromoCode] = useState<string | null>(null);
   const [, setPreferenceId] = useState<string | null>(null);
   const [orderId, setOrderId] = useState<string | null>(null);
+  // Reserva: al crear la orden (pending) el stock queda apartado 30 min. Si no
+  // se paga, el backend la expira (pg_cron) y libera el stock. En el cliente
+  // mostramos el countdown y, al vencer, un popover para reintentar o salir.
+  const [reservedAt, setReservedAt] = useState<number | null>(null);
+  const [reservationExpired, setReservationExpired] = useState(false);
   const [payMethod, setPayMethod] = useState<"yape" | "mp">("yape");
   const [guestName, setGuestName] = useState("");
   const [guestEmail, setGuestEmail] = useState("");
@@ -79,16 +94,15 @@ function BuyFlowInner({ params }: Props) {
     const key = `pasape:promo:${slug}`;
     const fromUrl = search.get("promo");
     let next: string | null = null;
-    if (fromUrl) {
-      next = fromUrl;
-      try {
+    try {
+      if (fromUrl) {
+        // Last-click wins: el último promotor que convenció al comprador gana.
+        next = fromUrl;
         window.localStorage.setItem(key, fromUrl);
-      } catch {}
-    } else {
-      try {
+      } else {
         next = window.localStorage.getItem(key);
-      } catch {}
-    }
+      }
+    } catch {}
     if (next) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setPromoCode(next);
@@ -159,6 +173,18 @@ function BuyFlowInner({ params }: Props) {
     });
   }, [acompCount]);
 
+  // Vence la reserva localmente cuando se cumplen los 30 min (el backend ya la
+  // expira en paralelo). Solo corre durante la fase de pago.
+  useEffect(() => {
+    if (phase !== "pay" || reservedAt == null || reservationExpired) return;
+    const check = () => {
+      if (Date.now() >= reservedAt + RESERVATION_MS) setReservationExpired(true);
+    };
+    check();
+    const id = setInterval(check, 1000);
+    return () => clearInterval(id);
+  }, [phase, reservedAt, reservationExpired]);
+
   // Acompañantes válidos: cualquier slot que tenga teléfono debe tener 9
   // dígitos. Slots vacíos (= "yo voy") son válidos por default.
   const acompValid = assignees.every((a) => {
@@ -205,6 +231,8 @@ function BuyFlowInner({ params }: Props) {
         return;
       }
 
+      setReservedAt(Date.now());
+      setReservationExpired(false);
       setPhase("pay");
       try {
         const url = new URL(window.location.href);
@@ -249,6 +277,16 @@ function BuyFlowInner({ params }: Props) {
       return;
     }
     router.back();
+  };
+
+  // Reintentar tras vencer: el stock se liberó, así que volvemos a armar el
+  // pedido desde el inicio (la orden vieja quedó expirada en el backend).
+  const retryReservation = () => {
+    setReservationExpired(false);
+    setReservedAt(null);
+    setOrderId(null);
+    setPreferenceId(null);
+    setPhase("pick");
   };
 
   const phaseLabel: Record<Phase, string> = {
@@ -298,7 +336,7 @@ function BuyFlowInner({ params }: Props) {
           </div>
           <button
             type="button"
-            onClick={() => router.push(`/events/${slug}` as never)}
+            onClick={() => router.back()}
             aria-label="Cerrar"
             className="grid size-9 place-items-center rounded-full bg-cart-bg-elev text-cart-ink-2 transition hover:bg-cart-bg-elev-2 hover:text-white"
           >
@@ -348,10 +386,14 @@ function BuyFlowInner({ params }: Props) {
                 setAssignees={setAssignees}
               />
             ) : (
-              <PayPhase
-                payMethod={payMethod}
-                setPayMethod={setPayMethod}
-                orderId={orderId}
+              <>
+                {reservedAt != null && !reservationExpired && (
+                  <ReservationCountdown reservedAt={reservedAt} />
+                )}
+                <PayPhase
+                  payMethod={payMethod}
+                  setPayMethod={setPayMethod}
+                  orderId={orderId}
                 total={total}
                 fee={fee}
                 isLogged={isLogged}
@@ -377,7 +419,8 @@ function BuyFlowInner({ params }: Props) {
                     : "";
                   router.push(`/events/${slug}/processing?order=${orderId}&total=${total}&method=${payMethod}${emailQs}`);
                 }}
-              />
+                />
+              </>
             )}
           </main>
 
@@ -404,7 +447,7 @@ function BuyFlowInner({ params }: Props) {
               )}
               {buy.error && (
                 <p className="mt-3 text-center text-[12px] text-rose-300">
-                  {(buy.error as Error).message}
+                  {buyErrorMsg((buy.error as Error).message)}
                 </p>
               )}
             </div>
@@ -421,7 +464,7 @@ function BuyFlowInner({ params }: Props) {
           <div className="mx-auto w-full max-w-[640px] px-5 pt-3">
             {buy.error && (
               <p className="mb-2 text-center text-[12px] text-rose-300">
-                {(buy.error as Error).message}
+                {buyErrorMsg((buy.error as Error).message)}
               </p>
             )}
             <button
@@ -435,6 +478,91 @@ function BuyFlowInner({ params }: Props) {
           </div>
         </div>
       )}
+
+      {/* Popover de reserva vencida */}
+      {reservationExpired && (
+        <ReservationExpiredModal
+          onRetry={retryReservation}
+          onCancel={() => router.push(`/events/${slug}` as never)}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ====================== Reserva: countdown + modal ====================== */
+
+function ReservationCountdown({ reservedAt }: { reservedAt: number }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const msLeft = Math.max(0, reservedAt + RESERVATION_MS - now);
+  const mins = Math.floor(msLeft / 60000);
+  const secs = Math.floor((msLeft % 60000) / 1000);
+  const low = msLeft <= 2 * 60000; // últimos 2 min en rojo
+  return (
+    <div
+      className={
+        "mb-4 flex items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-[13px] font-medium " +
+        (low
+          ? "border-rose-500/40 bg-rose-500/10 text-rose-200"
+          : "border-cart-line bg-cart-bg-elev text-cart-ink-2")
+      }
+    >
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
+        <circle cx="8" cy="9" r="5.5" stroke="currentColor" strokeWidth="1.4" />
+        <path d="M8 6v3l2 1.5M6 1.5h4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      </svg>
+      <span>
+        Reservamos tus entradas ·{" "}
+        <span className="tabular-nums font-semibold">
+          {mins}:{secs.toString().padStart(2, "0")}
+        </span>
+      </span>
+    </div>
+  );
+}
+
+function ReservationExpiredModal({
+  onRetry,
+  onCancel,
+}: {
+  onRetry: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 px-6 backdrop-blur-sm">
+      <div className="w-full max-w-[380px] rounded-2xl border border-cart-line bg-cart-bg-elev p-6 text-center">
+        <div className="mx-auto grid size-12 place-items-center rounded-full bg-rose-500/15 text-rose-300">
+          <svg width="22" height="22" viewBox="0 0 16 16" fill="none" aria-hidden>
+            <circle cx="8" cy="9" r="5.5" stroke="currentColor" strokeWidth="1.4" />
+            <path d="M8 6v3l2 1.5M6 1.5h4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+          </svg>
+        </div>
+        <h2 className="mt-4 text-[18px] font-semibold tracking-[-0.02em] text-white">
+          Venció tu tiempo
+        </h2>
+        <p className="mt-2 text-[13.5px] leading-relaxed text-cart-ink-2">
+          Tu reserva de 30 minutos terminó y liberamos las entradas. Puedes
+          volver a armar tu pedido si todavía hay disponibilidad.
+        </p>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="mt-5 w-full rounded-full bg-cart-accent py-3 text-[14.5px] font-semibold text-cart-bg transition hover:brightness-110"
+        >
+          Volver a empezar
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="mt-2 w-full rounded-full py-2.5 text-[13.5px] font-medium text-cart-ink-3 transition hover:text-white"
+        >
+          Salir
+        </button>
+      </div>
     </div>
   );
 }
@@ -1426,16 +1554,11 @@ function PayPhase({
             : "border-cart-line bg-cart-bg-elev hover:border-cart-line-strong")
         }
       >
-        <span className="grid size-12 flex-shrink-0 place-items-center rounded-xl bg-cart-bg-elev-2 text-white">
-          <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-            <rect x="2" y="4" width="18" height="14" rx="2.5" stroke="currentColor" strokeWidth="1.6" />
-            <rect x="2" y="7.5" width="18" height="2.5" fill="currentColor" />
-            <rect x="5" y="13" width="4" height="2" rx="0.5" fill="currentColor" opacity="0.7" />
-          </svg>
-        </span>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/brand/mercadopago.svg" alt="Mercado Pago" className="size-12 flex-shrink-0 rounded-xl object-cover" />
         <div className="min-w-0 flex-1">
-          <div className="text-[16.5px] font-semibold">Pagar con tarjeta</div>
-          <div className="mt-0.5 text-[12px] text-cart-ink-3">Crédito o débito · Visa / Mastercard</div>
+          <div className="text-[16.5px] font-semibold">Pagar con Mercado Pago</div>
+          <div className="mt-0.5 text-[12px] text-cart-ink-3">Tarjeta de crédito o débito · Visa / Mastercard</div>
         </div>
         <Radio active={payMethod === "mp"} color="var(--color-cart-accent)" />
       </button>
