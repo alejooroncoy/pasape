@@ -26,5 +26,6 @@ export const config = {
   // Excluimos `organizadores` del intl middleware porque es landing B2B
   // independiente del routing de locale.
   // Excluimos `auth/callback` para que reciba el `code` sin redirects de i18n.
-  matcher: ["/((?!api|_next|_vercel|organizadores|auth/callback|.*\\..*).*)"],
+  // Excluimos `monitoring` (tunnelRoute de Sentry) para que no lo locale-routee.
+  matcher: ["/((?!api|_next|_vercel|monitoring|organizadores|auth/callback|.*\\..*).*)"],
 };

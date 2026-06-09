@@ -43,15 +43,17 @@ const nextConfig: NextConfig = {
   ],
 };
 
-// Sentry envuelve por fuera de PWA/intl. Sin org/project/authToken solo
-// instrumenta en runtime (sin subir sourcemaps), que es lo que queremos hasta
-// que el usuario pegue el DSN y, si quiere, las credenciales de build.
+// Sentry envuelve por fuera de PWA/intl. El authToken se lee de
+// .env.sentry-build-plugin (gitignored); sin él, el plugin solo omite la subida
+// de sourcemaps con un warning (no rompe el build).
 export default withSentryConfig(withPWA(withNextIntl(nextConfig)), {
-  org: process.env.SENTRY_ORG,
-  project: process.env.SENTRY_PROJECT,
+  org: "pasape",
+  project: "javascript-nextjs",
   authToken: process.env.SENTRY_AUTH_TOKEN,
+  // Sube un set más amplio de archivos cliente para mejores stack traces.
+  widenClientFileUpload: true,
+  // Proxy para que los eventos no los bloqueen ad-blockers (excluido en proxy.ts).
+  tunnelRoute: "/monitoring",
   silent: !process.env.CI,
-  // No subir sourcemaps si no hay authToken (evita errores de build sin credenciales).
-  sourcemaps: { disable: !process.env.SENTRY_AUTH_TOKEN },
   telemetry: false,
 });

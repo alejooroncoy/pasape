@@ -1,18 +1,20 @@
 import * as Sentry from "@sentry/nextjs";
 
-// Inicialización de Sentry en el cliente (browser). El DSN público se inyecta
-// por env var; vacío → `enabled: false` deja a Sentry como no-op.
+// Sentry en el cliente (browser). DSN público por env var; vacío → no-op.
 const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN;
 
 Sentry.init({
   dsn,
   enabled: !!dsn,
-  environment: process.env.NODE_ENV,
-  tracesSampleRate: process.env.NODE_ENV === "production" ? 0.1 : 1,
-  // Replays desactivados por defecto (privacidad + costo). Se activan luego si hace falta.
-  replaysSessionSampleRate: 0,
-  replaysOnErrorSampleRate: 0,
+  sendDefaultPii: true,
+  // 100% de trazas en dev, 10% en producción (costo).
+  tracesSampleRate: process.env.NODE_ENV === "development" ? 1.0 : 0.1,
+  // Session Replay: 10% de sesiones, 100% cuando hay error.
+  replaysSessionSampleRate: 0.1,
+  replaysOnErrorSampleRate: 1.0,
+  enableLogs: true,
+  integrations: [Sentry.replayIntegration()],
 });
 
-// Requerido por Next para instrumentar las transiciones de navegación del App Router.
+// Requerido por Next para instrumentar las transiciones del App Router.
 export const onRouterTransitionStart = Sentry.captureRouterTransitionStart;
