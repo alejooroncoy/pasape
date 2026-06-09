@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 import createNextIntlPlugin from "next-intl/plugin";
 import withPWAInit from "next-pwa";
+import { withSentryConfig } from "@sentry/nextjs";
 
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 const withPWA = withPWAInit({
@@ -42,4 +43,15 @@ const nextConfig: NextConfig = {
   ],
 };
 
-export default withPWA(withNextIntl(nextConfig));
+// Sentry envuelve por fuera de PWA/intl. Sin org/project/authToken solo
+// instrumenta en runtime (sin subir sourcemaps), que es lo que queremos hasta
+// que el usuario pegue el DSN y, si quiere, las credenciales de build.
+export default withSentryConfig(withPWA(withNextIntl(nextConfig)), {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  silent: !process.env.CI,
+  // No subir sourcemaps si no hay authToken (evita errores de build sin credenciales).
+  sourcemaps: { disable: !process.env.SENTRY_AUTH_TOKEN },
+  telemetry: false,
+});

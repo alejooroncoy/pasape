@@ -10,6 +10,10 @@ export const QueryProvider = ({ children }: { children: ReactNode }) => {
         defaultOptions: {
           queries: {
             staleTime: 30_000,
+            // gcTime explícito: las queries inactivas se liberan a los 5 min en
+            // vez de quedar reteniendo memoria durante sesiones largas (sobre
+            // todo en Capacitor, donde la sesión dura horas).
+            gcTime: 5 * 60_000,
             retry: 1,
             refetchOnWindowFocus: false,
           },

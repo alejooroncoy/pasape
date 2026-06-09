@@ -568,38 +568,54 @@ export const supabaseEventRepository: EventRepository = {
 
     const { data: tts } = await db
       .from("ticket_types")
-      .select("id, name, kind, price_cents, capacity, sold")
+      .select("id, name, kind, price_cents, capacity")
       .eq("event_id", eventId)
       .order("position", { ascending: true });
-    const ticketTypes =
+    const ticketTypeRows =
       (tts as Array<{
         id: string;
         name: string;
         kind: TicketType["kind"];
         price_cents: number;
         capacity: number;
-        sold: number;
       }> | null) ?? [];
 
-    const sold = ticketTypes.reduce((acc, t) => acc + (t.sold ?? 0), 0);
-    const capacity = ticketTypes.reduce((acc, t) => acc + (t.capacity ?? 0), 0);
-
-    const { count: validatedCount } = await db
-      .from("scan_events")
-      .select("id", { count: "exact", head: true })
+    // KPIs escalares desde el view de rollup (una sola query): vendidas (pagado),
+    // reservadas (pending <30min), validadas, recaudado y aforo. Esto reemplaza
+    // las cuentas que antes sumaban `ticket_types.sold` (que mezcla reservado).
+    const { data: rollup } = await db
+      .from("event_stats_rollup")
+      .select("capacity, sold, reserved, validated, revenue_cents")
       .eq("event_id", eventId)
-      .eq("result", "valid");
+      .maybeSingle<{
+        capacity: number;
+        sold: number;
+        reserved: number;
+        validated: number;
+        revenue_cents: number;
+      }>();
+    const sold = rollup?.sold ?? 0;
+    const reserved = rollup?.reserved ?? 0;
+    const capacity = rollup?.capacity ?? 0;
+    const validatedCount = rollup?.validated ?? 0;
+    const revenueCents = rollup?.revenue_cents ?? 0;
 
-    const { data: paidOrders } = await db
-      .from("orders")
-      .select("total_cents")
-      .eq("event_id", eventId)
-      .eq("status", "paid");
-    const revenueCents =
-      (paidOrders as Array<{ total_cents: number }> | null)?.reduce(
-        (acc, o) => acc + (o.total_cents ?? 0),
-        0,
-      ) ?? 0;
+    // Vendidas por tipo (pagadas, activas/usadas) para el desglose del reporte —
+    // NO usamos `ticket_types.sold` porque incluye reservas pendientes.
+    const { data: paidTickets } = await db
+      .from("tickets")
+      .select("ticket_type_id, order:orders!inner(event_id, status)")
+      .eq("order.event_id", eventId)
+      .eq("order.status", "paid")
+      .in("status", ["active", "used"]);
+    const soldByType = new Map<string, number>();
+    for (const t of (paidTickets as Array<{ ticket_type_id: string }> | null) ?? []) {
+      soldByType.set(t.ticket_type_id, (soldByType.get(t.ticket_type_id) ?? 0) + 1);
+    }
+    const ticketTypes = ticketTypeRows.map((t) => ({
+      ...t,
+      sold: soldByType.get(t.id) ?? 0,
+    }));
 
     const { data: promoterOrders } = await db
       .from("orders")
@@ -771,7 +787,8 @@ export const supabaseEventRepository: EventRepository = {
 
     return {
       sold,
-      validated: validatedCount ?? 0,
+      reserved,
+      validated: validatedCount,
       revenueCents,
       capacity: capacity || null,
       salesSeries,

@@ -34,7 +34,10 @@ export type SalesSeriesPoint = {
 };
 
 export type EventStats = {
+  /** Vendidas: tickets de órdenes pagadas (NO incluye reservas pendientes). */
   sold: number;
+  /** Reservadas: tickets de órdenes pending dentro de la ventana de 30 min. */
+  reserved: number;
   validated: number;
   revenueCents: number;
   capacity: number | null;
@@ -46,6 +49,7 @@ export type EventStats = {
     kind: TicketType["kind"];
     priceCents: number;
     capacity: number;
+    /** Vendidas (pagadas) de este tipo — NO incluye reservas. */
     sold: number;
   }>;
   byPromoter: Array<{
