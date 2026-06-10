@@ -58,3 +58,5 @@ package-lock.json
 # Capacitor — APK de prueba (se distribuye fuera de git)
 pasape-debug.apk
 DerivedData/
+
+bun.lock

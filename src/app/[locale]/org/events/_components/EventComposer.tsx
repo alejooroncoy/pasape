@@ -1910,25 +1910,33 @@ function TicketsEditor({
           className="rounded-2xl border border-cart-line bg-cart-bg-elev-2 p-3"
           style={{ boxShadow: `inset 0 0 0 1px ${TICKET_KIND_META[t.kind].tint}` }}
         >
-          <div className="flex items-center gap-2">
-            <input
-              value={t.name}
-              onChange={(e) => update(t.rowKey, { name: e.target.value })}
-              className="flex-1 bg-transparent text-[15px] font-semibold tracking-[-0.01em] text-white outline-none placeholder:text-cart-ink-3 border-b border-white/20 pb-0.5 focus:border-cart-accent transition-colors"
-              placeholder="Nombre — ej. General, VIP, After"
-            />
-            {tickets.length > 1 && (
-              <button
-                type="button"
-                onClick={() => remove(t.rowKey)}
-                className="grid size-7 place-items-center rounded-full text-cart-ink-3 transition hover:bg-white/5 hover:text-red-300"
-                aria-label="Eliminar"
-              >
-                <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
-                  <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                </svg>
-              </button>
-            )}
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[9.5px] font-semibold uppercase tracking-[0.12em] text-cart-ink-4">
+              Nombre · tócalo para editar
+            </span>
+            <div className="flex items-center gap-2">
+              <svg width="12" height="12" viewBox="0 0 14 14" fill="none" className="shrink-0 text-cart-ink-3">
+                <path d="M9.5 2.5l2 2-7 7H2.5v-2l7-7z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+              </svg>
+              <input
+                value={t.name}
+                onChange={(e) => update(t.rowKey, { name: e.target.value })}
+                className="flex-1 bg-transparent text-[15px] font-semibold tracking-[-0.01em] text-white outline-none placeholder:text-cart-ink-3 border-b border-white/20 pb-0.5 focus:border-cart-accent transition-colors"
+                placeholder="Nombre — ej. General, VIP, After"
+              />
+              {tickets.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => remove(t.rowKey)}
+                  className="grid size-7 place-items-center rounded-full text-cart-ink-3 transition hover:bg-white/5 hover:text-red-300"
+                  aria-label="Eliminar"
+                >
+                  <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
+                    <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                  </svg>
+                </button>
+              )}
+            </div>
           </div>
           <div className="mt-3 grid grid-cols-2 gap-2">
             <div className="relative">
@@ -2029,26 +2037,33 @@ function TicketsEditor({
             className="rounded-2xl border border-cart-line bg-cart-bg-elev-2 p-3"
             style={{ boxShadow: `inset 0 0 0 1px ${TICKET_KIND_META[t.kind].tint}` }}
           >
-            <div className="flex items-center gap-2">
-              <input
-                value={t.name}
-                onChange={(e) => update(t.rowKey, { name: e.target.value })}
-                className="flex-1 bg-transparent text-[15px] font-semibold tracking-[-0.01em] text-white outline-none placeholder:text-cart-ink-3 border-b border-white/20 pb-0.5 focus:border-cart-accent transition-colors"
-                placeholder="Nombre — ej. Box VIP, Mesa Premium"
-              />
-              <KindPicker value={t.kind} onChange={(k) => update(t.rowKey, { kind: k })} />
-              {tickets.length > 1 && (
-                <button
-                  type="button"
-                  onClick={() => remove(t.rowKey)}
-                  className="grid size-7 place-items-center rounded-full text-cart-ink-3 transition hover:bg-white/5 hover:text-red-300"
-                  aria-label="Eliminar"
-                >
-                  <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
-                    <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                  </svg>
-                </button>
-              )}
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[9.5px] font-semibold uppercase tracking-[0.12em] text-cart-ink-4">
+                Nombre · tócalo para editar
+              </span>
+              <div className="flex items-center gap-2">
+                <svg width="12" height="12" viewBox="0 0 14 14" fill="none" className="shrink-0 text-cart-ink-3">
+                  <path d="M9.5 2.5l2 2-7 7H2.5v-2l7-7z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+                </svg>
+                <input
+                  value={t.name}
+                  onChange={(e) => update(t.rowKey, { name: e.target.value })}
+                  className="flex-1 bg-transparent text-[15px] font-semibold tracking-[-0.01em] text-white outline-none placeholder:text-cart-ink-3 border-b border-white/20 pb-0.5 focus:border-cart-accent transition-colors"
+                  placeholder="Nombre — ej. Box VIP, Mesa Premium"
+                />
+                {tickets.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => remove(t.rowKey)}
+                    className="grid size-7 place-items-center rounded-full text-cart-ink-3 transition hover:bg-white/5 hover:text-red-300"
+                    aria-label="Eliminar"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
+                      <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                    </svg>
+                  </button>
+                )}
+              </div>
             </div>
             <div className="mt-3 grid grid-cols-2 gap-2">
               <Stepper label="Precio" suffix="S/" value={t.priceSoles} onChange={(v) => update(t.rowKey, { priceSoles: v })} />
@@ -2145,44 +2160,6 @@ function TicketsEditor({
   );
 }
 
-function AddKindButton({ kind, onClick }: { kind: TicketKind; onClick: () => void }) {
-  const meta = TICKET_KIND_META[kind];
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-cart-line-strong px-3.5 py-1.5 text-[12.5px] font-medium text-cart-ink-2 transition hover:border-white/40 hover:text-white"
-    >
-      <span className="size-1.5 rounded-full" style={{ background: meta.tint }} />
-      + {meta.label}
-    </button>
-  );
-}
-
-function KindPicker({
-  value,
-  onChange,
-}: {
-  value: TicketKind;
-  onChange: (k: TicketKind) => void;
-}) {
-  const meta = TICKET_KIND_META[value];
-  const order: TicketKind[] = ["general", "vip", "box"];
-  const next = () => {
-    const idx = order.indexOf(value);
-    onChange(order[(idx + 1) % order.length]);
-  };
-  return (
-    <button
-      type="button"
-      onClick={next}
-      className="inline-flex items-center gap-1.5 rounded-full bg-cart-bg-elev px-2.5 py-1 text-[11px] font-semibold tracking-[0.06em] text-cart-ink-2 transition hover:text-white"
-    >
-      <span className="size-1.5 rounded-full" style={{ background: meta.tint }} />
-      {meta.label.toUpperCase()}
-    </button>
-  );
-}
 
 function Stepper({
   label,
@@ -2641,7 +2618,7 @@ function BulkBoxCreator({
 
         <div className="flex-1 overflow-y-auto px-5 py-5">
           {/* 1 — Zona */}
-          <BulkStep number={1} title="Zona del venue">
+          <BulkStep number={1} title="Zona">
             <div className="flex flex-col gap-2">
               <input
                 value={zone}
@@ -2681,8 +2658,8 @@ function BulkBoxCreator({
             </div>
           </BulkStep>
 
-          {/* 2 — Tipo (noun) */}
-          <BulkStep number={2} title="¿Cómo les llamas?">
+          {/* 2 — Nombre de espacio */}
+          <BulkStep number={2} title="Nombre de espacio">
             <div className="flex flex-wrap gap-1.5">
               {NOUN_PRESETS.map((p) => (
                 <button
@@ -2853,9 +2830,6 @@ function UnitNounPicker({
 
   return (
     <div className="mt-2 flex flex-col gap-1.5 rounded-xl bg-cart-bg-elev px-3 py-2">
-      <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">
-        Tipo
-      </span>
       <div className="flex flex-wrap gap-1.5">
         {presets.map((p) => {
           const active = lower === p;
