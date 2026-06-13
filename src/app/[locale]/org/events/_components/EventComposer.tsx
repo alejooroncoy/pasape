@@ -30,10 +30,12 @@ import { VenueInput, type VenueValue } from "@/components/ui/VenueInput";
 import type { OrgPromoter } from "@/server/promoters/domain/OrgPromoter";
 import type {
   Event as EventDomain,
+  EventCategory,
   PromoKind,
   TicketType,
   TicketTypeKind,
 } from "@/server/events/domain/Event";
+import { CATEGORIES } from "../../../_home/categories";
 import { createSupabaseBrowserClient } from "@/server/_shared/supabase/client";
 
 // ============================================================
@@ -234,6 +236,7 @@ export function EventComposer(props: EventComposerProps) {
     return {
       title: ev.title,
       description: ev.description ?? "",
+      category: ev.category ?? null,
       date,
       time,
       durationHours: durationHoursFromEdit > 0 ? String(durationHoursFromEdit) : "",
@@ -266,6 +269,9 @@ export function EventComposer(props: EventComposerProps) {
 
   const [title, setTitle] = useState(seedFromEdit?.title ?? "");
   const [description, setDescription] = useState(seedFromEdit?.description ?? "");
+  // Preseleccionada en "fiestas" (categoría dominante del ICP nightlife) y requerida:
+  // los chips funcionan como radio, nunca queda en null → el evento siempre es filtrable.
+  const [category, setCategory] = useState<EventCategory>(seedFromEdit?.category ?? "fiestas");
   const [date, setDate] = useState(seedFromEdit?.date ?? "");
   const [time, setTime] = useState(seedFromEdit?.time ?? "");
   const [durationHours, setDurationHours] = useState(seedFromEdit?.durationHours ?? "");
@@ -475,6 +481,7 @@ export function EventComposer(props: EventComposerProps) {
       const ev = await create.mutateAsync({
         title: title.trim(),
         description: description.trim() || null,
+        category,
         venue: venue.name.trim() || null,
         venueLat: venue.lat,
         venueLng: venue.lng,
@@ -563,6 +570,7 @@ export function EventComposer(props: EventComposerProps) {
       if (trimTitle !== ev.title) patch.title = trimTitle;
       const nextDesc = description.trim() || null;
       if (nextDesc !== ev.description) patch.description = nextDesc;
+      if (category !== (ev.category ?? null)) patch.category = category;
       const nextVenueName = venue.name.trim() || null;
       if (nextVenueName !== ev.venue) patch.venue = nextVenueName;
       if (venue.lat !== ev.venueLat) patch.venueLat = venue.lat;
@@ -805,6 +813,44 @@ export function EventComposer(props: EventComposerProps) {
             highlight={highlight === "nombre"}
           />
 
+          {/* Categoría — junto al nombre: define "qué es" el evento. Requerida (default fiestas). */}
+          <div className="rounded-2xl border border-cart-line bg-cart-bg-elev px-4 py-3">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">
+                Categoría
+              </span>
+              {CATEGORIES.map(({ id, label, color }) => {
+                const active = category === id;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setCategory(id)}
+                    className={`rounded-full border px-3 py-1 text-[11.5px] font-medium transition-colors ${
+                      active ? "" : "border-cart-line text-cart-ink-3 hover:border-cart-line-strong hover:text-white"
+                    }`}
+                    style={
+                      active
+                        ? { borderColor: color, background: `${color}1f`, color: "#fff" }
+                        : undefined
+                    }
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Descripción — junto a nombre/categoría: completa el "de qué va" el evento */}
+          <CardButton
+            icon={<IconText />}
+            label="Descripción"
+            hint={description ? truncate(description, 80) : "Opcional — vibras, lineup, dress code"}
+            onClick={() => setOpenSheet("description")}
+            active={!!description.trim()}
+          />
+
           {/* Fecha + hora */}
           <div
             className={
@@ -909,15 +955,6 @@ export function EventComposer(props: EventComposerProps) {
               />
             </FieldShell>
           </Card>
-
-          {/* Descripción */}
-          <CardButton
-            icon={<IconText />}
-            label="Descripción"
-            hint={description ? truncate(description, 80) : "Opcional — vibras, lineup, dress code"}
-            onClick={() => setOpenSheet("description")}
-            active={!!description.trim()}
-          />
 
           {/* Tickets */}
           <CardButton

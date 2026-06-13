@@ -9,9 +9,9 @@ export type PresaleTier = {
 };
 
 export type EventCategory =
-  | "musica"
-  | "dj_sets"
-  | "after_office"
+  | "conciertos"
+  | "fiestas"
+  | "festivales"
   | "comedia"
   | "cultura"
   | "deportes";

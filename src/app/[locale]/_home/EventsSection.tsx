@@ -3,6 +3,7 @@
 import { Link } from "@/i18n/navigation";
 import { useBrowseEvents } from "@/lib/events/hooks/useEvents";
 import type { Event, EventCategory } from "@/server/events/domain/Event";
+import { CATEGORIES } from "./categories";
 
 const shortDay = (iso: string, tz: string) =>
   new Intl.DateTimeFormat("es-PE", {
@@ -11,15 +12,6 @@ const shortDay = (iso: string, tz: string) =>
     day: "numeric",
     month: "short",
   }).format(new Date(iso));
-
-const CATS: Array<{ id: EventCategory; label: string }> = [
-  { id: "musica",       label: "Música"       },
-  { id: "dj_sets",      label: "DJ Sets"      },
-  { id: "after_office", label: "After-office"  },
-  { id: "comedia",      label: "Comedia"       },
-  { id: "cultura",      label: "Cultura"       },
-  { id: "deportes",     label: "Deportes"      },
-];
 
 function CardSkeleton() {
   return (
@@ -121,19 +113,23 @@ export function EventsSection({ sectionRef, category, onCategoryChange, search }
           >
             Todos
           </button>
-          {CATS.map(({ id, label }) => (
-            <button
-              key={id}
-              onClick={() => onCategoryChange(category === id ? null : id)}
-              className={`rounded-full border px-3.5 py-1.5 text-[12.5px] font-medium transition-colors duration-150 ${
-                category === id
-                  ? "border-cart-accent bg-cart-accent/15 text-white"
-                  : "border-cart-line bg-transparent text-white/45 hover:text-white/70 hover:border-white/20"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
+          {CATEGORIES.map(({ id, label, color }) => {
+            const active = category === id;
+            return (
+              <button
+                key={id}
+                onClick={() => onCategoryChange(active ? null : id)}
+                className="rounded-full border px-3.5 py-1.5 text-[12.5px] font-medium transition-colors duration-150"
+                style={{
+                  borderColor: active ? color : "var(--color-cart-line)",
+                  background: active ? `${color}26` : "transparent",
+                  color: active ? "#fff" : "rgba(255,255,255,0.45)",
+                }}
+              >
+                {label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
