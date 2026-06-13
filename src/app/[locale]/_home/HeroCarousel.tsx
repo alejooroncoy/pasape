@@ -7,8 +7,8 @@ import type { Event } from "@/server/events/domain/Event";
 
 const DURATION = 5000;
 
-const shortMeta = (iso: string, tz: string, venue: string | null) => {
-  const date = new Intl.DateTimeFormat("es-PE", {
+const shortDate = (iso: string, tz: string) =>
+  new Intl.DateTimeFormat("es-PE", {
     timeZone: tz,
     weekday: "short",
     day: "numeric",
@@ -16,32 +16,6 @@ const shortMeta = (iso: string, tz: string, venue: string | null) => {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(iso));
-  return venue ? `${date} · ${venue}` : date;
-};
-
-/* ─── Slide background ───────────────────────────────────────────────────── */
-function SlideBg({ event, active }: { event: Event; active: boolean }) {
-  return (
-    <div
-      className={`absolute inset-0 transition-opacity duration-[900ms] ${active ? "opacity-100 z-[1]" : "opacity-0 z-0"}`}
-      aria-hidden={!active}
-    >
-      {event.coverUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={event.coverUrl}
-          alt=""
-          className="absolute inset-0 h-full w-full object-cover"
-        />
-      ) : (
-        <div
-          className="absolute inset-0"
-          style={{ background: "linear-gradient(150deg,#0f0020 0%,#3b0764 40%,#7c3aed 100%)" }}
-        />
-      )}
-    </div>
-  );
-}
 
 /* ─── Skeleton ───────────────────────────────────────────────────────────── */
 function Skeleton() {
@@ -64,7 +38,6 @@ export function HeroCarousel() {
 
   const go = (i: number) => setCur((i + total) % total);
 
-  // Reset progress on slide change
   useEffect(() => {
     setProgress(0);
     if (progTimer.current) clearInterval(progTimer.current);
@@ -76,7 +49,6 @@ export function HeroCarousel() {
     return () => { if (progTimer.current) clearInterval(progTimer.current); };
   }, [cur, total]);
 
-  // Auto-advance
   useEffect(() => {
     if (paused || total <= 1) {
       if (autoTimer.current) clearInterval(autoTimer.current);
@@ -96,7 +68,6 @@ export function HeroCarousel() {
     );
   }
 
-  // Sin eventos: fallback estático
   if (total === 0) {
     return (
       <section className="relative pt-[clamp(20px,3vw,36px)]">
@@ -137,43 +108,87 @@ export function HeroCarousel() {
           className="relative overflow-hidden rounded-[20px] border border-cart-line"
           style={{ aspectRatio: "16/9", boxShadow: "0 32px 64px -20px rgba(0,0,0,0.7)" }}
         >
-          {/* Slides */}
+          {/* Fondo: flyer difuminado como atmósfera */}
           {list.map((e, i) => (
-            <SlideBg key={e.id} event={e} active={i === cur} />
+            <div
+              key={e.id}
+              className={`absolute inset-0 transition-opacity duration-[900ms] ${i === cur ? "opacity-100 z-[1]" : "opacity-0 z-0"}`}
+              aria-hidden
+            >
+              {e.coverUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={e.coverUrl}
+                  alt=""
+                  className="absolute inset-0 h-full w-full object-cover"
+                  style={{ filter: "blur(32px) saturate(1.3)", transform: "scale(1.08)" }}
+                />
+              ) : (
+                <div
+                  className="absolute inset-0"
+                  style={{ background: "linear-gradient(150deg,#0f0020 0%,#3b0764 40%,#7c3aed 100%)" }}
+                />
+              )}
+              <div className="absolute inset-0" style={{ background: "rgba(4,4,8,0.78)" }} />
+            </div>
           ))}
 
-          {/* Scrim — solo desde abajo */}
-          <div
-            className="pointer-events-none absolute inset-0 z-[2]"
-            style={{ background: "linear-gradient(to top, rgba(4,4,8,0.97) 0%, rgba(4,4,8,0.75) 26%, rgba(4,4,8,0.08) 52%, transparent 72%)" }}
-          />
+          {/* Layout split: flyer | info */}
+          <div className="absolute inset-0 z-[2] flex">
+            {/* ── Flyer thumbnail ── */}
+            <div className="flex items-center justify-center p-[clamp(16px,3vw,40px)]" style={{ width: "42%" }}>
+              <div className="relative h-full w-full overflow-hidden rounded-[14px] shadow-[0_16px_48px_-8px_rgba(0,0,0,0.7)]" style={{ maxWidth: "340px", maxHeight: "100%" }}>
+                {list.map((e, i) => (
+                  <div
+                    key={e.id}
+                    className={`absolute inset-0 transition-opacity duration-[900ms] ${i === cur ? "opacity-100" : "opacity-0"}`}
+                  >
+                    {e.coverUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={e.coverUrl}
+                        alt={e.title}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div
+                        className="h-full w-full"
+                        style={{ background: "linear-gradient(150deg,#0f0020 0%,#3b0764 40%,#7c3aed 100%)" }}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
 
-          {/* Contenido principal */}
-          <div
-            className="absolute z-[3]"
-            style={{
-              left: "clamp(24px,4vw,52px)",
-              right: "clamp(24px,4vw,52px)",
-              bottom: "calc(60px + clamp(20px,3vw,40px))",
-            }}
-          >
-            <p className="m-0 mb-2 text-[12px] text-white/35 font-sans tracking-[0.01em]">
-              {shortMeta(ev.startsAt, ev.timezone, ev.venue ?? null)}
-            </p>
-            <h1 className="m-0 mb-5 font-sans text-[clamp(28px,5vw,66px)] font-bold leading-[0.92] tracking-[-0.04em] text-white">
-              {ev.title}
-            </h1>
-            <Link
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              href={`/events/${ev.slug}` as any}
-              className="inline-flex items-center gap-2.5 rounded-full bg-cart-accent px-6 py-3 text-[13.5px] font-bold text-white transition-[filter] hover:brightness-110"
-              style={{ boxShadow: "0 6px 24px -6px var(--color-cart-accent-glow-strong)" }}
+            {/* ── Info del evento ── */}
+            <div
+              className="flex flex-1 flex-col justify-center pb-[60px]"
+              style={{ paddingRight: "clamp(24px,4vw,56px)" }}
             >
-              Comprar entradas
-              <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden>
-                <path d="M2.5 7h9M8 3.5 11.5 7 8 10.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </Link>
+              <p className="m-0 mb-3 text-[clamp(10px,1.1vw,13px)] font-medium text-white/55 font-sans tracking-[0.04em] uppercase">
+                {shortDate(ev.startsAt, ev.timezone)}
+              </p>
+              {ev.venue && (
+                <p className="m-0 mb-3 text-[clamp(11px,1.2vw,14px)] text-white/50 font-sans">
+                  {ev.venue}
+                </p>
+              )}
+              <h1 className="m-0 mb-6 font-sans text-[clamp(26px,4vw,60px)] font-bold leading-[0.92] tracking-[-0.04em] text-white">
+                {ev.title}
+              </h1>
+              <Link
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                href={`/events/${ev.slug}` as any}
+                className="inline-flex w-fit items-center gap-2.5 rounded-full bg-cart-accent px-6 py-3 text-[13.5px] font-bold text-white transition-[filter] hover:brightness-110"
+                style={{ boxShadow: "0 6px 24px -6px var(--color-cart-accent-glow-strong)" }}
+              >
+                Comprar entradas
+                <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden>
+                  <path d="M2.5 7h9M8 3.5 11.5 7 8 10.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </Link>
+            </div>
           </div>
 
           {/* Barra glass inferior */}
@@ -181,7 +196,6 @@ export function HeroCarousel() {
             className="absolute bottom-0 left-0 right-0 z-[4] border-t border-white/[0.06]"
             style={{ background: "rgba(6,6,12,0.65)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)" }}
           >
-            {/* Barra de progreso */}
             {total > 1 && (
               <div className="h-[2px] bg-white/[0.06]">
                 <div
@@ -190,8 +204,6 @@ export function HeroCarousel() {
                 />
               </div>
             )}
-
-            {/* Controles */}
             <div className="flex items-center justify-between px-[clamp(16px,3vw,44px)] py-[10px]">
               <span className="text-[11px] text-white/25 font-sans tracking-[0.03em]">
                 {cur + 1} de {total} eventos
