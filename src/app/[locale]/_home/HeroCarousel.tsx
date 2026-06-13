@@ -137,19 +137,34 @@ export function HeroCarousel() {
           <div className="absolute inset-0 z-[2] flex">
             {/* ── Flyer thumbnail ── */}
             <div className="flex items-center justify-center p-[clamp(16px,3vw,40px)]" style={{ width: "42%" }}>
-              <div className="relative h-full w-full overflow-hidden rounded-[14px] shadow-[0_16px_48px_-8px_rgba(0,0,0,0.7)]" style={{ maxWidth: "340px", maxHeight: "100%" }}>
+              {/* Aspecto 3/4 fijo — funciona tanto para flyers verticales como horizontales */}
+              <div
+                className="relative overflow-hidden rounded-[14px] shadow-[0_16px_48px_-8px_rgba(0,0,0,0.7)]"
+                style={{ aspectRatio: "3/4", height: "min(100%, 420px)", maxWidth: "320px" }}
+              >
                 {list.map((e, i) => (
                   <div
                     key={e.id}
                     className={`absolute inset-0 transition-opacity duration-[900ms] ${i === cur ? "opacity-100" : "opacity-0"}`}
                   >
                     {e.coverUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={e.coverUrl}
-                        alt={e.title}
-                        className="h-full w-full object-cover"
-                      />
+                      <>
+                        {/* Blur de fondo para rellenar huecos en flyers horizontales */}
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={e.coverUrl}
+                          alt=""
+                          aria-hidden
+                          className="absolute inset-0 h-full w-full object-cover"
+                          style={{ filter: "blur(16px) brightness(0.5)", transform: "scale(1.1)" }}
+                        />
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={e.coverUrl}
+                          alt={e.title}
+                          className="absolute inset-0 h-full w-full object-contain"
+                        />
+                      </>
                     ) : (
                       <div
                         className="h-full w-full"
