@@ -1,24 +1,12 @@
 "use client";
 
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
+import { makeQueryClient } from "./query-client-config";
 
 export const QueryProvider = ({ children }: { children: ReactNode }) => {
-  const [client] = useState(
-    () =>
-      new QueryClient({
-        defaultOptions: {
-          queries: {
-            staleTime: 30_000,
-            // gcTime explícito: las queries inactivas se liberan a los 5 min en
-            // vez de quedar reteniendo memoria durante sesiones largas (sobre
-            // todo en Capacitor, donde la sesión dura horas).
-            gcTime: 5 * 60_000,
-            retry: 1,
-            refetchOnWindowFocus: false,
-          },
-        },
-      }),
-  );
+  // Una instancia estable por montaje del cliente. La config vive en
+  // query-client-config para compartirla con el prefetch server-side.
+  const [client] = useState(makeQueryClient);
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 };
