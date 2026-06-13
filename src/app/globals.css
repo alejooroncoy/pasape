@@ -55,6 +55,10 @@ body {
   box-sizing: border-box;
 }
 
+button, [role="button"], a {
+  cursor: pointer;
+}
+
 @keyframes pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.5; transform: scale(0.85); }
@@ -63,6 +67,22 @@ body {
 @keyframes slide-in {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+/* Barra de progreso del hero: llena de 0 a 100 % en el compositor (GPU).
+   Al terminar, el componente escucha onAnimationEnd y avanza el slide.
+   La clase referencia el keyframe para que Lightning CSS (Tailwind v4) no lo
+   elimine como "no usado" — el animation inline solo no basta. */
+@keyframes hero-progress {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+.hero-progress-bar {
+  transform-origin: left;
+  animation-name: hero-progress;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+  /* animation-duration se pasa inline (DURATION_MS) como longhand */
 }
 
 /* Antes envolvía el mockup del teléfono en un canvas oscuro.
@@ -79,6 +99,11 @@ body {
 .cart-grain {
   position: relative;
 }
+@keyframes qr-fade-in {
+  from { opacity: 0; transform: scale(0.97); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
 .cart-grain::before {
   content: "";
   position: fixed;

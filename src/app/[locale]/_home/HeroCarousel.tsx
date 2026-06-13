@@ -1,11 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import { Link } from "@/i18n/navigation";
 import { useBrowseEvents } from "@/lib/events/hooks/useEvents";
 import type { Event } from "@/server/events/domain/Event";
 
-const DURATION = 5000;
+// Duración del auto-avance. La barra (.hero-progress-bar) anima de 0 a 100 % en
+// este tiempo y, al terminar, onAnimationEnd avanza el slide.
+const DURATION_MS = 5000;
 
 const shortDate = (iso: string, tz: string) =>
   new Intl.DateTimeFormat("es-PE", {
@@ -29,34 +32,46 @@ export function HeroCarousel() {
   const events = useBrowseEvents();
   const [cur, setCur] = useState(0);
   const [paused, setPaused] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const autoTimer = useRef<ReturnType<typeof setInterval> | null>(null);
-  const progTimer = useRef<ReturnType<typeof setInterval> | null>(null);
-
+  // Ratio (ancho/alto) de cada flyer, medido al cargar. El marco del thumbnail
+  // adopta el ratio del flyer actual → los horizontales llenan sin barras.
+  const [ratios, setRatios] = useState<Record<string, number>>({});
   const list = events.data ?? [];
   const total = list.length;
 
-  const go = (i: number) => setCur((i + total) % total);
+  // Navegación manual: cambia de slide (key={cur} reinicia la barra desde 0) y
+  // reanuda la animación — si no, al clickear las flechas con el cursor sobre
+  // el carrusel quedaría pausada en 0 % por el hover.
+  const go = (i: number) => {
+    setCur((i + total) % total);
+    setPaused(false);
+  };
 
-  useEffect(() => {
-    setProgress(0);
-    if (progTimer.current) clearInterval(progTimer.current);
-    if (total <= 1) return;
-    progTimer.current = setInterval(
-      () => setProgress(p => Math.min(p + 100 / (DURATION / 100), 100)),
-      100,
-    );
-    return () => { if (progTimer.current) clearInterval(progTimer.current); };
-  }, [cur, total]);
+  // Swipe horizontal en móvil (el ICP navega sobre todo con el dedo).
+  const touchX = useRef<number | null>(null);
+  const onTouchStart = (e: React.TouchEvent) => {
+    touchX.current = e.touches[0].clientX;
+  };
+  const onTouchEnd = (e: React.TouchEvent) => {
+    if (touchX.current == null) return;
+    const dx = e.changedTouches[0].clientX - touchX.current;
+    if (Math.abs(dx) > 40) go(cur + (dx < 0 ? 1 : -1));
+    touchX.current = null;
+  };
 
+  // Pre-mide el ratio de cada flyer para que el marco ya tenga la orientación
+  // correcta antes del fade (evita un salto de tamaño al cargar la imagen).
   useEffect(() => {
-    if (paused || total <= 1) {
-      if (autoTimer.current) clearInterval(autoTimer.current);
-      return;
-    }
-    autoTimer.current = setInterval(() => setCur(c => (c + 1) % total), DURATION);
-    return () => { if (autoTimer.current) clearInterval(autoTimer.current); };
-  }, [paused, total]);
+    list.forEach((e) => {
+      if (!e.coverUrl) return;
+      const img = new Image();
+      img.onload = () =>
+        setRatios((r) =>
+          r[e.id] ? r : { ...r, [e.id]: img.naturalWidth / img.naturalHeight },
+        );
+      img.src = e.coverUrl;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [total]);
 
   if (events.isLoading) {
     return (
@@ -96,17 +111,23 @@ export function HeroCarousel() {
   }
 
   const ev = list[cur];
+  // Dos formatos FIJOS para que el marco no cambie de tamaño entre flyers:
+  // apaisado → caja banner (ancho fijo); vertical/cuadrado → caja retrato (usa
+  // toda la altura). motion anima el cambio de tamaño entre orientaciones.
+  const curRatio = ev ? ratios[ev.id] : undefined;
+  const isLandscape = !!curRatio && curRatio >= 1.15;
+  const box = isLandscape ? { width: 440, height: 294 } : { width: 352, height: 440 };
 
   return (
     <section
       className="relative pt-[clamp(20px,3vw,36px)]"
-      onMouseEnter={() => setPaused(true)}
-      onMouseLeave={() => setPaused(false)}
     >
       <div className="mx-auto max-w-[1320px] px-[clamp(20px,4vw,56px)]">
         <div
-          className="relative overflow-hidden rounded-[20px] border border-cart-line"
-          style={{ aspectRatio: "16/9", boxShadow: "0 32px 64px -20px rgba(0,0,0,0.7)" }}
+          className="relative h-[560px] overflow-hidden rounded-[20px] border border-cart-line sm:h-auto sm:aspect-[16/9]"
+          style={{ boxShadow: "0 32px 64px -20px rgba(0,0,0,0.7)" }}
+          onTouchStart={onTouchStart}
+          onTouchEnd={onTouchEnd}
         >
           {/* Fondo: flyer difuminado como atmósfera */}
           {list.map((e, i) => (
@@ -133,47 +154,55 @@ export function HeroCarousel() {
             </div>
           ))}
 
-          {/* Layout split: flyer | info */}
-          <div className="absolute inset-0 z-[2] flex">
+          {/* ===== DESKTOP: split flyer | info ===== El hover pausa SOLO aquí
+              (contenido), no en el footer de flechas/contador. */}
+          <div
+            className="absolute inset-0 z-[2] hidden sm:flex"
+            onMouseEnter={() => setPaused(true)}
+            onMouseLeave={() => setPaused(false)}
+          >
             {/* ── Flyer thumbnail ── */}
             <div className="flex items-center justify-center p-[clamp(16px,3vw,40px)]" style={{ width: "42%" }}>
-              {/* Aspecto 3/4 fijo — funciona tanto para flyers verticales como horizontales */}
-              <div
+              {/* Marco de tamaño fijo por orientación; motion anima el cambio de
+                  tamaño y AnimatePresence hace el fade entre slides (un flyer a
+                  la vez), evitando que la foto anterior quede atrapada al saltar
+                  de horizontal a vertical. */}
+              <motion.div
                 className="relative overflow-hidden rounded-[14px] shadow-[0_16px_48px_-8px_rgba(0,0,0,0.7)]"
-                style={{ aspectRatio: "3/4", height: "min(100%, 420px)", maxWidth: "320px" }}
+                animate={{ width: box.width, height: box.height }}
+                transition={{ duration: 0.45, ease: [0.32, 0.72, 0, 1] }}
+                style={{ maxWidth: "100%" }}
               >
-                {list.map((e, i) => (
-                  <div
-                    key={e.id}
-                    className={`absolute inset-0 transition-opacity duration-[900ms] ${i === cur ? "opacity-100" : "opacity-0"}`}
+                <AnimatePresence initial={false}>
+                  <motion.div
+                    key={ev.id}
+                    className="absolute inset-0"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.6, ease: "easeInOut" }}
                   >
-                    {e.coverUrl ? (
-                      <>
-                        {/* Blur de fondo para rellenar huecos en flyers horizontales */}
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={e.coverUrl}
-                          alt=""
-                          aria-hidden
-                          className="absolute inset-0 h-full w-full object-cover"
-                          style={{ filter: "blur(16px) brightness(0.5)", transform: "scale(1.1)" }}
-                        />
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={e.coverUrl}
-                          alt={e.title}
-                          className="absolute inset-0 h-full w-full object-contain"
-                        />
-                      </>
+                    {ev.coverUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={ev.coverUrl}
+                        alt={ev.title}
+                        onLoad={(imgEv) => {
+                          const img = imgEv.currentTarget;
+                          const ar = img.naturalWidth / img.naturalHeight;
+                          setRatios((r) => (r[ev.id] ? r : { ...r, [ev.id]: ar }));
+                        }}
+                        className="absolute inset-0 h-full w-full object-cover"
+                      />
                     ) : (
                       <div
                         className="h-full w-full"
                         style={{ background: "linear-gradient(150deg,#0f0020 0%,#3b0764 40%,#7c3aed 100%)" }}
                       />
                     )}
-                  </div>
-                ))}
-              </div>
+                  </motion.div>
+                </AnimatePresence>
+              </motion.div>
             </div>
 
             {/* ── Info del evento ── */}
@@ -181,11 +210,11 @@ export function HeroCarousel() {
               className="flex flex-1 flex-col justify-center pb-[60px]"
               style={{ paddingRight: "clamp(24px,4vw,56px)" }}
             >
-              <p className="m-0 mb-3 text-[clamp(10px,1.1vw,13px)] font-medium text-white/55 font-sans tracking-[0.04em] uppercase">
+              <p className="m-0 mb-3 text-[clamp(10px,1.1vw,13px)] font-medium text-white/80 font-sans tracking-[0.04em] uppercase">
                 {shortDate(ev.startsAt, ev.timezone)}
               </p>
               {ev.venue && (
-                <p className="m-0 mb-3 text-[clamp(11px,1.2vw,14px)] text-white/50 font-sans">
+                <p className="m-0 mb-3 text-[clamp(11px,1.2vw,14px)] text-white/70 font-sans">
                   {ev.venue}
                 </p>
               )}
@@ -206,6 +235,57 @@ export function HeroCarousel() {
             </div>
           </div>
 
+          {/* ===== MÓVIL: card de altura fija (no cambia entre slides) con
+              transición animada (fade + slide) al deslizar ===== */}
+          <div className="absolute inset-0 z-[2] sm:hidden">
+            <AnimatePresence initial={false}>
+              <motion.div
+                key={ev.id}
+                className="absolute inset-0 flex flex-col items-center justify-center gap-4 px-5 pb-10 text-center"
+                initial={{ opacity: 0, x: 28 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -28 }}
+                transition={{ duration: 0.4, ease: [0.32, 0.72, 0, 1] }}
+              >
+                {/* Marco fijo 4/5 + object-cover: todos los flyers (horizontal o
+                    vertical) ocupan el mismo tamaño. */}
+                <div className="aspect-[4/5] w-full max-w-[256px] overflow-hidden rounded-[16px] shadow-[0_16px_48px_-8px_rgba(0,0,0,0.7)]">
+                  {ev.coverUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={ev.coverUrl} alt={ev.title} className="h-full w-full object-cover" />
+                  ) : (
+                    <div
+                      className="h-full w-full"
+                      style={{ background: "linear-gradient(150deg,#0f0020 0%,#3b0764 40%,#7c3aed 100%)" }}
+                    />
+                  )}
+                </div>
+                <div className="flex flex-col items-center">
+                  <p className="mb-1.5 text-[11px] font-medium uppercase tracking-[0.04em] text-white/80 font-sans">
+                    {shortDate(ev.startsAt, ev.timezone)}
+                  </p>
+                  <h1 className="m-0 mb-1 line-clamp-2 max-w-[20ch] font-sans text-[21px] font-bold leading-[1.1] tracking-[-0.03em] text-white">
+                    {ev.title}
+                  </h1>
+                  {ev.venue && (
+                    <p className="mb-4 line-clamp-1 text-[12.5px] text-white/65 font-sans">{ev.venue}</p>
+                  )}
+                  <Link
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    href={`/events/${ev.slug}` as any}
+                    className="mt-1 inline-flex items-center gap-2 rounded-full bg-cart-accent px-6 py-2.5 text-[13px] font-bold text-white"
+                    style={{ boxShadow: "0 6px 24px -6px var(--color-cart-accent-glow-strong)" }}
+                  >
+                    Comprar entradas
+                    <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden>
+                      <path d="M2.5 7h9M8 3.5 11.5 7 8 10.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </Link>
+                </div>
+              </motion.div>
+            </AnimatePresence>
+          </div>
+
           {/* Barra glass inferior */}
           <div
             className="absolute bottom-0 left-0 right-0 z-[4] border-t border-white/[0.06]"
@@ -213,24 +293,34 @@ export function HeroCarousel() {
           >
             {total > 1 && (
               <div className="h-[2px] bg-white/[0.06]">
+                {/* Animación CSS pura (compositor/GPU): se llena de 0 a 100 % y
+                    al terminar avisa por onAnimationEnd para avanzar el slide.
+                    key={cur} reinicia la animación en cada slide; el hover la
+                    pausa. Sin timers ni re-render por frame. */}
                 <div
-                  className="h-full bg-cart-accent/70 transition-[width] duration-100 linear"
-                  style={{ width: `${progress}%` }}
+                  key={cur}
+                  className="hero-progress-bar h-full w-full bg-cart-accent/70"
+                  style={{
+                    animationDuration: `${DURATION_MS}ms`,
+                    animationPlayState: paused ? "paused" : "running",
+                  }}
+                  onAnimationEnd={() => setCur((c) => (c + 1) % total)}
                 />
               </div>
             )}
             <div className="flex items-center justify-between px-[clamp(16px,3vw,44px)] py-[10px]">
-              <span className="text-[11px] text-white/25 font-sans tracking-[0.03em]">
+              <span className="text-[12px] font-medium text-white/60 font-sans tracking-[0.03em]">
                 {cur + 1} de {total} eventos
               </span>
               {total > 1 && (
-                <div className="flex gap-1.5">
+                // En móvil se navega con swipe; las flechas son para desktop.
+                <div className="hidden gap-1.5 sm:flex">
                   {([-1, 1] as const).map(dir => (
                     <button
                       key={dir}
                       onClick={() => go(cur + dir)}
                       aria-label={dir === -1 ? "Anterior" : "Siguiente"}
-                      className="flex size-[30px] items-center justify-center rounded-[8px] border border-white/[0.08] bg-transparent text-white/40 transition-colors hover:border-white/20 hover:text-white/70"
+                      className="flex size-[34px] items-center justify-center rounded-[9px] border border-white/15 bg-white/[0.04] text-white/75 transition-colors hover:border-white/30 hover:bg-white/10 hover:text-white"
                     >
                       <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
                         <path d={dir === -1 ? "M9 3 5 7l4 4" : "M5 3l4 4-4 4"} stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />

@@ -9,6 +9,7 @@ import { useEventPartners } from "@/lib/events/hooks/useEventPartners";
 import type { ShowcaseEvent, ShowcaseOrg } from "@/server/events/application/GetEventOrgShowcase";
 import type { EventPartner } from "@/server/events/application/EventPartners";
 import { formatMoney } from "@/lib/_shared/format";
+import { useImagePalette } from "@/lib/_shared/useImagePalette";
 import type { TicketType } from "@/server/events/domain/Event";
 import { VenueLayoutModal } from "@/components/ui/VenueLayoutModal";
 import { PresaleCountdown, shouldCountdown } from "@/components/ui/PresaleCountdown";
@@ -112,24 +113,31 @@ function EventDetailInner({ params }: Props) {
 
   return (
     <div className="min-h-dvh bg-cart-bg text-white">
-      <Hero event={event} startsAt={startsAt} />
-
       <div className="mx-auto w-full max-w-[1120px] px-5 lg:px-8">
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-10 lg:pt-8">
+        <div className="grid gap-8 pt-4 lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-10 lg:pt-8">
           <div className="pb-32 lg:pb-12">
+            {/* Flyer contenido (estilo Joinnus): el afiche vertical se ve
+                completo — nunca recortado — y un gradiente con los colores
+                del propio flyer rellena el marco. */}
+            <FlyerCard event={event} startsAt={startsAt} />
+
             <div className="pt-5 lg:hidden">
-              <DatePill startsAt={startsAt} timezone={event.timezone} />
-              <h1 className="mt-3 text-[30px] font-bold leading-[1.05] tracking-[-0.02em] sm:text-[34px]">
+              <h1 className="text-[30px] font-bold leading-[1.05] tracking-[-0.02em] sm:text-[34px]">
                 {event.title}
               </h1>
-              {event.venue && (
-                <p className="mt-2 text-[14px] text-cart-ink-3">
-                  <LocationIcon /> {event.venue}
-                </p>
-              )}
+              <div className="mt-3 flex flex-col gap-1 text-[14px] text-cart-ink-2">
+                <span className="font-medium">
+                  <CalendarIcon /> {formatLongDate(startsAt, event.timezone)}
+                </span>
+                {event.venue && (
+                  <span className="text-cart-ink-3">
+                    <LocationIcon /> {event.venue}
+                  </span>
+                )}
+              </div>
             </div>
 
-            <div className="hidden lg:block">
+            <div className="hidden lg:block lg:pt-6">
               <h1 className="text-[44px] font-bold leading-[1.02] tracking-[-0.022em]">
                 {event.title}
               </h1>
@@ -147,19 +155,11 @@ function EventDetailInner({ params }: Props) {
 
             {promo && <PromoBanner promo={promo} />}
 
-            {event.description && <DescriptionBlock text={event.description} />}
-
-            {/* Productora del evento — lleva a su vitrina (estilo Passline/Luma). */}
-            {showcase.data?.org && <OrganizerChip org={showcase.data.org} />}
-
-            <FeatureGrid />
-
+            {/* Jerarquía del comprador peruano: 1) flyer, 2) distribución del
+                local, 3) entradas. El plano va ANTES que la descripción — el
+                usuario decide su zona mirando el plano, recién ahí compra. */}
             {event.venueLayoutUrl && (
               <VenueLayoutBanner url={event.venueLayoutUrl} venue={event.venue} />
-            )}
-
-            {partners.data && partners.data.length > 0 && (
-              <PartnersStrip partners={partners.data} />
             )}
 
             <div className="mt-8 lg:hidden">
@@ -174,6 +174,17 @@ function EventDetailInner({ params }: Props) {
               />
             </div>
 
+            {event.description && <DescriptionBlock text={event.description} />}
+
+            {/* Productora del evento — lleva a su vitrina (estilo Passline/Luma). */}
+            {showcase.data?.org && <OrganizerChip org={showcase.data.org} />}
+
+            <FeatureGrid />
+
+            {partners.data && partners.data.length > 0 && (
+              <PartnersStrip partners={partners.data} />
+            )}
+
             {/* Más eventos de la misma productora — cross-sell. */}
             {showcase.data && showcase.data.events.length > 0 && (
               <MoreFromOrg org={showcase.data.org} events={showcase.data.events} />
@@ -181,7 +192,8 @@ function EventDetailInner({ params }: Props) {
           </div>
 
           <aside className="hidden lg:block">
-            <div className="sticky top-6">
+            {/* top-20 = altura del PublicHeader sticky (~57px) + respiro */}
+            <div className="sticky top-20">
               <div className="rounded-3xl border border-cart-line bg-cart-bg-elev p-5 shadow-[0_20px_60px_-20px_rgba(0,0,0,0.6)]">
                 <AvailabilityHeader availability={availability} />
 
@@ -621,50 +633,98 @@ function BoxAvailabilityBar({
 
 /* ============================== Hero ============================== */
 
-function Hero({
+function FlyerCard({
   event,
   startsAt,
 }: {
   event: { title: string; coverUrl: string | null; timezone: string };
   startsAt: Date;
 }) {
+  const palette = useImagePalette(event.coverUrl);
+  // Ratio (ancho/alto) del flyer, medido al cargar la imagen. Permite que el
+  // marco "respire" según la proporción (estilo Posh/DICE): un afiche vertical
+  // toma un marco alto y uno apaisado un marco banner.
+  const [ratio, setRatio] = useState<number | null>(null);
+
+  // Tinte oscuro del propio flyer para el overlay del blur-fill. Mientras
+  // carga o si falla CORS → base de marca.
+  const tint = palette?.dark ?? "#0D0B14";
+
+  // Alto del marco en desktop según el ratio: retrato → alto, apaisado →
+  // banner, cuadrado/intermedio → estándar. Acotado a un rango.
+  const frameH = ratio == null ? 460 : ratio < 0.85 ? 540 : ratio > 1.3 ? 360 : 460;
+
+  // Apaisado → el flyer llena el marco a sangre (object-cover): el recorte es
+  // mínimo porque su ratio ya es ancho, y evita las barras de blur laterales.
+  // Vertical/cuadrado → object-contain + blur-fill (cover recortaría su info).
+  const isWide = ratio != null && ratio > 1.3;
+
   return (
-    <div className="relative w-full overflow-hidden lg:rounded-b-[36px]">
-      <div className="relative aspect-[16/10] w-full sm:aspect-[16/8] lg:aspect-[1120/440]">
-        {event.coverUrl ? (
+    <div className="relative w-full overflow-hidden rounded-[24px] ring-1 ring-white/10 lg:rounded-[28px]">
+      {event.coverUrl ? (
+        // Blur-fill: el propio flyer difuminado llena el marco y toma su color
+        // (estilo Posh/DICE). Funciona con cualquier proporción sin recortar.
+        <div
+          className="absolute inset-0 scale-110 bg-cover bg-center blur-2xl saturate-[1.5]"
+          style={{ backgroundImage: `url("${event.coverUrl}")` }}
+        />
+      ) : (
+        // Sin flyer → gradiente de marca.
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              "linear-gradient(140deg, #4B1F9A 0%, #7C3AED 40%, #FF4D5E 90%)",
+          }}
+        />
+      )}
+      {/* Viñeta tintada con el color del flyer: asienta el afiche sin apagarlo */}
+      <div
+        className="absolute inset-0"
+        style={{
+          background: `radial-gradient(85% 75% at 50% 35%, ${tint}26 25%, ${tint}b3 100%)`,
+        }}
+      />
+
+      <div
+        className={
+          "relative w-full lg:[height:var(--fh)] " +
+          (event.coverUrl ? "" : "aspect-[16/10] lg:aspect-auto")
+        }
+        style={{ ["--fh" as string]: `${frameH}px` }}
+      >
+        {event.coverUrl && (
+          // Mobile: el card toma el ratio natural del flyer (vertical u
+          // horizontal, se ve completo). Desktop: marco adaptativo y el
+          // blur-fill rellena el letterbox.
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={event.coverUrl}
             alt=""
-            className="absolute inset-0 size-full object-cover"
+            onLoad={(e) =>
+              setRatio(
+                e.currentTarget.naturalWidth / e.currentTarget.naturalHeight,
+              )
+            }
+            className={
+              "relative z-[1] mx-auto h-auto max-h-[72vh] w-auto max-w-full rounded-2xl object-contain lg:absolute lg:inset-0 lg:size-full lg:max-h-none " +
+              // Apaisado: llena a sangre y el contenedor lo recorta redondeado
+              // (sin radius propio). Vertical/cuadrado: radius en el afiche.
+              (isWide ? "lg:rounded-none lg:object-cover" : "lg:p-5")
+            }
+            style={
+              isWide
+                ? undefined
+                : { filter: "drop-shadow(0 18px 50px rgba(0,0,0,0.55))" }
+            }
           />
-        ) : (
-          <div
-            className="absolute inset-0"
-            style={{
-              background:
-                "linear-gradient(140deg, #4B1F9A 0%, #7C3AED 40%, #FF4D5E 90%)",
-            }}
-          >
-            <div
-              className="absolute inset-0"
-              style={{
-                backgroundImage:
-                  "radial-gradient(60% 50% at 20% 30%, rgba(255,255,255,0.22), transparent 60%), radial-gradient(60% 50% at 80% 80%, rgba(0,0,0,0.55), transparent 60%)",
-              }}
-            />
-          </div>
         )}
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-32 bg-gradient-to-b from-transparent to-cart-bg" />
 
-        <div className="absolute inset-x-0 top-0 z-10 flex items-start justify-between p-4 sm:p-5 lg:p-6">
+        <div className="absolute inset-x-0 top-0 z-10 flex items-start justify-between p-4 sm:p-5">
           <BackButton />
           <ShareButton title={event.title} />
         </div>
 
-        <div className="absolute bottom-6 left-6 z-10 hidden lg:block">
-          <DatePill startsAt={startsAt} timezone={event.timezone} large />
-        </div>
       </div>
     </div>
   );
@@ -672,27 +732,49 @@ function Hero({
 
 function BackButton() {
   const router = useRouter();
+  const hasHistory = typeof window !== "undefined" && window.history.length > 1;
+  const handleBack = () => {
+    if (hasHistory) {
+      router.back();
+    } else {
+      router.push("/");
+    }
+  };
   return (
     <button
       type="button"
-      onClick={() => router.back()}
-      aria-label="Volver"
+      onClick={handleBack}
+      aria-label={hasHistory ? "Volver" : "Inicio"}
       className="grid size-10 place-items-center rounded-full bg-black/45 text-white backdrop-blur-md transition hover:bg-black/65"
     >
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-        <path
-          d="M10 3L5 8l5 5"
-          stroke="currentColor"
-          strokeWidth="1.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
+      {hasHistory ? (
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <path
+            d="M10 3L5 8l5 5"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      ) : (
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <path
+            d="M2 6.5L8 2l6 4.5V14a.5.5 0 01-.5.5h-4V10h-3v4.5h-4A.5.5 0 012 14V6.5z"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      )}
     </button>
   );
 }
 
 function ShareButton({ title }: { title: string }) {
+  const [copied, setCopied] = useState(false);
+
   const onShare = async () => {
     if (typeof navigator !== "undefined" && navigator.share) {
       try {
@@ -704,25 +786,34 @@ function ShareButton({ title }: { title: string }) {
     }
     try {
       await navigator.clipboard?.writeText(window.location.href);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     } catch {}
   };
   return (
-    <button
-      type="button"
-      onClick={onShare}
-      aria-label="Compartir evento"
-      className="grid size-10 place-items-center rounded-full bg-black/45 text-white backdrop-blur-md transition hover:bg-black/65"
-    >
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-        <path
-          d="M8 10V2m0 0L5 5m3-3l3 3M3 10v3a1 1 0 001 1h8a1 1 0 001-1v-3"
-          stroke="currentColor"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    </button>
+    <div className="relative">
+      <button
+        type="button"
+        onClick={onShare}
+        aria-label="Compartir evento"
+        className="grid size-10 place-items-center rounded-full bg-black/45 text-white backdrop-blur-md transition hover:bg-black/65"
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <path
+            d="M8 10V2m0 0L5 5m3-3l3 3M3 10v3a1 1 0 001 1h8a1 1 0 001-1v-3"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
+      {copied && (
+        <div className="absolute top-12 right-0 animate-in fade-in slide-in-from-top-2 duration-200 whitespace-nowrap rounded-lg bg-white/95 px-3 py-1.5 text-[12px] font-medium text-gray-900 shadow-lg backdrop-blur-sm">
+          Copiado en portapapeles
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -904,11 +995,13 @@ function VenueLayoutBanner({
         className="mt-3 group block w-full overflow-hidden rounded-2xl border border-cart-line bg-cart-bg-elev transition hover:border-cart-line-strong"
       >
         <div className="relative aspect-[16/9] w-full">
+          {/* object-contain: el plano se ve completo — recortar un plano de
+              zonas puede ocultar justo la zona que el cliente quiere. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={url}
             alt={venue ? `Plano de ${venue}` : "Plano del local"}
-            className="absolute inset-0 size-full object-cover opacity-90 transition group-hover:opacity-100"
+            className="absolute inset-0 size-full object-contain opacity-90 transition group-hover:opacity-100"
           />
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
           <div className="absolute inset-x-0 bottom-0 flex items-center justify-between px-4 pb-3.5">
@@ -1124,7 +1217,7 @@ function YapeMini() {
 /* ============================== Date helper ============================== */
 
 function formatLongDate(d: Date, timezone: string): string {
-  return new Intl.DateTimeFormat("es-PE", {
+  const s = new Intl.DateTimeFormat("es-PE", {
     timeZone: timezone,
     weekday: "long",
     day: "numeric",
@@ -1133,6 +1226,7 @@ function formatLongDate(d: Date, timezone: string): string {
     minute: "2-digit",
     hour12: false,
   }).format(d);
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 // Marcamos como referenciado para evitar warning de unused export entre archivos.
