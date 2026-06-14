@@ -9,7 +9,6 @@ import {
   useUpdateOrgPromoter,
 } from "@/lib/promoters/hooks/useOrgPromoters";
 import type { OrgPromoter } from "@/server/promoters/domain/OrgPromoter";
-import { formatMoney } from "@/lib/_shared/format";
 import { Money } from "@/lib/_shared/money";
 
 type Params = Promise<{ id: string; locale: string }>;
