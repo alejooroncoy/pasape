@@ -77,6 +77,7 @@ type EventRow = {
   timezone: string;
   status: Event["status"];
   category: EventCategory | null;
+  currency: string;
   total_capacity: number | null;
   overbook_pct: number;
   transfers_enabled: boolean;
@@ -166,6 +167,7 @@ const toEvent = (r: EventRow): Event => ({
   timezone: r.timezone,
   status: r.status,
   category: r.category,
+  currency: r.currency,
   capacity: {
     totalCapacity: r.total_capacity,
     overbookPct: r.overbook_pct,

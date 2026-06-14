@@ -92,7 +92,7 @@ function LivePanel({
         />
         <KpiCard
           label="Recaudado"
-          value={formatMoneyClean(revenue)}
+          value={formatMoneyClean(revenue, ev?.currency)}
           hint="acumulado · S/"
           tone="neutral"
         />
@@ -262,7 +262,7 @@ function FinalReport({
           Total recaudado
         </div>
         <div className="mt-2 font-sans text-[48px] font-semibold leading-none tracking-[-0.04em] lg:text-[60px]">
-          {formatMoneyClean(revenue)}
+          {formatMoneyClean(revenue, ev?.currency)}
         </div>
 
         {/* Trío de stats */}
@@ -371,7 +371,7 @@ function FinalReport({
                         </div>
                         <div className="shrink-0 text-right">
                           <div className="font-mono text-[13px] font-semibold">
-                            {formatMoneyClean(t.revenueCents)}
+                            {formatMoneyClean(t.revenueCents, ev?.currency)}
                           </div>
                           <div className="mt-0.5 text-[11px] text-cart-ink-3">
                             {fillPct}% del cupo
@@ -401,7 +401,7 @@ function FinalReport({
                         </div>
                         <div className="shrink-0 text-right">
                           <div className="font-mono text-[13px] font-semibold">
-                            {formatMoneyClean(boxRevenue)}
+                            {formatMoneyClean(boxRevenue, ev?.currency)}
                           </div>
                           <div className="mt-0.5 text-[11px] text-cart-ink-3">
                             {fillPct}% ocupados
@@ -643,9 +643,9 @@ function DoorHealthBanner({
   );
 }
 
-function formatMoneyClean(cents: number): string {
-  const s = Money.formatClean(cents);
-  return s ? `S/ ${s}` : "S/ 0";
+function formatMoneyClean(cents: number, currency: string = "PEN"): string {
+  // Usa el símbolo correcto por moneda (preparado para multi-mercado).
+  return Money.format(cents, currency);
 }
 
 /* ============================== Partners section ============================== */

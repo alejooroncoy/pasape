@@ -47,6 +47,8 @@ export type Event = {
   timezone: string;
   status: EventStatus;
   category: EventCategory | null;
+  /** Moneda del evento (ISO 4217). Default 'PEN'; preparado para multi-mercado. */
+  currency: string;
   capacity: CapacityPolicy;
   transferPolicy: TransferPolicy;
   version: number;
