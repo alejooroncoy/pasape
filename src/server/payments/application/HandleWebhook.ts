@@ -191,35 +191,13 @@ export const handleMpWebhook = async (
   // puerta) y devolver capacity. Sin esto, una entrada reembolsada seguiría
   // escaneando como válida.
   if ((mapped === "failed" || mapped === "refunded") && orderRow) {
-    const { data: tks } = await db
+    // Anular tickets (no los ya usados) libera el stock. ticket_types.sold lo
+    // recalcula el trigger tickets_sync_sold a partir de los tickets reales.
+    await db
       .from("tickets")
-      .select("id, ticket_type_id")
-      .eq("order_id", orderRow.id);
-    if (tks && tks.length > 0) {
-      await db
-        .from("tickets")
-        .update({ status: "void" })
-        .eq("order_id", orderRow.id)
-        .neq("status", "used");
-      // Decrement sold counters
-      const counts = new Map<string, number>();
-      for (const t of tks as Array<{ ticket_type_id: string }>) {
-        counts.set(t.ticket_type_id, (counts.get(t.ticket_type_id) ?? 0) + 1);
-      }
-      for (const [ttId, n] of counts) {
-        const { data: tt } = await db
-          .from("ticket_types")
-          .select("sold")
-          .eq("id", ttId)
-          .single<{ sold: number }>();
-        if (tt) {
-          await db
-            .from("ticket_types")
-            .update({ sold: Math.max(0, tt.sold - n) })
-            .eq("id", ttId);
-        }
-      }
-    }
+      .update({ status: "void" })
+      .eq("order_id", orderRow.id)
+      .neq("status", "used");
   }
 
   // Audit trail in the canonical `payments` table. Idempotency is handled

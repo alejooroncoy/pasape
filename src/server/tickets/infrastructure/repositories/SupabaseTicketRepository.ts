@@ -304,14 +304,8 @@ export const supabaseTicketRepository: TicketRepository = {
       .select("*");
     if (tkErr || !tkRows) return err(tkErr?.message ?? "tickets_create_failed");
 
-    for (const item of input.items) {
-      const tt = tts.find((t) => t.id === item.ticketTypeId);
-      if (!tt) continue;
-      await db
-        .from("ticket_types")
-        .update({ sold: tt.sold + item.qty })
-        .eq("id", item.ticketTypeId);
-    }
+    // ticket_types.sold lo mantiene el trigger tickets_sync_sold a partir de los
+    // tickets reales — no se toca a mano (antes se desfasaba).
 
     // Órdenes gratuitas: marcar paid inmediatamente, despachar QR, recalc hitos.
     if (total === 0) {
@@ -381,15 +375,8 @@ export const supabaseTicketRepository: TicketRepository = {
       // Si no se pudo crear preferencia, marcamos la order failed para no
       // dejar capacity reservada indefinidamente.
       await db.from("orders").update({ status: "failed" }).eq("id", orderRow.id);
+      // Anular tickets libera el stock: el trigger recalcula ticket_types.sold.
       await db.from("tickets").update({ status: "void" }).eq("order_id", orderRow.id);
-      for (const item of input.items) {
-        const tt = tts.find((t) => t.id === item.ticketTypeId);
-        if (!tt) continue;
-        await db
-          .from("ticket_types")
-          .update({ sold: Math.max(0, tt.sold) })
-          .eq("id", item.ticketTypeId);
-      }
       return err(prefResult.error);
     }
 
