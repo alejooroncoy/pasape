@@ -617,12 +617,29 @@ function QuotaEditor({
         type="button"
         onClick={() => {
           const num = parseInt(local, 10);
-          onChange(local.trim() === "" || isNaN(num) || num < 1 ? null : num);
+          // Vacío/<1 NO se interpreta como ilimitado: se descarta el cambio.
+          // Para quitar el tope hay que usar "Sin límite" explícitamente.
+          if (local.trim() === "" || isNaN(num) || num < 1) {
+            setEditing(false);
+            return;
+          }
+          onChange(num);
           setEditing(false);
         }}
         className="rounded-lg bg-cart-accent px-2 py-1 text-[11px] font-semibold text-white"
       >
         OK
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          onChange(null);
+          setEditing(false);
+        }}
+        title="Quitar el tope de ventas"
+        className="rounded-lg bg-white/8 px-2 py-1 text-[11px] font-medium text-cart-ink-2 hover:bg-white/12"
+      >
+        ∞ Sin límite
       </button>
       <button
         type="button"

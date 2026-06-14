@@ -84,7 +84,7 @@ function LivePanel({
           tone="accent"
         />
         <KpiCard
-          label="Validadas"
+          label="Ingresaron"
           value={validated.toLocaleString("es-PE")}
           hint={sold ? `${validatedPct}% de las vendidas` : "Sin ventas aún"}
           progress={sold ? validatedPct : null}
@@ -539,7 +539,7 @@ function PromoterRow({
       <div className="flex items-baseline gap-3 text-right">
         <span className="font-mono text-[13px] font-semibold">{promoter.ticketsSold}</span>
         <span className="font-mono text-[12.5px] font-semibold text-[#22D17F]">{promoter.ticketsValidated}</span>
-        <span className="hidden font-mono text-[12.5px] text-cart-ink-3 sm:inline">
+        <span className="font-mono text-[12.5px] text-cart-ink-3">
           {formatMoneyClean(promoter.revenueCents)}
         </span>
       </div>

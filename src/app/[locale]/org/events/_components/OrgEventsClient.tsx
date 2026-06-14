@@ -61,6 +61,21 @@ export function OrgEventsClient({ initialOrgSlug }: { initialOrgSlug: string | n
     };
   }, [events.data]);
 
+  // Coincidencias del término de búsqueda en las OTRAS tabs, para no decir
+  // "Sin resultados" cuando el evento existe en otra pestaña.
+  const otherTabMatches = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return [] as Array<{ tab: TabKey; count: number }>;
+    const all = events.data ?? [];
+    return (["upcoming", "past", "draft"] as TabKey[])
+      .filter((t) => t !== tab)
+      .map((t) => ({
+        tab: t,
+        count: all.filter((ev) => classifyEvent(ev) === t && ev.title.toLowerCase().includes(q)).length,
+      }))
+      .filter((x) => x.count > 0);
+  }, [events.data, tab, search]);
+
   return (
     <OrgShell>
       {/* Header — iOS large title on mobile */}
@@ -259,9 +274,25 @@ export function OrgEventsClient({ initialOrgSlug }: { initialOrgSlug: string | n
                     Sin resultados para{" "}
                     <span className="font-medium text-white">“{search}”</span>
                   </p>
-                  <p className="mt-1 text-[12.5px] text-cart-ink-4">
-                    Prueba con otro término o cambia de pestaña.
-                  </p>
+                  {otherTabMatches.length > 0 ? (
+                    <p className="mt-2 flex flex-wrap items-center justify-center gap-1.5 text-[12.5px] text-cart-ink-4">
+                      Pero sí en
+                      {otherTabMatches.map((m) => (
+                        <button
+                          key={m.tab}
+                          type="button"
+                          onClick={() => setTab(m.tab)}
+                          className="rounded-full bg-cart-bg-elev-2 px-2 py-0.5 font-medium text-cart-accent transition hover:bg-white/10"
+                        >
+                          {TABS.find((t) => t.key === m.tab)?.label} ({m.count})
+                        </button>
+                      ))}
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-[12.5px] text-cart-ink-4">
+                      Prueba con otro término.
+                    </p>
+                  )}
                 </div>
               ) : (
                 <EmptyState variant={tab} />

@@ -444,7 +444,8 @@ function BankAccountSheet({
   const submit = async () => {
     setError(null);
     if (!bankName.trim()) return setError("Elige el banco.");
-    if (accountNumber.replace(/\D/g, "").length < 4) return setError("Número de cuenta muy corto.");
+    if (accountNumber.replace(/\D/g, "").length < 8)
+      return setError("El número de cuenta parece incompleto (mínimo 8 dígitos).");
     const cciClean = cci.replace(/\D/g, "");
     if (cciClean && cciClean.length !== 20) return setError("El CCI debe tener exactamente 20 dígitos.");
     try {
