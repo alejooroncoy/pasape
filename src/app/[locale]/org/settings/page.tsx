@@ -98,6 +98,32 @@ export default function OrgSettingsPage() {
     });
   };
 
+  // Carga / sin marca: evitar mostrar inputs vacíos (parece marca borrada).
+  const loadingOrg = orgs.isLoading || me.isLoading;
+  const noOrg = orgs.isFetched && !activeOrg;
+  if (loadingOrg || noOrg) {
+    return (
+      <OrgShell>
+        <div className="mb-8 sm:mb-10">
+          <h1 className="font-sans text-[clamp(34px,7.2vw,42px)] font-bold leading-[1.05] tracking-[-0.035em] text-white">
+            Ajustes
+          </h1>
+        </div>
+        {noOrg ? (
+          <div className="rounded-2xl border border-cart-line bg-cart-bg-elev-2 px-5 py-8 text-center text-[14px] text-cart-ink-3">
+            No encontramos una marca activa. Crea o selecciona una marca para configurarla.
+          </div>
+        ) : (
+          <div className="flex flex-col gap-4">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="h-28 animate-pulse rounded-2xl bg-cart-bg-elev-2" />
+            ))}
+          </div>
+        )}
+      </OrgShell>
+    );
+  }
+
   return (
     <OrgShell>
       <div className="mb-8 sm:mb-10">

@@ -441,8 +441,14 @@ function AssignmentRow({
     const phone = assignment.whatsapp.replace(/[^\d]/g, "");
     window.open(`https://wa.me/${phone}?text=${text}`, "_blank");
   };
+  const inactive = !assignment.active;
   return (
-    <div className="grid grid-cols-1 gap-3 px-4 py-3 lg:grid-cols-[auto_1fr_auto_auto_auto_auto] lg:items-center lg:px-5">
+    <div
+      className={
+        "grid grid-cols-1 gap-3 px-4 py-3 lg:grid-cols-[auto_1fr_auto_auto_auto_auto] lg:items-center lg:px-5 " +
+        (inactive ? "opacity-60" : "")
+      }
+    >
       <div className="flex items-center gap-3">
         <div className="grid size-10 shrink-0 place-items-center rounded-full bg-cart-accent-soft text-[14px] font-semibold text-cart-accent">
           {(assignment.name[0] ?? "?").toUpperCase()}
@@ -452,11 +458,18 @@ function AssignmentRow({
             <span className="truncate text-[14px] font-semibold tracking-[-0.01em]">
               {assignment.name}
             </span>
-            {!assignment.profileId && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/12 px-1.5 py-px text-[9px] font-semibold tracking-[0.08em] text-amber-300">
-                <span className="size-1 rounded-full bg-amber-300" />
-                SIN ACTIVAR
+            {inactive ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-cart-ink-4/15 px-1.5 py-px text-[9px] font-semibold tracking-[0.08em] text-cart-ink-3">
+                <span className="size-1 rounded-full bg-cart-ink-3" />
+                DESACTIVADO
               </span>
+            ) : (
+              !assignment.profileId && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/12 px-1.5 py-px text-[9px] font-semibold tracking-[0.08em] text-amber-300">
+                  <span className="size-1 rounded-full bg-amber-300" />
+                  SIN ACTIVAR
+                </span>
+              )
             )}
           </div>
           <div className="truncate font-mono text-[10.5px] text-cart-ink-3">/r/{assignment.code}</div>
@@ -474,11 +487,13 @@ function AssignmentRow({
         <button
           type="button"
           onClick={onCopy}
-          className="rounded-full bg-cart-bg-elev-2 px-3 py-1.5 text-[12px] font-medium transition hover:bg-white/10"
+          disabled={inactive}
+          title={inactive ? "Link desactivado" : undefined}
+          className="rounded-full bg-cart-bg-elev-2 px-3 py-1.5 text-[12px] font-medium transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-cart-bg-elev-2"
         >
           {copied ? "✓" : "Copiar link"}
         </button>
-        {assignment.whatsapp && (
+        {assignment.whatsapp && !inactive && (
           <button
             type="button"
             onClick={onWa}
