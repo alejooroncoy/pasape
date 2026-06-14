@@ -26,7 +26,10 @@ export function OrgHomeClient() {
   const publishedCount = events.data?.filter((e) => e.status === "published").length ?? 0;
   const draftCount = events.data?.filter((e) => e.status === "draft").length ?? 0;
   const totalCapacity =
-    events.data?.reduce((sum, e) => sum + (e.capacity.totalCapacity ?? 0), 0) ?? 0;
+    events.data?.reduce(
+      (sum, e) => sum + (e.listStats?.capacity ?? e.capacity.totalCapacity ?? 0),
+      0,
+    ) ?? 0;
 
   // Revenue del evento activo (si hay uno publicado). Si hay varios, se suma el primero visible.
   const liveStats = useEventStats(liveEvent?.slug ?? "");
@@ -114,7 +117,7 @@ export function OrgHomeClient() {
                       </p>
                     </div>
                     <div className="grid w-full grid-cols-3 gap-3 sm:w-auto sm:min-w-[360px]">
-                      <MiniStat label="Aforo" value={String(liveEvent.capacity.totalCapacity ?? 0)} />
+                      <MiniStat label="Aforo" value={String(liveStats.data?.capacity ?? liveEvent.capacity.totalCapacity ?? 0)} />
                       <MiniStat label="Validadas" value={String(liveStats.data?.validated ?? 0)} tone="green" />
                       <MiniStat label="Recaudado" value={formatMoney(liveStats.data?.revenueCents ?? 0)} tone="accent" />
                     </div>
