@@ -101,7 +101,7 @@ export const exportEventReport = async (
   for (const t of summary.ticketTypes) {
     wsS.addRow({
       k: t.name,
-      v: `${t.sold} / ${t.capacity} / ${Money.toSoles(t.priceCents * t.sold).toFixed(2)}`,
+      v: `${t.sold} / ${t.capacity} / ${Money.toSoles(t.revenueCents).toFixed(2)}`,
     });
   }
 

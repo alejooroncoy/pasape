@@ -135,7 +135,12 @@ export const supabaseTicketRepository: TicketRepository = {
       });
       priceItems.push({ ticketTypeId: tt.id, qty: item.qty, unitPriceCents: ap.priceCents });
     }
-    const total = applyPromos(priceItems, promos).totalCents;
+    const promoResult = applyPromos(priceItems, promos);
+    const total = promoResult.totalCents;
+    // Subtotal real por tipo (con promos) → para repartir entre los tickets de
+    // cada línea y persistir tickets.price_cents (recaudado por tipo exacto).
+    const subtotalByType = new Map<string, number>();
+    for (const l of promoResult.lines) subtotalByType.set(l.ticketTypeId, l.subtotalCents);
 
     let promoterLinkId: string | null = null;
     let promoterId: string | null = null;
@@ -272,9 +277,17 @@ export const supabaseTicketRepository: TicketRepository = {
       // box_label + box_host_ticket_id apuntando a este ticket host.
       const isBox = !!tt?.box_label;
       const slots = isBox ? 1 : item.qty;
-      return Array.from({ length: slots }).map(() => ({
+      // Repartir el subtotal de la línea entre los tickets generados. Para box,
+      // el único ticket (host) lleva el subtotal completo del box. Para entradas
+      // normales, subtotal/qty por ticket con el resto en el primero — así la
+      // suma de price_cents iguala el subtotal exacto (sin drift por redondeo).
+      const lineSubtotal = subtotalByType.get(item.ticketTypeId) ?? 0;
+      const base = Math.floor(lineSubtotal / slots);
+      const remainder = lineSubtotal - base * slots;
+      return Array.from({ length: slots }).map((_, i) => ({
         order_id: orderRow.id,
         ticket_type_id: item.ticketTypeId,
+        price_cents: base + (i === 0 ? remainder : 0),
         holder_name: item.holderName ?? input.guest?.fullName ?? null,
         holder_email: input.guest?.email ?? null,
         holder_phone: input.guest?.phone ?? null,

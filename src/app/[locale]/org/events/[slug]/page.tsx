@@ -371,7 +371,7 @@ function FinalReport({
                         </div>
                         <div className="shrink-0 text-right">
                           <div className="font-mono text-[13px] font-semibold">
-                            {formatMoneyClean(t.priceCents * t.sold)}
+                            {formatMoneyClean(t.revenueCents)}
                           </div>
                           <div className="mt-0.5 text-[11px] text-cart-ink-3">
                             {fillPct}% del cupo
@@ -387,7 +387,7 @@ function FinalReport({
                 if (boxes.length > 0) {
                   const totalBoxes = boxes.length;
                   const soldBoxes = boxes.filter((b) => b.sold > 0).length;
-                  const boxRevenue = boxes.reduce((s, b) => s + b.priceCents * b.sold, 0);
+                  const boxRevenue = boxes.reduce((s, b) => s + b.revenueCents, 0);
                   const fillPct = totalBoxes > 0 ? Math.round((soldBoxes / totalBoxes) * 100) : 0;
                   const noun = boxes[0]?.name?.split(" ")[0] ?? "Box";
                   rows.push(

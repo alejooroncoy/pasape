@@ -150,7 +150,7 @@ export default function OrgReportPage({ params }: { params: Params }) {
                 </div>
               </div>
               <div style={{ fontFamily: FONT_DISPLAY, fontWeight: 700, fontSize: 14 }}>
-                {formatMoney(t.priceCents * t.sold)}
+                {formatMoney(t.revenueCents)}
               </div>
             </div>
           ))}

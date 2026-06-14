@@ -51,6 +51,8 @@ export type EventStats = {
     capacity: number;
     /** Vendidas (pagadas) de este tipo — NO incluye reservas. */
     sold: number;
+    /** Recaudado real de este tipo (suma de price_cents con promos), en céntimos. */
+    revenueCents: number;
   }>;
   byPromoter: Array<{
     promoterId: string;

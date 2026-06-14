@@ -628,17 +628,24 @@ export const supabaseEventRepository: EventRepository = {
     // NO usamos `ticket_types.sold` porque incluye reservas pendientes.
     const { data: paidTickets } = await db
       .from("tickets")
-      .select("ticket_type_id, order:orders!inner(event_id, status)")
+      .select("ticket_type_id, price_cents, order:orders!inner(event_id, status)")
       .eq("order.event_id", eventId)
       .eq("order.status", "paid")
       .in("status", ["active", "used"]);
     const soldByType = new Map<string, number>();
-    for (const t of (paidTickets as Array<{ ticket_type_id: string }> | null) ?? []) {
+    // Recaudado real por tipo = suma de price_cents de los tickets pagados
+    // (con promos ya aplicadas al momento de la compra). Cuadra con el total
+    // del rollup; nunca se recalcula precio×vendidos en el frontend.
+    const revenueByType = new Map<string, number>();
+    for (const t of (paidTickets as Array<{ ticket_type_id: string; price_cents: number | null }> | null) ??
+      []) {
       soldByType.set(t.ticket_type_id, (soldByType.get(t.ticket_type_id) ?? 0) + 1);
+      revenueByType.set(t.ticket_type_id, (revenueByType.get(t.ticket_type_id) ?? 0) + (t.price_cents ?? 0));
     }
     const ticketTypes = ticketTypeRows.map((t) => ({
       ...t,
       sold: soldByType.get(t.id) ?? 0,
+      revenueCents: revenueByType.get(t.id) ?? 0,
     }));
 
     const { data: promoterOrders } = await db
@@ -823,6 +830,7 @@ export const supabaseEventRepository: EventRepository = {
         priceCents: t.price_cents,
         capacity: t.capacity,
         sold: t.sold,
+        revenueCents: t.revenueCents,
       })),
       byPromoter,
     };
