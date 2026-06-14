@@ -51,6 +51,12 @@ export type Event = {
   transferPolicy: TransferPolicy;
   version: number;
   createdAt: string;
+  /**
+   * Stats de listado (opcional): solo lo adjunta `listByOrganization` desde el
+   * rollup para que las cards muestren ventas reales sin una query por card.
+   * El frontend solo lo muestra; el backend lo calcula.
+   */
+  listStats?: { sold: number; capacity: number; revenueCents: number };
 };
 
 // "presale" se retiró: la preventa ya no es un tipo de entrada, es un atributo

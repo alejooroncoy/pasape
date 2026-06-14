@@ -24,8 +24,8 @@ const STATUS_CONFIG: Record<Variant, { label: string; className: string }> = {
 
 export function EventCard({ event, variant }: { event: Event; variant: Variant }) {
   const status = STATUS_CONFIG[variant];
-  const sold = 0;
-  const capacity = event.capacity?.totalCapacity ?? 0;
+  const sold = event.listStats?.sold ?? 0;
+  const capacity = event.listStats?.capacity ?? event.capacity?.totalCapacity ?? 0;
   const pct = capacity > 0 ? Math.min(100, Math.round((sold / capacity) * 100)) : 0;
 
   return (

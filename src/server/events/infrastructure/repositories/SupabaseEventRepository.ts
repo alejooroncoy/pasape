@@ -246,7 +246,31 @@ export const supabaseEventRepository: EventRepository = {
       .select("*")
       .eq("organization_id", orgId)
       .order("starts_at", { ascending: false });
-    return (data as EventRow[] | null)?.map(toEvent) ?? [];
+    const events = (data as EventRow[] | null)?.map(toEvent) ?? [];
+    if (events.length === 0) return events;
+
+    // Ventas reales por evento desde el rollup (una sola query), para que las
+    // cards muestren vendido/aforo/recaudado sin inferir nada en el frontend.
+    const { data: rollups } = await db
+      .from("event_stats_rollup")
+      .select("event_id, sold, capacity, revenue_cents")
+      .in("event_id", events.map((e) => e.id));
+    const byId = new Map(
+      (rollups as Array<{ event_id: string; sold: number; capacity: number; revenue_cents: number }> | null)?.map(
+        (r) => [r.event_id, r],
+      ) ?? [],
+    );
+    return events.map((e) => {
+      const r = byId.get(e.id);
+      return {
+        ...e,
+        listStats: {
+          sold: r?.sold ?? 0,
+          capacity: r?.capacity ?? 0,
+          revenueCents: r?.revenue_cents ?? 0,
+        },
+      };
+    });
   },
 
   async getBySlug(slug) {
