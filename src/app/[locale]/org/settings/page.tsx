@@ -38,6 +38,7 @@ export default function OrgSettingsPage() {
   const [orgInstagram, setOrgInstagram] = useState(activeOrg?.instagram ?? "");
   const [logoPreview, setLogoPreview] = useState<string | null>(activeOrg?.logoUrl ?? null);
   const [logoUploading, setLogoUploading] = useState(false);
+  const [logoError, setLogoError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   const [bankOpen, setBankOpen] = useState(false);
@@ -58,6 +59,7 @@ export default function OrgSettingsPage() {
     const f = e.target.files?.[0];
     if (!f) return;
     setLogoUploading(true);
+    setLogoError(null);
     try {
       const supabase = createSupabaseBrowserClient();
       const ext = f.name.includes(".") ? f.name.split(".").pop() : "jpg";
@@ -69,7 +71,7 @@ export default function OrgSettingsPage() {
       const { data } = supabase.storage.from(ORG_ASSETS_BUCKET).getPublicUrl(path);
       setLogoPreview(data.publicUrl);
     } catch {
-      // Si falla la subida no rompemos la UI; el organizador puede reintentar.
+      setLogoError("No se pudo subir el logo. Reintenta.");
     } finally {
       setLogoUploading(false);
     }
@@ -177,6 +179,19 @@ export default function OrgSettingsPage() {
                 >
                   {logoUploading ? "Subiendo…" : "Cambiar"}
                 </button>
+                {logoPreview && !logoUploading && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLogoPreview(null);
+                      setLogoError(null);
+                    }}
+                    className="rounded-full px-2.5 py-1.5 text-[12.5px] font-medium text-cart-ink-3 transition hover:text-red-300"
+                  >
+                    Quitar
+                  </button>
+                )}
+                {logoError && <span className="text-[11.5px] text-red-300">{logoError}</span>}
                 <input
                   ref={fileRef}
                   type="file"
