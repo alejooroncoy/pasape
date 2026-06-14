@@ -2696,14 +2696,11 @@ function SpaceGroupCard({
                 type="button"
                 onClick={() => onChange({ scheme: s })}
                 className={
-                  "relative rounded-full border px-3 py-1 text-[12px] font-medium transition-colors " +
-                  (active ? "border-cart-accent text-white" : "border-cart-line text-cart-ink-3 hover:text-white")
+                  "rounded-full border px-3 py-1 text-[12px] font-medium transition-colors " +
+                  (active ? "border-cart-accent bg-cart-accent/15 text-white" : "border-cart-line text-cart-ink-3 hover:text-white")
                 }
               >
-                {active && (
-                  <motion.span layoutId={`sg-pill-${group.rowKey}`} className="absolute inset-0 rounded-full bg-cart-accent/15" transition={{ duration: 0.16, ease: "linear" }} />
-                )}
-                <span className="relative z-10">{s === "alpha" ? "Letras · A B C" : "Números · 1 2 3"}</span>
+                {s === "alpha" ? "Letras · A B C" : "Números · 1 2 3"}
               </button>
             );
           })}
