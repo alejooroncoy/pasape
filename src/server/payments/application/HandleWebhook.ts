@@ -55,10 +55,14 @@ type MpPaymentStatus =
   | "charged_back"
   | string;
 
-const mapOrderStatus = (s: MpPaymentStatus): "paid" | "failed" | "pending" | null => {
+const mapOrderStatus = (
+  s: MpPaymentStatus,
+): "paid" | "failed" | "pending" | "refunded" | null => {
   if (s === "approved") return "paid";
   if (s === "rejected" || s === "cancelled") return "failed";
   if (s === "in_process" || s === "pending") return "pending";
+  // refunded/charged_back: estado terminal — anula tickets y excluye del rollup.
+  if (s === "refunded" || s === "charged_back") return "refunded";
   return null;
 };
 
@@ -145,6 +149,11 @@ export const handleMpWebhook = async (
     update.paid_at = new Date().toISOString();
   } else if (mapped === "failed") {
     update.status = "failed";
+  } else if (mapped === "refunded") {
+    // Reembolso/contracargo: estado terminal. Cambiar status (no solo mp_status)
+    // hace que el trigger AFTER UPDATE OF status emita el broadcast y que el
+    // rollup (filtra status='paid') deje de contar esta orden.
+    update.status = "refunded";
   }
 
   const { data: orderRow, error: upErr } = await db
@@ -178,8 +187,10 @@ export const handleMpWebhook = async (
     );
   }
 
-  // Compensación si el pago falla: marcar tickets void y devolver capacity.
-  if (mapped === "failed" && orderRow) {
+  // Compensación si el pago falla o se reembolsa: anular tickets (inválidos en
+  // puerta) y devolver capacity. Sin esto, una entrada reembolsada seguiría
+  // escaneando como válida.
+  if ((mapped === "failed" || mapped === "refunded") && orderRow) {
     const { data: tks } = await db
       .from("tickets")
       .select("id, ticket_type_id")
@@ -217,7 +228,7 @@ export const handleMpWebhook = async (
     order_id: orderId,
     provider: "mercadopago",
     provider_ref: dataId,
-    status: mapped === "paid" ? "paid" : mapped === "failed" ? "failed" : "pending",
+    status: mapped ?? "pending",
     amount_cents: 0,
     raw: parsed as object,
   });

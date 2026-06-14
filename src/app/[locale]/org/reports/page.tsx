@@ -67,7 +67,7 @@ export default function OrgReportsPage() {
   useRealtimeEventStats(selectedEvent?.id, eventSlug ?? "");
 
   const kpis = useMemo(() => {
-    const revenue = (data?.revenueCents ?? 0) / 100;
+    const revenue = data?.revenueCents ?? 0; // céntimos — formatMoney divide /100
     const sold = data?.sold ?? 0;
     const reserved = data?.reserved ?? 0;
     const validated = data?.validated ?? 0;
@@ -222,7 +222,7 @@ export default function OrgReportsPage() {
                 (data?.ticketTypes ?? []).map((t) => ({
                   name: t.name,
                   kind: t.kind,
-                  price: t.priceCents / 100,
+                  price: t.priceCents, // céntimos — formatPriceRange usa formatMoney (/100)
                   sold: t.sold,
                   capacity: t.capacity,
                 })),
@@ -1107,7 +1107,7 @@ function PromotersTable({
       {/* Mobile: cards */}
       <div className="flex flex-col gap-2.5 sm:hidden">
         {ranked.map((r, i) => {
-          const avg = r.ticketsSold > 0 ? r.revenueCents / r.ticketsSold / 100 : 0;
+          const avg = r.ticketsSold > 0 ? r.revenueCents / r.ticketsSold : 0;
           return (
             <motion.div
               key={r.promoterId}
@@ -1134,7 +1134,7 @@ function PromotersTable({
               </div>
               <div className="grid grid-cols-3 gap-2 text-center">
                 <Stat label="Tickets" value={r.ticketsSold.toLocaleString("es-PE")} />
-                <Stat label="Recaudado" value={formatMoney(r.revenueCents / 100)} />
+                <Stat label="Recaudado" value={formatMoney(r.revenueCents)} />
                 <Stat label="Ticket prom." value={formatMoney(avg)} />
               </div>
             </motion.div>
@@ -1157,7 +1157,7 @@ function PromotersTable({
           </thead>
           <tbody>
             {ranked.map((r, i) => {
-              const avg = r.ticketsSold > 0 ? r.revenueCents / r.ticketsSold / 100 : 0;
+              const avg = r.ticketsSold > 0 ? r.revenueCents / r.ticketsSold : 0;
               return (
                 <motion.tr
                   key={r.promoterId}
@@ -1187,7 +1187,7 @@ function PromotersTable({
                     {r.ticketsSold.toLocaleString("es-PE")}
                   </td>
                   <td className="bg-cart-bg-elev-2/70 px-3 py-3 text-right text-[13px] font-semibold tabular-nums text-white">
-                    {formatMoney(r.revenueCents / 100)}
+                    {formatMoney(r.revenueCents)}
                   </td>
                   <td className="bg-cart-bg-elev-2/70 px-3 py-3 text-right text-[13px] tabular-nums text-cart-ink-2">
                     {formatMoney(avg)}

@@ -66,7 +66,7 @@ export function OrgHomeClient() {
             <StatCard label="Eventos" value={String(totalEvents)} hint={`${draftCount} en borrador`} />
             <StatCard label="Publicados" value={String(publishedCount)} tone="accent" />
             <StatCard label="Aforo total" value={totalCapacity.toLocaleString("es-PE")} />
-            <StatCard label="Recaudado" value={liveEvent ? formatMoney(liveRevenue / 100) : "—"} hint={liveEvent ? liveEvent.title : "Sin evento activo"} tone="green" />
+            <StatCard label="Recaudado" value={liveEvent ? formatMoney(liveRevenue) : "—"} hint={liveEvent ? liveEvent.title : "Sin evento activo"} tone="green" />
           </section>
 
           {liveEvent && (
@@ -115,8 +115,8 @@ export function OrgHomeClient() {
                     </div>
                     <div className="grid w-full grid-cols-3 gap-3 sm:w-auto sm:min-w-[360px]">
                       <MiniStat label="Aforo" value={String(liveEvent.capacity.totalCapacity ?? 0)} />
-                      <MiniStat label="Validadas" value="0" tone="green" />
-                      <MiniStat label="Recaudado" value={formatMoney(0)} tone="accent" />
+                      <MiniStat label="Validadas" value={String(liveStats.data?.validated ?? 0)} tone="green" />
+                      <MiniStat label="Recaudado" value={formatMoney(liveStats.data?.revenueCents ?? 0)} tone="accent" />
                     </div>
                   </div>
                 </Link>
