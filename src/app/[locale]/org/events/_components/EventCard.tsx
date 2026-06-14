@@ -23,7 +23,11 @@ const STATUS_CONFIG: Record<Variant, { label: string; className: string }> = {
 };
 
 export function EventCard({ event, variant }: { event: Event; variant: Variant }) {
-  const status = STATUS_CONFIG[variant];
+  // Un evento cancelado no es "Finalizado": distinguirlo por su status real.
+  const status =
+    event.status === "cancelled"
+      ? { label: "Cancelado", className: "bg-rose-500/10 text-rose-300 border-rose-400/20" }
+      : STATUS_CONFIG[variant];
   const sold = event.listStats?.sold ?? 0;
   const capacity = event.listStats?.capacity ?? event.capacity?.totalCapacity ?? 0;
   const pct = capacity > 0 ? Math.min(100, Math.round((sold / capacity) * 100)) : 0;

@@ -34,8 +34,9 @@ export default function OrgTeamPage() {
   const promoters = useOrgPromoters();
   const invites = useOrgInvites();
 
-  const coorgCount =
-    (invites.data?.members?.length ?? 0) + (pendingInvitesCount(invites.data?.invites) ?? 0);
+  // Solo activos (antes sumaba invitaciones pendientes y no coincidía con la
+  // sección "Activos").
+  const coorgCount = invites.data?.members?.length ?? 0;
   const promCount = promoters.data?.length ?? 0;
 
   return (
@@ -62,13 +63,6 @@ export default function OrgTeamPage() {
       {tab === "coorg" ? <CoorgTab /> : <PromotersTab />}
     </OrgShell>
   );
-}
-
-function pendingInvitesCount(
-  invites: { status: string }[] | undefined,
-): number {
-  if (!invites) return 0;
-  return invites.filter((i) => i.status === "pending").length;
 }
 
 function TabButton({

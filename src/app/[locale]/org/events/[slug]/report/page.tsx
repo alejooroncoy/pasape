@@ -112,7 +112,7 @@ export default function OrgReportPage({ params }: { params: Params }) {
             </span>
             <span>
               <strong style={{ color: C.dim }}>{noShow}</strong>{" "}
-              <span style={{ color: C.dim }}>no shows</span>
+              <span style={{ color: C.dim }}>no asistieron</span>
             </span>
           </div>
         </div>
@@ -170,8 +170,13 @@ export default function OrgReportPage({ params }: { params: Params }) {
       <div
         style={{ padding: "0 22px 32px", display: "flex", gap: 10, flexShrink: 0 }}
       >
-        <Btn kind="secondary">Compartir</Btn>
-        <Btn kind="green">Transferir →</Btn>
+        <Btn
+          kind="green"
+          style={{ flex: 1 }}
+          onClick={() => window.open(`/api/events/${slug}/export`, "_blank")}
+        >
+          Exportar Excel
+        </Btn>
       </div>
     </Phone>
   );

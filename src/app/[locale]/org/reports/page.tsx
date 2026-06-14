@@ -72,7 +72,7 @@ export default function OrgReportsPage() {
     const reserved = data?.reserved ?? 0;
     const validated = data?.validated ?? 0;
     const capacity = data?.capacity ?? 0;
-    const conversion = capacity > 0 ? (sold / capacity) * 100 : 0;
+    const conversion = capacity > 0 ? Math.min(100, (sold / capacity) * 100) : 0;
     return { revenue, sold, reserved, validated, conversion };
   }, [data]);
 
@@ -178,7 +178,7 @@ export default function OrgReportsPage() {
                 </p>
               </div>
               <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-cart-ink-4">
-                {(data?.byPromoter ?? []).length} promotores
+                {(data?.byPromoter ?? []).filter((p) => p.ticketsSold > 0).length} con ventas
               </span>
             </div>
             <PromotersTable

@@ -245,8 +245,10 @@ function StatusPill({ status }: { status: string }) {
   const map: Record<string, { label: string; cls: string }> = {
     published: { label: "Publicado", cls: "border-emerald-400/30 bg-emerald-500/10 text-emerald-300" },
     draft: { label: "Borrador", cls: "border-cart-line bg-cart-bg-elev-2 text-cart-ink-3" },
+    closed: { label: "Cerrado", cls: "border-cart-line bg-cart-bg-elev-2 text-cart-ink-3" },
+    cancelled: { label: "Cancelado", cls: "border-rose-400/30 bg-rose-500/10 text-rose-300" },
   };
-  const v = map[status] ?? { label: status, cls: "border-cart-line text-cart-ink-3" };
+  const v = map[status] ?? { label: "—", cls: "border-cart-line text-cart-ink-3" };
   return (
     <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10.5px] font-medium uppercase tracking-wide ${v.cls}`}>
       {v.label}
