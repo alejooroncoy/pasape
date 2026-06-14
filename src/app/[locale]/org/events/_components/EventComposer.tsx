@@ -2716,7 +2716,14 @@ function SpaceGroupCard({
         <div className="mb-2 flex items-center justify-between">
           <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">Vista previa · {n} {n === 1 ? "box" : "boxes"}</span>
           {n > 0 && (
-            <button type="button" onClick={() => setRenaming((v) => !v)} className="text-[12px] font-semibold text-cart-accent">
+            <button
+              type="button"
+              onClick={(e) => {
+                setRenaming((v) => !v);
+                e.currentTarget.blur();
+              }}
+              className="rounded text-[12px] font-semibold text-cart-accent outline-none focus-visible:ring-2 focus-visible:ring-cart-accent/40"
+            >
               {renaming ? "Listo" : "Editar c/u"}
             </button>
           )}
