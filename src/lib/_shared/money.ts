@@ -15,6 +15,22 @@
 const normalizeSpaces = (s: string): string =>
   s.replace(/[\u202f\u00a0]/g, " ");
 
+// Locale por moneda: dejamos que Intl localice el s\u00edmbolo y la agrupaci\u00f3n seg\u00fan
+// el mercado (PEN\u2192es-PE, USD\u2192en-US, COP\u2192es-CO\u2026). Multi-mercado a futuro: agregar
+// una entrada aqu\u00ed basta. Default es-PE.
+const LOCALE_BY_CURRENCY: Record<string, string> = {
+  PEN: "es-PE",
+  USD: "en-US",
+  COP: "es-CO",
+  CLP: "es-CL",
+  MXN: "es-MX",
+  ARS: "es-AR",
+  EUR: "es-ES",
+  BRL: "pt-BR",
+};
+
+const localeFor = (currency: string): string => LOCALE_BY_CURRENCY[currency] ?? "es-PE";
+
 export const Money = {
   /** Céntimos (entero, fuente de verdad) → soles (decimal). */
   toSoles(cents: number): number {
@@ -26,8 +42,12 @@ export const Money = {
     return Math.round(Number(soles || "0") * 100);
   },
 
-  /** Céntimos → string formateado para mostrar (p. ej. "S/ 600"). */
-  format(cents: number, currency: string = "PEN", locale: string = "es-PE"): string {
+  /**
+   * Céntimos → string formateado para mostrar (p. ej. "S/ 600", "$600").
+   * El locale se deriva de la moneda (Intl localiza símbolo y agrupación); se
+   * puede forzar uno con el 3er parámetro.
+   */
+  format(cents: number, currency: string = "PEN", locale: string = localeFor(currency)): string {
     return normalizeSpaces(
       new Intl.NumberFormat(locale, {
         style: "currency",
@@ -38,7 +58,7 @@ export const Money = {
   },
 
   /** Céntimos → solo el número formateado, sin símbolo de moneda (p. ej. "600"). */
-  formatClean(cents: number, locale: string = "es-PE"): string {
-    return Money.format(cents, "PEN", locale).replace(/[^\d,.]/g, "").trim();
+  formatClean(cents: number, currency: string = "PEN"): string {
+    return Money.format(cents, currency).replace(/[^\d,.]/g, "").trim();
   },
 } as const;
