@@ -2643,6 +2643,18 @@ function SpaceGroupCard({
   });
   const anyCustom = boxes.some((b) => b.custom);
 
+  // Altura animada con CSS puro: medimos el contenido tras el reflow (rAF) y
+  // transicionamos `height`. El rAF es clave — medir antes del reflow dejaba el
+  // colapso trabado.
+  const innerRef = useRef<HTMLDivElement>(null);
+  const [innerH, setInnerH] = useState<number | undefined>(undefined);
+  useEffect(() => {
+    const el = innerRef.current;
+    if (!el) return;
+    const id = requestAnimationFrame(() => setInnerH(el.scrollHeight));
+    return () => cancelAnimationFrame(id);
+  }, [renaming, n, group.scheme, group.name, group.overrides, priceN, seatsN]);
+
   return (
     <div
       className="rounded-2xl border border-cart-line bg-cart-bg-elev-2 p-3"
@@ -2725,8 +2737,11 @@ function SpaceGroupCard({
             </button>
           )}
         </div>
-        <div>
-          <div>
+        <div
+          className="overflow-hidden transition-[height] duration-200 ease-linear"
+          style={{ height: innerH }}
+        >
+          <div ref={innerRef}>
             {n === 0 ? (
               <p className="py-3 text-center text-[12.5px] text-cart-ink-4">Indica cuántos boxes crear.</p>
             ) : renaming ? (
