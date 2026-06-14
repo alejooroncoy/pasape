@@ -105,7 +105,7 @@ export default function OrgSettingsPage() {
           Ajustes
         </h1>
         <p className="mt-2 max-w-prose text-[13.5px] leading-snug text-cart-ink-3 sm:text-[14px]">
-          Configura tu cuenta, pagos y preferencias de notificación.
+          Configura tu marca, datos de pago y la información pública de tu productora.
         </p>
       </div>
 
@@ -283,9 +283,11 @@ export default function OrgSettingsPage() {
               <div className="flex sm:justify-end">
                 <button
                   type="button"
-                  className="rounded-full border border-rose-500/40 bg-rose-500/10 px-4 py-1.5 text-[12.5px] font-semibold text-rose-200 transition hover:bg-rose-500/20"
+                  disabled
+                  title="Próximamente — escríbenos para eliminar tu marca"
+                  className="cursor-not-allowed rounded-full border border-rose-500/30 bg-rose-500/5 px-4 py-1.5 text-[12.5px] font-semibold text-rose-200/60"
                 >
-                  Eliminar
+                  Próximamente
                 </button>
               </div>
             </SettingsRow>

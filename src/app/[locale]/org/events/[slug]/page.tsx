@@ -4,7 +4,6 @@ import { use, useRef, useState } from "react";
 import { Link } from "@/i18n/navigation";
 import { useEvent } from "@/lib/events/hooks/useEvents";
 import { useEventStats } from "@/lib/events/hooks/useEventStats";
-import { useScanRealtime } from "@/lib/scanning/hooks/useScanRealtime";
 import { useRealtimeEventStats } from "@/lib/events/hooks/useRealtimeEventStats";
 import { useEventPartners, useAddEventPartner, useRemoveEventPartner } from "@/lib/events/hooks/useEventPartners";
 import { formatMoney } from "@/lib/_shared/format";
@@ -21,8 +20,9 @@ export default function OrgEventPanelPage({ params }: { params: Params }) {
   const { slug } = use(params);
   const event = useEvent(slug);
   const stats = useEventStats(slug);
-  useScanRealtime(slug);
-  // Refresca KPIs al instante cuando entra/cambia una venta (Broadcast desde DB).
+  // Refresca KPIs al instante cuando entra/cambia una venta o un scan (Broadcast
+  // desde DB, con debounce). Cubre también los scans vía el trigger
+  // scan_events_broadcast_stats → ya no hace falta useScanRealtime.
   useRealtimeEventStats(event.data?.event?.id, slug);
 
   const ev = event.data?.event;

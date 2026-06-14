@@ -4,6 +4,7 @@ import { use } from "react";
 import { Btn, C, FONT_DISPLAY, Phone } from "@/components/design";
 import { useEvent } from "@/lib/events/hooks/useEvents";
 import { useEventStats } from "@/lib/events/hooks/useEventStats";
+import { useRealtimeEventStats } from "@/lib/events/hooks/useRealtimeEventStats";
 import { formatMoney } from "@/lib/_shared/format";
 import { BackBtn } from "../_components";
 
@@ -13,6 +14,8 @@ export default function OrgReportPage({ params }: { params: Params }) {
   const { slug } = use(params);
   const event = useEvent(slug);
   const stats = useEventStats(slug);
+  // Consistente con las otras pantallas: KPIs en vivo vía Broadcast (no solo polling).
+  useRealtimeEventStats(event.data?.event?.id, slug);
 
   const ev = event.data?.event;
   const sold = stats.data?.sold ?? 0;

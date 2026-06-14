@@ -646,15 +646,27 @@ function buildSeries(
   }
   const days = range === "today" ? 1 : range === "7d" ? 7 : range === "30d" ? 30 : 60;
   const out: number[] = [];
-  const today = new Date();
-  today.setUTCHours(0, 0, 0, 0);
+  // El eje debe alinear con los buckets de la view, que están en hora de Lima.
+  // "Hoy" en Lima (no en UTC) — cerca de medianoche difieren de día.
+  const limaToday = limaDayKey(new Date());
+  const base = new Date(`${limaToday}T00:00:00Z`);
   for (let i = days - 1; i >= 0; i--) {
-    const d = new Date(today);
-    d.setUTCDate(today.getUTCDate() - i);
+    const d = new Date(base);
+    d.setUTCDate(base.getUTCDate() - i);
     const key = d.toISOString().slice(0, 10);
     out.push(map.get(key) ?? 0);
   }
   return out;
+}
+
+/** Fecha (YYYY-MM-DD) del día en hora de Lima para un instante dado. */
+function limaDayKey(at: Date): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Lima",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(at);
 }
 
 function Sparkline({ data, range }: { data: number[]; range: RangeKey }) {
@@ -770,14 +782,13 @@ function Sparkline({ data, range }: { data: number[]; range: RangeKey }) {
 function buildXLabels(n: number, range: RangeKey): Array<{ i: number; label: string }> {
   if (n <= 1) return [{ i: 0, label: "Hoy" }];
   const indices = [0, Math.floor(n / 3), Math.floor((2 * n) / 3), n - 1];
-  const today = new Date();
-  today.setUTCHours(0, 0, 0, 0);
-  const fmt = new Intl.DateTimeFormat("es-PE", { day: "numeric", month: "short" });
+  const base = new Date(`${limaDayKey(new Date())}T00:00:00Z`);
+  const fmt = new Intl.DateTimeFormat("es-PE", { day: "numeric", month: "short", timeZone: "UTC" });
   return indices.map((i) => {
     if (range === "today") return { i, label: i === n - 1 ? "Hoy" : "" };
     if (i === n - 1) return { i, label: "Hoy" };
-    const d = new Date(today);
-    d.setUTCDate(today.getUTCDate() - (n - 1 - i));
+    const d = new Date(base);
+    d.setUTCDate(base.getUTCDate() - (n - 1 - i));
     return { i, label: fmt.format(d) };
   });
 }

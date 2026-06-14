@@ -53,6 +53,10 @@ export const useOrgPromoterDetail = (id: string) =>
     queryKey: ["promoters", "org-pool", id, "detail"] as const,
     queryFn: () => api.get<PromoterDetail>(`/api/org/promoters/${id}/detail`),
     enabled: !!id,
+    // Durante la noche del evento los KPIs cambian: refresca por intervalo y al
+    // volver a la pestaña para que no queden congelados.
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
   });
 
 export const useDeleteOrgPromoter = () => {
