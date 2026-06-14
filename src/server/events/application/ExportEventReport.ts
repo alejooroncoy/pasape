@@ -1,4 +1,5 @@
 import ExcelJS from "exceljs";
+import { Money } from "@/lib/_shared/money";
 import type { Event } from "../domain/Event";
 import type { EventRepository } from "../ports/EventRepository";
 
@@ -66,9 +67,9 @@ export const exportEventReport = async (
       code: p.code,
       ticketsSold: p.ticketsSold,
       ticketsValidated: p.ticketsValidated,
-      revenue: p.revenueCents / 100,
+      revenue: Money.toSoles(p.revenueCents),
       commissionPct: p.commissionPct,
-      commission: p.commissionCalculatedCents / 100,
+      commission: Money.toSoles(p.commissionCalculatedCents),
     });
   }
   wsP.getColumn("revenue").numFmt = "#,##0.00";
@@ -91,7 +92,7 @@ export const exportEventReport = async (
   wsS.addRow({ k: "Tickets vendidos", v: summary.sold });
   wsS.addRow({ k: "Tickets validados", v: summary.validated });
   wsS.addRow({ k: "Capacidad total", v: summary.capacity ?? "—" });
-  wsS.addRow({ k: "Recaudado (S/)", v: summary.revenueCents / 100 });
+  wsS.addRow({ k: "Recaudado (S/)", v: Money.toSoles(summary.revenueCents) });
   wsS.addRow({ k: "" });
   wsS.addRow({ k: "Desglose por tipo de ticket", v: "" }).font = { bold: true };
   wsS.addRow({ k: "Tipo", v: "Vendidos / Capacidad / Recaudado (S/)" }).font = {
@@ -100,7 +101,7 @@ export const exportEventReport = async (
   for (const t of summary.ticketTypes) {
     wsS.addRow({
       k: t.name,
-      v: `${t.sold} / ${t.capacity} / ${((t.priceCents * t.sold) / 100).toFixed(2)}`,
+      v: `${t.sold} / ${t.capacity} / ${Money.toSoles(t.priceCents * t.sold).toFixed(2)}`,
     });
   }
 

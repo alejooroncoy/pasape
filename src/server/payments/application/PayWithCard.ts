@@ -1,3 +1,4 @@
+import { Money } from "@/lib/_shared/money";
 import "server-only";
 import { randomUUID } from "node:crypto";
 import { err, ok, type Result } from "@/server/_shared/result";
@@ -85,7 +86,7 @@ export const payWithCard = async (
   // /api/tickets/order/[id]/status.
   const isPublicUrl = !/localhost|127\.0\.0\.1/.test(base);
   const body: Record<string, unknown> = {
-    transaction_amount: Math.round(order.total_cents) / 100,
+    transaction_amount: Money.toSoles(Math.round(order.total_cents)),
     token: input.token,
     payment_method_id: input.paymentMethodId,
     installments: input.installments,

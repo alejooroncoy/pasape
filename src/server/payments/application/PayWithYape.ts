@@ -1,3 +1,4 @@
+import { Money } from "@/lib/_shared/money";
 import "server-only";
 import { randomUUID } from "node:crypto";
 import { err, ok, type Result } from "@/server/_shared/result";
@@ -97,7 +98,7 @@ export const payWithYape = async (
   const isPublicUrl = !/localhost|127\.0\.0\.1/.test(base);
 
   const body: Record<string, unknown> = {
-    transaction_amount: Math.round(order.total_cents) / 100,
+    transaction_amount: Money.toSoles(Math.round(order.total_cents)),
     payment_method_id: "yape",
     // Yape no admite cuotificación — MP requiere installments=1 explícito,
     // si no devuelve "Invalid installments".

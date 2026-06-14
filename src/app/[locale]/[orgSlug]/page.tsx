@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { Money } from "@/lib/_shared/money";
 import { Link } from "@/i18n/navigation";
 import { FollowButton } from "./_components/FollowButton";
 import { supabaseOrganizationRepository } from "@/server/identity/organizations/infrastructure/repositories/SupabaseOrganizationRepository";
@@ -435,7 +436,7 @@ function formatEventDate(iso: string): string {
 
 function formatCents(cents: number | undefined): string {
   if (cents == null) return "—";
-  const soles = cents / 100;
+  const soles = Money.toSoles(cents);
   const rounded = Number.isInteger(soles) ? soles.toFixed(0) : soles.toFixed(2);
   return `S/ ${rounded}`;
 }

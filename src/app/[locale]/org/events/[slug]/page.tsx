@@ -8,6 +8,7 @@ import { useScanRealtime } from "@/lib/scanning/hooks/useScanRealtime";
 import { useRealtimeEventStats } from "@/lib/events/hooks/useRealtimeEventStats";
 import { useEventPartners, useAddEventPartner, useRemoveEventPartner } from "@/lib/events/hooks/useEventPartners";
 import { formatMoney } from "@/lib/_shared/format";
+import { Money } from "@/lib/_shared/money";
 import { EventShell } from "./_shell/EventShell";
 import { SpotlightTour } from "@/components/ui/SpotlightTour";
 import { createSupabaseBrowserClient } from "@/server/_shared/supabase/client";
@@ -646,7 +647,7 @@ function DoorHealthBanner({
 }
 
 function formatMoneyClean(cents: number): string {
-  const s = formatMoney(cents).replace(/[^\d,.]/g, "").trim();
+  const s = Money.formatClean(cents);
   return s ? `S/ ${s}` : "S/ 0";
 }
 

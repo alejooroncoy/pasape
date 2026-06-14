@@ -10,6 +10,7 @@ import {
 } from "@/lib/promoters/hooks/useOrgPromoters";
 import type { OrgPromoter } from "@/server/promoters/domain/OrgPromoter";
 import { formatMoney } from "@/lib/_shared/format";
+import { Money } from "@/lib/_shared/money";
 
 type Params = Promise<{ id: string; locale: string }>;
 
@@ -268,7 +269,7 @@ function ChevronLeft() {
 }
 
 function formatMoneyClean(cents: number): string {
-  const s = formatMoney(cents).replace(/[^\d,.]/g, "").trim();
+  const s = Money.formatClean(cents);
   return s ? `S/ ${s}` : "S/ 0";
 }
 

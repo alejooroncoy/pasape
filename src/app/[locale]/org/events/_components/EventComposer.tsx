@@ -11,6 +11,7 @@ import {
   type SetStateAction,
 } from "react";
 import { AnimatePresence, motion } from "motion/react";
+import { Money } from "@/lib/_shared/money";
 import { useRouter } from "@/i18n/navigation";
 import { useCreateEvent } from "@/lib/events/hooks/useCreateEvent";
 import { useUpdateEvent } from "@/lib/events/hooks/useUpdateEvent";
@@ -106,8 +107,8 @@ export type EventComposerProps =
 // Constantes / helpers
 // ============================================================
 const uid = () => Math.random().toString(36).slice(2, 9);
-const toCents = (s: string) => Math.round(Number(s || "0") * 100);
-const fromCents = (n: number) => (n / 100).toString();
+const toCents = (s: string) => Money.toCents(s);
+const fromCents = (n: number) => Money.toSoles(n).toString();
 
 /** Convierte presaleTiers del form al payload para la API. */
 const presaleTiersPayload = (t: TicketRow) => ({
@@ -134,7 +135,7 @@ const expandSpaceGroup = (g: SpaceGroup) =>
     return {
       name: label,
       kind: "box" as const,
-      priceCents: Math.round(spaceBoxPriceSoles(g, i) * 100),
+      priceCents: Money.toCents(spaceBoxPriceSoles(g, i)),
       capacity: spaceSeats(g),
       boxLabel: label,
       zone: null,

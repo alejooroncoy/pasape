@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Money } from "@/lib/_shared/money";
 import { useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import { Link } from "@/i18n/navigation";
@@ -808,12 +809,12 @@ function PromoterForm({
                       <input
                         type="number"
                         min={0}
-                        value={t.payoutCents / 100}
+                        value={Money.toSoles(t.payoutCents)}
                         onChange={(e) => {
                           const soles = Math.max(0, Number(e.target.value) || 0);
                           setTiers((prev) =>
                             prev.map((row, idx) =>
-                              idx === i ? { ...row, payoutCents: Math.round(soles * 100) } : row,
+                              idx === i ? { ...row, payoutCents: Money.toCents(soles) } : row,
                             ),
                           );
                         }}

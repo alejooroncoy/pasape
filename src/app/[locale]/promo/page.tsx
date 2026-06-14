@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { Money } from "@/lib/_shared/money";
 import { motion } from "motion/react";
 import { Link } from "@/i18n/navigation";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
@@ -17,7 +18,7 @@ const buildShareUrl = (code: string) =>
 
 const formatSoles = (cents: number | null | undefined): string => {
   if (cents == null) return "—";
-  const n = cents / 100;
+  const n = Money.toSoles(cents);
   return `S/ ${n.toLocaleString("es-PE", { maximumFractionDigits: 0 })}`;
 };
 

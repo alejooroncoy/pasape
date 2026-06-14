@@ -1,11 +1,12 @@
 "use client";
 
 import { useMemo } from "react";
+import { Money } from "@/lib/_shared/money";
 import { useMyEarnings } from "@/lib/promoters/hooks/usePromoter";
 import { PromoterShell } from "../_shell/PromoterShell";
 
 const formatSoles = (cents: number): string => {
-  const n = cents / 100;
+  const n = Money.toSoles(cents);
   return `S/ ${n.toLocaleString("es-PE", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 };
 

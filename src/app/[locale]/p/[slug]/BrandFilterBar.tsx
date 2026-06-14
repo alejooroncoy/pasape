@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
+import { Money } from "@/lib/_shared/money";
 import { Link } from "@/i18n/navigation";
 
 export type BrandFilterItem = {
@@ -247,7 +248,7 @@ function formatDate(iso: string): string {
 
 function formatCents(cents: number | null): string {
   if (cents == null) return "—";
-  const soles = cents / 100;
+  const soles = Money.toSoles(cents);
   const rounded = Number.isInteger(soles) ? soles.toFixed(0) : soles.toFixed(2);
   return `S/ ${rounded}`;
 }
