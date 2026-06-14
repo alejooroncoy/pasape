@@ -592,14 +592,11 @@ function DoorHealthBanner({
   doors: EventStatsPayload["doors"];
   dupOffline: number;
 }) {
-  const STALE_MIN = 3;
-  const now = Date.now();
-  const minsSince = (iso: string | null): number | null =>
-    iso === null ? null : Math.floor((now - new Date(iso).getTime()) / 60000);
-
+  // Staleness lo decide el backend (reloj del server) → sin falsos positivos
+  // por el reloj del dispositivo.
   const stale = doors
-    .map((d) => ({ ...d, mins: minsSince(d.lastSyncAt) }))
-    .filter((d) => d.mins === null || d.mins >= STALE_MIN);
+    .filter((d) => d.isStale)
+    .map((d) => ({ ...d, mins: d.minutesSinceSync }));
 
   if (dupOffline === 0 && stale.length === 0) return null;
 

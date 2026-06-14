@@ -1082,6 +1082,8 @@ type PromoterStatRow = {
   ticketsSold: number;
   ticketsValidated: number;
   revenueCents: number;
+  payoutCents: number;
+  commissionType: "percentage" | "tiered" | "inkind";
   attendanceRate: number;
   flag: "ok" | "watch" | "suspect";
 };
@@ -1162,6 +1164,7 @@ function PromotersTable({
               <th className="px-2 pb-2 text-left font-medium">Promotor · Origen QR</th>
               <th className="px-2 pb-2 text-right font-medium">Tickets</th>
               <th className="px-2 pb-2 text-right font-medium">Recaudado</th>
+              <th className="px-2 pb-2 text-right font-medium">A pagar</th>
               <th className="px-2 pb-2 text-right font-medium">Ticket prom.</th>
               <th className="px-2 pb-2 text-right font-medium">Asistencia</th>
             </tr>
@@ -1199,6 +1202,9 @@ function PromotersTable({
                   </td>
                   <td className="bg-cart-bg-elev-2/70 px-3 py-3 text-right text-[13px] font-semibold tabular-nums text-white">
                     {formatMoney(r.revenueCents)}
+                  </td>
+                  <td className="bg-cart-bg-elev-2/70 px-3 py-3 text-right text-[13px] font-semibold tabular-nums text-cart-accent">
+                    {r.commissionType === "inkind" ? "En especie" : formatMoney(r.payoutCents)}
                   </td>
                   <td className="bg-cart-bg-elev-2/70 px-3 py-3 text-right text-[13px] tabular-nums text-cart-ink-2">
                     {formatMoney(avg)}

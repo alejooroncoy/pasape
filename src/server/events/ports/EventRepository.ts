@@ -102,6 +102,10 @@ export type DoorHealth = {
   zoneName: string | null;
   lastSyncAt: string | null;
   expiresAt: string;
+  /** Minutos desde el último sync, calculado server-side. null si nunca sincronizó. */
+  minutesSinceSync: number | null;
+  /** True si la puerta lleva demasiado sin sincronizar (umbral del backend). */
+  isStale: boolean;
 };
 
 export type CreateTicketTypeInput = {

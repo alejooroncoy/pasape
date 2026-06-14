@@ -44,7 +44,9 @@ export default function OrgReportPage({ params }: { params: Params }) {
         }}
       >
         <BackBtn />
-        <div style={{ fontSize: 12, color: C.dim, letterSpacing: "0.06em" }}>REPORTE FINAL</div>
+        <div style={{ fontSize: 12, color: C.dim, letterSpacing: "0.06em" }}>
+          {ev?.status === "closed" || ev?.status === "cancelled" ? "REPORTE FINAL" : "AVANCE EN VIVO"}
+        </div>
         <div style={{ width: 38 }} />
       </div>
 

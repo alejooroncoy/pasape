@@ -975,12 +975,24 @@ export const supabaseEventRepository: EventRepository = {
       expires_at: string;
       zones: { name: string } | null;
     };
-    const doors = ((sessionsRes.data as SessionRow[] | null) ?? []).map((s) => ({
-      deviceId: s.device_id,
-      zoneName: s.zones?.name ?? null,
-      lastSyncAt: s.last_sync_at,
-      expiresAt: s.expires_at,
-    }));
+    // Staleness calculado server-side (reloj del server, confiable) en vez del
+    // Date.now() del navegador, que podía dar falsos positivos.
+    const STALE_MIN = 3;
+    const nowMs = Date.now();
+    const doors = ((sessionsRes.data as SessionRow[] | null) ?? []).map((s) => {
+      const minutesSinceSync =
+        s.last_sync_at === null
+          ? null
+          : Math.floor((nowMs - new Date(s.last_sync_at).getTime()) / 60000);
+      return {
+        deviceId: s.device_id,
+        zoneName: s.zones?.name ?? null,
+        lastSyncAt: s.last_sync_at,
+        expiresAt: s.expires_at,
+        minutesSinceSync,
+        isStale: minutesSinceSync === null || minutesSinceSync >= STALE_MIN,
+      };
+    });
 
     return { doors, dupOffline: dupRes.count ?? 0 };
   },
