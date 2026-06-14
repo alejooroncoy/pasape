@@ -4,35 +4,58 @@ import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { createSupabaseBrowserClient } from "@/server/_shared/supabase/client";
 
-// Realtime de los KPIs del panel vía Broadcast desde la DB (trigger
-// broadcast_event_stats_change → topic `event-stats:<eventId>`). El ping no
-// trae datos: solo dispara un refetch del view de stats (que respeta RLS).
-//
-// Debounce ~400ms para coalescer ráfagas — una orden de N tickets o varios
-// scans seguidos no deben disparar N refetches. Degrada limpio: si Realtime no
-// conecta, el polling de useEventStats (15s) sigue cubriendo.
-export function useRealtimeEventStats(eventId: string | null | undefined, slug: string) {
-  const qc = useQueryClient();
+// Núcleo reusable: se suscribe al Broadcast de la DB para un evento
+// (trigger broadcast_event_stats_change → topic `event-stats:<eventId>`) y llama
+// `onPing` (debounced ~400ms) cada vez que cambian las stats. El ping NO trae
+// datos: solo señaliza que hay que refetchear (el refetch respeta RLS). Coalesce
+// ráfagas (una orden de N tickets / varios scans no disparan N refetches) y
+// degrada limpio: si Realtime no conecta, el polling de cada query sigue.
+function useEventStatsBroadcast(
+  eventId: string | null | undefined,
+  onPing: () => void,
+) {
   useEffect(() => {
-    if (!eventId || !slug) return;
+    if (!eventId) return;
     const supabase = createSupabaseBrowserClient();
 
     let timer: ReturnType<typeof setTimeout> | null = null;
-    const invalidateSoon = () => {
+    const pingSoon = () => {
       if (timer) clearTimeout(timer);
-      timer = setTimeout(() => {
-        void qc.invalidateQueries({ queryKey: ["events", "stats", slug] });
-      }, 400);
+      timer = setTimeout(onPing, 400);
     };
 
     const channel = supabase
       .channel(`event-stats:${eventId}`)
-      .on("broadcast", { event: "stats_changed" }, invalidateSoon)
+      .on("broadcast", { event: "stats_changed" }, pingSoon)
       .subscribe();
 
     return () => {
       if (timer) clearTimeout(timer);
       void supabase.removeChannel(channel);
     };
-  }, [eventId, slug, qc]);
+    // onPing se recrea cada render; lo excluimos a propósito (usa qc estable).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventId]);
+}
+
+// KPIs del panel del organizador.
+export function useRealtimeEventStats(eventId: string | null | undefined, slug: string) {
+  const qc = useQueryClient();
+  useEventStatsBroadcast(eventId, () => {
+    if (slug) void qc.invalidateQueries({ queryKey: ["events", "stats", slug] });
+  });
+}
+
+// Vista del promotor: mismo Broadcast del evento, invalida sus queries para que
+// vea ventas/hitos en vivo mientras vende.
+export function useRealtimePromoterStats(
+  eventId: string | null | undefined,
+  eventSlug: string,
+) {
+  const qc = useQueryClient();
+  useEventStatsBroadcast(eventId, () => {
+    if (eventSlug) void qc.invalidateQueries({ queryKey: ["promoters", "home", eventSlug] });
+    void qc.invalidateQueries({ queryKey: ["promoters", "earnings"] });
+    void qc.invalidateQueries({ queryKey: ["promoters", "links"] });
+  });
 }

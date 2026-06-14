@@ -20,12 +20,19 @@ export const usePromoterHome = (slug: string) =>
     queryKey: ["promoters", "home", slug],
     queryFn: () => api.get<PromoterHomeData>(`/api/promoters/home/${slug}`),
     enabled: !!slug,
+    // Realtime lo cubre useRealtimePromoterStats; esto es el fallback si el
+    // Broadcast no conecta y al volver a la pestaña durante el evento.
+    refetchOnWindowFocus: true,
   });
 
 export const useMyEarnings = () =>
   useQuery({
     queryKey: ["promoters", "earnings"],
     queryFn: () => api.get<PromoterEventEarning[]>("/api/promoters/earnings"),
+    // Agregado multi-evento (no atado a un eventId): polling ligero + refetch al
+    // enfocar para que el promotor vea sus ganancias actualizarse.
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
   });
 
 export const useGenerateInvite = () => {

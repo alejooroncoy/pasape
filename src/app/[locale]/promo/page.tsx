@@ -6,6 +6,7 @@ import { motion } from "motion/react";
 import { Link } from "@/i18n/navigation";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { useMyPromoterLinks, usePromoterHome } from "@/lib/promoters/hooks/usePromoter";
+import { useRealtimePromoterStats } from "@/lib/events/hooks/useRealtimeEventStats";
 import { useCommissionTiers } from "@/lib/promoters/tiers/hooks/useCommissionTiers";
 import type { PromoterLink } from "@/server/promoters/domain/Promoter";
 import type { CommissionTier } from "@/server/promoters/tiers/domain/CommissionTier";
@@ -208,6 +209,10 @@ function ActiveEventPanel({ link }: { link: PromoterLink }) {
   const home = usePromoterHome(link.eventSlug);
   const tiers = useCommissionTiers(link.id);
   const allTiers = tiers.data ?? [];
+
+  // El promotor ve sus ventas/hitos en vivo: mismo Broadcast del evento que usa
+  // el panel del organizador.
+  useRealtimePromoterStats(link.eventId, link.eventSlug);
 
   const sold = home.data?.soldCount ?? 0;
   const validated = 0; // TODO: cuando tengamos el dato real
