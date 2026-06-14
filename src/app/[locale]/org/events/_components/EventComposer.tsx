@@ -2711,8 +2711,8 @@ function SpaceGroupCard({
         <span className="mt-0.5 text-[10.5px] text-cart-ink-4">La etiqueta viaja en el QR de cada invitado · identifica el box en la puerta.</span>
       </div>
 
-      {/* Vista previa con altura animada */}
-      <motion.div layout transition={{ duration: 0.16, ease: "linear" }} className="mt-2 overflow-hidden rounded-xl bg-cart-bg-elev px-3 py-2.5">
+      {/* Vista previa — altura animada con CSS (height medido + transición) */}
+      <div className="mt-2 rounded-xl bg-cart-bg-elev px-3 py-2.5">
         <div className="mb-2 flex items-center justify-between">
           <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">Vista previa · {n} {n === 1 ? "box" : "boxes"}</span>
           {n > 0 && (
@@ -2728,47 +2728,47 @@ function SpaceGroupCard({
             </button>
           )}
         </div>
-        <AnimatePresence mode="popLayout" initial={false}>
-          {n === 0 ? (
-            <motion.p key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="py-3 text-center text-[12.5px] text-cart-ink-4">
-              Indica cuántos boxes crear.
-            </motion.p>
-          ) : renaming ? (
-            <motion.div key="edit" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.16, ease: "linear" }} className="flex flex-col gap-1.5">
-              {boxes.map((b, i) => (
-                <div key={i} className="flex items-center gap-1.5">
-                  <span className="w-4 shrink-0 text-[11px] text-cart-ink-4">{i + 1}.</span>
-                  <input
-                    value={group.overrides[i]?.label ?? spaceBoxLabel(group, i)}
-                    onChange={(e) => setOv(i, { label: e.target.value })}
-                    className="min-w-0 flex-1 rounded-lg border border-cart-line bg-cart-bg-elev-2 px-2 py-1 font-mono text-[13px] font-semibold text-white outline-none focus:border-cart-accent"
-                  />
-                  <div className={"flex w-[84px] shrink-0 items-center gap-1 rounded-lg border bg-cart-bg-elev-2 px-2 py-1 " + (b.custom ? "border-cart-accent/60" : "border-cart-line")}>
-                    <span className="font-mono text-[11px] text-cart-ink-3">S/</span>
-                    <input inputMode="numeric" value={group.overrides[i]?.price ?? ""} onChange={(e) => setOv(i, { price: e.target.value.replace(/[^\d]/g, "") })} placeholder={String(priceN)} className="w-full bg-transparent font-mono text-[13px] font-semibold text-white outline-none placeholder:text-cart-ink-4" />
+        <div>
+          <div>
+            {n === 0 ? (
+              <p className="py-3 text-center text-[12.5px] text-cart-ink-4">Indica cuántos boxes crear.</p>
+            ) : renaming ? (
+              <div className="flex flex-col gap-1.5">
+                {boxes.map((b, i) => (
+                  <div key={i} className="flex items-center gap-1.5">
+                    <span className="w-4 shrink-0 text-[11px] text-cart-ink-4">{i + 1}.</span>
+                    <input
+                      value={group.overrides[i]?.label ?? spaceBoxLabel(group, i)}
+                      onChange={(e) => setOv(i, { label: e.target.value })}
+                      className="min-w-0 flex-1 rounded-lg border border-cart-line bg-cart-bg-elev-2 px-2 py-1 font-mono text-[13px] font-semibold text-white outline-none focus:border-cart-accent"
+                    />
+                    <div className={"flex w-[84px] shrink-0 items-center gap-1 rounded-lg border bg-cart-bg-elev-2 px-2 py-1 " + (b.custom ? "border-cart-accent/60" : "border-cart-line")}>
+                      <span className="font-mono text-[11px] text-cart-ink-3">S/</span>
+                      <input inputMode="numeric" value={group.overrides[i]?.price ?? ""} onChange={(e) => setOv(i, { price: e.target.value.replace(/[^\d]/g, "") })} placeholder={String(priceN)} className="w-full bg-transparent font-mono text-[13px] font-semibold text-white outline-none placeholder:text-cart-ink-4" />
+                    </div>
                   </div>
-                </div>
-              ))}
-              <span className="px-1 text-[10.5px] text-cart-ink-4">Vacío = usa el precio de la categoría (S/ {priceN.toLocaleString("es-PE")}).</span>
-            </motion.div>
-          ) : (
-            <motion.div key="preview" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.16, ease: "linear" }} className="flex flex-wrap gap-1.5">
-              {boxes.map((b, i) => (
-                <span key={i} className="inline-flex items-center gap-1.5 rounded-full border border-cart-line bg-cart-bg-elev-2 px-2.5 py-1 text-[12px]">
-                  <span className="font-mono font-semibold tracking-[0.04em] text-white">{b.label}</span>
-                  <span className="text-cart-ink-4">· {seatsN}p</span>
-                  {b.custom && <span className="font-mono text-cart-accent">· S/{b.price.toLocaleString("es-PE")}</span>}
-                </span>
-              ))}
-            </motion.div>
-          )}
-        </AnimatePresence>
-        <motion.div layout className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1 border-t border-cart-line pt-2 text-[12px] text-cart-ink-3">
+                ))}
+                <span className="px-1 text-[10.5px] text-cart-ink-4">Vacío = usa el precio de la categoría (S/ {priceN.toLocaleString("es-PE")}).</span>
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {boxes.map((b, i) => (
+                  <span key={i} className="inline-flex items-center gap-1.5 rounded-full border border-cart-line bg-cart-bg-elev-2 px-2.5 py-1 text-[12px]">
+                    <span className="font-mono font-semibold tracking-[0.04em] text-white">{b.label}</span>
+                    <span className="text-cart-ink-4">· {seatsN}p</span>
+                    {b.custom && <span className="font-mono text-cart-accent">· S/{b.price.toLocaleString("es-PE")}</span>}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1 border-t border-cart-line pt-2 text-[12px] text-cart-ink-3">
           <span><span className="font-semibold text-white">{n}</span> boxes</span>
           <span><span className="font-semibold text-white">{n * seatsN}</span> personas</span>
           <span>{anyCustom ? `S/ ${Math.min(...boxes.map((b) => b.price)).toLocaleString("es-PE")}–${Math.max(...boxes.map((b) => b.price)).toLocaleString("es-PE")}` : `S/ ${priceN.toLocaleString("es-PE")} c/u`}</span>
-        </motion.div>
-      </motion.div>
+        </div>
+      </div>
     </div>
   );
 }
