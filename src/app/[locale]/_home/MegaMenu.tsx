@@ -3,52 +3,7 @@
 import { ArrowRightIcon } from "./icons";
 import type { EventCategory } from "@/server/events/domain/Event";
 import { useBrowseEvents } from "@/lib/events/hooks/useEvents";
-
-type CatKey = EventCategory | null;
-
-const COLS: Array<{ title: string; items: Array<[string, CatKey]> }> = [
-  {
-    title: "Conciertos",
-    items: [
-      ["Conciertos",   "conciertos"],
-      ["Cumbia",       "conciertos"],
-      ["Reggaetón",    "conciertos"],
-      ["Jazz & Blues", "conciertos"],
-      ["K-Pop",        "conciertos"],
-      ["Festivales",   "festivales"],
-    ],
-  },
-  {
-    title: "Fiestas",
-    items: [
-      ["DJ Sets",      "fiestas"],
-      ["Electrónica",  "fiestas"],
-      ["After-office", "fiestas"],
-      ["Karaoke",      null],
-      ["Rooftop",      null],
-    ],
-  },
-  {
-    title: "Cultura",
-    items: [
-      ["Teatro",     "cultura"],
-      ["Comedia",    "comedia"],
-      ["Cine",       "cultura"],
-      ["Arte & expo","cultura"],
-      ["Charlas",    "cultura"],
-    ],
-  },
-  {
-    title: "Comida & deporte",
-    items: [
-      ["Gastronomía",      null],
-      ["Cata de vino",     null],
-      ["Pisco & mixología",null],
-      ["Carreras & runs",  "deportes"],
-      ["Deportes",         "deportes"],
-    ],
-  },
-];
+import { CATEGORIES } from "./categories";
 
 type Props = {
   open: boolean;
@@ -72,42 +27,43 @@ export function MegaMenu({ open, onClose, onSelectCategory }: Props) {
       }`}
     >
       <div className="mx-auto max-w-[1320px] px-[clamp(20px,4vw,56px)]">
-        <div className="grid grid-cols-[repeat(4,1fr)_1.3fr] gap-8 py-8 max-[1024px]:grid-cols-[repeat(2,1fr)_1.3fr] max-[1024px]:gap-6">
-          {COLS.map((col) => (
-            <div key={col.title} onClick={(e) => e.stopPropagation()}>
-              <h6 className="mb-3 text-[11.5px] font-medium uppercase tracking-[0.08em] text-cart-ink-4">
-                {col.title}
-              </h6>
-              <ul className="flex flex-col gap-2 list-none p-0 m-0">
-                {col.items.map(([label, cat]) => (
-                  <li key={label}>
-                    <button
-                      type="button"
-                      onClick={() => { onSelectCategory(cat); onClose(); }}
-                      className="inline-flex w-full justify-between gap-3 whitespace-nowrap py-1 text-[14.5px] text-cart-ink-2 transition-colors hover:text-cart-accent"
-                    >
-                      {label}
-                      {cat === null && (
-                        <span className="text-[11px] text-cart-ink-4 italic">pronto</span>
-                      )}
-                    </button>
-                  </li>
-                ))}
-              </ul>
+        <div className="grid grid-cols-[1.4fr_1fr] gap-10 py-8 max-[900px]:grid-cols-1 max-[900px]:gap-6">
+          {/* Categorías reales */}
+          <div onClick={(e) => e.stopPropagation()}>
+            <h6 className="mb-4 text-[11.5px] font-medium uppercase tracking-[0.08em] text-cart-ink-4">
+              Categorías
+            </h6>
+            <div className="grid grid-cols-2 gap-2 max-[560px]:grid-cols-1">
+              {CATEGORIES.map(({ id, label, Icon, color }) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => { onSelectCategory(id); onClose(); }}
+                  className="group flex items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 text-left transition-colors hover:border-cart-line hover:bg-cart-bg-elev-2"
+                >
+                  <span
+                    className="grid size-9 shrink-0 place-items-center rounded-lg bg-white/5 transition-colors"
+                    style={{ color }}
+                  >
+                    <Icon width={18} height={18} />
+                  </span>
+                  <span className="text-[15px] font-medium text-cart-ink-2 transition-colors group-hover:text-white">
+                    {label}
+                  </span>
+                </button>
+              ))}
             </div>
-          ))}
+          </div>
 
           {/* Panel destacado */}
           <div
             onClick={(e) => e.stopPropagation()}
-            className="flex flex-col justify-between border-l border-cart-line pl-8 max-[1024px]:col-span-full max-[1024px]:flex-row max-[1024px]:items-center max-[1024px]:justify-between max-[1024px]:border-l-0 max-[1024px]:border-t max-[1024px]:pl-0 max-[1024px]:pt-6"
+            className="flex flex-col justify-between border-l border-cart-line pl-10 max-[900px]:border-l-0 max-[900px]:border-t max-[900px]:pl-0 max-[900px]:pt-6"
           >
             {featured ? (
               <>
                 <div>
-                  <h6 className="font-serif italic text-sm text-cart-accent">
-                    Destacado
-                  </h6>
+                  <h6 className="font-serif italic text-sm text-cart-accent">Destacado</h6>
                   <p className="mt-1.5 max-w-[26ch] text-[22px] font-semibold leading-[1.2] tracking-[-0.015em] text-white">
                     {featured.title}
                   </p>
