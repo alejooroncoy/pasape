@@ -27,6 +27,7 @@ const updateProfileSchema = z.object({
     .enum(["production_company", "venue_owner", "independent_host"])
     .nullable()
     .optional(),
+  avatarUrl: z.string().url().nullable().optional(),
 });
 
 const onboardingSchema = z.object({
@@ -99,6 +100,7 @@ export const IdentityController = {
       phone: parsed.data.phone ?? null,
       dni: parsed.data.dni ?? null,
       organizerType: parsed.data.organizerType,
+      avatarUrl: parsed.data.avatarUrl,
     });
   },
 
