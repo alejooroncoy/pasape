@@ -80,6 +80,7 @@ export function HomeClient({ user }: { user: NavUser | null }) {
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         onSignIn={() => setSignInOpen(true)}
+        onSelectCategory={selectCategoryFromNav}
       />
       <SignInDrawer open={signInOpen} onClose={() => setSignInOpen(false)} />
       </div>

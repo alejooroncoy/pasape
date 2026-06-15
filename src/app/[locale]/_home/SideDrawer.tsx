@@ -6,23 +6,19 @@ import { AnimatePresence, motion } from "motion/react";
 import { Ticket, Heart, Bell, LogOut, ChevronRight } from "lucide-react";
 import { useRouter } from "@/i18n/navigation";
 import { useSignOut } from "@/lib/identity/hooks/useSupabaseAuth";
-import { CloseIcon, WaIcon, MusicIcon, DjIcon, ComedyIcon, CultureIcon, PinIcon } from "./icons";
+import { CloseIcon, WaIcon, PinIcon } from "./icons";
 import { Logo } from "@/components/brand/Logo";
 import { WA_HREF } from "./wa";
+import { CATEGORIES } from "./categories";
 import type { NavUser } from "./Nav";
+import type { EventCategory } from "@/server/events/domain/Event";
 
-const CATEGORIES = [
-  { name: "Música en vivo", Icon: MusicIcon },
-  { name: "DJ Sets", Icon: DjIcon },
-  { name: "Comedia", Icon: ComedyIcon },
-  { name: "Cultura", Icon: CultureIcon },
-];
-
-export function SideDrawer({ user, open, onClose, onSignIn }: {
+export function SideDrawer({ user, open, onClose, onSignIn, onSelectCategory }: {
   user: NavUser | null;
   open: boolean;
   onClose: () => void;
   onSignIn: () => void;
+  onSelectCategory?: (cat: EventCategory | null) => void;
 }) {
   useEffect(() => {
     if (!open) return;
@@ -95,8 +91,16 @@ export function SideDrawer({ user, open, onClose, onSignIn }: {
               </Section>
 
               <Section title="Categorías" topBorder>
-                {CATEGORIES.map(({ name, Icon }) => (
-                  <Item key={name} Icon={Icon} label={name} badge="Pronto" />
+                {CATEGORIES.map(({ id, label, Icon }) => (
+                  <Item
+                    key={id}
+                    Icon={Icon}
+                    label={label}
+                    onClick={() => {
+                      onSelectCategory?.(id);
+                      onClose();
+                    }}
+                  />
                 ))}
               </Section>
 
@@ -261,15 +265,17 @@ function Section({ title, topBorder, children }: { title?: string; topBorder?: b
   );
 }
 
-function Item({ Icon, label, meta, badge }: {
-  Icon: (p: { width?: number; height?: number }) => React.ReactNode;
+function Item({ Icon, label, meta, badge, onClick }: {
+  Icon: React.FC<React.SVGProps<SVGSVGElement>>;
   label: string;
   meta?: string;
   badge?: string;
+  onClick?: () => void;
 }) {
   return (
     <button
       type="button"
+      onClick={onClick}
       className="flex w-full cursor-pointer items-center gap-3.5 rounded-[10px] border-0 bg-transparent px-4 py-[11px] text-left text-[15px] font-medium text-cart-ink-2 transition-colors hover:bg-cart-bg-elev hover:text-white"
     >
       <span className="grid size-[22px] flex-shrink-0 place-items-center text-cart-ink-3">

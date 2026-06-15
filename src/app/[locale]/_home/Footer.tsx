@@ -18,10 +18,10 @@ export function Footer() {
             </p>
           </div>
           <FootCol title="Explorar" links={[
-            ["Esta noche", "#"],
-            ["Este finde", "#"],
-            ["Música", "#"],
-            ["DJ Sets", "#"],
+            ["Conciertos", "/events"],
+            ["Fiestas", "/events"],
+            ["Festivales", "/events"],
+            ["Comedia", "/events"],
           ]} />
           <FootCol title="Organizadores" links={[
             ["Crear evento", "/organizadores"],
