@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { Money } from "@/lib/_shared/money";
 import { motion } from "motion/react";
 import { Link } from "@/i18n/navigation";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { useMyPromoterLinks, usePromoterGuests, usePromoterHome } from "@/lib/promoters/hooks/usePromoter";
+import { useRealtimePromoterStats } from "@/lib/events/hooks/useRealtimeEventStats";
 import { useCommissionTiers } from "@/lib/promoters/tiers/hooks/useCommissionTiers";
 import type { PromoterLink } from "@/server/promoters/domain/Promoter";
 import type { CommissionTier } from "@/server/promoters/tiers/domain/CommissionTier";
@@ -19,7 +21,7 @@ const buildShareUrl = (code: string) =>
 
 const formatSoles = (cents: number | null | undefined): string => {
   if (cents == null) return "—";
-  const n = cents / 100;
+  const n = Money.toSoles(cents);
   return `S/ ${n.toLocaleString("es-PE", { maximumFractionDigits: 0 })}`;
 };
 
@@ -209,6 +211,10 @@ function ActiveEventPanel({ link }: { link: PromoterLink }) {
   const home = usePromoterHome(link.eventSlug);
   const tiers = useCommissionTiers(link.id);
   const allTiers = tiers.data ?? [];
+
+  // El promotor ve sus ventas/hitos en vivo: mismo Broadcast del evento que usa
+  // el panel del organizador.
+  useRealtimePromoterStats(link.eventId, link.eventSlug);
 
   const sold = home.data?.soldCount ?? 0;
   const validated = 0; // TODO: cuando tengamos el dato real

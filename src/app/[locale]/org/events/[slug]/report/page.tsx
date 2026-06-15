@@ -4,6 +4,7 @@ import { use } from "react";
 import { Btn, C, FONT_DISPLAY, Phone } from "@/components/design";
 import { useEvent } from "@/lib/events/hooks/useEvents";
 import { useEventStats } from "@/lib/events/hooks/useEventStats";
+import { useRealtimeEventStats } from "@/lib/events/hooks/useRealtimeEventStats";
 import { formatMoney } from "@/lib/_shared/format";
 import { BackBtn } from "../_components";
 
@@ -13,6 +14,8 @@ export default function OrgReportPage({ params }: { params: Params }) {
   const { slug } = use(params);
   const event = useEvent(slug);
   const stats = useEventStats(slug);
+  // Consistente con las otras pantallas: KPIs en vivo vía Broadcast (no solo polling).
+  useRealtimeEventStats(event.data?.event?.id, slug);
 
   const ev = event.data?.event;
   const sold = stats.data?.sold ?? 0;
@@ -41,7 +44,9 @@ export default function OrgReportPage({ params }: { params: Params }) {
         }}
       >
         <BackBtn />
-        <div style={{ fontSize: 12, color: C.dim, letterSpacing: "0.06em" }}>REPORTE FINAL</div>
+        <div style={{ fontSize: 12, color: C.dim, letterSpacing: "0.06em" }}>
+          {ev?.status === "closed" || ev?.status === "cancelled" ? "REPORTE FINAL" : "AVANCE EN VIVO"}
+        </div>
         <div style={{ width: 38 }} />
       </div>
 
@@ -86,7 +91,7 @@ export default function OrgReportPage({ params }: { params: Params }) {
               lineHeight: 1,
             }}
           >
-            {formatMoney(revenue)}
+            {formatMoney(revenue, ev?.currency)}
           </div>
           <div
             style={{
@@ -107,7 +112,7 @@ export default function OrgReportPage({ params }: { params: Params }) {
             </span>
             <span>
               <strong style={{ color: C.dim }}>{noShow}</strong>{" "}
-              <span style={{ color: C.dim }}>no shows</span>
+              <span style={{ color: C.dim }}>no asistieron</span>
             </span>
           </div>
         </div>
@@ -150,7 +155,7 @@ export default function OrgReportPage({ params }: { params: Params }) {
                 </div>
               </div>
               <div style={{ fontFamily: FONT_DISPLAY, fontWeight: 700, fontSize: 14 }}>
-                {formatMoney(t.priceCents * t.sold)}
+                {formatMoney(t.revenueCents, ev?.currency)}
               </div>
             </div>
           ))}
@@ -165,8 +170,13 @@ export default function OrgReportPage({ params }: { params: Params }) {
       <div
         style={{ padding: "0 22px 32px", display: "flex", gap: 10, flexShrink: 0 }}
       >
-        <Btn kind="secondary">Compartir</Btn>
-        <Btn kind="green">Transferir →</Btn>
+        <Btn
+          kind="green"
+          style={{ flex: 1 }}
+          onClick={() => window.open(`/api/events/${slug}/export`, "_blank")}
+        >
+          Exportar Excel
+        </Btn>
       </div>
     </Phone>
   );

@@ -1,4 +1,5 @@
 import ExcelJS from "exceljs";
+import { Money } from "@/lib/_shared/money";
 import type { Event } from "../domain/Event";
 import type { EventRepository } from "../ports/EventRepository";
 
@@ -9,6 +10,38 @@ const STATUS_LABEL: Record<string, string> = {
   used: "Usada",
   void: "Anulada",
   refunded: "Reembolsada",
+};
+
+// Anti CSV/Excel injection: un valor de usuario que empiece con = + - @ o un
+// control (TAB/CR/LF) se ejecuta como fórmula al abrir el archivo. Lo
+// neutralizamos prefijando una comilla simple (Excel la trata como texto).
+const safeCell = (v: string | null | undefined): string => {
+  const s = v ?? "";
+  return /^[=+\-@\t\r\n]/.test(s) ? `'${s}` : s;
+};
+
+// Fecha ISO (UTC) → Date con la hora de pared de Lima (UTC-5), para que Excel la
+// muestre en horario local y la trate como fecha real (con numFmt). El server
+// corre en UTC, así que construir el Date desde los componentes de Lima da el
+// serial correcto.
+const toLimaDate = (iso: string | null | undefined): Date | null => {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const p = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Lima",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(d);
+  const get = (t: string) => Number(p.find((x) => x.type === t)?.value);
+  return new Date(
+    Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute"), get("second")),
+  );
 };
 
 export const exportEventReport = async (
@@ -37,16 +70,17 @@ export const exportEventReport = async (
   for (const a of attendees) {
     wsA.addRow({
       ticketId: a.ticketId,
-      holderName: a.holderName ?? "",
-      ticketTypeName: a.ticketTypeName,
+      holderName: safeCell(a.holderName),
+      ticketTypeName: safeCell(a.ticketTypeName),
       status: STATUS_LABEL[a.status] ?? a.status,
-      usedAt: a.usedAt ?? "",
+      usedAt: toLimaDate(a.usedAt) ?? "",
       orderId: a.orderId,
-      buyerEmail: a.buyerEmail ?? "",
-      buyerPhone: a.buyerPhone ?? "",
-      promoterCode: a.promoterCode ?? "",
+      buyerEmail: safeCell(a.buyerEmail),
+      buyerPhone: safeCell(a.buyerPhone),
+      promoterCode: safeCell(a.promoterCode),
     });
   }
+  wsA.getColumn("usedAt").numFmt = "yyyy-mm-dd hh:mm";
   wsA.getRow(1).font = { bold: true };
 
   // ---- Hoja Promotores ----
@@ -64,15 +98,15 @@ export const exportEventReport = async (
   ];
   for (const p of promoters) {
     wsP.addRow({
-      name: p.name,
-      code: p.code,
+      name: safeCell(p.name),
+      code: safeCell(p.code),
       ticketsSold: p.ticketsSold,
       ticketsValidated: p.ticketsValidated,
       guestsInvited: p.guestsInvited,
       guestsEntered: p.guestsEntered,
-      revenue: p.revenueCents / 100,
+      revenue: Money.toSoles(p.revenueCents),
       commissionPct: p.commissionPct,
-      commission: p.commissionCalculatedCents / 100,
+      commission: Money.toSoles(p.commissionCalculatedCents),
     });
   }
   wsP.getColumn("revenue").numFmt = "#,##0.00";
@@ -86,16 +120,17 @@ export const exportEventReport = async (
     { header: "Valor", key: "v", width: 24 },
   ];
   wsS.getRow(1).font = { bold: true };
-  wsS.addRow({ k: "Evento", v: event.title });
-  wsS.addRow({ k: "Slug", v: event.slug });
-  wsS.addRow({ k: "Inicio", v: event.startsAt });
-  wsS.addRow({ k: "Venue", v: event.venue ?? "" });
+  wsS.addRow({ k: "Evento", v: safeCell(event.title) });
+  wsS.addRow({ k: "Slug", v: safeCell(event.slug) });
+  const startsAtRow = wsS.addRow({ k: "Inicio", v: toLimaDate(event.startsAt) ?? "" });
+  startsAtRow.getCell("v").numFmt = "yyyy-mm-dd hh:mm";
+  wsS.addRow({ k: "Venue", v: safeCell(event.venue) });
   wsS.addRow({ k: "Estado", v: event.status });
   wsS.addRow({ k: "" });
   wsS.addRow({ k: "Tickets vendidos", v: summary.sold });
   wsS.addRow({ k: "Tickets validados", v: summary.validated });
   wsS.addRow({ k: "Capacidad total", v: summary.capacity ?? "—" });
-  wsS.addRow({ k: "Recaudado (S/)", v: summary.revenueCents / 100 });
+  wsS.addRow({ k: "Recaudado (S/)", v: Money.toSoles(summary.revenueCents) });
   wsS.addRow({ k: "" });
   wsS.addRow({ k: "Desglose por tipo de ticket", v: "" }).font = { bold: true };
   wsS.addRow({ k: "Tipo", v: "Vendidos / Capacidad / Recaudado (S/)" }).font = {
@@ -103,8 +138,8 @@ export const exportEventReport = async (
   };
   for (const t of summary.ticketTypes) {
     wsS.addRow({
-      k: t.name,
-      v: `${t.sold} / ${t.capacity} / ${((t.priceCents * t.sold) / 100).toFixed(2)}`,
+      k: safeCell(t.name),
+      v: `${t.sold} / ${t.capacity} / ${Money.toSoles(t.revenueCents).toFixed(2)}`,
     });
   }
 

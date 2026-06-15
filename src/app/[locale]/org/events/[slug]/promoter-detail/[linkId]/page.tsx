@@ -6,6 +6,7 @@ import { Link } from "@/i18n/navigation";
 import { useEventPromoters, usePromoterLinkSales } from "@/lib/promoters/hooks/useEventPromoters";
 import { useSendPromoterInvite } from "@/lib/promoters/hooks/useSendPromoterInvite";
 import { formatMoney } from "@/lib/_shared/format";
+import { Money } from "@/lib/_shared/money";
 
 type Params = Promise<{ slug: string; linkId: string; locale: string }>;
 
@@ -366,6 +367,6 @@ function Empty({ label }: { label: string }) {
 }
 
 function formatMoneyClean(cents: number): string {
-  const s = formatMoney(cents).replace(/[^\d,.]/g, "").trim();
+  const s = Money.formatClean(cents);
   return s ? `S/ ${s}` : "S/ 0";
 }

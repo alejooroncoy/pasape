@@ -11,6 +11,7 @@ import {
   type SetStateAction,
 } from "react";
 import { AnimatePresence, motion } from "motion/react";
+import { Money } from "@/lib/_shared/money";
 import { useRouter } from "@/i18n/navigation";
 import { useCreateEvent } from "@/lib/events/hooks/useCreateEvent";
 import { useUpdateEvent } from "@/lib/events/hooks/useUpdateEvent";
@@ -30,10 +31,12 @@ import { VenueInput, type VenueValue } from "@/components/ui/VenueInput";
 import type { OrgPromoter } from "@/server/promoters/domain/OrgPromoter";
 import type {
   Event as EventDomain,
+  EventCategory,
   PromoKind,
   TicketType,
   TicketTypeKind,
 } from "@/server/events/domain/Event";
+import { CATEGORIES } from "../../../_home/categories";
 import { createSupabaseBrowserClient } from "@/server/_shared/supabase/client";
 
 // ============================================================
@@ -65,6 +68,25 @@ type TicketRow = {
   presaleTiers: Array<{ rowKey: string; priceSoles: string; endsAt: string }>;
 };
 
+/**
+ * Grupo de espacios reservables (boxes/mesas) definido en UN solo card.
+ * Se expande a N TicketRows (Box A…F) al guardar. El frontend lo trata como una
+ * unidad; el backend recibe N ticket_types (modelo actual).
+ */
+export type SpaceGroup = {
+  rowKey: string;
+  name: string;
+  priceSoles: string;
+  /** Personas por box (aforo de cada instancia). */
+  seats: string;
+  /** Cuántos boxes genera. */
+  count: string;
+  /** Etiquetado: letras (A,B,C) o números (1,2,3). */
+  scheme: "alpha" | "num";
+  /** Override por índice: etiqueta y/o precio propios. */
+  overrides: Record<number, { label?: string; price?: string }>;
+};
+
 export type ComposerMode = "create" | "edit";
 
 export type EventComposerProps =
@@ -87,14 +109,52 @@ export type EventComposerProps =
 // Constantes / helpers
 // ============================================================
 const uid = () => Math.random().toString(36).slice(2, 9);
-const toCents = (s: string) => Math.round(Number(s || "0") * 100);
-const fromCents = (n: number) => (n / 100).toString();
+const toCents = (s: string) => Money.toCents(s);
+const fromCents = (n: number) => Money.toSoles(n).toString();
 
 /** Convierte presaleTiers del form al payload para la API. */
 const presaleTiersPayload = (t: TicketRow) => ({
   presaleTiers: t.presaleTiers
     .filter(tier => tier.priceSoles.trim() && tier.endsAt)
     .map(tier => ({ priceCents: toCents(tier.priceSoles), endsAt: tier.endsAt })),
+});
+
+// ── Helpers de grupos de espacios (boxes/mesas) ──────────────────────────────
+const spaceCount = (g: SpaceGroup) => Math.max(0, Math.min(60, Number(g.count) || 0));
+const spaceSeats = (g: SpaceGroup) => Math.max(1, Number(g.seats) || 1);
+const spaceBoxLabel = (g: SpaceGroup, i: number) => {
+  const auto = g.scheme === "alpha" ? String.fromCharCode(65 + (i % 26)) : String(i + 1);
+  return g.overrides[i]?.label?.trim() || `${g.name.trim() || "Box"} ${auto}`;
+};
+const spaceBoxPriceSoles = (g: SpaceGroup, i: number) => {
+  const ov = g.overrides[i]?.price;
+  return ov != null && ov !== "" ? Number(ov) || 0 : Number(g.priceSoles || "0");
+};
+/** Expande un grupo a payloads de ticket_type (kind=box), uno por instancia. */
+const expandSpaceGroup = (g: SpaceGroup) =>
+  Array.from({ length: spaceCount(g) }, (_, i) => {
+    const label = spaceBoxLabel(g, i);
+    return {
+      name: label,
+      kind: "box" as const,
+      priceCents: Money.toCents(spaceBoxPriceSoles(g, i)),
+      capacity: spaceSeats(g),
+      boxLabel: label,
+      zone: null,
+      unitNoun: (g.name.trim() || "Box").toLowerCase(),
+      saleEndsAt: null,
+      description: null,
+      presaleTiers: [],
+    };
+  });
+const newSpaceGroup = (): SpaceGroup => ({
+  rowKey: uid(),
+  name: "Box",
+  priceSoles: "200",
+  seats: "8",
+  count: "6",
+  scheme: "alpha",
+  overrides: {},
 });
 
 const TICKET_KIND_META: Record<TicketKind, { label: string; tint: string }> = {
@@ -239,6 +299,7 @@ export function EventComposer(props: EventComposerProps) {
     return {
       title: ev.title,
       description: ev.description ?? "",
+      category: ev.category ?? null,
       date,
       time,
       durationHours: durationHoursFromEdit > 0 ? String(durationHoursFromEdit) : "",
@@ -271,6 +332,9 @@ export function EventComposer(props: EventComposerProps) {
 
   const [title, setTitle] = useState(seedFromEdit?.title ?? "");
   const [description, setDescription] = useState(seedFromEdit?.description ?? "");
+  // Preseleccionada en "fiestas" (categoría dominante del ICP nightlife) y requerida:
+  // los chips funcionan como radio, nunca queda en null → el evento siempre es filtrable.
+  const [category, setCategory] = useState<EventCategory>(seedFromEdit?.category ?? "fiestas");
   const [date, setDate] = useState(seedFromEdit?.date ?? "");
   const [time, setTime] = useState(seedFromEdit?.time ?? "");
   const [durationHours, setDurationHours] = useState(seedFromEdit?.durationHours ?? "");
@@ -300,6 +364,10 @@ export function EventComposer(props: EventComposerProps) {
       },
     ],
   );
+  // Grupos de espacios (boxes/mesas) creados en este composer. Cada grupo es UN
+  // card que se expande a N boxes al guardar. En edit, los boxes ya existentes
+  // siguen como TicketRows; los grupos nuevos se agregan como ticket_types.
+  const [spaceGroups, setSpaceGroups] = useState<SpaceGroup[]>([]);
   const [selectedPromoterIds, setSelectedPromoterIds] = useState<Set<string>>(
     new Set(),
   );
@@ -342,17 +410,33 @@ export function EventComposer(props: EventComposerProps) {
   );
 
   // ---------- derivados ----------
+  // Boxes provenientes de grupos (se expanden al guardar).
+  const spaceBoxesCount = useMemo(
+    () => spaceGroups.reduce((a, g) => a + spaceCount(g), 0),
+    [spaceGroups],
+  );
   const totalCapacity = useMemo(
-    () => tickets.reduce((a, t) => a + Number(t.capacity || 0), 0),
-    [tickets],
+    () =>
+      tickets.reduce((a, t) => a + Number(t.capacity || 0), 0) +
+      spaceGroups.reduce((a, g) => a + spaceCount(g) * spaceSeats(g), 0),
+    [tickets, spaceGroups],
   );
   const totalMax = useMemo(
     () =>
       tickets.reduce(
         (a, t) => a + Number(t.capacity || 0) * Number(t.priceSoles || 0),
         0,
+      ) +
+      spaceGroups.reduce(
+        (a, g) =>
+          a +
+          Array.from({ length: spaceCount(g) }).reduce<number>(
+            (s, _, i) => s + spaceBoxPriceSoles(g, i),
+            0,
+          ),
+        0,
       ),
-    [tickets],
+    [tickets, spaceGroups],
   );
 
   const formattedDateLong = useMemo(() => {
@@ -378,14 +462,16 @@ export function EventComposer(props: EventComposerProps) {
       (t.kind !== "box" || t.boxLabel.trim().length > 0),
   );
 
+  const hasValidSpace = spaceGroups.some((g) => spaceCount(g) >= 1);
+
   const missingFields = useMemo(() => {
     const m: string[] = [];
     if (!title.trim()) m.push("nombre");
     if (!date) m.push("fecha");
     if (!time) m.push("hora");
-    if (validTickets.length === 0) m.push("entradas");
+    if (validTickets.length === 0 && !hasValidSpace) m.push("entradas");
     return m;
-  }, [title, date, time, validTickets.length]);
+  }, [title, date, time, validTickets.length, hasValidSpace]);
 
   const ready = missingFields.length === 0;
 
@@ -436,18 +522,22 @@ export function EventComposer(props: EventComposerProps) {
     }
     try {
       const startsAt = new Date(`${date}T${time}:00`).toISOString();
-      const ticketTypes = validTickets.map((t) => ({
-        name: t.name,
-        kind: t.kind,
-        priceCents: toCents(t.priceSoles),
-        capacity: Number(t.capacity),
-        boxLabel: t.kind === "box" ? t.boxLabel.trim() : null,
-        zone: t.zone.trim() || null,
-        unitNoun: t.kind === "box" ? t.unitNoun.trim() || null : null,
-        saleEndsAt: t.saleEndsAt || null,
-        description: t.description.trim() || null,
-        ...presaleTiersPayload(t),
-      }));
+      const ticketTypes = [
+        ...validTickets.map((t) => ({
+          name: t.name,
+          kind: t.kind,
+          priceCents: toCents(t.priceSoles),
+          capacity: Number(t.capacity),
+          boxLabel: t.kind === "box" ? t.boxLabel.trim() : null,
+          zone: t.zone.trim() || null,
+          unitNoun: t.kind === "box" ? t.unitNoun.trim() || null : null,
+          saleEndsAt: t.saleEndsAt || null,
+          description: t.description.trim() || null,
+          ...presaleTiersPayload(t),
+        })),
+        // Expandir cada grupo de espacios a N boxes (Box A…F).
+        ...spaceGroups.flatMap(expandSpaceGroup),
+      ];
 
       let venueLayoutUrl: string | null = null;
       let coverUrl: string | null = null;
@@ -480,6 +570,7 @@ export function EventComposer(props: EventComposerProps) {
       const ev = await create.mutateAsync({
         title: title.trim(),
         description: description.trim() || null,
+        category,
         venue: venue.name.trim() || null,
         venueLat: venue.lat,
         venueLng: venue.lng,
@@ -568,6 +659,7 @@ export function EventComposer(props: EventComposerProps) {
       if (trimTitle !== ev.title) patch.title = trimTitle;
       const nextDesc = description.trim() || null;
       if (nextDesc !== ev.description) patch.description = nextDesc;
+      if (category !== (ev.category ?? null)) patch.category = category;
       const nextVenueName = venue.name.trim() || null;
       if (nextVenueName !== ev.venue) patch.venue = nextVenueName;
       if (venue.lat !== ev.venueLat) patch.venueLat = venue.lat;
@@ -615,6 +707,13 @@ export function EventComposer(props: EventComposerProps) {
           description: t.description.trim() || null,
           ...presaleTiersPayload(t),
         });
+      }
+
+      // Crear los boxes de cada grupo de espacios nuevo (se expanden aquí).
+      for (const g of spaceGroups) {
+        for (const box of expandSpaceGroup(g)) {
+          await createTT.mutateAsync(box);
+        }
       }
 
       // Actualizar cambiados
@@ -810,6 +909,44 @@ export function EventComposer(props: EventComposerProps) {
             highlight={highlight === "nombre"}
           />
 
+          {/* Categoría — junto al nombre: define "qué es" el evento. Requerida (default fiestas). */}
+          <div className="rounded-2xl border border-cart-line bg-cart-bg-elev px-4 py-3">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">
+                Categoría
+              </span>
+              {CATEGORIES.map(({ id, label, color }) => {
+                const active = category === id;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setCategory(id)}
+                    className={`rounded-full border px-3 py-1 text-[11.5px] font-medium transition-colors ${
+                      active ? "" : "border-cart-line text-cart-ink-3 hover:border-cart-line-strong hover:text-white"
+                    }`}
+                    style={
+                      active
+                        ? { borderColor: color, background: `${color}1f`, color: "#fff" }
+                        : undefined
+                    }
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Descripción — junto a nombre/categoría: completa el "de qué va" el evento */}
+          <CardButton
+            icon={<IconText />}
+            label="Descripción"
+            hint={description ? truncate(description, 80) : "Opcional — vibras, lineup, dress code"}
+            onClick={() => setOpenSheet("description")}
+            active={!!description.trim()}
+          />
+
           {/* Fecha + hora */}
           <div
             className={
@@ -914,15 +1051,6 @@ export function EventComposer(props: EventComposerProps) {
               />
             </FieldShell>
           </Card>
-
-          {/* Descripción */}
-          <CardButton
-            icon={<IconText />}
-            label="Descripción"
-            hint={description ? truncate(description, 80) : "Opcional — vibras, lineup, dress code"}
-            onClick={() => setOpenSheet("description")}
-            active={!!description.trim()}
-          />
 
           {/* Tickets */}
           <CardButton
@@ -1069,7 +1197,12 @@ export function EventComposer(props: EventComposerProps) {
       <AnimatePresence>
         {openSheet === "tickets" && (
           <Sheet onClose={() => setOpenSheet(null)} title="Entradas">
-            <TicketsEditor tickets={tickets} setTickets={setTickets} />
+            <TicketsEditor
+              tickets={tickets}
+              setTickets={setTickets}
+              spaceGroups={spaceGroups}
+              setSpaceGroups={setSpaceGroups}
+            />
           </Sheet>
         )}
         {openSheet === "promoters" && !isEdit && (
@@ -1838,9 +1971,13 @@ function AdvancedToggle({ open, onToggle, hasContent }: { open: boolean; onToggl
 function TicketsEditor({
   tickets,
   setTickets,
+  spaceGroups,
+  setSpaceGroups,
 }: {
   tickets: TicketRow[];
   setTickets: Dispatch<SetStateAction<TicketRow[]>>;
+  spaceGroups: SpaceGroup[];
+  setSpaceGroups: Dispatch<SetStateAction<SpaceGroup[]>>;
 }) {
   const [advancedOpen, setAdvancedOpen] = useState<Set<string>>(new Set());
   const toggleAdvanced = (rowKey: string) =>
@@ -2106,6 +2243,18 @@ function TicketsEditor({
         );
       })}
 
+      {/* Grupos de espacios (boxes/mesas) — un card define N boxes */}
+      {spaceGroups.map((g) => (
+        <SpaceGroupCard
+          key={g.rowKey}
+          group={g}
+          onChange={(patch) =>
+            setSpaceGroups((prev) => prev.map((x) => (x.rowKey === g.rowKey ? { ...x, ...patch } : x)))
+          }
+          onRemove={() => setSpaceGroups((prev) => prev.filter((x) => x.rowKey !== g.rowKey))}
+        />
+      ))}
+
       <div className="flex flex-wrap gap-2">
         {/* Entrada individual — General o VIP, el organiza solo escribe el nombre */}
         <button
@@ -2120,10 +2269,10 @@ function TicketsEditor({
           + Nueva entrada
         </button>
 
-        {/* Espacio reservable — Mesa / Box / Lounge, para grupos */}
+        {/* Espacio reservable — agrega un grupo de boxes/mesas inline */}
         <button
           type="button"
-          onClick={() => add("box")}
+          onClick={() => setSpaceGroups((prev) => [...prev, newSpaceGroup()])}
           className="inline-flex items-center gap-2 rounded-full border border-dashed border-cart-line-strong px-4 py-1.5 text-[13px] font-medium text-cart-ink-2 transition hover:border-white/40 hover:text-white"
         >
           <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
@@ -2132,35 +2281,9 @@ function TicketsEditor({
             <rect x="1.5" y="8" width="4.5" height="4.5" rx="1" stroke="currentColor" strokeWidth="1.4" />
             <rect x="8" y="8" width="4.5" height="4.5" rx="1" stroke="currentColor" strokeWidth="1.4" />
           </svg>
-          + Espacio / Mesa / Box
-        </button>
-
-        {/* Crear varios espacios en lote */}
-        <button
-          type="button"
-          onClick={() => setBulkOpen(true)}
-          className="inline-flex items-center gap-1.5 rounded-full bg-cart-accent/15 px-3.5 py-1.5 text-[12.5px] font-semibold text-cart-accent transition hover:bg-cart-accent/25"
-        >
-          <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
-            <rect x="1.5" y="1.5" width="4.5" height="4.5" rx="1" stroke="currentColor" strokeWidth="1.4" />
-            <rect x="8" y="1.5" width="4.5" height="4.5" rx="1" stroke="currentColor" strokeWidth="1.4" />
-            <rect x="1.5" y="8" width="4.5" height="4.5" rx="1" stroke="currentColor" strokeWidth="1.4" />
-            <rect x="8" y="8" width="4.5" height="4.5" rx="1" stroke="currentColor" strokeWidth="1.4" />
-          </svg>
-          Crear varios
+          + Nuevo espacio (Mesa, Box, entre otros)
         </button>
       </div>
-
-      {bulkOpen && (
-        <BulkBoxCreator
-          knownZones={knownZones}
-          onClose={() => setBulkOpen(false)}
-          onCreate={(rows) => {
-            setTickets([...tickets, ...rows]);
-            setBulkOpen(false);
-          }}
-        />
-      )}
     </div>
   );
 }
@@ -2502,318 +2625,169 @@ function IconPeople() {
 }
 
 // ============================================================
-// Bulk box creator — genera N boxes en una zona en 30 segundos
+// SpaceGroupCard — un card define un grupo de boxes/mesas (se expande a N)
 // ============================================================
-type NounPreset = "box" | "mesa" | "lounge" | "custom";
-type NumberingScheme = "num" | "alpha";
-
-const NOUN_PRESETS: Array<{ id: NounPreset; label: string }> = [
-  { id: "box", label: "Box" },
-  { id: "mesa", label: "Mesa" },
-  { id: "lounge", label: "Lounge" },
-  { id: "custom", label: "Otro" },
-];
-
-const capitalizeNoun = (s: string): string =>
-  s.length === 0 ? s : s[0].toUpperCase() + s.slice(1).toLowerCase();
-
-function BulkBoxCreator({
-  knownZones,
-  onClose,
-  onCreate,
+function SpaceGroupCard({
+  group,
+  onChange,
+  onRemove,
 }: {
-  knownZones: string[];
-  onClose: () => void;
-  onCreate: (rows: TicketRow[]) => void;
+  group: SpaceGroup;
+  onChange: (patch: Partial<SpaceGroup>) => void;
+  onRemove: () => void;
 }) {
-  const [zone, setZone] = useState(knownZones[0] ?? "");
-  const [nounPreset, setNounPreset] = useState<NounPreset>("box");
-  const [customNoun, setCustomNoun] = useState("Espacio");
-  const [numbering, setNumbering] = useState<NumberingScheme>("num");
-  const [startNumber, setStartNumber] = useState("1");
-  const [startLetter, setStartLetter] = useState("A");
-  const [quantity, setQuantity] = useState("10");
-  const [capacity, setCapacity] = useState("12");
-  const [priceSoles, setPriceSoles] = useState("1500");
+  const [renaming, setRenaming] = useState(false);
+  const n = spaceCount(group);
+  const seatsN = spaceSeats(group);
+  const priceN = Number(group.priceSoles || "0");
+  const setOv = (i: number, patch: { label?: string; price?: string }) =>
+    onChange({ overrides: { ...group.overrides, [i]: { ...group.overrides[i], ...patch } } });
+  const boxes = Array.from({ length: n }, (_, i) => {
+    const ov = group.overrides[i] ?? {};
+    const custom = ov.price != null && ov.price !== "";
+    return { label: spaceBoxLabel(group, i), price: custom ? Number(ov.price) || 0 : priceN, custom };
+  });
+  const anyCustom = boxes.some((b) => b.custom);
 
-  const qty = Math.max(0, Math.min(60, Number(quantity) || 0));
-  const start =
-    numbering === "alpha"
-      ? Math.max(1, (startLetter.toUpperCase().charCodeAt(0) - 64) || 1)
-      : Math.max(1, Number(startNumber) || 1);
-  const cap = Math.max(1, Number(capacity) || 1);
-
-  const effectiveNoun =
-    nounPreset === "custom" ? customNoun.trim() || "Espacio" : NOUN_PRESETS.find((p) => p.id === nounPreset)!.label;
-
-  const labels = useMemo(() => {
-    return Array.from({ length: qty }, (_, i) => {
-      const suffix =
-        numbering === "alpha" ? String.fromCharCode(64 + start + i) : String(start + i);
-      return `${capitalizeNoun(effectiveNoun)} ${suffix}`;
-    });
-  }, [qty, start, numbering, effectiveNoun]);
-
-  const previewSample = labels.slice(0, 4).join(" · ") + (labels.length > 4 ? ` … ${labels[labels.length - 1]}` : "");
-
-  const canCreate = qty >= 1 && qty <= 60 && cap >= 1 && Number(priceSoles) >= 0;
-
-  const handleCreate = () => {
-    if (!canCreate) return;
-    const noun = effectiveNoun.toLowerCase();
-    const rows: TicketRow[] = labels.map((label) => ({
-      rowKey: uid(),
-      name: label,
-      kind: "box",
-      priceSoles: String(priceSoles),
-      capacity: String(cap),
-      boxLabel: label,
-      zone: zone.trim(),
-      unitNoun: noun,
-      saleEndsAt: "",
-      description: "",
-      presaleTiers: [],
-    }));
-    onCreate(rows);
-  };
+  // Altura animada con CSS puro: medimos el contenido tras el reflow (rAF) y
+  // transicionamos `height`. El rAF es clave — medir antes del reflow dejaba el
+  // colapso trabado.
+  const innerRef = useRef<HTMLDivElement>(null);
+  const [innerH, setInnerH] = useState<number | undefined>(undefined);
+  useEffect(() => {
+    const el = innerRef.current;
+    if (!el) return;
+    const id = requestAnimationFrame(() => setInnerH(el.scrollHeight));
+    return () => cancelAnimationFrame(id);
+  }, [renaming, n, group.scheme, group.name, group.overrides, priceN, seatsN]);
 
   return (
-    <>
-      <motion.div
-        key="bbd"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.18 }}
-        onClick={onClose}
-        aria-hidden
-        className="fixed inset-0 z-[110] bg-black/70 backdrop-blur-sm"
-      />
-      <motion.div
-        key="bbs"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Crear boxes en lote"
-        initial={{ y: "100%" }}
-        animate={{ y: 0 }}
-        exit={{ y: "100%" }}
-        transition={{ type: "spring", damping: 32, stiffness: 360, mass: 0.8 }}
-        className="fixed inset-x-0 bottom-0 z-[111] mx-auto flex max-h-[92dvh] w-full max-w-[520px] flex-col overflow-hidden rounded-t-[28px] border-t border-cart-line-strong bg-cart-bg-elev shadow-[0_-20px_60px_-10px_rgba(0,0,0,0.7)]"
-      >
-        <div className="flex shrink-0 items-center justify-between border-b border-cart-line px-5 py-4">
-          <div>
-            <div className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-cart-accent">
-              Boxes en lote
-            </div>
-            <h3 className="mt-0.5 font-sans text-[19px] font-semibold tracking-[-0.02em]">
-              Crear varios a la vez
-            </h3>
-          </div>
+    <div
+      className="rounded-2xl border border-cart-line bg-cart-bg-elev-2 p-3"
+      style={{ boxShadow: `inset 0 0 0 1px ${TICKET_KIND_META.box.tint}` }}
+    >
+      {/* Nombre */}
+      <div className="flex flex-col gap-0.5">
+        <span className="text-[9.5px] font-semibold uppercase tracking-[0.12em] text-cart-ink-4">
+          Nombre · tócalo para editar
+        </span>
+        <div className="flex items-center gap-2">
+          <svg width="12" height="12" viewBox="0 0 14 14" fill="none" className="shrink-0 text-cart-ink-3">
+            <path d="M9.5 2.5l2 2-7 7H2.5v-2l7-7z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+          </svg>
+          <input
+            value={group.name}
+            onChange={(e) => onChange({ name: e.target.value })}
+            placeholder="Box, Mesa, Lounge…"
+            maxLength={24}
+            className="flex-1 border-b border-white/20 bg-transparent pb-0.5 text-[15px] font-semibold tracking-[-0.01em] text-white outline-none transition-colors placeholder:text-cart-ink-3 focus:border-cart-accent"
+          />
           <button
             type="button"
-            onClick={onClose}
-            className="grid size-9 place-items-center rounded-full text-cart-ink-3 transition hover:bg-white/5 hover:text-white"
-            aria-label="Cerrar"
+            onClick={onRemove}
+            className="grid size-7 place-items-center rounded-full text-cart-ink-3 transition hover:bg-white/5 hover:text-red-300"
+            aria-label="Eliminar"
           >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
               <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
             </svg>
           </button>
         </div>
+      </div>
 
-        <div className="flex-1 overflow-y-auto px-5 py-5">
-          {/* 1 — Zona */}
-          <BulkStep number={1} title="Zona">
-            <div className="flex flex-col gap-2">
-              <input
-                value={zone}
-                onChange={(e) => setZone(e.target.value)}
-                placeholder="Ej. Platinum, VIP, Terraza"
-                list="bulk-zones"
-                maxLength={60}
-                className="w-full rounded-xl border border-cart-line bg-cart-bg-elev-2 px-3 py-2.5 text-[14px] text-white outline-none placeholder:text-cart-ink-4 focus:border-cart-accent"
-              />
-              <datalist id="bulk-zones">
-                {knownZones.map((z) => (
-                  <option key={z} value={z} />
-                ))}
-              </datalist>
-              {knownZones.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {knownZones.map((z) => (
-                    <button
-                      key={z}
-                      type="button"
-                      onClick={() => setZone(z)}
-                      className={
-                        "rounded-full px-2.5 py-1 text-[11.5px] transition " +
-                        (zone === z
-                          ? "bg-cart-accent text-cart-bg"
-                          : "border border-cart-line text-cart-ink-2 hover:border-white/40")
-                      }
-                    >
-                      {z}
-                    </button>
-                  ))}
-                </div>
-              )}
-              <p className="text-[10.5px] text-cart-ink-4">
-                Agrupa los boxes en el plano del comprador. Opcional pero recomendado.
-              </p>
-            </div>
-          </BulkStep>
+      {/* Precio · Personas/box · Cuántos */}
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        <Stepper label="Precio" suffix="S/" value={group.priceSoles} onChange={(v) => onChange({ priceSoles: v })} />
+        <Stepper label="Personas/box" value={group.seats} onChange={(v) => onChange({ seats: v })} />
+        <Stepper label="Cuántos" value={group.count} onChange={(v) => onChange({ count: v })} />
+      </div>
 
-          {/* 2 — Nombre de espacio */}
-          <BulkStep number={2} title="Nombre de espacio">
-            <div className="flex flex-wrap gap-1.5">
-              {NOUN_PRESETS.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => setNounPreset(p.id)}
-                  className={
-                    "rounded-full px-3.5 py-1.5 text-[12.5px] font-semibold transition " +
-                    (nounPreset === p.id
-                      ? "bg-cart-accent text-cart-bg"
-                      : "border border-cart-line bg-cart-bg-elev-2 text-cart-ink-2 hover:border-white/40 hover:text-white")
-                  }
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
-            {nounPreset === "custom" && (
-              <input
-                value={customNoun}
-                onChange={(e) => setCustomNoun(e.target.value)}
-                placeholder="Ej: Lounge, Espacio, Suite…"
-                maxLength={24}
-                className="mt-2 w-full rounded-xl border border-cart-line bg-cart-bg-elev-2 px-3 py-2.5 text-[14px] text-white outline-none placeholder:text-cart-ink-4 focus:border-cart-accent"
-              />
-            )}
-            <p className="mt-2 text-[10.5px] text-cart-ink-4">
-              El comprador verá: <span className="text-cart-ink-2">«Cada {effectiveNoun.toLowerCase()} para X personas»</span>
-            </p>
-          </BulkStep>
-
-          {/* 3 — Numeración */}
-          <BulkStep number={3} title="Numeración">
-            <div className="flex flex-wrap gap-1.5">
+      {/* Etiquetas de los boxes */}
+      <div className="mt-2 flex flex-col gap-1 rounded-xl bg-cart-bg-elev px-3 py-2">
+        <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">Etiquetas de los boxes</span>
+        <div className="mt-1 flex gap-1.5">
+          {(["alpha", "num"] as const).map((s) => {
+            const active = group.scheme === s;
+            return (
               <button
+                key={s}
                 type="button"
-                onClick={() => setNumbering("num")}
+                onClick={() => onChange({ scheme: s })}
                 className={
-                  "rounded-full px-3.5 py-1.5 text-[12.5px] font-semibold transition " +
-                  (numbering === "num"
-                    ? "bg-cart-accent text-cart-bg"
-                    : "border border-cart-line bg-cart-bg-elev-2 text-cart-ink-2 hover:border-white/40 hover:text-white")
+                  "rounded-full border px-3 py-1 text-[12px] font-medium transition-colors " +
+                  (active ? "border-cart-accent bg-cart-accent/15 text-white" : "border-cart-line text-cart-ink-3 hover:text-white")
                 }
               >
-                1, 2, 3…
+                {s === "alpha" ? "Letras · A B C" : "Números · 1 2 3"}
               </button>
-              <button
-                type="button"
-                onClick={() => setNumbering("alpha")}
-                className={
-                  "rounded-full px-3.5 py-1.5 text-[12.5px] font-semibold transition " +
-                  (numbering === "alpha"
-                    ? "bg-cart-accent text-cart-bg"
-                    : "border border-cart-line bg-cart-bg-elev-2 text-cart-ink-2 hover:border-white/40 hover:text-white")
-                }
-              >
-                A, B, C…
-              </button>
-            </div>
-          </BulkStep>
-
-          {/* 4 — Cantidad / cupo / precio */}
-          <BulkStep number={4} title="Configuración">
-            <div className="grid grid-cols-3 gap-2">
-              <BulkNumberField
-                label="Cantidad"
-                value={quantity}
-                onChange={setQuantity}
-                min={1}
-                max={60}
-              />
-              <BulkNumberField
-                label="Cupo c/u"
-                value={capacity}
-                onChange={setCapacity}
-                min={1}
-                max={50}
-              />
-              <BulkNumberField
-                label="Precio S/"
-                value={priceSoles}
-                onChange={setPriceSoles}
-                min={0}
-                max={50000}
-              />
-            </div>
-            <div className="mt-2">
-              {numbering === "alpha" ? (
-                <label className="flex flex-col gap-1 rounded-xl border border-cart-line bg-cart-bg-elev-2 px-2.5 py-2">
-                  <span className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">
-                    Empezar en
-                  </span>
-                  <input
-                    value={startLetter}
-                    maxLength={1}
-                    onChange={(e) => {
-                      const l = e.target.value.replace(/[^a-zA-Z]/g, "").toUpperCase();
-                      if (l) setStartLetter(l);
-                    }}
-                    className="w-full bg-transparent text-[16px] font-semibold tracking-[-0.01em] text-white outline-none uppercase"
-                  />
-                </label>
-              ) : (
-                <BulkNumberField
-                  label="Empezar desde"
-                  value={startNumber}
-                  onChange={setStartNumber}
-                  min={1}
-                  max={99}
-                />
-              )}
-            </div>
-          </BulkStep>
-
-          {/* Preview */}
-          <div className="mt-2 rounded-2xl border border-dashed border-cart-line bg-cart-bg-elev-2 px-3.5 py-3">
-            <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">
-              Vista previa
-            </div>
-            <div className="mt-1.5 font-mono text-[12.5px] leading-relaxed text-white">
-              {qty > 0 ? previewSample : "—"}
-            </div>
-          </div>
+            );
+          })}
         </div>
+        <span className="mt-0.5 text-[10.5px] text-cart-ink-4">La etiqueta viaja en el QR de cada invitado · identifica el box en la puerta.</span>
+      </div>
 
+      {/* Vista previa — altura animada con CSS (height medido + transición) */}
+      <div className="mt-2 rounded-xl bg-cart-bg-elev px-3 py-2.5">
+        <div className="mb-2 flex items-center justify-between">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">Vista previa · {n} {n === 1 ? "box" : "boxes"}</span>
+          {n > 0 && (
+            <button
+              type="button"
+              onClick={(e) => {
+                setRenaming((v) => !v);
+                e.currentTarget.blur();
+              }}
+              className="rounded text-[12px] font-semibold text-cart-accent outline-none focus-visible:ring-2 focus-visible:ring-cart-accent/40"
+            >
+              {renaming ? "Listo" : "Editar c/u"}
+            </button>
+          )}
+        </div>
         <div
-          className="shrink-0 border-t border-cart-line bg-cart-bg-elev px-5 pt-3"
-          style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 14px)" }}
+          className="overflow-hidden transition-[height] duration-200 ease-linear"
+          style={{ height: innerH }}
         >
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-full px-4 py-2.5 text-[13.5px] font-medium text-cart-ink-2 transition hover:text-white"
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              onClick={handleCreate}
-              disabled={!canCreate}
-              className="flex-1 rounded-full bg-cart-accent py-3 text-[14px] font-semibold text-cart-bg shadow-[0_8px_24px_-6px_var(--color-cart-accent-glow)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:bg-cart-bg-elev-2 disabled:text-cart-ink-3 disabled:shadow-none"
-            >
-              {canCreate ? `Crear ${qty} boxes` : "Completa los campos"}
-            </button>
+          <div ref={innerRef}>
+            {n === 0 ? (
+              <p className="py-3 text-center text-[12.5px] text-cart-ink-4">Indica cuántos boxes crear.</p>
+            ) : renaming ? (
+              <div className="flex flex-col gap-1.5">
+                {boxes.map((b, i) => (
+                  <div key={i} className="flex items-center gap-1.5">
+                    <span className="w-4 shrink-0 text-[11px] text-cart-ink-4">{i + 1}.</span>
+                    <input
+                      value={group.overrides[i]?.label ?? spaceBoxLabel(group, i)}
+                      onChange={(e) => setOv(i, { label: e.target.value })}
+                      className="min-w-0 flex-1 rounded-lg border border-cart-line bg-cart-bg-elev-2 px-2 py-1 font-mono text-[13px] font-semibold text-white outline-none focus:border-cart-accent"
+                    />
+                    <div className={"flex w-[84px] shrink-0 items-center gap-1 rounded-lg border bg-cart-bg-elev-2 px-2 py-1 " + (b.custom ? "border-cart-accent/60" : "border-cart-line")}>
+                      <span className="font-mono text-[11px] text-cart-ink-3">S/</span>
+                      <input inputMode="numeric" value={group.overrides[i]?.price ?? ""} onChange={(e) => setOv(i, { price: e.target.value.replace(/[^\d]/g, "") })} placeholder={String(priceN)} className="w-full bg-transparent font-mono text-[13px] font-semibold text-white outline-none placeholder:text-cart-ink-4" />
+                    </div>
+                  </div>
+                ))}
+                <span className="px-1 text-[10.5px] text-cart-ink-4">Vacío = usa el precio de la categoría (S/ {priceN.toLocaleString("es-PE")}).</span>
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {boxes.map((b, i) => (
+                  <span key={i} className="inline-flex items-center gap-1.5 rounded-full border border-cart-line bg-cart-bg-elev-2 px-2.5 py-1 text-[12px]">
+                    <span className="font-mono font-semibold tracking-[0.04em] text-white">{b.label}</span>
+                    <span className="text-cart-ink-4">· {seatsN}p</span>
+                    {b.custom && <span className="font-mono text-cart-accent">· S/{b.price.toLocaleString("es-PE")}</span>}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         </div>
-      </motion.div>
-    </>
+        <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1 border-t border-cart-line pt-2 text-[12px] text-cart-ink-3">
+          <span><span className="font-semibold text-white">{n}</span> boxes</span>
+          <span><span className="font-semibold text-white">{n * seatsN}</span> personas</span>
+          <span>{anyCustom ? `S/ ${Math.min(...boxes.map((b) => b.price)).toLocaleString("es-PE")}–${Math.max(...boxes.map((b) => b.price)).toLocaleString("es-PE")}` : `S/ ${priceN.toLocaleString("es-PE")} c/u`}</span>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -2886,68 +2860,6 @@ function UnitNounPicker({
   );
 }
 
-function BulkStep({
-  number,
-  title,
-  children,
-}: {
-  number: number;
-  title: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="mb-5">
-      <div className="mb-2 flex items-center gap-2">
-        <span className="grid size-5 place-items-center rounded-full bg-cart-accent/20 text-[10.5px] font-bold text-cart-accent">
-          {number}
-        </span>
-        <h4 className="text-[13px] font-semibold tracking-[-0.005em] text-white">{title}</h4>
-      </div>
-      <div>{children}</div>
-    </div>
-  );
-}
-
-function BulkNumberField({
-  label,
-  value,
-  onChange,
-  min,
-  max,
-  hint,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  min: number;
-  max: number;
-  hint?: string;
-}) {
-  return (
-    <label className="flex flex-col gap-1 rounded-xl border border-cart-line bg-cart-bg-elev-2 px-2.5 py-2">
-      <span className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">
-        {label}
-      </span>
-      <input
-        inputMode="numeric"
-        value={value}
-        onChange={(e) => {
-          const clean = e.target.value.replace(/[^0-9]/g, "");
-          if (clean === "") return onChange("");
-          const n = Number(clean);
-          if (n > max) return onChange(String(max));
-          onChange(clean);
-        }}
-        onBlur={() => {
-          const n = Number(value);
-          if (!n || n < min) onChange(String(min));
-        }}
-        className="w-full bg-transparent text-[16px] font-semibold tracking-[-0.01em] text-white outline-none"
-      />
-      {hint && <span className="text-[9.5px] text-cart-ink-4">{hint}</span>}
-    </label>
-  );
-}
 
 // ============================================================
 // IconTag / PromosEditor — Promociones 2x1 / 3x2 (sección aparte de preventa).

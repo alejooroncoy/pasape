@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { useRouter } from "@/i18n/navigation";
 import type { EventCategory } from "@/server/events/domain/Event";
 import { Nav, type NavUser } from "./Nav";
+import { NextEventHero } from "./NextEventHero";
 import { HeroCarousel } from "./HeroCarousel";
 import { EventsSection } from "./EventsSection";
 import { Footer } from "./Footer";
@@ -59,6 +60,7 @@ export function HomeClient({ user }: { user: NavUser | null }) {
         selectedCategory={category}
       />
       <main className="max-[560px]:pb-[72px]">
+        {loggedIn && <NextEventHero />}
         <HeroCarousel />
         <EventsSection sectionRef={eventsSectionRef} category={category} onCategoryChange={setCategory} search={search} />
       </main>

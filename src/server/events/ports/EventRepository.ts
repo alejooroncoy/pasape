@@ -51,6 +51,8 @@ export type EventStats = {
     capacity: number;
     /** Vendidas (pagadas) de este tipo — NO incluye reservas. */
     sold: number;
+    /** Recaudado real de este tipo (suma de price_cents con promos), en céntimos. */
+    revenueCents: number;
   }>;
   byPromoter: Array<{
     promoterId: string;
@@ -105,6 +107,10 @@ export type DoorHealth = {
   zoneName: string | null;
   lastSyncAt: string | null;
   expiresAt: string;
+  /** Minutos desde el último sync, calculado server-side. null si nunca sincronizó. */
+  minutesSinceSync: number | null;
+  /** True si la puerta lleva demasiado sin sincronizar (umbral del backend). */
+  isStale: boolean;
 };
 
 export type CreateTicketTypeInput = {

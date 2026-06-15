@@ -12,13 +12,15 @@ export const useBrowseEvents = (category?: EventCategory | null) =>
       api.get<Event[]>(category ? `/api/events?category=${category}` : "/api/events"),
   });
 
-export const useMyEvents = () => {
+// orgSlugOverride: cuando el server ya resolvió la marca activa (prefetch híbrido),
+// se pasa para arrancar sin esperar a useCurrentUser (evita el waterfall en cliente).
+export const useMyEvents = (orgSlugOverride?: string | null) => {
   const me = useCurrentUser();
-  const hasOrg = !!me.data?.activeOrgSlug;
+  const slug = orgSlugOverride ?? me.data?.activeOrgSlug ?? null;
   return useQuery({
-    queryKey: ["events", "mine", me.data?.activeOrgSlug ?? null],
+    queryKey: ["events", "mine", slug],
     queryFn: () => api.get<Event[]>("/api/events?scope=mine"),
-    enabled: hasOrg,
+    enabled: !!slug,
   });
 };
 

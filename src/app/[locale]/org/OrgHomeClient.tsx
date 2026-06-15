@@ -26,7 +26,10 @@ export function OrgHomeClient() {
   const publishedCount = events.data?.filter((e) => e.status === "published").length ?? 0;
   const draftCount = events.data?.filter((e) => e.status === "draft").length ?? 0;
   const totalCapacity =
-    events.data?.reduce((sum, e) => sum + (e.capacity.totalCapacity ?? 0), 0) ?? 0;
+    events.data?.reduce(
+      (sum, e) => sum + (e.listStats?.capacity ?? e.capacity.totalCapacity ?? 0),
+      0,
+    ) ?? 0;
 
   // Revenue del evento activo (si hay uno publicado). Si hay varios, se suma el primero visible.
   const liveStats = useEventStats(liveEvent?.slug ?? "");
@@ -66,7 +69,7 @@ export function OrgHomeClient() {
             <StatCard label="Eventos" value={String(totalEvents)} hint={`${draftCount} en borrador`} />
             <StatCard label="Publicados" value={String(publishedCount)} tone="accent" />
             <StatCard label="Aforo total" value={totalCapacity.toLocaleString("es-PE")} />
-            <StatCard label="Recaudado" value={liveEvent ? formatMoney(liveRevenue / 100) : "—"} hint={liveEvent ? liveEvent.title : "Sin evento activo"} tone="green" />
+            <StatCard label="Recaudado" value={liveEvent ? formatMoney(liveRevenue) : "—"} hint={liveEvent ? liveEvent.title : "Sin evento activo"} tone="green" />
           </section>
 
           {liveEvent && (
@@ -114,9 +117,9 @@ export function OrgHomeClient() {
                       </p>
                     </div>
                     <div className="grid w-full grid-cols-3 gap-3 sm:w-auto sm:min-w-[360px]">
-                      <MiniStat label="Aforo" value={String(liveEvent.capacity.totalCapacity ?? 0)} />
-                      <MiniStat label="Validadas" value="0" tone="green" />
-                      <MiniStat label="Recaudado" value={formatMoney(0)} tone="accent" />
+                      <MiniStat label="Aforo" value={String(liveStats.data?.capacity ?? liveEvent.capacity.totalCapacity ?? 0)} />
+                      <MiniStat label="Validadas" value={String(liveStats.data?.validated ?? 0)} tone="green" />
+                      <MiniStat label="Recaudado" value={formatMoney(liveStats.data?.revenueCents ?? 0)} tone="accent" />
                     </div>
                   </div>
                 </Link>
@@ -242,8 +245,10 @@ function StatusPill({ status }: { status: string }) {
   const map: Record<string, { label: string; cls: string }> = {
     published: { label: "Publicado", cls: "border-emerald-400/30 bg-emerald-500/10 text-emerald-300" },
     draft: { label: "Borrador", cls: "border-cart-line bg-cart-bg-elev-2 text-cart-ink-3" },
+    closed: { label: "Cerrado", cls: "border-cart-line bg-cart-bg-elev-2 text-cart-ink-3" },
+    cancelled: { label: "Cancelado", cls: "border-rose-400/30 bg-rose-500/10 text-rose-300" },
   };
-  const v = map[status] ?? { label: status, cls: "border-cart-line text-cart-ink-3" };
+  const v = map[status] ?? { label: "—", cls: "border-cart-line text-cart-ink-3" };
   return (
     <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10.5px] font-medium uppercase tracking-wide ${v.cls}`}>
       {v.label}

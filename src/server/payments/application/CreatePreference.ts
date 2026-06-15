@@ -1,3 +1,4 @@
+import { Money } from "@/lib/_shared/money";
 import "server-only";
 import { Preference } from "mercadopago";
 import { err, ok, type Result } from "@/server/_shared/result";
@@ -51,7 +52,7 @@ export const createPreference = async (
           id: it.id,
           title: it.title,
           quantity: it.quantity,
-          unit_price: it.unitPriceCents / 100,
+          unit_price: Money.toSoles(it.unitPriceCents),
           currency_id: it.currency ?? currency,
         })),
         payer: input.payerEmail ? { email: input.payerEmail } : undefined,

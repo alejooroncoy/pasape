@@ -236,6 +236,9 @@ export const supabaseBoxRepository: BoxRepository = {
       .insert({
         order_id: box.orderId,
         ticket_type_id: box.ticketTypeId,
+        // El integrante no paga: el box completo lo cobró el ticket host. Va en 0
+        // para no duplicar el recaudado por tipo.
+        price_cents: 0,
         holder_name: holderName,
         holder_dni_last2: holderDni ? holderDni.slice(-2) : null,
         holder_phone: holderPhone,

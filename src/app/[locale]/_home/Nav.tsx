@@ -13,6 +13,7 @@ import { Logo } from "@/components/brand/Logo";
 import { MegaMenu } from "./MegaMenu";
 import { GoogleBtn } from "@/components/design";
 import { useGoogleSignIn } from "@/lib/identity/hooks/useFirebaseAuth";
+import { CATEGORIES, CATEGORY_BY_ID } from "./categories";
 import type { EventCategory } from "@/server/events/domain/Event";
 
 // Spring compartido para micro-interacciones (tap/hover) — respuesta rápida
@@ -359,13 +360,8 @@ function firstName(fullName: string | null): string {
 type StripChip = { label: string; cat: EventCategory | null };
 
 const STRIP_CHIPS: StripChip[] = [
-  { label: "Todos",        cat: null          },
-  { label: "Música",       cat: "musica"      },
-  { label: "DJ Sets",      cat: "dj_sets"     },
-  { label: "After-office", cat: "after_office"},
-  { label: "Comedia",      cat: "comedia"     },
-  { label: "Cultura",      cat: "cultura"     },
-  { label: "Deportes",     cat: "deportes"    },
+  { label: "Todos", cat: null },
+  ...CATEGORIES.map((c) => ({ label: c.label, cat: c.id })),
 ];
 
 function MobileContextStrip({
@@ -384,6 +380,7 @@ function MobileContextStrip({
       <span className="h-4 w-px shrink-0 bg-cart-line" aria-hidden />
       {STRIP_CHIPS.map(({ label, cat }) => {
         const active = selectedCategory === cat;
+        const color = cat ? CATEGORY_BY_ID[cat].color : "#ffffff";
         return (
           <motion.button
             key={label}
@@ -391,11 +388,21 @@ function MobileContextStrip({
             onClick={() => onSelectCategory(cat)}
             whileTap={{ scale: 0.93 }}
             transition={TAP_SPRING}
-            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12.5px] whitespace-nowrap transition-colors ${
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12.5px] whitespace-nowrap transition-colors"
+            style={
               active
-                ? "border-cart-accent bg-cart-accent text-white shadow-[0_0_12px_var(--color-cart-accent-glow)]"
-                : "border-cart-line bg-transparent text-cart-ink-2"
-            }`}
+                ? {
+                    borderColor: color,
+                    background: color,
+                    color: cat ? "#0a0a0f" : "#0a0a0f",
+                    boxShadow: `0 0 12px ${color}80`,
+                  }
+                : {
+                    borderColor: "var(--color-cart-line)",
+                    background: "transparent",
+                    color: "var(--color-cart-ink-2)",
+                  }
+            }
           >
             {label}
           </motion.button>

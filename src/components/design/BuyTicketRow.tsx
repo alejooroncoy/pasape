@@ -1,5 +1,6 @@
 "use client";
 
+import { Money } from "@/lib/_shared/money";
 import { C, FONT_DISPLAY } from "./tokens";
 
 type Props = {
@@ -13,8 +14,7 @@ type Props = {
   disabled?: boolean;
 };
 
-const fmt = (cents: number) =>
-  new Intl.NumberFormat("es-PE", { style: "currency", currency: "PEN", maximumFractionDigits: 0 }).format(cents / 100);
+const fmt = (cents: number) => Money.format(cents);
 
 export const BuyTicketRow = ({ name, sub, priceCents, qty, onChange, remaining, accent, disabled }: Props) => {
   const tone = accent ?? C.purple;

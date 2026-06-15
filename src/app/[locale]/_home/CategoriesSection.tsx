@@ -1,18 +1,7 @@
 "use client";
 
 import type { EventCategory } from "@/server/events/domain/Event";
-import { AfterIcon, ComedyIcon, CultureIcon, DjIcon, MusicIcon, SportIcon } from "./icons";
-
-type CatDef = { id: EventCategory; name: string; Icon: React.FC };
-
-const CATS: CatDef[] = [
-  { id: "musica",       name: "Música",       Icon: MusicIcon   },
-  { id: "dj_sets",      name: "DJ Sets",      Icon: DjIcon      },
-  { id: "after_office", name: "After-office",  Icon: AfterIcon   },
-  { id: "comedia",      name: "Comedia",       Icon: ComedyIcon  },
-  { id: "cultura",      name: "Cultura",       Icon: CultureIcon },
-  { id: "deportes",     name: "Deportes",      Icon: SportIcon   },
-];
+import { CATEGORIES } from "./categories";
 
 type Props = {
   selected: EventCategory | null;
@@ -41,22 +30,23 @@ export function CategoriesSection({ selected, onChange }: Props) {
           Todos
         </button>
 
-        {CATS.map(({ id, name, Icon }) => {
+        {CATEGORIES.map(({ id, label, Icon, color }) => {
           const active = selected === id;
           return (
             <button
               key={id}
               onClick={() => onChange(active ? null : id)}
-              className={`flex flex-shrink-0 items-center gap-1.5 rounded-full border px-4 py-[7px] text-[13px] font-medium transition-colors duration-150 ${
-                active
-                  ? "border-cart-accent bg-cart-accent/15 text-white"
-                  : "border-cart-line bg-transparent text-white/50 hover:border-white/25 hover:text-white/75"
-              }`}
+              className="flex flex-shrink-0 items-center gap-1.5 rounded-full border px-4 py-[7px] text-[13px] font-medium transition-colors duration-150"
+              style={{
+                borderColor: active ? color : "var(--color-cart-line)",
+                background: active ? `${color}26` : "transparent",
+                color: active ? "#fff" : "rgba(255,255,255,0.5)",
+              }}
             >
-              <span className={`text-[14px] ${active ? "text-cart-accent" : "text-white/40"}`}>
+              <span className="text-[14px]" style={{ color: active ? color : "rgba(255,255,255,0.4)" }}>
                 <Icon />
               </span>
-              {name}
+              {label}
             </button>
           );
         })}

@@ -9,7 +9,7 @@ import {
   useUpdateOrgPromoter,
 } from "@/lib/promoters/hooks/useOrgPromoters";
 import type { OrgPromoter } from "@/server/promoters/domain/OrgPromoter";
-import { formatMoney } from "@/lib/_shared/format";
+import { Money } from "@/lib/_shared/money";
 
 type Params = Promise<{ id: string; locale: string }>;
 
@@ -134,6 +134,7 @@ export default function OrgPromoterDetailPage({ params }: { params: Params }) {
                     title={e.eventTitle}
                     startsAt={e.eventStartsAt}
                     ticketsSold={e.ticketsSold}
+                    maxSold={Math.max(1, ...byEvent.map((x) => x.ticketsSold))}
                     commissionCents={e.commissionCents}
                     href={`/org/events/${e.eventSlug}/promoter-detail/${e.promoterLinkId}`}
                   />
@@ -199,12 +200,14 @@ function EventRow({
   title,
   startsAt,
   ticketsSold,
+  maxSold,
   commissionCents,
   href,
 }: {
   title: string;
   startsAt: string;
   ticketsSold: number;
+  maxSold: number;
   commissionCents: number;
   href: string;
 }) {
@@ -217,8 +220,9 @@ function EventRow({
       return "—";
     }
   })();
-  // bar: simple visualization, normalized to a soft scale (up to 200 tickets fills it)
-  const barPct = Math.min(100, Math.round((ticketsSold / 200) * 100));
+  // Barra relativa: el evento con más ventas del promotor llena la barra; el
+  // resto se mide contra ese máximo (escala honesta, sin un tope inventado).
+  const barPct = Math.min(100, Math.round((ticketsSold / maxSold) * 100));
   return (
     <Link
       href={href as never}
@@ -268,7 +272,7 @@ function ChevronLeft() {
 }
 
 function formatMoneyClean(cents: number): string {
-  const s = formatMoney(cents).replace(/[^\d,.]/g, "").trim();
+  const s = Money.formatClean(cents);
   return s ? `S/ ${s}` : "S/ 0";
 }
 

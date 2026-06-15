@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useMpSdk } from "@/lib/payments/useMpSdk";
+import { useMpSdk } from "@/lib/payments/hooks/useMpSdk";
 
 // Why: el CardPayment Brick de MP falla con `Failed to create card token`
 // en sandbox (limitación conocida de MP). Migramos a Checkout API directa

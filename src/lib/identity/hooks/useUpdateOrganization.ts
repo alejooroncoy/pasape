@@ -2,6 +2,8 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/_shared/api-client";
+import { myOrgsKey } from "@/lib/identity/organizations/hooks/useMyOrgs";
+import { currentUserKey } from "@/lib/identity/hooks/useCurrentUser";
 import type { Organization } from "@/server/identity/organizations/domain/Organization";
 
 export type UpdateOrgInput = {
@@ -20,8 +22,10 @@ export const useUpdateOrganization = (currentSlug: string) => {
     mutationFn: (input: UpdateOrgInput) =>
       api.patch<Organization>(`/api/organizations/${currentSlug}`, input),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["identity", "my-orgs"] });
-      qc.invalidateQueries({ queryKey: ["identity", "me"] });
+      // Keys correctas (antes invalidaba ["identity","my-orgs"], que no existe →
+      // la lista de marcas quedaba stale y el slug viejo rompía el 2º guardado).
+      qc.invalidateQueries({ queryKey: myOrgsKey });
+      qc.invalidateQueries({ queryKey: currentUserKey });
     },
   });
 };

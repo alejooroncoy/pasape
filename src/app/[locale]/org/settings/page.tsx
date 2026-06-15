@@ -38,6 +38,7 @@ export default function OrgSettingsPage() {
   const [orgInstagram, setOrgInstagram] = useState(activeOrg?.instagram ?? "");
   const [logoPreview, setLogoPreview] = useState<string | null>(activeOrg?.logoUrl ?? null);
   const [logoUploading, setLogoUploading] = useState(false);
+  const [logoError, setLogoError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   const [bankOpen, setBankOpen] = useState(false);
@@ -58,6 +59,7 @@ export default function OrgSettingsPage() {
     const f = e.target.files?.[0];
     if (!f) return;
     setLogoUploading(true);
+    setLogoError(null);
     try {
       const supabase = createSupabaseBrowserClient();
       const ext = f.name.includes(".") ? f.name.split(".").pop() : "jpg";
@@ -69,7 +71,7 @@ export default function OrgSettingsPage() {
       const { data } = supabase.storage.from(ORG_ASSETS_BUCKET).getPublicUrl(path);
       setLogoPreview(data.publicUrl);
     } catch {
-      // Si falla la subida no rompemos la UI; el organizador puede reintentar.
+      setLogoError("No se pudo subir el logo. Reintenta.");
     } finally {
       setLogoUploading(false);
     }
@@ -98,6 +100,32 @@ export default function OrgSettingsPage() {
     });
   };
 
+  // Carga / sin marca: evitar mostrar inputs vacíos (parece marca borrada).
+  const loadingOrg = orgs.isLoading || me.isLoading;
+  const noOrg = orgs.isFetched && !activeOrg;
+  if (loadingOrg || noOrg) {
+    return (
+      <OrgShell>
+        <div className="mb-8 sm:mb-10">
+          <h1 className="font-sans text-[clamp(34px,7.2vw,42px)] font-bold leading-[1.05] tracking-[-0.035em] text-white">
+            Ajustes
+          </h1>
+        </div>
+        {noOrg ? (
+          <div className="rounded-2xl border border-cart-line bg-cart-bg-elev-2 px-5 py-8 text-center text-[14px] text-cart-ink-3">
+            No encontramos una marca activa. Crea o selecciona una marca para configurarla.
+          </div>
+        ) : (
+          <div className="flex flex-col gap-4">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="h-28 animate-pulse rounded-2xl bg-cart-bg-elev-2" />
+            ))}
+          </div>
+        )}
+      </OrgShell>
+    );
+  }
+
   return (
     <OrgShell>
       <div className="mb-8 sm:mb-10">
@@ -105,7 +133,7 @@ export default function OrgSettingsPage() {
           Ajustes
         </h1>
         <p className="mt-2 max-w-prose text-[13.5px] leading-snug text-cart-ink-3 sm:text-[14px]">
-          Configura tu cuenta, pagos y preferencias de notificación.
+          Configura tu marca, datos de pago y la información pública de tu productora.
         </p>
       </div>
 
@@ -151,6 +179,19 @@ export default function OrgSettingsPage() {
                 >
                   {logoUploading ? "Subiendo…" : "Cambiar"}
                 </button>
+                {logoPreview && !logoUploading && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLogoPreview(null);
+                      setLogoError(null);
+                    }}
+                    className="rounded-full px-2.5 py-1.5 text-[12.5px] font-medium text-cart-ink-3 transition hover:text-red-300"
+                  >
+                    Quitar
+                  </button>
+                )}
+                {logoError && <span className="text-[11.5px] text-red-300">{logoError}</span>}
                 <input
                   ref={fileRef}
                   type="file"
@@ -283,9 +324,11 @@ export default function OrgSettingsPage() {
               <div className="flex sm:justify-end">
                 <button
                   type="button"
-                  className="rounded-full border border-rose-500/40 bg-rose-500/10 px-4 py-1.5 text-[12.5px] font-semibold text-rose-200 transition hover:bg-rose-500/20"
+                  disabled
+                  title="Próximamente — escríbenos para eliminar tu marca"
+                  className="cursor-not-allowed rounded-full border border-rose-500/30 bg-rose-500/5 px-4 py-1.5 text-[12.5px] font-semibold text-rose-200/60"
                 >
-                  Eliminar
+                  Próximamente
                 </button>
               </div>
             </SettingsRow>
@@ -401,7 +444,8 @@ function BankAccountSheet({
   const submit = async () => {
     setError(null);
     if (!bankName.trim()) return setError("Elige el banco.");
-    if (accountNumber.replace(/\D/g, "").length < 4) return setError("Número de cuenta muy corto.");
+    if (accountNumber.replace(/\D/g, "").length < 8)
+      return setError("El número de cuenta parece incompleto (mínimo 8 dígitos).");
     const cciClean = cci.replace(/\D/g, "");
     if (cciClean && cciClean.length !== 20) return setError("El CCI debe tener exactamente 20 dígitos.");
     try {

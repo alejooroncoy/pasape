@@ -91,6 +91,9 @@ export const getOrgPromoterDetail = async (
     const rows =
       (tickets as Array<{ order_id: string; status: "active" | "used" | "void" | "refunded" }> | null) ?? [];
     ticketsByOrder = rows.reduce((acc, t) => {
+      // Solo activas/usadas cuentan como vendidas; void/refunded no inflan el
+      // ticketsSold que alimenta el cálculo de comisión.
+      if (t.status !== "active" && t.status !== "used") return acc;
       const entry = acc.get(t.order_id) ?? { sold: 0, validated: 0 };
       entry.sold += 1;
       if (t.status === "used") entry.validated += 1;

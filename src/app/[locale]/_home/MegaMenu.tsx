@@ -8,23 +8,23 @@ type CatKey = EventCategory | null;
 
 const COLS: Array<{ title: string; items: Array<[string, CatKey]> }> = [
   {
-    title: "Música",
+    title: "Conciertos",
     items: [
-      ["Conciertos",   "musica"],
-      ["Cumbia",       "musica"],
-      ["Reggaetón",    "musica"],
-      ["Jazz & Blues", "musica"],
-      ["K-Pop",        "musica"],
-      ["Electrónica",  "musica"],
+      ["Conciertos",   "conciertos"],
+      ["Cumbia",       "conciertos"],
+      ["Reggaetón",    "conciertos"],
+      ["Jazz & Blues", "conciertos"],
+      ["K-Pop",        "conciertos"],
+      ["Festivales",   "festivales"],
     ],
   },
   {
-    title: "Noche",
+    title: "Fiestas",
     items: [
-      ["DJ Sets",      "dj_sets"],
-      ["After-office", "after_office"],
+      ["DJ Sets",      "fiestas"],
+      ["Electrónica",  "fiestas"],
+      ["After-office", "fiestas"],
       ["Karaoke",      null],
-      ["Open mic",     null],
       ["Rooftop",      null],
     ],
   },
