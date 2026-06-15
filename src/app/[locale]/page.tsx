@@ -1,8 +1,11 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useRouter } from "@/i18n/navigation";
 import type { EventCategory } from "@/server/events/domain/Event";
+import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { Nav } from "./_home/Nav";
+import { NextEventHero } from "./_home/NextEventHero";
 import { HeroCarousel } from "./_home/HeroCarousel";
 import { EventsSection } from "./_home/EventsSection";
 import { Footer } from "./_home/Footer";
@@ -12,6 +15,9 @@ import { SideDrawer } from "./_home/SideDrawer";
 import { SignInDrawer } from "./_home/SignInDrawer";
 
 export default function HomePage() {
+  const router = useRouter();
+  const me = useCurrentUser();
+  const loggedIn = !!me.data?.user;
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [signInOpen, setSignInOpen] = useState(false);
   const [category, setCategory] = useState<EventCategory | null>(null);
@@ -55,14 +61,15 @@ export default function HomePage() {
         selectedCategory={category}
       />
       <main className="max-[560px]:pb-[72px]">
+        {loggedIn && <NextEventHero />}
         <HeroCarousel />
         <EventsSection sectionRef={eventsSectionRef} category={category} onCategoryChange={setCategory} search={search} />
       </main>
       <Footer />
       <WaFloat />
       <MobileTabbar
-        onTickets={() => setSignInOpen(true)}
-        onAccount={() => setSignInOpen(true)}
+        onTickets={() => (loggedIn ? router.push("/tickets" as never) : setSignInOpen(true))}
+        onAccount={() => (loggedIn ? router.push("/account" as never) : setSignInOpen(true))}
       />
       <SideDrawer
         open={drawerOpen}

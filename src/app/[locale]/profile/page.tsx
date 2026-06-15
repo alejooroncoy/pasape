@@ -1,54 +1,138 @@
 "use client";
 
-import { Arrow, BackBtn, C, FONT_DISPLAY, Phone } from "@/components/design";
+import { useMemo } from "react";
+import { motion } from "motion/react";
 import { Link, useRouter } from "@/i18n/navigation";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { useSignOut } from "@/lib/identity/hooks/useFirebaseAuth";
+import { useMyTickets } from "@/lib/tickets/hooks/useTickets";
 
 const initialsOf = (name: string | null | undefined) => {
   if (!name) return "·";
   const parts = name.trim().split(/\s+/);
-  return (parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "");
+  return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase();
 };
 
-const Stat = ({ n, k, middle }: { n: string; k: string; middle?: boolean }) => (
-  <div
-    style={{
-      textAlign: "center",
-      borderLeft: middle ? `1px solid ${C.line}` : "none",
-      borderRight: middle ? `1px solid ${C.line}` : "none",
-    }}
-  >
-    <div
-      style={{
-        fontFamily: FONT_DISPLAY,
-        fontSize: 26,
-        fontWeight: 700,
-        letterSpacing: "-0.04em",
-        lineHeight: 1,
-      }}
-    >
-      {n}
-    </div>
-    <div
-      style={{
-        fontSize: 10,
-        color: C.dim,
-        marginTop: 6,
-        letterSpacing: "0.06em",
-        textTransform: "uppercase",
-      }}
-    >
-      {k}
-    </div>
-  </div>
-);
+export default function BuyerProfilePage() {
+  const { data, isLoading } = useCurrentUser();
+  const tickets = useMyTickets();
+  const signOut = useSignOut();
+  const router = useRouter();
 
-const ProfRow = ({
+  const user = data?.user ?? null;
+  const fullName = user?.fullName ?? "Tu perfil";
+  const sub = user?.email ?? user?.phone ?? "";
+
+  const stats = useMemo(() => {
+    const all = tickets.data ?? [];
+    const entradas = all.length;
+    const noches = new Set(
+      all
+        .filter((t) => t.status === "used" || t.event.status === "closed")
+        .map((t) => t.event.id),
+    ).size;
+    return { entradas, noches };
+  }, [tickets.data]);
+
+  return (
+    <div className="cart-grain relative min-h-screen bg-cart-bg font-sans text-white">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute left-1/2 top-[-120px] z-0 h-[560px] w-[900px] -translate-x-1/2 blur-[90px]"
+        style={{ background: "radial-gradient(closest-side, rgba(184,124,255,0.2), transparent 70%)" }}
+      />
+      <div className="relative z-[1] mx-auto w-full max-w-[640px] px-4 pb-[96px] pt-3 sm:px-6">
+        {/* Tarjeta de perfil */}
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.25 }}
+          className="relative overflow-hidden rounded-[26px] border border-cart-accent/25 p-5"
+          style={{
+            background: "radial-gradient(120% 80% at 30% 0%, rgba(124,58,237,0.3), transparent 70%), var(--color-cart-bg-elev)",
+          }}
+        >
+          <div className="flex items-center gap-4">
+            <div
+              className="grid size-16 shrink-0 place-items-center rounded-[20px] text-[24px] font-extrabold tracking-[-0.02em] text-white"
+              style={{
+                background: "linear-gradient(135deg, #FF4D5E, #7C3AED 60%, #4B1F9A)",
+                boxShadow: "0 0 0 2px rgba(255,255,255,0.1), 0 18px 40px -12px rgba(124,58,237,0.5)",
+              }}
+            >
+              {initialsOf(fullName)}
+            </div>
+            <div className="min-w-0 flex-1">
+              <h1 className="truncate text-[22px] font-bold leading-tight tracking-[-0.02em]">
+                {isLoading ? "Cargando…" : fullName}
+              </h1>
+              {sub && <p className="mt-1 truncate text-[12.5px] text-white/55">{sub}</p>}
+            </div>
+            <Link
+              href={"/profile/edit" as never}
+              className="shrink-0 rounded-full bg-white/10 px-3.5 py-1.5 text-[11.5px] font-semibold tracking-[0.03em] text-white transition hover:bg-white/15"
+            >
+              Editar
+            </Link>
+          </div>
+
+          <div className="mt-5 grid grid-cols-2 divide-x divide-white/10 border-t border-white/10 pt-4">
+            <Stat n={String(stats.entradas)} k="entradas" />
+            <Stat n={String(stats.noches)} k="noches" />
+          </div>
+        </motion.div>
+
+        {/* Cuenta */}
+        <SectionLabel>Cuenta</SectionLabel>
+        <Card>
+          <Row icon={<IconCard />} label="Métodos de pago" sub="Yape · tarjetas" onClick={() => router.push("/profile/payment-methods" as never)} />
+          <Row icon={<IconBell />} label="Notificaciones" sub="WhatsApp · email" onClick={() => router.push("/profile/notifications" as never)} />
+          <Row icon={<IconHeart />} label="Organizadores que sigues" onClick={() => router.push("/profile/following" as never)} />
+          {data?.activeOrgSlug && (
+            <Row
+              icon={<IconBuilding />}
+              label="Tu marca"
+              sub={`@${data.activeOrgSlug}`}
+              onClick={() => router.push(`/org/${data.activeOrgSlug}` as never)}
+            />
+          )}
+          <Row icon={<IconShield />} label="Privacidad y datos" last />
+        </Card>
+
+        {/* Ayuda */}
+        <SectionLabel>Ayuda</SectionLabel>
+        <Card>
+          <Row icon={<IconHelp />} label="Reportar un problema" />
+          <Row icon={<IconOut />} label="Cerrar sesión" danger last onClick={() => void signOut()} />
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function Stat({ n, k }: { n: string; k: string }) {
+  return (
+    <div className="text-center">
+      <div className="text-[26px] font-bold leading-none tracking-[-0.03em]">{n}</div>
+      <div className="mt-1.5 text-[10px] uppercase tracking-[0.08em] text-white/45">{k}</div>
+    </div>
+  );
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="mb-2 mt-6 px-1 text-[11px] font-semibold uppercase tracking-[0.1em] text-white/45">{children}</p>
+  );
+}
+
+function Card({ children }: { children: React.ReactNode }) {
+  return <div className="overflow-hidden rounded-2xl border border-cart-line bg-cart-bg-elev">{children}</div>;
+}
+
+function Row({
   icon,
   label,
   sub,
-  href,
   danger,
   last,
   onClick,
@@ -56,293 +140,47 @@ const ProfRow = ({
   icon: React.ReactNode;
   label: string;
   sub?: string;
-  href?: string;
   danger?: boolean;
   last?: boolean;
   onClick?: () => void;
-}) => {
-  const router = useRouter();
-  const handleClick = onClick
-    ? onClick
-    : href
-      ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        () => router.push(href as any)
-      : undefined;
+}) {
   return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 14,
-        padding: "14px 4px",
-        borderBottom: last ? "none" : `1px solid ${C.line}`,
-        cursor: handleClick ? "pointer" : "default",
-      }}
-      onClick={handleClick}
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={!onClick}
+      className={
+        "flex w-full items-center gap-3.5 px-4 py-3.5 text-left transition " +
+        (last ? "" : "border-b border-cart-line ") +
+        (onClick ? "hover:bg-white/[0.03] " : "cursor-default ")
+      }
     >
-      <div
-        style={{
-          width: 38,
-          height: 38,
-          borderRadius: 11,
-          background: danger ? C.redSoft : "rgba(255,255,255,0.05)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
+      <span
+        className={
+          "grid size-9 shrink-0 place-items-center rounded-xl " +
+          (danger ? "bg-red-500/10 text-red-300" : "bg-white/5 text-cart-accent")
+        }
       >
         {icon}
-      </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div
-          style={{
-            fontWeight: 600,
-            fontSize: 14,
-            color: danger ? C.red : "#fff",
-          }}
-        >
-          {label}
-        </div>
-        {sub && <div style={{ fontSize: 11, color: C.dim, marginTop: 2 }}>{sub}</div>}
-      </div>
-      {!danger && <Arrow />}
-    </div>
-  );
-};
-
-const IconCard = () => (
-  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-    <rect x="2" y="4" width="14" height="10" rx="1.6" stroke={C.purple} strokeWidth="1.4" />
-    <path d="M2 7h14" stroke={C.purple} strokeWidth="1.4" />
-  </svg>
-);
-const IconBell = () => (
-  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-    <path
-      d="M4 12V8a5 5 0 0 1 10 0v4l1.5 2h-13L4 12Z"
-      stroke={C.purple}
-      strokeWidth="1.4"
-      strokeLinejoin="round"
-    />
-    <path d="M7 15a2 2 0 0 0 4 0" stroke={C.purple} strokeWidth="1.4" strokeLinecap="round" />
-  </svg>
-);
-const IconHeart = () => (
-  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-    <path
-      d="M9 15s-6-4-6-8a3 3 0 0 1 6-1 3 3 0 0 1 6 1c0 4-6 8-6 8Z"
-      stroke={C.purple}
-      strokeWidth="1.4"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
-const IconShield = () => (
-  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-    <path
-      d="M9 2L3 4v5c0 3.5 2.5 6.5 6 8 3.5-1.5 6-4.5 6-8V4L9 2Z"
-      stroke={C.purple}
-      strokeWidth="1.4"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
-const IconBuilding = () => (
-  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-    <rect x="3" y="3" width="12" height="12" rx="1.5" stroke={C.purple} strokeWidth="1.4" />
-    <path
-      d="M6 6h1M6 9h1M6 12h1M11 6h1M11 9h1M11 12h1"
-      stroke={C.purple}
-      strokeWidth="1.4"
-      strokeLinecap="round"
-    />
-  </svg>
-);
-const IconHelp = () => (
-  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-    <circle cx="9" cy="9" r="7" stroke={C.purple} strokeWidth="1.4" />
-    <path
-      d="M7 7.5c.3-1 1.1-1.5 2-1.5 1.2 0 2 .8 2 1.7 0 .8-.5 1.2-1 1.5-.7.4-1 .8-1 1.3M9 13v.1"
-      stroke={C.purple}
-      strokeWidth="1.4"
-      strokeLinecap="round"
-      fill="none"
-    />
-  </svg>
-);
-const IconOut = () => (
-  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-    <path
-      d="M11 4H4v10h7M14 9H7M11 6l3 3-3 3"
-      stroke={C.red}
-      strokeWidth="1.4"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      fill="none"
-    />
-  </svg>
-);
-
-export default function BuyerProfilePage() {
-  const { data, isLoading } = useCurrentUser();
-  const signOut = useSignOut();
-
-  const user = data?.user ?? null;
-  const fullName = user?.fullName ?? "Tu perfil";
-  const sub = user?.email ?? user?.phone ?? "";
-
-  return (
-    <Phone>
-      <div
-        style={{
-          padding: "6px 22px 0",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}
-      >
-        <BackBtn />
-        <div style={{ fontSize: 12, color: C.dim, letterSpacing: "0.06em" }}>TU PERFIL</div>
-        <div style={{ width: 38 }} />
-      </div>
-
-      <div style={{ padding: "8px 22px" }}>
-        <div
-          style={{
-            borderRadius: 24,
-            padding: 20,
-            position: "relative",
-            overflow: "hidden",
-            background: `radial-gradient(120% 80% at 30% 0%, rgba(124,58,237,0.32), transparent 70%), ${C.bg2}`,
-            boxShadow: `0 0 0 1px ${C.purpleEdge} inset`,
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 22 }}>
-            <div
-              style={{
-                width: 64,
-                height: 64,
-                borderRadius: 20,
-                background: "linear-gradient(135deg, #FF4D5E, #7C3AED 60%, #4B1F9A)",
-                boxShadow:
-                  "0 0 0 2px rgba(255,255,255,0.1), 0 20px 40px -10px rgba(124,58,237,0.5)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontFamily: FONT_DISPLAY,
-                fontWeight: 800,
-                fontSize: 26,
-                color: "#fff",
-                letterSpacing: "-0.02em",
-              }}
-            >
-              {initialsOf(fullName).toUpperCase()}
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div
-                style={{
-                  fontFamily: FONT_DISPLAY,
-                  fontSize: 22,
-                  fontWeight: 700,
-                  letterSpacing: "-0.025em",
-                  lineHeight: 1,
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {isLoading ? "Cargando…" : fullName}
-              </div>
-              {sub && (
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: C.dim,
-                    marginTop: 6,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {sub}
-                </div>
-              )}
-            </div>
-            <Link
-              href="/profile/edit"
-              style={{
-                padding: "8px 14px",
-                borderRadius: 999,
-                border: 0,
-                background: "rgba(255,255,255,0.1)",
-                color: "#fff",
-                fontFamily: FONT_DISPLAY,
-                fontSize: 11,
-                fontWeight: 700,
-                letterSpacing: "0.04em",
-                textDecoration: "none",
-              }}
-            >
-              EDITAR
-            </Link>
-          </div>
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr 1fr",
-              padding: "14px 0",
-              borderTop: `1px solid ${C.line}`,
-              borderBottom: `1px solid ${C.line}`,
-            }}
-          >
-            <Stat n="0" k="entradas" />
-            <Stat n="S/0" k="ahorros" middle />
-            <Stat n="0" k="noches" />
-          </div>
-        </div>
-
-        <div
-          style={{
-            marginTop: 18,
-            fontSize: 11,
-            color: C.dim,
-            letterSpacing: "0.08em",
-            fontWeight: 600,
-            marginBottom: 8,
-          }}
-        >
-          CUENTA
-        </div>
-        <ProfRow icon={<IconCard />} label="Métodos de pago" sub="Yape · tarjetas" href="/profile/payment-methods" />
-        <ProfRow icon={<IconBell />} label="Notificaciones" sub="WhatsApp · email" href="/profile/notifications" />
-        <ProfRow icon={<IconHeart />} label="Organizadores que sigues" href="/profile/following" />
-        {data?.activeOrgSlug && (
-          <ProfRow
-            icon={<IconBuilding />}
-            label="Tu marca"
-            sub={`@${data.activeOrgSlug}`}
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            href={`/org/${data.activeOrgSlug}` as any}
-          />
-        )}
-        <ProfRow icon={<IconShield />} label="Privacidad y datos" last />
-
-        <div
-          style={{
-            marginTop: 14,
-            fontSize: 11,
-            color: C.dim,
-            letterSpacing: "0.08em",
-            fontWeight: 600,
-            marginBottom: 8,
-          }}
-        >
-          AYUDA
-        </div>
-        <ProfRow icon={<IconHelp />} label="Reportar un problema" />
-        <ProfRow icon={<IconOut />} label="Cerrar sesión" danger last onClick={() => void signOut()} />
-      </div>
-    </Phone>
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className={"block text-[14px] font-semibold " + (danger ? "text-red-300" : "text-white")}>{label}</span>
+        {sub && <span className="mt-0.5 block text-[11.5px] text-white/50">{sub}</span>}
+      </span>
+      {!danger && onClick && (
+        <svg width="16" height="16" viewBox="0 0 20 20" fill="none" className="shrink-0 text-white/30">
+          <path d="M7 5l5 5-5 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      )}
+    </button>
   );
 }
+
+const sw = { stroke: "currentColor", strokeWidth: 1.4, fill: "none" } as const;
+const IconCard = () => (<svg width="18" height="18" viewBox="0 0 18 18"><rect x="2" y="4" width="14" height="10" rx="1.6" {...sw} /><path d="M2 7h14" {...sw} /></svg>);
+const IconBell = () => (<svg width="18" height="18" viewBox="0 0 18 18"><path d="M4 12V8a5 5 0 0 1 10 0v4l1.5 2h-13L4 12Z" {...sw} strokeLinejoin="round" /><path d="M7 15a2 2 0 0 0 4 0" {...sw} strokeLinecap="round" /></svg>);
+const IconHeart = () => (<svg width="18" height="18" viewBox="0 0 18 18"><path d="M9 15s-6-4-6-8a3 3 0 0 1 6-1 3 3 0 0 1 6 1c0 4-6 8-6 8Z" {...sw} strokeLinejoin="round" /></svg>);
+const IconShield = () => (<svg width="18" height="18" viewBox="0 0 18 18"><path d="M9 2L3 4v5c0 3.5 2.5 6.5 6 8 3.5-1.5 6-4.5 6-8V4L9 2Z" {...sw} strokeLinejoin="round" /></svg>);
+const IconBuilding = () => (<svg width="18" height="18" viewBox="0 0 18 18"><rect x="3" y="3" width="12" height="12" rx="1.5" {...sw} /><path d="M6 6h1M6 9h1M6 12h1M11 6h1M11 9h1M11 12h1" {...sw} strokeLinecap="round" /></svg>);
+const IconHelp = () => (<svg width="18" height="18" viewBox="0 0 18 18"><circle cx="9" cy="9" r="7" {...sw} /><path d="M7 7.5c.3-1 1.1-1.5 2-1.5 1.2 0 2 .8 2 1.7 0 .8-.5 1.2-1 1.5-.7.4-1 .8-1 1.3M9 13v.1" {...sw} strokeLinecap="round" /></svg>);
+const IconOut = () => (<svg width="18" height="18" viewBox="0 0 18 18"><path d="M11 4H4v10h7M14 9H7M11 6l3 3-3 3" {...sw} strokeLinecap="round" strokeLinejoin="round" /></svg>);
