@@ -6,7 +6,7 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
   return (
     <>
       <PublicHeader />
-      <div className="max-[560px]:pb-[72px]">{children}</div>
+      <div className="pb-[72px]">{children}</div>
       <UserTabbar />
     </>
   );
