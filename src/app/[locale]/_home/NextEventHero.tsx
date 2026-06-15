@@ -24,10 +24,15 @@ export function NextEventHero() {
   const next = pickNext(tickets.data ?? []);
   if (!next) return null;
 
+  // Atajo solo el día del evento (hoy, en la zona del evento). Si es para otro
+  // día, no lo mostramos — el usuario ya lo ve en "Mis entradas".
+  if (!isSameDayInTz(next.event.startsAt, next.event.timezone)) return null;
+
   const when = countdownLabel(next.event.startsAt, next.event.timezone);
 
   return (
-    <section className="mx-auto w-full max-w-[1120px] px-4 pt-4 sm:px-6 lg:px-8">
+    // Atajo pensado para móvil; en desktop la navegación/contenido ya lo cubre.
+    <section className="mx-auto w-full max-w-[1120px] px-4 pt-4 sm:px-6 lg:hidden">
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -101,6 +106,20 @@ function pickNext(tickets: WalletTicket[]): WalletTicket | null {
       (a, b) => new Date(a.event.startsAt).getTime() - new Date(b.event.startsAt).getTime(),
     );
   return candidates[0] ?? null;
+}
+
+// ¿El evento es hoy? (mismo día de calendario en la zona del evento). Display:
+// decide solo cuándo mostrar el atajo — el estado del evento lo sigue dando el
+// backend (closed/cancelled se filtran en pickNext).
+function isSameDayInTz(startsAt: string, timezone: string): boolean {
+  const dayKey = (d: Date) =>
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(d);
+  return dayKey(new Date()) === dayKey(new Date(startsAt));
 }
 
 // Etiqueta amigable de cuándo es (display). Cuando falta poco da precisión por
