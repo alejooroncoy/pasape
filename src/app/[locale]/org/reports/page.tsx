@@ -67,12 +67,12 @@ export default function OrgReportsPage() {
   useRealtimeEventStats(selectedEvent?.id, eventSlug ?? "");
 
   const kpis = useMemo(() => {
-    const revenue = (data?.revenueCents ?? 0) / 100;
+    const revenue = data?.revenueCents ?? 0; // céntimos — formatMoney divide /100
     const sold = data?.sold ?? 0;
     const reserved = data?.reserved ?? 0;
     const validated = data?.validated ?? 0;
     const capacity = data?.capacity ?? 0;
-    const conversion = capacity > 0 ? (sold / capacity) * 100 : 0;
+    const conversion = capacity > 0 ? Math.min(100, (sold / capacity) * 100) : 0;
     return { revenue, sold, reserved, validated, conversion };
   }, [data]);
 
@@ -178,7 +178,7 @@ export default function OrgReportsPage() {
                 </p>
               </div>
               <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-cart-ink-4">
-                {(data?.byPromoter ?? []).length} promotores
+                {(data?.byPromoter ?? []).filter((p) => p.ticketsSold > 0).length} con ventas
               </span>
             </div>
             <PromotersTable
@@ -222,7 +222,7 @@ export default function OrgReportsPage() {
                 (data?.ticketTypes ?? []).map((t) => ({
                   name: t.name,
                   kind: t.kind,
-                  price: t.priceCents / 100,
+                  price: t.priceCents, // céntimos — formatPriceRange usa formatMoney (/100)
                   sold: t.sold,
                   capacity: t.capacity,
                 })),
@@ -646,15 +646,27 @@ function buildSeries(
   }
   const days = range === "today" ? 1 : range === "7d" ? 7 : range === "30d" ? 30 : 60;
   const out: number[] = [];
-  const today = new Date();
-  today.setUTCHours(0, 0, 0, 0);
+  // El eje debe alinear con los buckets de la view, que están en hora de Lima.
+  // "Hoy" en Lima (no en UTC) — cerca de medianoche difieren de día.
+  const limaToday = limaDayKey(new Date());
+  const base = new Date(`${limaToday}T00:00:00Z`);
   for (let i = days - 1; i >= 0; i--) {
-    const d = new Date(today);
-    d.setUTCDate(today.getUTCDate() - i);
+    const d = new Date(base);
+    d.setUTCDate(base.getUTCDate() - i);
     const key = d.toISOString().slice(0, 10);
     out.push(map.get(key) ?? 0);
   }
   return out;
+}
+
+/** Fecha (YYYY-MM-DD) del día en hora de Lima para un instante dado. */
+function limaDayKey(at: Date): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Lima",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(at);
 }
 
 function Sparkline({ data, range }: { data: number[]; range: RangeKey }) {
@@ -770,14 +782,13 @@ function Sparkline({ data, range }: { data: number[]; range: RangeKey }) {
 function buildXLabels(n: number, range: RangeKey): Array<{ i: number; label: string }> {
   if (n <= 1) return [{ i: 0, label: "Hoy" }];
   const indices = [0, Math.floor(n / 3), Math.floor((2 * n) / 3), n - 1];
-  const today = new Date();
-  today.setUTCHours(0, 0, 0, 0);
-  const fmt = new Intl.DateTimeFormat("es-PE", { day: "numeric", month: "short" });
+  const base = new Date(`${limaDayKey(new Date())}T00:00:00Z`);
+  const fmt = new Intl.DateTimeFormat("es-PE", { day: "numeric", month: "short", timeZone: "UTC" });
   return indices.map((i) => {
     if (range === "today") return { i, label: i === n - 1 ? "Hoy" : "" };
     if (i === n - 1) return { i, label: "Hoy" };
-    const d = new Date(today);
-    d.setUTCDate(today.getUTCDate() - (n - 1 - i));
+    const d = new Date(base);
+    d.setUTCDate(base.getUTCDate() - (n - 1 - i));
     return { i, label: fmt.format(d) };
   });
 }
@@ -1071,6 +1082,8 @@ type PromoterStatRow = {
   ticketsSold: number;
   ticketsValidated: number;
   revenueCents: number;
+  payoutCents: number;
+  commissionType: "percentage" | "tiered" | "inkind";
   attendanceRate: number;
   flag: "ok" | "watch" | "suspect";
 };
@@ -1107,7 +1120,7 @@ function PromotersTable({
       {/* Mobile: cards */}
       <div className="flex flex-col gap-2.5 sm:hidden">
         {ranked.map((r, i) => {
-          const avg = r.ticketsSold > 0 ? r.revenueCents / r.ticketsSold / 100 : 0;
+          const avg = r.ticketsSold > 0 ? r.revenueCents / r.ticketsSold : 0;
           return (
             <motion.div
               key={r.promoterId}
@@ -1134,7 +1147,7 @@ function PromotersTable({
               </div>
               <div className="grid grid-cols-3 gap-2 text-center">
                 <Stat label="Tickets" value={r.ticketsSold.toLocaleString("es-PE")} />
-                <Stat label="Recaudado" value={formatMoney(r.revenueCents / 100)} />
+                <Stat label="Recaudado" value={formatMoney(r.revenueCents)} />
                 <Stat label="Ticket prom." value={formatMoney(avg)} />
               </div>
             </motion.div>
@@ -1151,13 +1164,14 @@ function PromotersTable({
               <th className="px-2 pb-2 text-left font-medium">Promotor · Origen QR</th>
               <th className="px-2 pb-2 text-right font-medium">Tickets</th>
               <th className="px-2 pb-2 text-right font-medium">Recaudado</th>
+              <th className="px-2 pb-2 text-right font-medium">A pagar</th>
               <th className="px-2 pb-2 text-right font-medium">Ticket prom.</th>
               <th className="px-2 pb-2 text-right font-medium">Asistencia</th>
             </tr>
           </thead>
           <tbody>
             {ranked.map((r, i) => {
-              const avg = r.ticketsSold > 0 ? r.revenueCents / r.ticketsSold / 100 : 0;
+              const avg = r.ticketsSold > 0 ? r.revenueCents / r.ticketsSold : 0;
               return (
                 <motion.tr
                   key={r.promoterId}
@@ -1187,7 +1201,10 @@ function PromotersTable({
                     {r.ticketsSold.toLocaleString("es-PE")}
                   </td>
                   <td className="bg-cart-bg-elev-2/70 px-3 py-3 text-right text-[13px] font-semibold tabular-nums text-white">
-                    {formatMoney(r.revenueCents / 100)}
+                    {formatMoney(r.revenueCents)}
+                  </td>
+                  <td className="bg-cart-bg-elev-2/70 px-3 py-3 text-right text-[13px] font-semibold tabular-nums text-cart-accent">
+                    {r.commissionType === "inkind" ? "En especie" : formatMoney(r.payoutCents)}
                   </td>
                   <td className="bg-cart-bg-elev-2/70 px-3 py-3 text-right text-[13px] tabular-nums text-cart-ink-2">
                     {formatMoney(avg)}

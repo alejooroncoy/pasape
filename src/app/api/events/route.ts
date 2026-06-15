@@ -3,7 +3,7 @@ import { EventsController } from "@/server/events/controllers/rest/EventsControl
 import { json } from "@/server/_shared/http";
 import type { EventCategory } from "@/server/events/domain/Event";
 
-const VALID_CATEGORIES = new Set<string>(["musica","dj_sets","after_office","comedia","cultura","deportes"]);
+const VALID_CATEGORIES = new Set<string>(["conciertos","fiestas","festivales","comedia","cultura","deportes"]);
 
 export const GET = async (req: NextRequest) => {
   const scope = req.nextUrl.searchParams.get("scope");

@@ -4,10 +4,10 @@ import { use, useRef, useState } from "react";
 import { Link } from "@/i18n/navigation";
 import { useEvent } from "@/lib/events/hooks/useEvents";
 import { useEventStats } from "@/lib/events/hooks/useEventStats";
-import { useScanRealtime } from "@/lib/scanning/hooks/useScanRealtime";
 import { useRealtimeEventStats } from "@/lib/events/hooks/useRealtimeEventStats";
 import { useEventPartners, useAddEventPartner, useRemoveEventPartner } from "@/lib/events/hooks/useEventPartners";
 import { formatMoney } from "@/lib/_shared/format";
+import { Money } from "@/lib/_shared/money";
 import { EventShell } from "./_shell/EventShell";
 import { SpotlightTour } from "@/components/ui/SpotlightTour";
 import { createSupabaseBrowserClient } from "@/server/_shared/supabase/client";
@@ -20,8 +20,9 @@ export default function OrgEventPanelPage({ params }: { params: Params }) {
   const { slug } = use(params);
   const event = useEvent(slug);
   const stats = useEventStats(slug);
-  useScanRealtime(slug);
-  // Refresca KPIs al instante cuando entra/cambia una venta (Broadcast desde DB).
+  // Refresca KPIs al instante cuando entra/cambia una venta o un scan (Broadcast
+  // desde DB, con debounce). Cubre también los scans vía el trigger
+  // scan_events_broadcast_stats → ya no hace falta useScanRealtime.
   useRealtimeEventStats(event.data?.event?.id, slug);
 
   const ev = event.data?.event;
@@ -83,7 +84,7 @@ function LivePanel({
           tone="accent"
         />
         <KpiCard
-          label="Validadas"
+          label="Ingresaron"
           value={validated.toLocaleString("es-PE")}
           hint={sold ? `${validatedPct}% de las vendidas` : "Sin ventas aún"}
           progress={sold ? validatedPct : null}
@@ -91,7 +92,7 @@ function LivePanel({
         />
         <KpiCard
           label="Recaudado"
-          value={formatMoneyClean(revenue)}
+          value={formatMoneyClean(revenue, ev?.currency)}
           hint="acumulado · S/"
           tone="neutral"
         />
@@ -261,7 +262,7 @@ function FinalReport({
           Total recaudado
         </div>
         <div className="mt-2 font-sans text-[48px] font-semibold leading-none tracking-[-0.04em] lg:text-[60px]">
-          {formatMoneyClean(revenue)}
+          {formatMoneyClean(revenue, ev?.currency)}
         </div>
 
         {/* Trío de stats */}
@@ -370,7 +371,7 @@ function FinalReport({
                         </div>
                         <div className="shrink-0 text-right">
                           <div className="font-mono text-[13px] font-semibold">
-                            {formatMoneyClean(t.priceCents * t.sold)}
+                            {formatMoneyClean(t.revenueCents, ev?.currency)}
                           </div>
                           <div className="mt-0.5 text-[11px] text-cart-ink-3">
                             {fillPct}% del cupo
@@ -386,7 +387,7 @@ function FinalReport({
                 if (boxes.length > 0) {
                   const totalBoxes = boxes.length;
                   const soldBoxes = boxes.filter((b) => b.sold > 0).length;
-                  const boxRevenue = boxes.reduce((s, b) => s + b.priceCents * b.sold, 0);
+                  const boxRevenue = boxes.reduce((s, b) => s + b.revenueCents, 0);
                   const fillPct = totalBoxes > 0 ? Math.round((soldBoxes / totalBoxes) * 100) : 0;
                   const noun = boxes[0]?.name?.split(" ")[0] ?? "Box";
                   rows.push(
@@ -400,7 +401,7 @@ function FinalReport({
                         </div>
                         <div className="shrink-0 text-right">
                           <div className="font-mono text-[13px] font-semibold">
-                            {formatMoneyClean(boxRevenue)}
+                            {formatMoneyClean(boxRevenue, ev?.currency)}
                           </div>
                           <div className="mt-0.5 text-[11px] text-cart-ink-3">
                             {fillPct}% ocupados
@@ -538,7 +539,7 @@ function PromoterRow({
       <div className="flex items-baseline gap-3 text-right">
         <span className="font-mono text-[13px] font-semibold">{promoter.ticketsSold}</span>
         <span className="font-mono text-[12.5px] font-semibold text-[#22D17F]">{promoter.ticketsValidated}</span>
-        <span className="hidden font-mono text-[12.5px] text-cart-ink-3 sm:inline">
+        <span className="font-mono text-[12.5px] text-cart-ink-3">
           {formatMoneyClean(promoter.revenueCents)}
         </span>
       </div>
@@ -591,14 +592,11 @@ function DoorHealthBanner({
   doors: EventStatsPayload["doors"];
   dupOffline: number;
 }) {
-  const STALE_MIN = 3;
-  const now = Date.now();
-  const minsSince = (iso: string | null): number | null =>
-    iso === null ? null : Math.floor((now - new Date(iso).getTime()) / 60000);
-
+  // Staleness lo decide el backend (reloj del server) → sin falsos positivos
+  // por el reloj del dispositivo.
   const stale = doors
-    .map((d) => ({ ...d, mins: minsSince(d.lastSyncAt) }))
-    .filter((d) => d.mins === null || d.mins >= STALE_MIN);
+    .filter((d) => d.isStale)
+    .map((d) => ({ ...d, mins: d.minutesSinceSync }));
 
   if (dupOffline === 0 && stale.length === 0) return null;
 
@@ -645,9 +643,9 @@ function DoorHealthBanner({
   );
 }
 
-function formatMoneyClean(cents: number): string {
-  const s = formatMoney(cents).replace(/[^\d,.]/g, "").trim();
-  return s ? `S/ ${s}` : "S/ 0";
+function formatMoneyClean(cents: number, currency: string = "PEN"): string {
+  // Usa el símbolo correcto por moneda (preparado para multi-mercado).
+  return Money.format(cents, currency);
 }
 
 /* ============================== Partners section ============================== */

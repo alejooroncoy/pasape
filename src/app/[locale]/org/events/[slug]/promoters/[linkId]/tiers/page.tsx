@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useMemo, useState } from "react";
+import { Money } from "@/lib/_shared/money";
 import { EventShell } from "../../../_shell/EventShell";
 import { Link } from "@/i18n/navigation";
 import {
@@ -16,7 +17,7 @@ type Params = Promise<{ slug: string; linkId: string; locale: string }>;
 
 const formatSoles = (cents: number | null): string => {
   if (cents == null) return "—";
-  const n = cents / 100;
+  const n = Money.toSoles(cents);
   return `S/ ${n.toLocaleString("es-PE", { maximumFractionDigits: 0 })}`;
 };
 
@@ -409,7 +410,7 @@ function ComposerSheet({
       await onSubmit({
         thresholdCount: Math.max(1, threshold),
         rewardKind: "cash",
-        rewardAmountCents: Math.max(0, Math.round(amountSoles * 100)),
+        rewardAmountCents: Math.max(0, Money.toCents(amountSoles)),
         rewardLabel: `S/ ${amountSoles.toLocaleString("es-PE")}`,
       });
     } else {

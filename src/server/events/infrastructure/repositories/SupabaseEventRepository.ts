@@ -77,6 +77,7 @@ type EventRow = {
   timezone: string;
   status: Event["status"];
   category: EventCategory | null;
+  currency: string;
   total_capacity: number | null;
   overbook_pct: number;
   transfers_enabled: boolean;
@@ -166,6 +167,7 @@ const toEvent = (r: EventRow): Event => ({
   timezone: r.timezone,
   status: r.status,
   category: r.category,
+  currency: r.currency,
   capacity: {
     totalCapacity: r.total_capacity,
     overbookPct: r.overbook_pct,
@@ -246,7 +248,31 @@ export const supabaseEventRepository: EventRepository = {
       .select("*")
       .eq("organization_id", orgId)
       .order("starts_at", { ascending: false });
-    return (data as EventRow[] | null)?.map(toEvent) ?? [];
+    const events = (data as EventRow[] | null)?.map(toEvent) ?? [];
+    if (events.length === 0) return events;
+
+    // Ventas reales por evento desde el rollup (una sola query), para que las
+    // cards muestren vendido/aforo/recaudado sin inferir nada en el frontend.
+    const { data: rollups } = await db
+      .from("event_stats_rollup")
+      .select("event_id, sold, capacity, revenue_cents")
+      .in("event_id", events.map((e) => e.id));
+    const byId = new Map(
+      (rollups as Array<{ event_id: string; sold: number; capacity: number; revenue_cents: number }> | null)?.map(
+        (r) => [r.event_id, r],
+      ) ?? [],
+    );
+    return events.map((e) => {
+      const r = byId.get(e.id);
+      return {
+        ...e,
+        listStats: {
+          sold: r?.sold ?? 0,
+          capacity: r?.capacity ?? 0,
+          revenueCents: r?.revenue_cents ?? 0,
+        },
+      };
+    });
   },
 
   async getBySlug(slug) {
@@ -602,19 +628,34 @@ export const supabaseEventRepository: EventRepository = {
 
     // Vendidas por tipo (pagadas, activas/usadas) para el desglose del reporte —
     // NO usamos `ticket_types.sold` porque incluye reservas pendientes.
-    const { data: paidTickets } = await db
-      .from("tickets")
-      .select("ticket_type_id, order:orders!inner(event_id, status)")
-      .eq("order.event_id", eventId)
-      .eq("order.status", "paid")
-      .in("status", ["active", "used"]);
+    const PAGE = 1000;
+    const paidTickets: Array<{ ticket_type_id: string; price_cents: number | null }> = [];
+    for (let from = 0; ; from += PAGE) {
+      const { data: page } = await db
+        .from("tickets")
+        .select("ticket_type_id, price_cents, order:orders!inner(event_id, status)")
+        .eq("order.event_id", eventId)
+        .eq("order.status", "paid")
+        .in("status", ["active", "used"])
+        .order("id", { ascending: true })
+        .range(from, from + PAGE - 1);
+      const rows = (page as Array<{ ticket_type_id: string; price_cents: number | null }> | null) ?? [];
+      paidTickets.push(...rows);
+      if (rows.length < PAGE) break;
+    }
     const soldByType = new Map<string, number>();
-    for (const t of (paidTickets as Array<{ ticket_type_id: string }> | null) ?? []) {
+    // Recaudado real por tipo = suma de price_cents de los tickets pagados
+    // (con promos ya aplicadas al momento de la compra). Cuadra con el total
+    // del rollup; nunca se recalcula precio×vendidos en el frontend.
+    const revenueByType = new Map<string, number>();
+    for (const t of paidTickets) {
       soldByType.set(t.ticket_type_id, (soldByType.get(t.ticket_type_id) ?? 0) + 1);
+      revenueByType.set(t.ticket_type_id, (revenueByType.get(t.ticket_type_id) ?? 0) + (t.price_cents ?? 0));
     }
     const ticketTypes = ticketTypeRows.map((t) => ({
       ...t,
       sold: soldByType.get(t.id) ?? 0,
+      revenueCents: revenueByType.get(t.id) ?? 0,
     }));
 
     const { data: promoterOrders } = await db
@@ -660,6 +701,10 @@ export const supabaseEventRepository: EventRepository = {
       const rows =
         (pTickets as Array<{ order_id: string; status: "active" | "used" | "void" | "refunded" }> | null) ?? [];
       ticketsByOrder = rows.reduce((acc, t) => {
+        // Solo cuentan vendidas las activas/usadas. void/refunded NO suman —
+        // si no, inflan ticketsSold y se sobrepaga comisión por entradas
+        // anuladas o reembolsadas (alinea con soldByType).
+        if (t.status !== "active" && t.status !== "used") return acc;
         const entry = acc.get(t.order_id) ?? { sold: 0, validated: 0 };
         entry.sold += 1;
         if (t.status === "used") entry.validated += 1;
@@ -799,6 +844,7 @@ export const supabaseEventRepository: EventRepository = {
         priceCents: t.price_cents,
         capacity: t.capacity,
         sold: t.sold,
+        revenueCents: t.revenueCents,
       })),
       byPromoter,
     };
@@ -808,18 +854,33 @@ export const supabaseEventRepository: EventRepository = {
     const db = supabaseAdmin();
 
     // Tickets joined with ticket_type, order (+ buyer profile, promoter_link).
-    const { data: ticketRows } = await db
-      .from("tickets")
-      .select(
-        `id, holder_name, status, used_at, order_id,
-         ticket_type:ticket_types!inner(id, name),
-         order:orders!inner(
-           id, event_id, promoter_link_id,
-           buyer:profiles!inner(id, email, phone),
-           promoter_link:promoter_links(id, code)
-         )`,
-      )
-      .eq("order.event_id", eventId);
+    // Solo entradas realmente válidas: orden pagada + ticket active/used (excluye
+    // pending/expired/void/refunded — antes contaminaban la hoja Asistentes y no
+    // cuadraban con el Resumen). Paginado en bloques de 1000 porque PostgREST
+    // corta a 1000 filas SIN error → eventos grandes exportaban incompletos.
+    const PAGE = 1000;
+    const ticketRows: unknown[] = [];
+    for (let from = 0; ; from += PAGE) {
+      const { data: page } = await db
+        .from("tickets")
+        .select(
+          `id, holder_name, status, used_at, order_id,
+           ticket_type:ticket_types!inner(id, name),
+           order:orders!inner(
+             id, event_id, promoter_link_id, status,
+             buyer:profiles!inner(id, email, phone),
+             promoter_link:promoter_links(id, code)
+           )`,
+        )
+        .eq("order.event_id", eventId)
+        .eq("order.status", "paid")
+        .in("status", ["active", "used"])
+        .order("id", { ascending: true })
+        .range(from, from + PAGE - 1);
+      const rows = page ?? [];
+      ticketRows.push(...rows);
+      if (rows.length < PAGE) break;
+    }
 
     type TicketJoinRow = {
       id: string;
@@ -916,12 +977,24 @@ export const supabaseEventRepository: EventRepository = {
       expires_at: string;
       zones: { name: string } | null;
     };
-    const doors = ((sessionsRes.data as SessionRow[] | null) ?? []).map((s) => ({
-      deviceId: s.device_id,
-      zoneName: s.zones?.name ?? null,
-      lastSyncAt: s.last_sync_at,
-      expiresAt: s.expires_at,
-    }));
+    // Staleness calculado server-side (reloj del server, confiable) en vez del
+    // Date.now() del navegador, que podía dar falsos positivos.
+    const STALE_MIN = 3;
+    const nowMs = Date.now();
+    const doors = ((sessionsRes.data as SessionRow[] | null) ?? []).map((s) => {
+      const minutesSinceSync =
+        s.last_sync_at === null
+          ? null
+          : Math.floor((nowMs - new Date(s.last_sync_at).getTime()) / 60000);
+      return {
+        deviceId: s.device_id,
+        zoneName: s.zones?.name ?? null,
+        lastSyncAt: s.last_sync_at,
+        expiresAt: s.expires_at,
+        minutesSinceSync,
+        isStale: minutesSinceSync === null || minutesSinceSync >= STALE_MIN,
+      };
+    });
 
     return { doors, dupOffline: dupRes.count ?? 0 };
   },

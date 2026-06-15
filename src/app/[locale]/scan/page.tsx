@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { C, FONT_DISPLAY, FONT_MONO } from "@/components/design";
 import { useScanQr, useAdmitTicket } from "@/lib/scanning/hooks/useScanQr";
 import { refreshScanCache, searchCachedTickets } from "@/lib/scanning/scanCache";
-import { useOnlineStatus } from "@/lib/_shared/useOnlineStatus";
+import { useOnlineStatus } from "@/lib/_shared/hooks/useOnlineStatus";
 import { scanLocal, admitLocal } from "@/lib/scanning/scanLocal";
 import { countPending } from "@/lib/scanning/scanQueue";
 import { syncPending } from "@/lib/scanning/syncWorker";

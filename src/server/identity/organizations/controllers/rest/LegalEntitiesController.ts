@@ -30,7 +30,7 @@ const updateSchema = z.object({
   coverUrl: z.string().url().nullable().optional(),
   bio: z.string().max(280).nullable().optional(),
   bankName: z.string().min(1).max(40).nullable().optional(),
-  bankAccountNumber: z.string().min(4).max(40).nullable().optional(),
+  bankAccountNumber: z.string().min(8).max(40).nullable().optional(),
   bankCci: z
     .string()
     .regex(/^\d{20}$/, "El CCI debe tener exactamente 20 dígitos.")

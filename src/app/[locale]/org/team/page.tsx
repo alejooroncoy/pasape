@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Money } from "@/lib/_shared/money";
 import { useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import { Link } from "@/i18n/navigation";
@@ -33,8 +34,9 @@ export default function OrgTeamPage() {
   const promoters = useOrgPromoters();
   const invites = useOrgInvites();
 
-  const coorgCount =
-    (invites.data?.members?.length ?? 0) + (pendingInvitesCount(invites.data?.invites) ?? 0);
+  // Solo activos (antes sumaba invitaciones pendientes y no coincidía con la
+  // sección "Activos").
+  const coorgCount = invites.data?.members?.length ?? 0;
   const promCount = promoters.data?.length ?? 0;
 
   return (
@@ -61,13 +63,6 @@ export default function OrgTeamPage() {
       {tab === "coorg" ? <CoorgTab /> : <PromotersTab />}
     </OrgShell>
   );
-}
-
-function pendingInvitesCount(
-  invites: { status: string }[] | undefined,
-): number {
-  if (!invites) return 0;
-  return invites.filter((i) => i.status === "pending").length;
 }
 
 function TabButton({
@@ -808,12 +803,12 @@ function PromoterForm({
                       <input
                         type="number"
                         min={0}
-                        value={t.payoutCents / 100}
+                        value={Money.toSoles(t.payoutCents)}
                         onChange={(e) => {
                           const soles = Math.max(0, Number(e.target.value) || 0);
                           setTiers((prev) =>
                             prev.map((row, idx) =>
-                              idx === i ? { ...row, payoutCents: Math.round(soles * 100) } : row,
+                              idx === i ? { ...row, payoutCents: Money.toCents(soles) } : row,
                             ),
                           );
                         }}

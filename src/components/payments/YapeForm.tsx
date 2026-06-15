@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { C, FONT_DISPLAY } from "@/components/design";
-import { useMpSdk } from "@/lib/payments/useMpSdk";
+import { useMpSdk } from "@/lib/payments/hooks/useMpSdk";
 
 type Props = {
   orderId: string;
