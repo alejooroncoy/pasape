@@ -68,7 +68,12 @@ export default function HomePage() {
       <Footer />
       <WaFloat />
       <MobileTabbar
+        onHome={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+        onExplore={() =>
+          eventsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+        }
         onTickets={() => (loggedIn ? router.push("/tickets" as never) : setSignInOpen(true))}
+        onFavs={() => (loggedIn ? router.push("/account" as never) : setSignInOpen(true))}
         onAccount={() => (loggedIn ? router.push("/account" as never) : setSignInOpen(true))}
       />
       <SideDrawer
