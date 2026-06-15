@@ -103,8 +103,29 @@ function pickNext(tickets: WalletTicket[]): WalletTicket | null {
   return candidates[0] ?? null;
 }
 
-// Etiqueta amigable de cuándo es (display): Hoy / Mañana / En N días / fecha.
+// Etiqueta amigable de cuándo es (display). Cuando falta poco da precisión por
+// horas/minutos (más útil que "Hoy" a secas); más allá de 24 h razona por días.
 function countdownLabel(startsAt: string, timezone: string): string {
+  const now = new Date();
+  const start = new Date(startsAt);
+  const diffMs = start.getTime() - now.getTime();
+  const MIN = 60_000;
+  const HOUR = 3_600_000;
+
+  // Ya empezó (o está por empezar) pero el backend aún no lo cerró → es hoy.
+  if (diffMs <= 0) return "¡Es hoy!";
+
+  // Dentro de las próximas 24 h: contar horas / minutos.
+  if (diffMs < 24 * HOUR) {
+    if (diffMs < HOUR) {
+      const mins = Math.max(1, Math.round(diffMs / MIN));
+      return `En ${mins} ${mins === 1 ? "minuto" : "minutos"}`;
+    }
+    const hours = Math.round(diffMs / HOUR);
+    return `En ${hours} ${hours === 1 ? "hora" : "horas"}`;
+  }
+
+  // Más de 24 h: razonar por días de calendario (en la zona del evento).
   const dayKey = (d: Date) =>
     new Intl.DateTimeFormat("en-CA", {
       timeZone: timezone,
@@ -112,14 +133,13 @@ function countdownLabel(startsAt: string, timezone: string): string {
       month: "2-digit",
       day: "2-digit",
     }).format(d);
-  const today = dayKey(new Date());
-  const target = dayKey(new Date(startsAt));
+  const today = dayKey(now);
+  const target = dayKey(start);
   const diffDays = Math.round(
     (new Date(`${target}T00:00:00Z`).getTime() - new Date(`${today}T00:00:00Z`).getTime()) /
       86400000,
   );
-  if (diffDays <= 0) return "Hoy";
-  if (diffDays === 1) return "Mañana";
+  if (diffDays <= 1) return "Mañana";
   if (diffDays < 7) return `En ${diffDays} días`;
   if (diffDays < 14) return "En una semana";
   return `En ${Math.round(diffDays / 7)} semanas`;
