@@ -20,7 +20,7 @@ import "./landing.css";
 const SITE_URL = "https://pasa.pe";
 
 export const metadata: Metadata = {
-  title: "Pasape — Entradas digitales para organizadores",
+  title: "Pasape | Entradas digitales para organizadores",
   description:
     "Vende entradas, promos, combos y grupos sin responder un solo DM. Mide a tus promotores en tiempo real.",
 };

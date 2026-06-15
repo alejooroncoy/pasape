@@ -8,7 +8,7 @@ const DESCRIPTION =
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: "Pasape — Entradas para eventos en Lima",
+    default: "Pasape | Entradas para eventos en Lima",
     template: "%s · Pasape",
   },
   description: DESCRIPTION,
@@ -24,12 +24,12 @@ export const metadata: Metadata = {
     locale: "es_PE",
     url: SITE_URL,
     siteName: "Pasape",
-    title: "Pasape — Entradas para eventos en Lima",
+    title: "Pasape | Entradas para eventos en Lima",
     description: DESCRIPTION,
   },
   twitter: {
     card: "summary_large_image",
-    title: "Pasape — Entradas para eventos en Lima",
+    title: "Pasape | Entradas para eventos en Lima",
     description: DESCRIPTION,
   },
 };

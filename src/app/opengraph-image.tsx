@@ -3,7 +3,7 @@ import { ImageResponse } from "next/og";
 // Imagen Open Graph por defecto para toda la app (1200×630). Las rutas que
 // necesiten su propia imagen pueden definir su propio opengraph-image.
 export const runtime = "nodejs";
-export const alt = "Pasape — Tu pase a los eventos que valen la pena en Lima";
+export const alt = "Pasape | Tu pase a los eventos que valen la pena en Lima";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
