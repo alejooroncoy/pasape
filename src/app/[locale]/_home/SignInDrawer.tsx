@@ -1,31 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { GoogleBtn } from "@/components/design";
 import { useGoogleSignIn } from "@/lib/identity/hooks/useFirebaseAuth";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 
-const useIsDesktop = () => {
-  const [isDesktop, setIsDesktop] = useState(false);
-  useEffect(() => {
-    const mq = window.matchMedia("(min-width: 768px)");
-    const update = () => setIsDesktop(mq.matches);
-    update();
-    mq.addEventListener("change", update);
-    return () => mq.removeEventListener("change", update);
-  }, []);
-  return isDesktop;
-};
-
 type Props = {
   open: boolean;
   onClose: () => void;
-  /** Texto principal. Default: "Entra a Pasape" */
   title?: string;
-  /** Subtítulo. Default: copy de comprador. */
   subtitle?: string;
-  /** A dónde redirige el callback post-Google. Default: la ruta actual. */
   redirectTo?: string;
 };
 
@@ -33,12 +18,11 @@ export function SignInDrawer({
   open,
   onClose,
   title = "Entra a Pasape",
-  subtitle = "Un toque y guardamos tus eventos favoritos.",
+  subtitle = "Guarda eventos, compra entradas y sigue a tus productoras favoritas.",
   redirectTo,
 }: Props) {
   const { signIn, pending, error } = useGoogleSignIn({ redirectTo });
   const me = useCurrentUser();
-  const isDesktop = useIsDesktop();
 
   useEffect(() => {
     if (me.data?.user && open) onClose();
@@ -62,49 +46,25 @@ export function SignInDrawer({
           exit={{ opacity: 0 }}
           transition={{ duration: 0.18 }}
           onClick={onClose}
-          className={
-            isDesktop
-              ? "fixed inset-0 z-[90] flex items-stretch justify-end bg-black/60 backdrop-blur-sm"
-              : "fixed inset-0 z-[90] flex items-end justify-center bg-black/60 backdrop-blur-sm"
-          }
+          className="fixed inset-0 z-[90] flex items-end justify-center bg-black/60 backdrop-blur-sm"
         >
           <motion.div
-            initial={isDesktop ? { x: "100%" } : { y: "100%" }}
-            animate={isDesktop ? { x: 0 } : { y: 0 }}
-            exit={isDesktop ? { x: "100%" } : { y: "100%" }}
+            initial={{ y: "100%" }}
+            animate={{ y: 0 }}
+            exit={{ y: "100%" }}
             transition={{ type: "spring", damping: 30, stiffness: 320, mass: 0.8 }}
             onClick={(e) => e.stopPropagation()}
-            {...(!isDesktop && {
-              drag: "y" as const,
-              dragConstraints: { top: 0, bottom: 0 },
-              dragElastic: { top: 0, bottom: 0.5 },
-              onDragEnd: (_: unknown, info: { offset: { y: number }; velocity: { y: number } }) => {
-                if (info.offset.y > 120 || info.velocity.y > 800) onClose();
-              },
-            })}
-            className={
-              isDesktop
-                ? "relative flex h-full w-[min(440px,90vw)] flex-col overflow-y-auto border-l border-cart-line-strong bg-cart-bg-elev p-7 shadow-[-30px_0_80px_-20px_rgba(0,0,0,0.7)]"
-                : "w-full max-w-[420px] rounded-t-[26px] bg-cart-bg-elev px-[22px] pb-9 pt-3.5 shadow-[0_-1px_0_rgba(255,255,255,0.07)_inset,0_-30px_60px_-10px_rgba(0,0,0,0.7)] touch-none"
-            }
+            drag="y"
+            dragConstraints={{ top: 0, bottom: 0 }}
+            dragElastic={{ top: 0, bottom: 0.5 }}
+            onDragEnd={(_: unknown, info: { offset: { y: number }; velocity: { y: number } }) => {
+              if (info.offset.y > 120 || info.velocity.y > 800) onClose();
+            }}
+            className="w-full max-w-[420px] rounded-t-[26px] bg-cart-bg-elev px-[22px] pb-9 pt-3.5 shadow-[0_-1px_0_rgba(255,255,255,0.07)_inset,0_-30px_60px_-10px_rgba(0,0,0,0.7)] touch-none"
           >
-            {!isDesktop && (
-              <div className="mb-4 flex justify-center">
-                <div className="h-1 w-9 rounded-full bg-white/15" />
-              </div>
-            )}
-            {isDesktop && (
-              <button
-                type="button"
-                onClick={onClose}
-                aria-label="Cerrar"
-                className="absolute right-4 top-4 grid size-9 place-items-center rounded-full border border-cart-line bg-cart-bg-elev-2 text-cart-ink-3 transition-colors hover:border-cart-line-strong hover:text-white"
-              >
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                  <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                </svg>
-              </button>
-            )}
+            <div className="mb-4 flex justify-center">
+              <div className="h-1 w-9 rounded-full bg-white/15" />
+            </div>
             <motion.div
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}

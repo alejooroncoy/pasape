@@ -56,7 +56,7 @@ function EventCard({ event }: { event: Event }) {
         )}
         <div
           className="pointer-events-none absolute inset-0"
-          style={{ background: "linear-gradient(to top, rgba(4,4,8,0.88) 0%, transparent 50%)" }}
+          style={{ background: "linear-gradient(to top, rgba(4,4,8,0.96) 0%, rgba(4,4,8,0.7) 35%, rgba(4,4,8,0.15) 60%, transparent 80%)" }}
         />
         <div className="absolute left-[10px] top-[10px] rounded-full border border-white/[0.08] bg-black/50 px-[9px] py-[4px] text-[10px] font-semibold text-white/80 backdrop-blur-md">
           {shortDay(event.startsAt, event.timezone)}
@@ -66,7 +66,7 @@ function EventCard({ event }: { event: Event }) {
             {event.title}
           </p>
           {event.venue && (
-            <p className="m-0 font-sans text-[11px] text-white/45">{event.venue}</p>
+            <p className="m-0 font-sans text-[11px] text-white/65">{event.venue}</p>
           )}
         </div>
       </div>

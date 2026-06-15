@@ -1,14 +1,36 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
+const SITE_URL = "https://pasa.pe";
+const DESCRIPTION =
+  "Tu pase a los eventos que valen la pena en Lima. Entradas digitales con QR, combos y promotores.";
+
 export const metadata: Metadata = {
-  title: "Pasape",
-  description: "Entradas digitales con beneficios",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: "Pasape — Entradas para eventos en Lima",
+    template: "%s · Pasape",
+  },
+  description: DESCRIPTION,
   manifest: "/manifest.json",
+  applicationName: "Pasape",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
     title: "Pasape",
+  },
+  openGraph: {
+    type: "website",
+    locale: "es_PE",
+    url: SITE_URL,
+    siteName: "Pasape",
+    title: "Pasape — Entradas para eventos en Lima",
+    description: DESCRIPTION,
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Pasape — Entradas para eventos en Lima",
+    description: DESCRIPTION,
   },
 };
 
@@ -31,7 +53,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap"
           rel="stylesheet"
         />
-        <link rel="apple-touch-icon" href="/icons/logo-dark-square-180.png" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="Pasape" />

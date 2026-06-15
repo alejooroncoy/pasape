@@ -2,6 +2,7 @@
 
 import { Link } from "@/i18n/navigation";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
+import { Logo } from "@/components/brand/Logo";
 
 export function PublicHeader() {
   const me = useCurrentUser();
@@ -15,12 +16,7 @@ export function PublicHeader() {
           href={"/" as never}
           className="inline-flex items-center gap-2 text-[17px] font-semibold tracking-[-0.01em]"
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/icons/logo-icon-min.svg"
-            alt="Pasape"
-            className="size-8 object-contain drop-shadow-[0_2px_10px_rgba(184,124,255,0.35)]"
-          />
+          <Logo className="size-8 drop-shadow-[0_2px_10px_rgba(184,124,255,0.35)]" />
           <span className="hidden sm:inline">Pasape</span>
         </Link>
 

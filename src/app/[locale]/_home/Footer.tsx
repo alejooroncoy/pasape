@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Logo } from "@/components/brand/Logo";
 
 export function Footer() {
   return (
@@ -8,12 +9,7 @@ export function Footer() {
           <div>
             <Link href="/" className="inline-flex items-center gap-2.5 text-[19px] font-semibold tracking-[-0.01em] text-white">
               <span className="grid size-[34px] place-items-center">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src="/icons/logo-icon-min.svg"
-                  alt="Pasape"
-                  className="size-full object-contain"
-                />
+                <Logo className="size-full" />
               </span>
               Pasape
             </Link>
@@ -35,6 +31,7 @@ export function Footer() {
           ]} />
           <FootCol title="Pasape" links={[
             ["Sobre nosotros", "#"],
+            ["Ayuda", "#"],
             ["Contacto", "#"],
             ["Términos", "#"],
             ["Privacidad", "#"],

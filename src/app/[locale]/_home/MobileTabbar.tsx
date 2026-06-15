@@ -11,8 +11,11 @@ const TABS = [
   { id: "me", label: "Cuenta", Icon: UserIcon },
 ];
 
-export function MobileTabbar({ onTickets, onAccount }: {
+export function MobileTabbar({ onHome, onExplore, onTickets, onFavs, onAccount }: {
+  onHome: () => void;
+  onExplore: () => void;
   onTickets: () => void;
+  onFavs: () => void;
   onAccount: () => void;
 }) {
   const [active, setActive] = useState("home");
@@ -30,7 +33,10 @@ export function MobileTabbar({ onTickets, onAccount }: {
               type="button"
               onClick={() => {
                 setActive(id);
+                if (id === "home") onHome();
+                if (id === "explore") onExplore();
                 if (id === "tickets") onTickets();
+                if (id === "favs") onFavs();
                 if (id === "me") onAccount();
               }}
               className={`relative flex flex-col items-center gap-1 border-0 bg-transparent px-0.5 py-1.5 text-[10.5px] font-medium transition-colors ${
