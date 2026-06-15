@@ -53,15 +53,26 @@ export default function BuyerProfilePage() {
           }}
         >
           <div className="flex items-center gap-4">
-            <div
-              className="grid size-16 shrink-0 place-items-center rounded-[20px] text-[24px] font-extrabold tracking-[-0.02em] text-white"
-              style={{
-                background: "linear-gradient(135deg, #FF4D5E, #7C3AED 60%, #4B1F9A)",
-                boxShadow: "0 0 0 2px rgba(255,255,255,0.1), 0 18px 40px -12px rgba(124,58,237,0.5)",
-              }}
-            >
-              {initialsOf(fullName)}
-            </div>
+            {user?.avatarUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={user.avatarUrl}
+                alt={fullName ?? "Tu perfil"}
+                referrerPolicy="no-referrer"
+                className="size-16 shrink-0 rounded-[20px] object-cover"
+                style={{ boxShadow: "0 0 0 2px rgba(255,255,255,0.1), 0 18px 40px -12px rgba(124,58,237,0.5)" }}
+              />
+            ) : (
+              <div
+                className="grid size-16 shrink-0 place-items-center rounded-[20px] text-[24px] font-extrabold tracking-[-0.02em] text-white"
+                style={{
+                  background: "linear-gradient(135deg, #FF4D5E, #7C3AED 60%, #4B1F9A)",
+                  boxShadow: "0 0 0 2px rgba(255,255,255,0.1), 0 18px 40px -12px rgba(124,58,237,0.5)",
+                }}
+              >
+                {initialsOf(fullName)}
+              </div>
+            )}
             <div className="min-w-0 flex-1">
               <h1 className="truncate text-[22px] font-bold leading-tight tracking-[-0.02em]">
                 {isLoading ? "Cargando…" : fullName}

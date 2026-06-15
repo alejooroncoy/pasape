@@ -3,6 +3,7 @@
 import type { ReactElement, SVGProps } from "react";
 import { Link, usePathname } from "@/i18n/navigation";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
+import { UserAvatar } from "./UserAvatar";
 import {
   CompassIcon,
   HeartIcon,
@@ -44,16 +45,18 @@ export function UserSidebar() {
   const user = me.data?.user ?? null;
   const name = user?.fullName ?? "Tu cuenta";
   const sub = user?.email ?? user?.phone ?? "";
-  const initial = (user?.fullName ?? user?.email ?? "·").charAt(0).toUpperCase();
 
   return (
     <aside className="hidden lg:block lg:w-[248px] lg:shrink-0">
       <div className="sticky top-[76px] flex flex-col gap-1.5">
         {/* Identidad */}
         <div className="mb-2 flex items-center gap-3 rounded-2xl border border-cart-line bg-cart-bg-elev p-3">
-          <span className="grid size-10 shrink-0 place-items-center rounded-full bg-gradient-to-br from-[#7C3AED] to-[#b87cff] text-[14px] font-semibold text-white shadow-[0_0_0_1px_rgba(255,255,255,0.1)_inset]">
-            {initial}
-          </span>
+          <UserAvatar
+            name={user?.fullName ?? user?.email}
+            avatarUrl={user?.avatarUrl}
+            className="size-10 rounded-full shadow-[0_0_0_1px_rgba(255,255,255,0.1)_inset]"
+            fallbackClassName="bg-gradient-to-br from-[#7C3AED] to-[#b87cff] text-[14px]"
+          />
           <div className="min-w-0">
             <p className="truncate text-[14px] font-semibold text-white">{name}</p>
             {sub && <p className="truncate text-[12px] text-cart-ink-3">{sub}</p>}

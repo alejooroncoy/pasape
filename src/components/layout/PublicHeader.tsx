@@ -3,11 +3,11 @@
 import { Link } from "@/i18n/navigation";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { Logo } from "@/components/brand/Logo";
+import { UserAvatar } from "@/components/layout/UserAvatar";
 
 export function PublicHeader() {
   const me = useCurrentUser();
   const user = me.data?.user;
-  const initial = user?.fullName?.charAt(0).toUpperCase() ?? user?.email?.charAt(0).toUpperCase();
 
   return (
     <header className="sticky top-0 z-50 border-b border-cart-line bg-cart-bg/90 backdrop-blur-md">
@@ -37,12 +37,13 @@ export function PublicHeader() {
           </Link>
 
           {user ? (
-            <Link
-              href={"/org" as never}
-              className="grid size-9 place-items-center rounded-full bg-gradient-to-br from-[#7C3AED] to-[#b87cff] text-[12.5px] font-semibold text-white shadow-[0_0_0_1px_rgba(255,255,255,0.1)_inset]"
-              aria-label="Mi cuenta"
-            >
-              {initial ?? "·"}
+            <Link href={"/org" as never} aria-label="Mi cuenta" className="block">
+              <UserAvatar
+                name={user.fullName ?? user.email}
+                avatarUrl={user.avatarUrl}
+                className="size-9 rounded-full shadow-[0_0_0_1px_rgba(255,255,255,0.1)_inset]"
+                fallbackClassName="bg-gradient-to-br from-[#7C3AED] to-[#b87cff] text-[12.5px]"
+              />
             </Link>
           ) : (
             <Link
