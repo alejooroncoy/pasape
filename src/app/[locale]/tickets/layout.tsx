@@ -6,7 +6,7 @@ export default function TicketsLayout({ children }: { children: ReactNode }) {
   return (
     <>
       <PublicHeader />
-      <div className="pb-[72px]">{children}</div>
+      <div className="pb-[72px] lg:pb-0">{children}</div>
       <UserTabbar />
     </>
   );

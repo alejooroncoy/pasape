@@ -43,7 +43,7 @@ export function UserTabbar() {
   return (
     <nav
       aria-label="Navegación principal"
-      className="fixed inset-x-0 bottom-0 z-[70] block border-t border-cart-line bg-cart-bg/90 backdrop-blur-xl backdrop-saturate-150 px-1 pt-2 pb-[calc(env(safe-area-inset-bottom,0px)+8px)]"
+      className="fixed inset-x-0 bottom-0 z-[70] block lg:hidden border-t border-cart-line bg-cart-bg/90 backdrop-blur-xl backdrop-saturate-150 px-1 pt-2 pb-[calc(env(safe-area-inset-bottom,0px)+8px)]"
     >
       <div className="mx-auto grid max-w-[540px] grid-cols-5">
         {TABS.map(({ id, label, href, Icon, dot }) => {
