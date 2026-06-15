@@ -3,6 +3,7 @@
 import { type ReactNode } from "react";
 import { Link } from "@/i18n/navigation";
 import { PromoterUserPill } from "./PromoterUserPill";
+import { Logo } from "@/components/brand/Logo";
 
 export type PromoTab = "home" | "earnings" | "profile";
 
@@ -59,8 +60,7 @@ export function PromoterShell({
         <aside className="sticky top-0 flex h-dvh flex-col border-r border-cart-line bg-cart-bg-elev/50 px-5 py-6">
           <div className="mb-8 flex items-center gap-2.5 text-[15px] font-semibold tracking-[-0.01em]">
             <span className="grid size-8 place-items-center overflow-hidden rounded-lg">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/icons/logo-icon-min.svg" alt="" className="size-full object-contain" />
+              <Logo className="size-full" />
             </span>
             Pasape
             <span className="ml-1 rounded-full bg-cart-accent-soft px-1.5 py-px text-[9.5px] font-bold tracking-[0.12em] text-cart-accent">

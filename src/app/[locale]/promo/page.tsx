@@ -4,11 +4,13 @@ import { useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
 import { Link } from "@/i18n/navigation";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
-import { useMyPromoterLinks, usePromoterHome } from "@/lib/promoters/hooks/usePromoter";
+import { useMyPromoterLinks, usePromoterGuests, usePromoterHome } from "@/lib/promoters/hooks/usePromoter";
 import { useCommissionTiers } from "@/lib/promoters/tiers/hooks/useCommissionTiers";
 import type { PromoterLink } from "@/server/promoters/domain/Promoter";
 import type { CommissionTier } from "@/server/promoters/tiers/domain/CommissionTier";
 import { PromoterShell } from "./_shell/PromoterShell";
+import { AddGuestForm } from "./_components/AddGuestForm";
+import { GuestList } from "./_components/GuestList";
 
 const buildShareUrl = (code: string) =>
   typeof window === "undefined"
@@ -224,6 +226,8 @@ function ActiveEventPanel({ link }: { link: PromoterLink }) {
 
       <KpiRow sold={sold} validated={validated} generatedCents={generatedCents} />
 
+      <GuestsSection slug={link.eventSlug} />
+
       <HitosCarousel
         slug={link.eventSlug}
         tiers={allTiers}
@@ -233,6 +237,64 @@ function ActiveEventPanel({ link }: { link: PromoterLink }) {
 
       <ActivityFeed recent={recent} loading={home.isLoading} />
     </div>
+  );
+}
+
+// ============================================================
+// Lista de invitados del evento activo (resumen + alta inline)
+// ============================================================
+function GuestsSection({ slug }: { slug: string }) {
+  const guests = usePromoterGuests(slug);
+  const [adding, setAdding] = useState(false);
+  const list = guests.data ?? [];
+  const entered = list.filter((g) => g.status === "used").length;
+
+  return (
+    <section>
+      <div className="mb-2 flex items-center justify-between">
+        <h3 className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">
+          Lista de invitados
+        </h3>
+        {list.length > 0 && (
+          <Link
+            href={`/promo/${slug}/guests` as never}
+            className="text-[12.5px] font-medium text-cart-accent transition hover:brightness-110"
+          >
+            Ver todos
+          </Link>
+        )}
+      </div>
+
+      {list.length > 0 && (
+        <p className="mb-3 text-[12.5px] text-cart-ink-3">
+          <b className="text-white">{list.length}</b> invitados ·{" "}
+          <b className="text-white">{entered}</b> entraron
+        </p>
+      )}
+
+      <GuestList guests={list} loading={guests.isLoading} limit={4} />
+
+      {adding ? (
+        <div className="mt-3 rounded-2xl border border-cart-line-strong bg-cart-bg-elev/60 p-4">
+          <AddGuestForm slug={slug} onAdded={() => setAdding(false)} />
+          <button
+            type="button"
+            onClick={() => setAdding(false)}
+            className="mt-3 w-full text-center text-[12.5px] font-medium text-cart-ink-3 transition hover:text-white"
+          >
+            Cancelar
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setAdding(true)}
+          className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-cart-line bg-transparent px-4 py-3 text-[13px] font-semibold text-cart-ink-2 transition hover:border-cart-line-strong hover:text-white"
+        >
+          <span className="text-cart-accent">+</span> Agregar invitado
+        </button>
+      )}
+    </section>
   );
 }
 

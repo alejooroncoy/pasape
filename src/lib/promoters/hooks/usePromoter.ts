@@ -1,10 +1,13 @@
 "use client";
 
+import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { createSupabaseBrowserClient } from "@/server/_shared/supabase/client";
 import { api } from "@/lib/_shared/api-client";
 import type {
   PromoterApplication,
   PromoterEventEarning,
+  PromoterGuest,
   PromoterHomeData,
   PromoterLink,
 } from "@/server/promoters/domain/Promoter";
@@ -14,6 +17,25 @@ export const useMyPromoterLinks = () =>
     queryKey: ["promoters", "links"],
     queryFn: () => api.get<PromoterLink[]>("/api/promoters/links"),
   });
+
+export const usePromoterGuests = (slug: string) =>
+  useQuery({
+    queryKey: ["promoters", "guests", slug],
+    queryFn: () => api.get<PromoterGuest[]>(`/api/promoters/home/${slug}/guests`),
+    enabled: !!slug,
+  });
+
+export const useAddGuest = (slug: string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { name: string; dni: string; email?: string | null; phone?: string | null }) =>
+      api.post<{ ticketId: string }>(`/api/promoters/home/${slug}/guests`, input),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["promoters", "guests", slug] });
+      void qc.invalidateQueries({ queryKey: ["promoters", "home", slug] });
+    },
+  });
+};
 
 export const usePromoterHome = (slug: string) =>
   useQuery({
@@ -68,8 +90,31 @@ export const useApplicationStatus = (slug: string) =>
         `/api/promoters/status/${slug}`,
       ),
     enabled: !!slug,
-    refetchInterval: 5000,
   });
+
+// Realtime de solicitudes de promotor vía Broadcast desde la DB (trigger
+// promoter_app_broadcast → topic `promoter-app:<slug>`). Reemplaza el polling:
+// el ping no trae datos, solo dispara un refetch del estado (postulante) y de la
+// lista de pendientes (organizador). Degrada vía refetchOnWindowFocus si Realtime
+// no conecta. Un solo hook sirve a ambas pantallas porque comparten el slug.
+export function useRealtimePromoterApplications(slug: string) {
+  const qc = useQueryClient();
+  useEffect(() => {
+    if (!slug) return;
+    const supabase = createSupabaseBrowserClient();
+    const invalidate = () => {
+      void qc.invalidateQueries({ queryKey: ["promoters", "status", slug] });
+      void qc.invalidateQueries({ queryKey: ["promoters", "pending", slug] });
+    };
+    const channel = supabase
+      .channel(`promoter-app:${slug}`)
+      .on("broadcast", { event: "application_changed" }, invalidate)
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [slug, qc]);
+}
 
 export const usePendingApplications = (slug: string) =>
   useQuery({

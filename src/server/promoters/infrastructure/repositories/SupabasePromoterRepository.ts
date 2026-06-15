@@ -5,6 +5,7 @@ import type { PromoterRepository } from "@/server/promoters/ports/PromoterReposi
 import type {
   PromoterApplication,
   PromoterEventEarning,
+  PromoterGuest,
   PromoterLink,
 } from "@/server/promoters/domain/Promoter";
 
@@ -90,17 +91,22 @@ export const supabasePromoterRepository: PromoterRepository = {
     if (!link) return null;
     const l = toLink(link as unknown as LinkRow);
 
+    // total_cents > 0 = venta real. Las cortesías (S/0 de la lista de invitados)
+    // también quedan 'paid', así que se excluyen para no inflar "Vendidas" ni
+    // aparecer como "compró" en la actividad.
     const { count } = await db
       .from("orders")
       .select("id", { count: "exact", head: true })
       .eq("promoter_link_id", l.id)
-      .eq("status", "paid");
+      .eq("status", "paid")
+      .gt("total_cents", 0);
 
     const { data: orders } = await db
       .from("orders")
       .select("created_at, buyer:profiles!inner(full_name)")
       .eq("promoter_link_id", l.id)
       .eq("status", "paid")
+      .gt("total_cents", 0)
       .order("created_at", { ascending: false })
       .limit(10);
 
@@ -111,6 +117,38 @@ export const supabasePromoterRepository: PromoterRepository = {
     }));
 
     return { link: l, soldCount: count ?? 0, recent };
+  },
+
+  async listGuests(linkId): Promise<PromoterGuest[]> {
+    const db = supabaseAdmin();
+    const { data } = await db
+      .from("tickets")
+      .select(
+        "id, holder_name, holder_email, holder_phone, status, used_at, created_at, " +
+          "ticket_type:ticket_types!inner(kind), order:orders!inner(promoter_link_id)",
+      )
+      .eq("order.promoter_link_id", linkId)
+      .eq("ticket_type.kind", "invitation")
+      .order("created_at", { ascending: false });
+
+    type GuestTicketRow = {
+      id: string;
+      holder_name: string | null;
+      holder_email: string | null;
+      holder_phone: string | null;
+      status: PromoterGuest["status"];
+      used_at: string | null;
+      created_at: string;
+    };
+    return ((data as unknown as GuestTicketRow[] | null) ?? []).map((t) => ({
+      ticketId: t.id,
+      name: t.holder_name,
+      email: t.holder_email,
+      phone: t.holder_phone,
+      status: t.status,
+      enteredAt: t.used_at,
+      createdAt: t.created_at,
+    }));
   },
 
   async getEarnings(promoterId) {

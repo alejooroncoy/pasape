@@ -40,6 +40,18 @@ export type PromoterHomeData = {
   recent: RecentBuyer[];
 };
 
+// Un invitado de la lista del promotor: una cortesía (ticket S/0) que él emitió.
+// `enteredAt` no es null cuando el invitado ya pasó por puerta (status 'used').
+export type PromoterGuest = {
+  ticketId: string;
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  status: "active" | "used" | "void" | "refunded";
+  enteredAt: string | null;
+  createdAt: string;
+};
+
 export type PromoterApplication = {
   id: string;
   eventId: string;
