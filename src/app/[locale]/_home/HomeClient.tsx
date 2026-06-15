@@ -72,8 +72,8 @@ export function HomeClient({ user }: { user: NavUser | null }) {
           eventsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
         }
         onTickets={() => (loggedIn ? router.push("/tickets" as never) : setSignInOpen(true))}
-        onFavs={() => (loggedIn ? router.push("/account" as never) : setSignInOpen(true))}
-        onAccount={() => (loggedIn ? router.push("/account" as never) : setSignInOpen(true))}
+        onFavs={() => (loggedIn ? router.push("/profile" as never) : setSignInOpen(true))}
+        onAccount={() => (loggedIn ? router.push("/profile" as never) : setSignInOpen(true))}
       />
       <SideDrawer
         user={user}
