@@ -10,7 +10,6 @@ import {
   SearchIcon,
 } from "./icons";
 import { Logo } from "@/components/brand/Logo";
-import { MegaMenu } from "./MegaMenu";
 import { GoogleBtn } from "@/components/design";
 import { useGoogleSignIn } from "@/lib/identity/hooks/useFirebaseAuth";
 import { CATEGORIES, CATEGORY_BY_ID } from "./categories";
@@ -36,7 +35,6 @@ type NavProps = {
 
 export function Nav({ user, onOpenDrawer, onOpenSignIn, onSearch, onSelectCategory, selectedCategory }: NavProps) {
   const [scrolled, setScrolled] = useState(false);
-  const [megaOpen, setMegaOpen] = useState(false);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -44,15 +42,6 @@ export function Nav({ user, onOpenDrawer, onOpenSignIn, onSearch, onSelectCatego
     document.addEventListener("scroll", onScroll, { passive: true });
     return () => document.removeEventListener("scroll", onScroll);
   }, []);
-
-  useEffect(() => {
-    if (!megaOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setMegaOpen(false);
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [megaOpen]);
 
   // ⌘K / Ctrl+K → focus search
   useEffect(() => {
@@ -83,51 +72,14 @@ export function Nav({ user, onOpenDrawer, onOpenSignIn, onSearch, onSelectCatego
           <span className="max-[560px]:sr-only">Pasape</span>
         </Link>
 
-        {/* Controles de exploración — qué (Categorías) y dónde (Lima) */}
+        {/* Selector de ciudad — filtro de exploración (las categorías viven
+            pegadas a la lista de eventos, no en el header). */}
         <div className="flex items-center gap-2 max-[900px]:hidden">
-          <motion.button
-            type="button"
-            aria-expanded={megaOpen}
-            aria-controls="cart-mega"
-            onClick={(e) => {
-              e.stopPropagation();
-              setMegaOpen((v) => !v);
-            }}
-            whileTap={{ scale: 0.96 }}
-            transition={TAP_SPRING}
-            className={`hidden items-center gap-2 rounded-[10px] border px-3.5 py-2 text-[14.5px] font-medium transition-colors max-[900px]:hidden lg:inline-flex ${
-              megaOpen
-                ? "border-cart-line bg-cart-bg-elev text-white"
-                : "border-transparent text-cart-ink-2 hover:border-cart-line hover:bg-cart-bg-elev hover:text-white"
-            }`}
-          >
-            Categorías
-            <motion.svg
-              width="10"
-              height="10"
-              viewBox="0 0 10 10"
-              fill="none"
-              className="opacity-70"
-              animate={{ rotate: megaOpen ? 180 : 0 }}
-              transition={{ duration: 0.2 }}
-              aria-hidden
-            >
-              <path
-                d="M2 4l3 3 3-3"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </motion.svg>
-          </motion.button>
-
-          {/* Selector de ciudad — filtro de exploración, no de cuenta */}
           <CitySelector className="max-[1180px]:hidden" />
         </div>
 
         {/* Búsqueda compacta — ya no es héroe centrado, vive en la fila junto al nav */}
-        <label className="flex h-[42px] w-full max-w-[420px] items-center gap-2.5 rounded-full border border-cart-line bg-cart-bg-elev px-3.5 transition-colors focus-within:border-cart-accent focus-within:shadow-[0_0_0_4px_var(--color-cart-accent-soft),0_0_18px_var(--color-cart-accent-glow)] max-[560px]:h-10 max-[560px]:max-w-none max-[560px]:px-3 max-[560px]:gap-2">
+        <label className="flex h-[42px] w-full items-center gap-2.5 rounded-full border border-cart-line bg-cart-bg-elev px-3.5 transition-colors focus-within:border-cart-accent focus-within:shadow-[0_0_0_4px_var(--color-cart-accent-soft),0_0_18px_var(--color-cart-accent-glow)] max-[560px]:h-10 max-[560px]:px-3 max-[560px]:gap-2">
           <SearchIcon className="shrink-0 text-cart-ink-4" />
           <input
             data-cart-search
@@ -199,7 +151,6 @@ export function Nav({ user, onOpenDrawer, onOpenSignIn, onSearch, onSelectCatego
       </div>
 
       <MobileContextStrip selectedCategory={selectedCategory} onSelectCategory={onSelectCategory} />
-      <MegaMenu open={megaOpen} onClose={() => setMegaOpen(false)} onSelectCategory={onSelectCategory} />
     </header>
   );
 }
