@@ -1,28 +1,17 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useState } from "react";
-import { AnimatePresence, motion } from "motion/react";
-import * as Dialog from "@radix-ui/react-dialog";
 import {
-  CaretIcon,
-  PinIcon,
-  SearchIcon,
-} from "./icons";
-import { Logo } from "@/components/brand/Logo";
-import { GoogleBtn } from "@/components/design";
-import { useGoogleSignIn } from "@/lib/identity/hooks/useFirebaseAuth";
-import { CATEGORIES, CATEGORY_BY_ID } from "./categories";
+  AppHeader,
+  HeaderActions,
+  HeaderBrand,
+  HeaderCity,
+  HeaderSearch,
+  MobileCategoryStrip,
+  type NavUser,
+} from "./AppHeader";
 import type { EventCategory } from "@/server/events/domain/Event";
 
-// Spring compartido para micro-interacciones (tap/hover) — respuesta rápida
-// y sin rebote excesivo, consistente en todos los botones del header.
-const TAP_SPRING = { type: "spring", stiffness: 500, damping: 30 } as const;
-
-export type NavUser = {
-  fullName: string | null;
-  avatarUrl: string | null;
-};
+export type { NavUser };
 
 type NavProps = {
   user: NavUser | null;
@@ -33,332 +22,23 @@ type NavProps = {
   selectedCategory: EventCategory | null;
 };
 
-export function Nav({ user, onOpenDrawer, onOpenSignIn, onSearch, onSelectCategory, selectedCategory }: NavProps) {
-  const [scrolled, setScrolled] = useState(false);
-
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 8);
-    onScroll();
-    document.addEventListener("scroll", onScroll, { passive: true });
-    return () => document.removeEventListener("scroll", onScroll);
-  }, []);
-
-  // ⌘K / Ctrl+K → focus search
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        document.querySelector<HTMLInputElement>("input[data-cart-search]")?.focus();
+// Header de la home — composición: marca + ciudad + buscador + acciones, con el
+// strip de categorías (solo móvil) debajo. onOpenSignIn se conserva para
+// compatibilidad aunque el modal de sign-in vive dentro de las acciones.
+export function Nav({ user, onOpenDrawer, onSearch, onSelectCategory, selectedCategory }: NavProps) {
+  return (
+    <AppHeader
+      below={
+        <MobileCategoryStrip
+          selectedCategory={selectedCategory}
+          onSelectCategory={onSelectCategory}
+        />
       }
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, []);
-
-  return (
-    <header
-      className={`sticky top-0 z-50 backdrop-blur-md backdrop-saturate-150 border-b transition-[border-color,background] duration-200 ${
-        scrolled
-          ? "border-cart-line bg-cart-bg/[0.92]"
-          : "border-transparent bg-cart-bg/80"
-      }`}
     >
-      {/* Single row — logo + búsqueda compacta a la izquierda, acciones a la derecha */}
-      <div className="mx-auto grid h-[68px] max-w-[1320px] grid-cols-[auto_auto_minmax(0,1fr)_auto] items-center gap-[18px] px-[clamp(20px,4vw,56px)] max-[900px]:grid-cols-[auto_minmax(0,1fr)_auto] max-[560px]:h-[60px] max-[560px]:gap-2">
-        <Link href="/" className="inline-flex items-center gap-2.5 text-[19px] font-semibold tracking-[-0.01em] max-[560px]:text-[0]">
-          <span className="grid size-[40px] place-items-center max-[560px]:size-9">
-            <Logo className="size-full drop-shadow-[0_2px_10px_rgba(184,124,255,0.35)]" />
-          </span>
-          <span className="max-[560px]:sr-only">Pasape</span>
-        </Link>
-
-        {/* Selector de ciudad — filtro de exploración (las categorías viven
-            pegadas a la lista de eventos, no en el header). */}
-        <div className="flex items-center gap-2 max-[900px]:hidden">
-          <CitySelector className="max-[1180px]:hidden" />
-        </div>
-
-        {/* Búsqueda compacta — ya no es héroe centrado, vive en la fila junto al nav */}
-        <label className="flex h-[42px] w-full items-center gap-2.5 rounded-full border border-cart-line bg-cart-bg-elev px-3.5 transition-colors focus-within:border-cart-accent focus-within:shadow-[0_0_0_4px_var(--color-cart-accent-soft),0_0_18px_var(--color-cart-accent-glow)] max-[560px]:h-10 max-[560px]:px-3 max-[560px]:gap-2">
-          <SearchIcon className="shrink-0 text-cart-ink-4" />
-          <input
-            data-cart-search
-            type="search"
-            placeholder="Buscar eventos, artistas, lugares…"
-            aria-label="Buscar eventos"
-            className="min-w-0 flex-1 border-0 bg-transparent text-[14.5px] text-white outline-none focus:outline-none focus-visible:outline-none max-[560px]:text-sm placeholder:text-cart-ink-4"
-            onChange={(e) => onSearch(e.target.value)}
-          />
-          <kbd className="shrink-0 rounded-md border border-cart-line bg-cart-bg-elev-2 px-1.5 py-0.5 font-mono text-[11px] text-cart-ink-3 max-[560px]:hidden">
-            ⌘K
-          </kbd>
-        </label>
-
-        {/* Cuenta — solo lo personal: Organizadores (B2B) separado de ♡ + avatar */}
-        <div className="flex items-center gap-2.5 max-[560px]:gap-0">
-          <Link
-            href="/organizadores"
-            className="whitespace-nowrap text-[13.5px] text-cart-ink-2 transition-colors hover:text-white max-[1180px]:hidden"
-          >
-            Soy organizador
-          </Link>
-
-          <span className="h-5 w-px bg-cart-line max-[1180px]:hidden" aria-hidden />
-
-          <Link
-            href={"/tickets" as never}
-            className="relative inline-flex h-10 items-center gap-2 rounded-full border border-transparent px-3 text-[13.5px] font-medium text-cart-ink-2 transition-colors hover:border-cart-line hover:bg-cart-bg-elev hover:text-white max-[900px]:hidden"
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
-              <path d="M2 6a1 1 0 011-1h10a1 1 0 011 1v1a1 1 0 100 2v1a1 1 0 01-1 1H3a1 1 0 01-1-1V9a1 1 0 100-2V6z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/>
-              <path d="M6.5 5v6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeDasharray="1.5 1.5"/>
-            </svg>
-            <span className="max-[1180px]:hidden">Mis entradas</span>
-          </Link>
-
-          {user ? (
-            /* Sesión activa — avatar + nombre, abre el menú de cuenta */
-            <motion.button
-              type="button"
-              onClick={onOpenDrawer}
-              aria-label="Mi cuenta"
-              whileHover={{ y: -1 }}
-              whileTap={{ scale: 0.96 }}
-              transition={TAP_SPRING}
-              className="inline-flex items-center gap-2 rounded-full border border-cart-line bg-cart-bg-elev py-1 pl-1 pr-3 transition-colors hover:border-cart-line-strong max-[900px]:hidden"
-            >
-              <Avatar user={user} />
-              <span className="max-w-[120px] truncate text-sm font-medium text-white">
-                {firstName(user.fullName)}
-              </span>
-            </motion.button>
-          ) : (
-            /* Sin sesión — modal centrado de sign-in */
-            <DesktopSignInModal />
-          )}
-
-          <motion.button
-            type="button"
-            onClick={onOpenDrawer}
-            aria-label="Menú"
-            whileTap={{ scale: 0.9 }}
-            transition={TAP_SPRING}
-            className="hidden size-10 place-items-center rounded-full border border-cart-line bg-cart-bg-elev max-[900px]:grid"
-          >
-            <span className="block h-px w-4 bg-cart-ink-2 relative before:absolute before:top-[-5px] before:block before:h-px before:w-4 before:bg-cart-ink-2 before:content-[''] after:absolute after:top-[5px] after:block after:h-px after:w-4 after:bg-cart-ink-2 after:content-['']" />
-          </motion.button>
-        </div>
-      </div>
-
-      <MobileContextStrip selectedCategory={selectedCategory} onSelectCategory={onSelectCategory} />
-    </header>
-  );
-}
-
-function DesktopSignInModal() {
-  const [open, setOpen] = useState(false);
-  const { signIn, pending, error } = useGoogleSignIn({});
-
-  return (
-    <Dialog.Root open={open} onOpenChange={setOpen}>
-      <Dialog.Trigger asChild>
-        <motion.button
-          type="button"
-          whileHover={{ y: -1, filter: "brightness(1.1)" }}
-          whileTap={{ scale: 0.96 }}
-          transition={TAP_SPRING}
-          className="whitespace-nowrap rounded-full border-0 bg-cart-accent px-[18px] py-2.5 text-sm font-medium text-white shadow-[0_0_0_1px_rgba(255,255,255,0.08)_inset,0_6px_22px_-6px_var(--color-cart-accent-glow-strong)] max-[900px]:hidden"
-        >
-          Ingresar
-        </motion.button>
-      </Dialog.Trigger>
-      <Dialog.Portal forceMount>
-        <AnimatePresence>
-          {open && (
-            <>
-              <Dialog.Overlay asChild>
-                <motion.div
-                  key="overlay"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.2 }}
-                  className="fixed inset-0 z-[190] bg-black/60 backdrop-blur-sm"
-                />
-              </Dialog.Overlay>
-              <Dialog.Content asChild>
-                <motion.div
-                  key="modal"
-                  initial={{ opacity: 0, scale: 0.94, y: 8 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.94, y: 8 }}
-                  transition={{ type: "spring", stiffness: 420, damping: 28, mass: 0.7 }}
-                  className="fixed left-1/2 top-1/2 z-[200] w-[min(360px,90vw)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-cart-line bg-cart-bg-elev p-6 shadow-[0_32px_80px_-12px_rgba(0,0,0,0.9),0_0_0_1px_rgba(255,255,255,0.06)_inset] outline-none"
-                >
-                  <Dialog.Title className="mb-0.5 text-[20px] font-bold leading-tight tracking-[-0.02em] text-white">
-                    Entra a Pasape
-                  </Dialog.Title>
-                  <Dialog.Description className="mb-5 text-[13px] leading-snug text-cart-ink-3">
-                    Guarda eventos, compra entradas y sigue a tus productoras favoritas.
-                  </Dialog.Description>
-                  <GoogleBtn onClick={() => void signIn()} disabled={pending} />
-                  {error && (
-                    <p className="mt-2 text-center text-[11px] text-rose-400">{error}</p>
-                  )}
-                  <p className="mt-3 text-center text-[11px] text-cart-ink-4">
-                    Sin contraseña · sin apps
-                  </p>
-                  <Dialog.Close asChild>
-                    <button
-                      type="button"
-                      aria-label="Cerrar"
-                      className="absolute right-3.5 top-3.5 grid size-8 place-items-center rounded-full border border-cart-line bg-cart-bg-elev-2 text-cart-ink-3 transition-colors hover:border-cart-line-strong hover:text-white"
-                    >
-                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
-                        <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                      </svg>
-                    </button>
-                  </Dialog.Close>
-                </motion.div>
-              </Dialog.Content>
-            </>
-          )}
-        </AnimatePresence>
-      </Dialog.Portal>
-    </Dialog.Root>
-  );
-}
-
-function CitySelector({ className = "" }: { className?: string }) {
-  const [showSoon, setShowSoon] = useState(false);
-
-  // Cerrar al hacer click afuera o con Escape (comportamiento de toggle/popover).
-  useEffect(() => {
-    if (!showSoon) return;
-    const onDown = (e: PointerEvent) => {
-      if (!(e.target as HTMLElement).closest("[data-city-selector]")) setShowSoon(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setShowSoon(false);
-    };
-    document.addEventListener("pointerdown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("pointerdown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [showSoon]);
-
-  return (
-    <div data-city-selector className={`relative ${className}`}>
-      <motion.button
-        type="button"
-        onClick={() => setShowSoon((v) => !v)}
-        aria-expanded={showSoon}
-        aria-label="Cambiar ciudad — disponible pronto"
-        whileHover={{ y: -1 }}
-        whileTap={{ scale: 0.95 }}
-        transition={{ type: "spring", stiffness: 500, damping: 30 }}
-        className="inline-flex items-center gap-1.5 rounded-full border border-cart-line bg-cart-bg-elev px-3 py-2 text-[13px] font-medium text-cart-ink-2 transition-colors hover:border-cart-line-strong hover:text-white"
-      >
-        <PinIcon className="text-cart-accent" />
-        Lima
-        <motion.span animate={{ rotate: showSoon ? 180 : 0 }} transition={{ duration: 0.2 }}>
-          <CaretIcon />
-        </motion.span>
-      </motion.button>
-      <AnimatePresence>
-        {showSoon && (
-          <motion.span
-            role="status"
-            initial={{ opacity: 0, y: -4, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -4, scale: 0.9 }}
-            transition={{ type: "spring", stiffness: 500, damping: 30 }}
-            className="absolute left-1/2 top-[calc(100%+8px)] z-10 -translate-x-1/2 whitespace-nowrap rounded-full border border-cart-line bg-cart-bg-elev-2 px-2.5 py-1 text-[11.5px] font-medium text-cart-ink-2 shadow-[0_8px_24px_-8px_rgba(0,0,0,0.6)]"
-          >
-            Más ciudades pronto
-          </motion.span>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
-function Avatar({ user }: { user: NavUser }) {
-  const initial = (user.fullName?.trim()?.[0] ?? "?").toUpperCase();
-  if (user.avatarUrl) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={user.avatarUrl}
-        alt=""
-        className="size-8 shrink-0 rounded-full object-cover"
-      />
-    );
-  }
-  return (
-    <span className="grid size-8 shrink-0 place-items-center rounded-full bg-cart-accent text-[13px] font-semibold text-white">
-      {initial}
-    </span>
-  );
-}
-
-function firstName(fullName: string | null): string {
-  return fullName?.trim().split(/\s+/)[0] ?? "Mi cuenta";
-}
-
-type StripChip = { label: string; cat: EventCategory | null };
-
-const STRIP_CHIPS: StripChip[] = [
-  { label: "Todos", cat: null },
-  ...CATEGORIES.map((c) => ({ label: c.label, cat: c.id })),
-];
-
-function MobileContextStrip({
-  selectedCategory,
-  onSelectCategory,
-}: {
-  selectedCategory: EventCategory | null;
-  onSelectCategory: (cat: EventCategory | null) => void;
-}) {
-  return (
-    <div
-      className="hidden items-center gap-2 overflow-x-auto border-t border-cart-line-2 px-[clamp(20px,4vw,56px)] py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden max-[560px]:flex"
-      aria-label="Filtros rápidos"
-    >
-      <CitySelector />
-      <span className="h-4 w-px shrink-0 bg-cart-line" aria-hidden />
-      {STRIP_CHIPS.map(({ label, cat }) => {
-        const active = selectedCategory === cat;
-        const color = cat ? CATEGORY_BY_ID[cat].color : "#ffffff";
-        return (
-          <motion.button
-            key={label}
-            type="button"
-            onClick={() => onSelectCategory(cat)}
-            whileTap={{ scale: 0.93 }}
-            transition={TAP_SPRING}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12.5px] whitespace-nowrap transition-colors"
-            style={
-              active
-                ? {
-                    borderColor: color,
-                    background: color,
-                    color: cat ? "#0a0a0f" : "#0a0a0f",
-                    boxShadow: `0 0 12px ${color}80`,
-                  }
-                : {
-                    borderColor: "var(--color-cart-line)",
-                    background: "transparent",
-                    color: "var(--color-cart-ink-2)",
-                  }
-            }
-          >
-            {label}
-          </motion.button>
-        );
-      })}
-    </div>
+      <HeaderBrand />
+      <HeaderCity />
+      <HeaderSearch onSearch={onSearch} />
+      <HeaderActions user={user} onOpenMenu={onOpenDrawer} />
+    </AppHeader>
   );
 }
