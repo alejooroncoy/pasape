@@ -318,6 +318,7 @@ export const EventsController = {
       boxLabel: string | null;
       boxHostTicketId: string | null;
       status: "active" | "used" | "void" | "refunded";
+      signingPub: JsonWebKey | null;
     }>;
   }>> {
     const guard = await guardEventMember(slug);
@@ -333,6 +334,7 @@ export const EventsController = {
         status,
         box_label,
         box_host_ticket_id,
+        signing_pub,
         orders!inner(event_id),
         ticket_types!inner(name)
       `)
@@ -346,6 +348,7 @@ export const EventsController = {
         status: "active" | "used" | "void" | "refunded";
         box_label: string | null;
         box_host_ticket_id: string | null;
+        signing_pub: JsonWebKey | null;
         orders: { event_id: string };
         ticket_types: { name: string };
       }>>();
@@ -365,6 +368,7 @@ export const EventsController = {
         boxLabel: t.box_label,
         boxHostTicketId: t.box_host_ticket_id,
         status: t.status,
+        signingPub: t.signing_pub,
       })),
     });
   },

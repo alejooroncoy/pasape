@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { Link } from "@/i18n/navigation";
 import { FollowButton } from "./_components/FollowButton";
+import { BackButton } from "./_components/BackButton";
 import { supabaseOrganizationRepository } from "@/server/identity/organizations/infrastructure/repositories/SupabaseOrganizationRepository";
 import { supabaseEventRepository } from "@/server/events/infrastructure/repositories/SupabaseEventRepository";
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
@@ -177,22 +178,6 @@ function Cover({ brand }: { brand: string }) {
         }}
       />
       <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-b from-transparent to-cart-bg" />
-    </div>
-  );
-}
-
-function BackButton() {
-  return (
-    <div className="absolute left-5 top-5 z-20 lg:left-10 lg:top-8">
-      <Link
-        href="/"
-        className="grid size-10 place-items-center rounded-full border border-white/15 bg-black/40 text-white backdrop-blur transition hover:bg-black/60"
-        aria-label="Volver"
-      >
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-          <path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </Link>
     </div>
   );
 }

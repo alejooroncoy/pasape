@@ -5,6 +5,7 @@ import { motion } from "motion/react";
 import { useSearchParams } from "next/navigation";
 import { GoogleBtn } from "@/components/design";
 import { useGoogleSignIn } from "@/lib/identity/hooks/useFirebaseAuth";
+import { Logo } from "@/components/brand/Logo";
 
 export function LoginClient() {
   const search = useSearchParams();
@@ -45,8 +46,7 @@ export function LoginClient() {
             aria-hidden
             className="grid size-14 place-items-center rounded-[18px] bg-cart-bg-elev shadow-[0_0_0_1px_rgba(255,255,255,0.08)_inset,0_20px_50px_-12px_rgba(124,58,237,0.45)]"
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/icons/logo-icon-min.svg" alt="Pasape" className="size-8" />
+            <Logo className="size-8" />
           </div>
           <div className="mt-3 font-sans text-[11px] font-semibold uppercase tracking-[0.24em] text-cart-ink-3">
             Pasape

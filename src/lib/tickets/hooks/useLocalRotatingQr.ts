@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/_shared/api-client";
 import {
-  buildSignedQrPayload,
+  buildCompactQrPayload,
   signWindow,
   WINDOW_SECONDS,
 } from "@/lib/tickets/signedQr";
@@ -50,6 +50,8 @@ export const useLocalRotatingQr = (
   });
   const privRef = useRef<CryptoKey | null>(null);
   const certRef = useRef<string | null>(null);
+  const windowIdxRef = useRef<number | null>(null);
+  const payloadRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!ticketId) {
@@ -73,12 +75,24 @@ export const useLocalRotatingQr = (
       if (!priv || !cert) return;
       const now = Date.now();
       const windowIdx = Math.floor(now / 1000 / windowSeconds);
-      const sig = await signWindow(priv, ticketId, windowIdx);
-      const payload = buildSignedQrPayload(cert, windowIdx, sig);
       const secondsLeft =
         windowSeconds - Math.floor((now / 1000) % windowSeconds);
-      if (cancelled) return;
-      setState({ payload, windowIdx, secondsLeft, loading: false, error: null });
+
+      if (windowIdx !== windowIdxRef.current) {
+        // Nueva ventana: firmar una sola vez y cachear.
+        // ECDSA P-256 es no-determinístico — nunca llamar signWindow más de una vez
+        // por ventana o el QR cambiaría en cada tick aunque los datos sean los mismos.
+        const sig = await signWindow(priv, ticketId, windowIdx);
+        const payload = buildCompactQrPayload(ticketId, windowIdx, sig);
+        windowIdxRef.current = windowIdx;
+        payloadRef.current = payload;
+        if (cancelled) return;
+        setState({ payload, windowIdx, secondsLeft, loading: false, error: null });
+      } else {
+        // Misma ventana: solo actualizar el countdown.
+        if (cancelled) return;
+        setState((prev) => ({ ...prev, secondsLeft }));
+      }
     };
 
     const fetchCert = async (pubJwk: JsonWebKey): Promise<string> => {

@@ -7,7 +7,7 @@ import { QrSquare } from "@/components/design";
 import { useTicket, useTransferTicket } from "@/lib/tickets/hooks/useTickets";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { useLocalRotatingQr } from "@/lib/tickets/hooks/useLocalRotatingQr";
-import { useBoxForTicket } from "@/lib/boxes/hooks/useBoxes";
+import { useBoxForTicket, useRealtimeBox } from "@/lib/boxes/hooks/useBoxes";
 import { formatDate } from "@/lib/_shared/format";
 
 type Props = { params: Promise<{ id: string }> };
@@ -29,6 +29,7 @@ export default function TicketDetailPage({ params }: Props) {
   const isHost = isBoxTicket && !data?.boxHostTicketId;
   const boxQuery = useBoxForTicket(isHost ? id : "");
   const box = boxQuery.data ?? null;
+  useRealtimeBox(box?.inviteToken);
 
   if (isLoading) {
     return (

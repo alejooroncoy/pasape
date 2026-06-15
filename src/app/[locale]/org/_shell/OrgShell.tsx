@@ -8,6 +8,7 @@ import { useMyOrgs } from "@/lib/identity/organizations/hooks/useMyOrgs";
 import { AnimatePresence, motion } from "motion/react";
 import { OrgSwitcherButton } from "@/components/domain/identity/OrgSwitcherButton";
 import { UserPill, initialsOf } from "./UserPill";
+import { Logo } from "@/components/brand/Logo";
 import { AccountSheet } from "./AccountSheet";
 
 type NavItem = { href: string; label: string; icon: ReactNode };
@@ -157,7 +158,7 @@ export function OrgShell({ children }: { children: ReactNode }) {
             aria-label="Pasape"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/icons/logo-icon-min.svg" alt="" className="size-5 opacity-90" />
+            <Logo className="size-5 opacity-90" />
             <span className="uppercase">Pasape</span>
           </Link>
 
@@ -246,7 +247,7 @@ export function OrgShell({ children }: { children: ReactNode }) {
             </motion.button>
             <Link href={"/org" as never} className="flex items-center gap-2 text-[15px] font-semibold">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/icons/logo-icon-min.svg" alt="" className="size-7" />
+              <Logo className="size-7" />
               <span className="truncate">{activeOrg?.name ?? "Panel"}</span>
             </Link>
             <motion.button
@@ -310,7 +311,7 @@ export function OrgShell({ children }: { children: ReactNode }) {
                   className="flex items-center gap-2 text-[17px] font-semibold"
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src="/icons/logo-icon-min.svg" alt="" className="size-8" />
+                  <Logo className="size-8" />
                   Pasape
                 </Link>
                 <motion.button

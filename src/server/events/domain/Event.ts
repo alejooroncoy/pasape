@@ -55,7 +55,9 @@ export type Event = {
 
 // "presale" se retiró: la preventa ya no es un tipo de entrada, es un atributo
 // (presalePriceCents/presaleQty/presaleEndsAt). Una entrada = un acceso.
-export type TicketTypeKind = "general" | "vip" | "box";
+// "invitation" (cortesía) es el tipo que el promotor reparte por su lista de
+// invitados: precio 0, oculto al público, emitido solo desde la app del promotor.
+export type TicketTypeKind = "general" | "vip" | "box" | "invitation";
 
 /** Promoción aplicada a una entrada. Solo 2x1 / 3x2 por ahora. */
 export type PromoKind = "2x1" | "3x2";

@@ -41,6 +41,13 @@ const nextConfig: NextConfig = {
     "*.ngrok.io",
     "*.ngrok.app",
   ],
+  // La ruta opengraph-image lee el logo desde public/ con fs en runtime; el
+  // tracer no detecta esa lectura dinámica, así que forzamos su inclusión en
+  // el bundle de la función (si no, en prod la OG saldría sin logo).
+  outputFileTracingIncludes: {
+    "/opengraph-image": ["./public/icons/logo-icon-min-512.png"],
+    "/twitter-image": ["./public/icons/logo-icon-min-512.png"],
+  },
 };
 
 // Sentry envuelve por fuera de PWA/intl. El authToken se lee de

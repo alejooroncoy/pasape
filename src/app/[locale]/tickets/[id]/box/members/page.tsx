@@ -2,7 +2,7 @@
 
 import { use } from "react";
 import { BackBtn, C, FONT_DISPLAY, FONT_MONO, Phone, ProfileMenu, QrSquare, TopBar } from "@/components/design";
-import { useBoxForTicket } from "@/lib/boxes/hooks/useBoxes";
+import { useBoxForTicket, useRealtimeBox } from "@/lib/boxes/hooks/useBoxes";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 
 type Props = { params: Promise<{ id: string }> };
@@ -14,6 +14,7 @@ const Dot = ({ color }: { color: string }) => (
 export default function BuyerMyBoxPage({ params }: Props) {
   const { id } = use(params);
   const box = useBoxForTicket(id);
+  useRealtimeBox(box.data?.inviteToken);
   const me = useCurrentUser();
 
   if (box.isLoading) {

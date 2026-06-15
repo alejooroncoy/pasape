@@ -31,6 +31,9 @@ export type BuyInput = {
   items: Array<{ ticketTypeId: string; qty: number; holderName?: string | null }>;
   promoCode?: string | null;
   guest?: GuestBuyer;
+  /** Datos del comprador logueado (mismos campos que guest, sin crear auth user).
+      Se persisten en su perfil/kyc para autorrellenar la próxima compra. */
+  buyer?: GuestBuyer;
 };
 
 export type BuyResult = {

@@ -4,7 +4,7 @@ const DB_NAME = "pasape-scan";
 const STORE = "tickets";
 const META = "meta";
 const PENDING = "pending_scans";
-const VERSION = 2;
+const VERSION = 3;
 
 export type CachedTicket = {
   ticketId: string;
@@ -15,6 +15,8 @@ export type CachedTicket = {
   boxLabel: string | null;
   boxHostTicketId: string | null;
   status: "active" | "used" | "void" | "refunded";
+  /** Clave pública ECDSA del ticket (para verificar QR compacto offline). */
+  signingPub: JsonWebKey | null;
 };
 
 type ScanCacheResponse = {
@@ -25,10 +27,15 @@ type ScanCacheResponse = {
 
 async function db(): Promise<IDBPDatabase> {
   return openDB(DB_NAME, VERSION, {
-    upgrade(db) {
+    upgrade(db, oldVersion) {
       if (!db.objectStoreNames.contains(STORE)) {
-        const s = db.createObjectStore(STORE, { keyPath: "qrCode" });
-        s.createIndex("ticketId", "ticketId", { unique: true });
+        const s = db.createObjectStore(STORE, { keyPath: "ticketId" });
+        s.createIndex("qrCode", "qrCode", { unique: false });
+      } else if (oldVersion < 3) {
+        // Migrar keyPath de qrCode → ticketId
+        db.deleteObjectStore(STORE);
+        const s = db.createObjectStore(STORE, { keyPath: "ticketId" });
+        s.createIndex("qrCode", "qrCode", { unique: false });
       }
       if (!db.objectStoreNames.contains(META)) {
         db.createObjectStore(META);
@@ -68,7 +75,7 @@ export async function lookupTicketById(
   ticketId: string,
 ): Promise<CachedTicket | null> {
   const d = await db();
-  return (await d.getFromIndex(STORE, "ticketId", ticketId)) ?? null;
+  return (await d.get(STORE, ticketId)) ?? null;
 }
 
 export async function markUsedLocalById(ticketId: string): Promise<void> {

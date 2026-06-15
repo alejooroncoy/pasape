@@ -13,11 +13,12 @@ type Row = {
   created_at: string;
 };
 
-const toDomain = (r: Row): User => ({
+const toDomain = (r: Row, dni: string | null): User => ({
   id: r.id,
   email: r.email,
   phone: r.phone,
   fullName: r.full_name,
+  dni,
   avatarUrl: r.avatar_url,
   initialRole: r.initial_role,
   organizerType: r.organizer_type,
@@ -32,7 +33,15 @@ export const supabaseUserRepository: UserRepository = {
       .select("*")
       .eq("id", id)
       .maybeSingle<Row>();
-    if (error) return null;
-    return data ? toDomain(data) : null;
+    if (error || !data) return null;
+    // DNI vive en kyc_documents (no en profiles) — lo exponemos para que el
+    // checkout autorrellene los datos del comprador en compras siguientes.
+    const { data: kyc } = await db
+      .from("kyc_documents")
+      .select("doc_number")
+      .eq("profile_id", id)
+      .eq("doc_kind", "dni")
+      .maybeSingle<{ doc_number: string }>();
+    return toDomain(data, kyc?.doc_number ?? null);
   },
 };

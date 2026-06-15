@@ -73,6 +73,23 @@ function BuyFlowInner({ params }: Props) {
   const { lookup: dniLookup, pending: dniPending } = useDniLookup();
   const [dniHint, setDniHint] = useState<"idle" | "not_found">("idle");
 
+  // Autorrelleno para logueados: los datos de la cuenta (nombre, DNI, WhatsApp,
+  // email) pre-llenan el formulario pero siguen editables — la primera compra
+  // los pide y los persiste; las siguientes solo se confirman.
+  const prefilledRef = useRef(false);
+  useEffect(() => {
+    const u = me.data?.user;
+    if (!u || prefilledRef.current) return;
+    prefilledRef.current = true;
+    if (u.fullName) {
+      nameTouchedRef.current = true; // que RENIEC no pise el nombre de la cuenta
+      setGuestName((prev) => prev || u.fullName!);
+    }
+    if (u.dni) setGuestDni((prev) => prev || u.dni!);
+    if (u.phone) setGuestPhone((prev) => prev || u.phone!);
+    if (u.email) setGuestEmail((prev) => prev || u.email!);
+  }, [me.data?.user]);
+
   useEffect(() => {
     if (guestDni.length !== 8) {
       setDniHint("idle");
@@ -195,28 +212,31 @@ function BuyFlowInner({ params }: Props) {
   const isLogged = !!me.data?.user;
   const emailOk = /.+@.+\..+/.test(guestEmail.trim());
   const phoneOk = guestPhone.replace(/\D/g, "").length === 9;
+  // El portero valida por DNI — es obligatorio también para logueados. La
+  // diferencia es que a ellos les llega pre-llenado desde su cuenta.
   const guestValid =
     guestName.trim().length >= 2 &&
     guestDni.trim().length === 8 &&
     phoneOk;
-  const orderValid = totalItems > 0 && (isLogged || guestValid) && acompValid;
+  const orderValid = totalItems > 0 && guestValid && acompValid;
 
   if (!data) return <PageLoader />;
 
   const startPayment = async () => {
     try {
+      const attendee = {
+        email: guestEmail.trim() || null,
+        fullName: guestName.trim(),
+        dni: guestDni.trim(),
+        phone: guestPhone.replace(/\D/g, "") || null,
+      };
       const res = await buy.mutateAsync({
         eventId: data.event.id,
         items,
         promoCode,
-        guest: isLogged
-          ? undefined
-          : {
-              email: guestEmail.trim() || null,
-              fullName: guestName.trim(),
-              dni: guestDni.trim(),
-              phone: guestPhone.replace(/\D/g, "") || null,
-            },
+        // Logueado → buyer (persiste en su perfil/kyc); guest → crea/reusa perfil.
+        guest: isLogged ? undefined : attendee,
+        buyer: isLogged ? attendee : undefined,
       });
       setPreferenceId(res.preference.id);
       setOrderId(res.order.id);
@@ -257,7 +277,7 @@ function BuyFlowInner({ params }: Props) {
   };
 
   const pickValid = totalItems > 0;
-  const dataValid = isLogged || guestValid;
+  const dataValid = guestValid;
 
   const onPrimary = () => {
     if (phase === "pick" && pickValid) {
@@ -363,7 +383,6 @@ function BuyFlowInner({ params }: Props) {
                 ticketTypes={data.ticketTypes}
                 qty={qty}
                 isLogged={isLogged}
-                userName={me.data?.user?.fullName ?? null}
                 userIdent={me.data?.user?.email ?? me.data?.user?.phone ?? null}
                 guestDni={guestDni}
                 setGuestDni={(v) => {
@@ -680,7 +699,6 @@ function DataPhase({
   ticketTypes,
   qty,
   isLogged,
-  userName,
   userIdent,
   guestDni,
   setGuestDni,
@@ -699,7 +717,6 @@ function DataPhase({
   ticketTypes: TicketType[];
   qty: Record<string, number>;
   isLogged: boolean;
-  userName: string | null;
   userIdent: string | null;
   guestDni: string;
   setGuestDni: (v: string) => void;
@@ -725,55 +742,62 @@ function DataPhase({
     <div className="flex flex-col gap-8">
       <Section
         title={isLogged ? "Tus datos" : "¿Quién va?"}
-        hint={isLogged ? undefined : "Para enviarte el QR por WhatsApp"}
+        hint={
+          isLogged
+            ? "De tu cuenta — edítalos si algo cambió"
+            : "Para enviarte el QR por WhatsApp"
+        }
       >
-        {isLogged ? (
-          <div className="rounded-2xl border border-cart-accent/40 bg-cart-accent-soft px-4 py-4">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-cart-accent">
-              Usas los datos de tu cuenta
+        <div className="flex flex-col gap-3">
+          {isLogged && userIdent && (
+            <div className="flex items-center gap-2 rounded-xl bg-cart-accent-soft px-3.5 py-2.5 text-[12px] text-cart-accent ring-1 ring-cart-accent/30">
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" className="shrink-0">
+                <circle cx="8" cy="5.5" r="2.5" stroke="currentColor" strokeWidth="1.5" />
+                <path d="M3 13.5c0-2.5 2.2-4 5-4s5 1.5 5 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+              <span className="truncate">
+                Conectado como <span className="font-semibold">{userIdent}</span>
+              </span>
             </div>
-            <div className="mt-1.5 text-[15.5px] font-semibold">{userName ?? "—"}</div>
-            <div className="mt-0.5 text-[12.5px] text-cart-ink-2">{userIdent ?? "—"}</div>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-3">
-            <Field
-              label="DNI"
-              value={guestDni}
-              onChange={setGuestDni}
-              placeholder="71234567"
-              mono
-              hint={
-                dniHint === "not_found"
-                  ? "No te encontramos en RENIEC — escribe tu nombre abajo."
+          )}
+          <Field
+            label="DNI"
+            value={guestDni}
+            onChange={setGuestDni}
+            placeholder="71234567"
+            mono
+            hint={
+              dniHint === "not_found"
+                ? "No te encontramos en RENIEC — escribe tu nombre abajo."
+                : isLogged && guestDni
+                  ? "Lo usa el portero para validar tu entrada."
                   : "Lo buscamos en RENIEC y completamos tu nombre."
-              }
-            />
-            <Field
-              label="Nombre completo"
-              value={guestName}
-              onChange={setGuestName}
-              placeholder={dniPending ? "Buscando en RENIEC…" : "Juan Pérez García"}
-              disabled={dniPending}
-            />
-            <Field
-              label="WhatsApp"
-              value={guestPhone}
-              onChange={setGuestPhone}
-              placeholder="987 654 321"
-              mono
-              hint="Tu QR llega por aquí."
-            />
-            <Field
-              label="Email (opcional)"
-              type="email"
-              value={guestEmail}
-              onChange={setGuestEmail}
-              placeholder="juan@gmail.com"
-              hint="Solo si pagas con tarjeta."
-            />
-          </div>
-        )}
+            }
+          />
+          <Field
+            label="Nombre completo"
+            value={guestName}
+            onChange={setGuestName}
+            placeholder={dniPending ? "Buscando en RENIEC…" : "Juan Pérez García"}
+            disabled={dniPending}
+          />
+          <Field
+            label="WhatsApp"
+            value={guestPhone}
+            onChange={setGuestPhone}
+            placeholder="987 654 321"
+            mono
+            hint="Tu QR llega por aquí."
+          />
+          <Field
+            label="Email (opcional)"
+            type="email"
+            value={guestEmail}
+            onChange={setGuestEmail}
+            placeholder="juan@gmail.com"
+            hint="Solo si pagas con tarjeta."
+          />
+        </div>
       </Section>
 
       {totalItems > 1 && (
@@ -1557,7 +1581,7 @@ function PayPhase({
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/brand/mercadopago.svg" alt="Mercado Pago" className="size-12 flex-shrink-0 rounded-xl object-cover" />
         <div className="min-w-0 flex-1">
-          <div className="text-[16.5px] font-semibold">Pagar con Mercado Pago</div>
+          <div className="text-[16.5px] font-semibold">Pagar con tarjeta</div>
           <div className="mt-0.5 text-[12px] text-cart-ink-3">Tarjeta de crédito o débito · Visa / Mastercard</div>
         </div>
         <Radio active={payMethod === "mp"} color="var(--color-cart-accent)" />

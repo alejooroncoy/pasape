@@ -39,7 +39,9 @@ import { createSupabaseBrowserClient } from "@/server/_shared/supabase/client";
 // ============================================================
 // Tipos
 // ============================================================
-type TicketKind = TicketTypeKind;
+// Las cortesías (kind='invitation') las gestiona el promotor desde su app, no
+// el organizador en el composer — por eso se excluyen de los tipos creables.
+type TicketKind = Exclude<TicketTypeKind, "invitation">;
 
 type TicketRow = {
   /** id presente sólo si el ticket type ya existe en DB (modo edit). */
@@ -210,11 +212,14 @@ export function EventComposer(props: EventComposerProps) {
       url: ev.venueUrl,
       source: (ev.venueSource ?? "manual") as VenueValue["source"],
     };
-    const rows: TicketRow[] = props.initial.ticketTypes.map((tt) => ({
+    const rows: TicketRow[] = props.initial.ticketTypes
+      // Las cortesías del promotor no se editan en el composer del organizador.
+      .filter((tt) => tt.kind !== "invitation")
+      .map((tt) => ({
       id: tt.id,
       rowKey: tt.id,
       name: tt.name,
-      kind: tt.kind,
+      kind: tt.kind as TicketKind,
       priceSoles: fromCents(tt.priceCents),
       capacity: String(tt.capacity),
       boxLabel: tt.boxLabel ?? "",

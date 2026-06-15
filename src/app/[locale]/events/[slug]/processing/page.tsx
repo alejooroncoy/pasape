@@ -187,11 +187,13 @@ function Inner({ params }: Props) {
             />
             <div className="absolute inset-[20px] grid place-items-center rounded-full border border-cart-line bg-cart-bg-elev">
               {payMethod === "mp" ? (
-                <svg width="32" height="32" viewBox="0 0 22 22" fill="none" className="text-white">
-                  <rect x="2" y="4" width="18" height="14" rx="2.5" stroke="currentColor" strokeWidth="1.6" />
-                  <rect x="2" y="7.5" width="18" height="2.5" fill="currentColor" />
-                  <rect x="5" y="13" width="4" height="2" rx="0.5" fill="currentColor" opacity="0.7" />
-                </svg>
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src="/brand/mercadopago.svg"
+                  alt="Mercado Pago"
+                  width={48}
+                  height={48}
+                />
               ) : (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img

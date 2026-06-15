@@ -47,6 +47,7 @@ export const updateProfile = async (input: Input): Promise<Result<User>> => {
     email: profile.email,
     phone: profile.phone,
     fullName: profile.full_name,
+    dni: input.dni ?? null,
     avatarUrl: profile.avatar_url,
     initialRole: profile.initial_role,
     organizerType: profile.organizer_type ?? null,

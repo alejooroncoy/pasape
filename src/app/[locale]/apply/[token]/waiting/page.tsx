@@ -3,7 +3,7 @@
 import { use, useEffect } from "react";
 import { useRouter } from "@/i18n/navigation";
 import { C, CloseBtn, FONT_BODY, FONT_DISPLAY, Phone } from "@/components/design";
-import { useResolveInvite, useApplicationStatus } from "@/lib/promoters/hooks/usePromoter";
+import { useResolveInvite, useApplicationStatus, useRealtimePromoterApplications } from "@/lib/promoters/hooks/usePromoter";
 
 const Dot = ({ color }: { color: string }) => (
   <span style={{ width: 10, height: 10, borderRadius: 999, background: color, boxShadow: `0 0 10px ${color}`, display: "inline-block" }} />
@@ -15,6 +15,7 @@ export default function PromoAppliedWaitingPage({ params }: Props) {
   const { token } = use(params);
   const resolved = useResolveInvite(token);
   const status = useApplicationStatus(resolved.data?.eventSlug ?? "");
+  useRealtimePromoterApplications(resolved.data?.eventSlug ?? "");
   const router = useRouter();
 
   useEffect(() => {

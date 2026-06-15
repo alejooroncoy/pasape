@@ -31,3 +31,12 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - El frontend recibe datos ya procesados y los muestra tal cual
 
 **Regla práctica:** si escribes `new Date()` o `Date.now()` fuera de un formatter de display o del EventComposer, detente y pregúntate si esa lógica pertenece al backend.
+
+## QR rotativo — ventana de 10 segundos
+
+El QR del ticket cambia **cada 10 segundos** (`WINDOW_SECONDS = 10` en `@/lib/tickets/signedQr`).
+
+- La firma ECDSA P-256 es **no-determinística**: llamar a `signWindow` dos veces con los mismos argumentos produce firmas distintas.  
+- Por tanto, **solo se firma una vez por ventana** — cachear el `windowIdx` en un ref y reutilizar el payload mientras el índice no cambie.  
+- El timer de 1 s solo debe actualizar `secondsLeft` para el countdown ring, nunca re-firmar.
+- El QR usa `errorCorrectionLevel: "H"` para reservar espacio al logo centrado (máx ~30 % del área).

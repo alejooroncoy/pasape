@@ -3,7 +3,7 @@
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { BackBtn, C, FONT_DISPLAY, FONT_MONO, Phone } from "@/components/design";
-import { useBoxForTicket, useCreateBox } from "@/lib/boxes/hooks/useBoxes";
+import { useBoxForTicket, useCreateBox, useRealtimeBox } from "@/lib/boxes/hooks/useBoxes";
 
 const CopyIcon = () => (
   <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
@@ -70,6 +70,7 @@ type Props = { params: Promise<{ id: string }> };
 export default function BuyerBoxInvitePage({ params }: Props) {
   const { id } = use(params);
   const boxQuery = useBoxForTicket(id);
+  useRealtimeBox(boxQuery.data?.inviteToken);
   const create = useCreateBox();
   const [copied, setCopied] = useState(false);
 

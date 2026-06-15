@@ -204,6 +204,67 @@ export async function verifySignedQr(
   return { valid: true, claims, window: parsed.windowIdx };
 }
 
+// ── Formato compacto del QR: ticketId(16B) | windowIdx(4B) | sig(64B) = 84B → ~112 chars ──
+// Reemplaza el formato largo (cert~window~sig ~600 chars) para QRs más sparse y scan más rápido.
+// El cert ya no viaja en el QR — el portero tiene signing_pub pre-cargado por ticketId.
+
+function uuidToBytes(uuid: string): Uint8Array {
+  const hex = uuid.replace(/-/g, "");
+  const out = new Uint8Array(16);
+  for (let i = 0; i < 16; i++) out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  return out;
+}
+
+function bytesToUuid(b: Uint8Array): string {
+  const h = Array.from(b).map((x) => x.toString(16).padStart(2, "0")).join("");
+  return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;
+}
+
+export function buildCompactQrPayload(
+  ticketId: string,
+  windowIdx: number,
+  sig: string,
+): string {
+  const buf = new Uint8Array(84);
+  buf.set(uuidToBytes(ticketId), 0);
+  const view = new DataView(buf.buffer);
+  view.setUint32(16, windowIdx, false); // big-endian
+  buf.set(b64urlToBytes(sig), 20);
+  return bytesToB64url(buf);
+}
+
+export function parseCompactQrPayload(
+  raw: string,
+): { ticketId: string; windowIdx: number; sig: string } | null {
+  try {
+    const buf = b64urlToBytes(raw);
+    if (buf.length !== 84) return null;
+    const ticketId = bytesToUuid(buf.slice(0, 16));
+    const windowIdx = new DataView(buf.buffer, buf.byteOffset).getUint32(16, false);
+    const sig = bytesToB64url(buf.slice(20, 84));
+    if (!windowIdx) return null;
+    return { ticketId, windowIdx, sig };
+  } catch {
+    return null;
+  }
+}
+
+export function isCompactQrPayload(raw: string): boolean {
+  // 84 bytes en base64url = 112 chars exactos
+  return raw.length === 112 && /^[A-Za-z0-9_-]+$/.test(raw);
+}
+
+export async function verifyCompactQr(
+  ticketPubJwk: JsonWebKey,
+  ticketId: string,
+  windowIdx: number,
+  sig: string,
+  now: number = Date.now(),
+): Promise<boolean> {
+  if (Math.abs(windowIdx - currentWindow(now)) > WINDOW_TOLERANCE) return false;
+  return verifyWindow(ticketPubJwk as JWK, ticketId, windowIdx, sig, now);
+}
+
 // ── base64url isomórfico (sin Buffer) ────────────────────────────────────────
 
 function bytesToB64url(bytes: Uint8Array): string {

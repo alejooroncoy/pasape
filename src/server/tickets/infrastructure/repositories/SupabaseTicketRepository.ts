@@ -265,6 +265,40 @@ export const supabaseTicketRepository: TicketRepository = {
       .single<OrderRow>();
     if (orderErr || !orderRow) return err(orderErr?.message ?? "order_create_failed");
 
+    // Datos de identidad del que compra: guest o logueado (buyer). Mismo shape;
+    // la diferencia es que buyer no crea auth user — ya existe sesión.
+    const attendee = input.guest ?? input.buyer ?? null;
+
+    // Persistencia para autorrelleno: la primera compra guarda DNI (kyc) y
+    // teléfono (profile); las siguientes el checkout los pre-llena desde /me.
+    if (attendee) {
+      const phoneNorm = attendee.phone?.replace(/\D/g, "") || null;
+      if (phoneNorm) {
+        await db.from("profiles").update({ phone: phoneNorm }).eq("id", effectiveBuyerId);
+      }
+      if (attendee.dni && attendee.dni.length >= 6) {
+        await db.from("kyc_documents").upsert(
+          {
+            profile_id: effectiveBuyerId,
+            doc_kind: "dni",
+            doc_number: attendee.dni,
+            last2: attendee.dni.slice(-2),
+          },
+          { onConflict: "profile_id,doc_kind" },
+        );
+      }
+    }
+
+    // Nombre del comprador como fallback para entradas nominativas: si el
+    // checkout no capturó un holderName por entrada ni datos de guest/buyer,
+    // el ticket hereda el nombre del perfil del comprador.
+    const { data: buyerProfile } = await db
+      .from("profiles")
+      .select("full_name")
+      .eq("id", effectiveBuyerId)
+      .single<{ full_name: string | null }>();
+    const buyerFullName = buyerProfile?.full_name ?? null;
+
     const ticketsToInsert = input.items.flatMap((item) => {
       const tt = tts.find((t) => t.id === item.ticketTypeId);
       // Why: para boxes solo generamos 1 ticket (el "host") sin importar qty.
@@ -275,9 +309,12 @@ export const supabaseTicketRepository: TicketRepository = {
       return Array.from({ length: slots }).map(() => ({
         order_id: orderRow.id,
         ticket_type_id: item.ticketTypeId,
-        holder_name: item.holderName ?? input.guest?.fullName ?? null,
-        holder_email: input.guest?.email ?? null,
-        holder_phone: input.guest?.phone ?? null,
+        holder_name: item.holderName ?? attendee?.fullName ?? buyerFullName,
+        holder_email: attendee?.email ?? null,
+        holder_phone: attendee?.phone ?? null,
+        // El portero busca por últimos 2 dígitos del DNI — sin esto las
+        // entradas de compradores logueados eran inubicables por DNI.
+        holder_dni_last2: attendee?.dni ? attendee.dni.slice(-2) : null,
         qr_code: generateQr(),
         current_holder: effectiveBuyerId,
         box_label: tt?.box_label ?? null,

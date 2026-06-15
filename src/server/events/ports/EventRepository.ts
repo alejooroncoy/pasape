@@ -57,8 +57,13 @@ export type EventStats = {
     promoterLinkId: string;
     code: string;
     name: string;
+    /** Tickets PAGADOS (orden total > 0). No incluye cortesías. */
     ticketsSold: number;
     ticketsValidated: number;
+    /** Cortesías emitidas por su lista de invitados (orden total 0). */
+    guestsInvited: number;
+    /** Cortesías que efectivamente entraron (status 'used'). */
+    guestsEntered: number;
     revenueCents: number;
     /** Ratio validated/sold en [0,1]; 0 si no hay ventas. */
     attendanceRate: number;
@@ -180,6 +185,8 @@ export type PromoterReportRow = {
   code: string;
   ticketsSold: number;
   ticketsValidated: number;
+  guestsInvited: number;
+  guestsEntered: number;
   revenueCents: number;
   commissionPct: number;
   commissionCalculatedCents: number;
@@ -212,6 +219,12 @@ export interface EventRepository {
   ): Promise<Result<TicketType>>;
   deleteTicketType(ticketTypeId: string, eventId: string): Promise<Result<{ id: string }>>;
   getTicketType(ticketTypeId: string, eventId: string): Promise<TicketType | null>;
+  /**
+   * Devuelve el id del ticket_type de cortesía (kind='invitation') del evento,
+   * creándolo si aún no existe. Precio 0, oculto al público — base de la lista
+   * de invitados que reparten los promotores.
+   */
+  ensureInvitationTicketType(eventId: string): Promise<Result<{ id: string }>>;
   listPromos(eventId: string): Promise<Promo[]>;
   /** Reemplaza todas las promos del evento por las dadas. */
   setPromos(eventId: string, promos: PromoInput[]): Promise<Result<Promo[]>>;

@@ -37,6 +37,9 @@ const buySchema = z.object({
     .min(1),
   promoCode: z.string().min(1).max(64).nullable().optional(),
   guest: guestSchema.optional(),
+  // Datos del comprador logueado — mismos campos que guest; se persisten en
+  // su perfil/kyc para autorrellenar la próxima compra.
+  buyer: guestSchema.optional(),
 });
 
 const transferSchema = z.object({
@@ -53,7 +56,8 @@ export const TicketsController = {
     // no debe registrarse para comprar. Si no hay sesión, exigimos guest.
     if (!auth.ok) {
       if (!parsed.data.guest) return err("guest_required");
-      return buyTickets({ repo }, { ...parsed.data, guest: parsed.data.guest });
+      // Sin sesión no hay perfil que actualizar — buyer no aplica.
+      return buyTickets({ repo }, { ...parsed.data, guest: parsed.data.guest, buyer: undefined });
     }
     return buyTickets({ repo }, { buyerId: auth.value.profileId, ...parsed.data });
   },

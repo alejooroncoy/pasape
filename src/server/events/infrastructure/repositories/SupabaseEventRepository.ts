@@ -261,6 +261,9 @@ export const supabaseEventRepository: EventRepository = {
       .from("ticket_types")
       .select("*")
       .eq("event_id", event.id)
+      // Las cortesías (kind='invitation') son internas de la lista de invitados
+      // del promotor — nunca se muestran ni se venden en la página pública.
+      .neq("kind", "invitation")
       .order("position", { ascending: true });
     const { data: promos } = await db
       .from("ticket_promos")
@@ -406,6 +409,43 @@ export const supabaseEventRepository: EventRepository = {
       .eq("event_id", eventId)
       .maybeSingle<TicketTypeRow>();
     return data ? toTicketType(data) : null;
+  },
+
+  async ensureInvitationTicketType(eventId): Promise<Result<{ id: string }>> {
+    const db = supabaseAdmin();
+    const { data: existing } = await db
+      .from("ticket_types")
+      .select("id")
+      .eq("event_id", eventId)
+      .eq("kind", "invitation")
+      .maybeSingle<{ id: string }>();
+    if (existing) return ok({ id: existing.id });
+
+    // Capacity alta: la cortesía no tiene tope en v1 (la regla de negocio del
+    // cupo por promotor se evalúa aparte). El guard de `sold_out` en buy nunca
+    // debe dispararse para una invitación.
+    const { data: maxRow } = await db
+      .from("ticket_types")
+      .select("position")
+      .eq("event_id", eventId)
+      .order("position", { ascending: false })
+      .limit(1)
+      .maybeSingle<{ position: number }>();
+    const position = (maxRow?.position ?? -1) + 1;
+    const { data, error } = await db
+      .from("ticket_types")
+      .insert({
+        event_id: eventId,
+        name: "Invitación",
+        kind: "invitation",
+        price_cents: 0,
+        capacity: 1_000_000,
+        position,
+      })
+      .select("id")
+      .single<{ id: string }>();
+    if (error || !data) return err(error?.message ?? "invitation_type_create_failed");
+    return ok({ id: data.id });
   },
 
   async listPromos(eventId): Promise<Promo[]> {
@@ -677,6 +717,11 @@ export const supabaseEventRepository: EventRepository = {
         name: string;
         ticketsSold: number;
         ticketsValidated: number;
+        // Cortesías de la lista de invitados: tickets gratis (orden total 0)
+        // atribuidos al link. Se cuentan aparte de las ventas porque el
+        // organizador las paga distinto (convocatoria, no comisión).
+        guestsInvited: number;
+        guestsEntered: number;
         revenueCents: number;
         commissionType: CommissionType;
         commissionPct: number;
@@ -713,13 +758,23 @@ export const supabaseEventRepository: EventRepository = {
         name: displayName,
         ticketsSold: 0,
         ticketsValidated: 0,
+        guestsInvited: 0,
+        guestsEntered: 0,
         revenueCents: 0,
         commissionType,
         commissionPct,
         commissionConfig,
       };
-      entry.ticketsSold += counts.sold;
-      entry.ticketsValidated += counts.validated;
+      // Orden con monto > 0 = venta (comisiona). Orden de S/0 = cortesía de la
+      // lista de invitados (convocatoria). Se separan para que el reporte del
+      // promotor no mezcle "vendió 30" con "metió 18 gratis".
+      if ((o.total_cents ?? 0) > 0) {
+        entry.ticketsSold += counts.sold;
+        entry.ticketsValidated += counts.validated;
+      } else {
+        entry.guestsInvited += counts.sold;
+        entry.guestsEntered += counts.validated;
+      }
       entry.revenueCents += o.total_cents ?? 0;
       promoterAgg.set(key, entry);
     }
@@ -758,6 +813,8 @@ export const supabaseEventRepository: EventRepository = {
           name: p.name,
           ticketsSold: p.ticketsSold,
           ticketsValidated: p.ticketsValidated,
+          guestsInvited: p.guestsInvited,
+          guestsEntered: p.guestsEntered,
           revenueCents: p.revenueCents,
           attendanceRate,
           flag,
@@ -858,6 +915,8 @@ export const supabaseEventRepository: EventRepository = {
       code: p.code,
       ticketsSold: p.ticketsSold,
       ticketsValidated: p.ticketsValidated,
+      guestsInvited: p.guestsInvited,
+      guestsEntered: p.guestsEntered,
       revenueCents: p.revenueCents,
       commissionPct: p.commissionPct,
       commissionCalculatedCents: p.payoutCents,

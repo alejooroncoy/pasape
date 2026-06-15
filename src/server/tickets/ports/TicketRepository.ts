@@ -11,6 +11,9 @@ export type GuestBuyer = {
 export type BuyInput = {
   buyerId?: string;
   guest?: GuestBuyer | null;
+  /** Datos del comprador logueado (mismos campos que guest). Se persisten en
+      profiles/kyc_documents para autorrellenar la próxima compra. */
+  buyer?: GuestBuyer | null;
   eventId: string;
   items: Array<{ ticketTypeId: string; qty: number; holderName?: string | null }>;
   promoCode?: string | null;

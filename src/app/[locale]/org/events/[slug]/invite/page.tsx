@@ -3,7 +3,7 @@
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { BackBtn, C, FONT_DISPLAY, FONT_MONO, Phone } from "@/components/design";
-import { useGenerateInvite, usePendingApplications } from "@/lib/promoters/hooks/usePromoter";
+import { useGenerateInvite, usePendingApplications, useRealtimePromoterApplications } from "@/lib/promoters/hooks/usePromoter";
 
 const CopyIcon = () => (
   <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
@@ -89,6 +89,7 @@ export default function OrgInviteLinkPage({ params }: Props) {
   const { slug } = use(params);
   const generate = useGenerateInvite();
   const pending = usePendingApplications(slug);
+  useRealtimePromoterApplications(slug);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {

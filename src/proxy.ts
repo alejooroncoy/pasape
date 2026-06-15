@@ -27,5 +27,9 @@ export const config = {
   // independiente del routing de locale.
   // Excluimos `auth/callback` para que reciba el `code` sin redirects de i18n.
   // Excluimos `monitoring` (tunnelRoute de Sentry) para que no lo locale-routee.
-  matcher: ["/((?!api|_next|_vercel|monitoring|organizadores|auth/callback|.*\\..*).*)"],
+  // Excluimos las rutas de metadatos de imagen (opengraph-image/twitter-image),
+  // que viven en la raíz y no deben recibir prefijo de locale.
+  matcher: [
+    "/((?!api|_next|_vercel|monitoring|organizadores|auth/callback|opengraph-image|twitter-image|.*\\..*).*)",
+  ],
 };
