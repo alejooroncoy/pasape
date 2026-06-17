@@ -7,7 +7,8 @@ import { supabaseTicketRepository as repo } from "../../infrastructure/repositor
 import { buyTickets } from "../../application/BuyTickets";
 import { getMyTicketById, getMyTickets } from "../../application/GetMyTickets";
 import { transferTicket } from "../../application/TransferTicket";
-import type { Ticket, WalletTicket } from "../../domain/Ticket";
+import { claimTransfer } from "../../application/ClaimTransfer";
+import type { TransferOutcome, WalletTicket } from "../../domain/Ticket";
 import type { BuyOutput } from "../../ports/TicketRepository";
 
 // Why: el QR llega por WhatsApp o email — exigimos al menos uno. DNI es
@@ -44,7 +45,13 @@ const buySchema = z.object({
 
 const transferSchema = z.object({
   ticketId: z.string().uuid(),
-  toIdentifier: z.string().min(3),
+  // Solo por WhatsApp: la transferencia siempre queda en espera de reclamo y
+  // el link viaja al número del receptor.
+  toPhone: z.string().min(6),
+});
+
+const claimSchema = z.object({
+  token: z.string().min(10),
 });
 
 export const TicketsController = {
@@ -89,18 +96,49 @@ export const TicketsController = {
     return { ok: true, value: t };
   },
 
-  async transfer(input: unknown): Promise<Result<Ticket>> {
+  async transfer(input: unknown): Promise<Result<TransferOutcome>> {
     const auth = await getAuthContext();
     if (!auth.ok) return err(auth.error);
     const parsed = transferSchema.safeParse(input);
     if (!parsed.success) return err("invalid_input");
+    // Nombre del emisor para el mensaje de WhatsApp ("Juan te envió una entrada").
+    const { data: prof } = await supabaseAdmin()
+      .from("profiles")
+      .select("full_name")
+      .eq("id", auth.value.profileId)
+      .maybeSingle<{ full_name: string | null }>();
     return transferTicket(
       { repo },
       {
         ticketId: parsed.data.ticketId,
         fromProfile: auth.value.profileId,
-        toIdentifier: parsed.data.toIdentifier,
+        fromName: prof?.full_name ?? null,
+        toPhone: parsed.data.toPhone,
       },
     );
+  },
+
+  async claim(input: unknown): Promise<Result<{ ticketId: string; eventSlug: string }>> {
+    const auth = await getAuthContext();
+    if (!auth.ok) return err("unauthenticated");
+    const parsed = claimSchema.safeParse(input);
+    if (!parsed.success) return err("invalid_input");
+    const res = await claimTransfer(
+      { repo },
+      { token: parsed.data.token, toProfile: auth.value.profileId },
+    );
+    if (!res.ok) return res;
+    return { ok: true, value: { ticketId: res.value.ticket.id, eventSlug: res.value.eventSlug } };
+  },
+
+  async cancelTransfer(input: unknown): Promise<Result<{ ok: true }>> {
+    const auth = await getAuthContext();
+    if (!auth.ok) return err(auth.error);
+    const parsed = z.object({ ticketId: z.string().uuid() }).safeParse(input);
+    if (!parsed.success) return err("invalid_input");
+    return repo.cancelPendingTransfer({
+      ticketId: parsed.data.ticketId,
+      fromProfile: auth.value.profileId,
+    });
   },
 };

@@ -6,7 +6,7 @@ import type {
   TicketRepository,
 } from "@/server/tickets/ports/TicketRepository";
 import type { Order, Ticket, WalletTicket } from "@/server/tickets/domain/Ticket";
-import type { EventStatus, Promo } from "@/server/events/domain/Event";
+import type { EventCategory, EventStatus, Promo } from "@/server/events/domain/Event";
 import { activePricing, applyPromos, type PromoLineInput } from "@/lib/events/pricing";
 import { createPreference } from "@/server/payments/application/CreatePreference";
 import { dispatchTicketDelivery } from "@/server/notifications/application/DispatchTicketDelivery";
@@ -69,6 +69,45 @@ const toTicket = (r: TicketRow): Ticket => ({
   boxLabel: r.box_label,
   boxHostTicketId: r.box_host_ticket_id,
 });
+
+type TransferableEvent = {
+  starts_at: string;
+  title: string;
+  transfers_enabled: boolean;
+  transfer_deadline_hours: number | null;
+  transfer_max_count: number;
+};
+
+// Carga el ticket y valida que se pueda transferir AHORA (dueño correcto,
+// activo, evento con transferencias habilitadas, dentro de la ventana y bajo el
+// límite). Compartido por transfer() y createPendingTransfer().
+const loadTransferable = async (
+  db: ReturnType<typeof supabaseAdmin>,
+  ticketId: string,
+  fromProfile: string,
+): Promise<Result<{ row: TicketRow; event: TransferableEvent }>> => {
+  const { data: existing, error } = await db
+    .from("tickets")
+    .select(
+      "*, ticket_type:ticket_types!inner(event:events!inner(starts_at, title, transfers_enabled, transfer_deadline_hours, transfer_max_count))",
+    )
+    .eq("id", ticketId)
+    .single();
+  if (error || !existing) return err("ticket_not_found");
+  const joined = existing as unknown as TicketRow & {
+    ticket_type: { event: TransferableEvent };
+  };
+  if (joined.current_holder !== fromProfile) return err("not_owner");
+  if (joined.status !== "active") return err("ticket_not_active");
+  const ev = joined.ticket_type.event;
+  if (!ev.transfers_enabled) return err("transfers_disabled");
+  if (ev.transfer_deadline_hours != null) {
+    const hoursUntilStart = (new Date(ev.starts_at).getTime() - Date.now()) / 3_600_000;
+    if (hoursUntilStart < ev.transfer_deadline_hours) return err("transfer_window_closed");
+  }
+  if (joined.transfer_count >= ev.transfer_max_count) return err("transfer_limit_reached");
+  return ok({ row: joined, event: ev });
+};
 
 export const supabaseTicketRepository: TicketRepository = {
   async buy(input: BuyInput): Promise<Result<BuyOutput>> {
@@ -429,11 +468,24 @@ export const supabaseTicketRepository: TicketRepository = {
     const { data } = await db
       .from("tickets")
       .select(
-        "*, ticket_type:ticket_types!inner(id,name,kind,event_id,event:events!inner(id,slug,title,starts_at,venue,timezone,status))",
+        "*, ticket_type:ticket_types!inner(id,name,kind,event_id,event:events!inner(id,slug,title,starts_at,venue,timezone,status,cover_url,category))",
       )
       .eq("current_holder", buyerId)
       .order("created_at", { ascending: false });
     if (!data) return [];
+    // Transferencias pendientes de estos tickets: el emisor las ve como
+    // "enviada · esperando reclamo" mientras el receptor no abre su link.
+    const ids = (data as unknown as TicketRow[]).map((r) => r.id);
+    const { data: pend } = ids.length
+      ? await db
+          .from("ticket_transfers")
+          .select("ticket_id, to_contact")
+          .eq("status", "pending")
+          .in("ticket_id", ids)
+      : { data: [] as { ticket_id: string; to_contact: string | null }[] };
+    const pendMap = new Map(
+      (pend ?? []).map((p) => [p.ticket_id, p.to_contact]),
+    );
     type Joined = TicketRow & {
       ticket_type: {
         id: string;
@@ -448,6 +500,8 @@ export const supabaseTicketRepository: TicketRepository = {
           venue: string | null;
           timezone: string;
           status: EventStatus;
+          cover_url: string | null;
+          category: EventCategory | null;
         };
       };
     };
@@ -461,12 +515,15 @@ export const supabaseTicketRepository: TicketRepository = {
         venue: row.ticket_type.event.venue,
         timezone: row.ticket_type.event.timezone,
         status: row.ticket_type.event.status,
+        coverUrl: row.ticket_type.event.cover_url,
+        category: row.ticket_type.event.category,
       },
       ticketType: {
         id: row.ticket_type.id,
         name: row.ticket_type.name,
         kind: row.ticket_type.kind,
       },
+      pendingTransferTo: pendMap.get(row.id) ?? null,
     }));
   },
 
@@ -478,50 +535,12 @@ export const supabaseTicketRepository: TicketRepository = {
   async transfer(input): Promise<Result<Ticket>> {
     if (!input.toProfile) return err("recipient_required");
     const db = supabaseAdmin();
-    const { data: existing, error: getErr } = await db
-      .from("tickets")
-      .select(
-        "*, ticket_type:ticket_types!inner(event:events!inner(starts_at, transfers_enabled, transfer_deadline_hours, transfer_max_count))",
-      )
-      .eq("id", input.ticketId)
-      .single();
-    if (getErr || !existing) return err("ticket_not_found");
-
-    type Joined = TicketRow & {
-      ticket_type: {
-        event: {
-          starts_at: string;
-          transfers_enabled: boolean;
-          transfer_deadline_hours: number | null;
-          transfer_max_count: number;
-        };
-      };
-    };
-    const joined = existing as unknown as Joined;
-
-    if (joined.current_holder !== input.fromProfile) return err("not_owner");
-    if (joined.status !== "active") return err("ticket_not_active");
-
-    const ev = joined.ticket_type.event;
-    // Why: el organizador puede deshabilitar transferencias por evento.
-    if (!ev.transfers_enabled) return err("transfers_disabled");
-
-    // Why: cooldown anti-fraude. Cerca del evento, las transferencias son
-    // vector de reventa/laundering. El organizador define la ventana.
-    if (ev.transfer_deadline_hours != null) {
-      const hoursUntilStart = (new Date(ev.starts_at).getTime() - Date.now()) / 3_600_000;
-      if (hoursUntilStart < ev.transfer_deadline_hours) {
-        return err("transfer_window_closed");
-      }
-    }
-
-    if (joined.transfer_count >= ev.transfer_max_count) {
-      return err("transfer_limit_reached");
-    }
+    const loaded = await loadTransferable(db, input.ticketId, input.fromProfile);
+    if (!loaded.ok) return loaded;
 
     const { data: updated, error: upErr } = await db
       .from("tickets")
-      .update({ current_holder: input.toProfile, transfer_count: joined.transfer_count + 1 })
+      .update({ current_holder: input.toProfile, transfer_count: loaded.value.row.transfer_count + 1 })
       .eq("id", input.ticketId)
       .select("*")
       .single<TicketRow>();
@@ -535,6 +554,93 @@ export const supabaseTicketRepository: TicketRepository = {
       status: "completed",
     });
     return ok(toTicket(updated));
+  },
+
+  async createPendingTransfer(input): Promise<Result<{ event: { title: string; startsAt: string } }>> {
+    const db = supabaseAdmin();
+    const loaded = await loadTransferable(db, input.ticketId, input.fromProfile);
+    if (!loaded.ok) return loaded;
+
+    // Reenviar o cambiar de destinatario: cancela el pending anterior antes de
+    // crear el nuevo (el índice único exige a lo sumo uno pendiente por ticket).
+    await db
+      .from("ticket_transfers")
+      .update({ status: "cancelled" })
+      .eq("ticket_id", input.ticketId)
+      .eq("status", "pending");
+
+    const { error: insErr } = await db.from("ticket_transfers").insert({
+      ticket_id: input.ticketId,
+      from_profile: input.fromProfile,
+      to_profile: null,
+      to_contact: input.toContact,
+      pending_token: input.token,
+      expires_at: input.expiresAt,
+      status: "pending",
+    });
+    if (insErr) return err(insErr.message);
+    return ok({ event: { title: loaded.value.event.title, startsAt: loaded.value.event.starts_at } });
+  },
+
+  async claimTransfer(input): Promise<Result<{ ticket: Ticket; eventSlug: string }>> {
+    const db = supabaseAdmin();
+    const { data: pendingRow } = await db
+      .from("ticket_transfers")
+      .select("id, ticket_id, from_profile, expires_at")
+      .eq("pending_token", input.token)
+      .eq("status", "pending")
+      .maybeSingle<{ id: string; ticket_id: string; from_profile: string; expires_at: string | null }>();
+    if (!pendingRow) return err("claim_not_found");
+    if (pendingRow.expires_at && new Date(pendingRow.expires_at) < new Date()) {
+      return err("claim_expired");
+    }
+    // El emisor no puede reclamar su propio envío.
+    if (pendingRow.from_profile === input.toProfile) return err("cannot_claim_own");
+
+    // El ticket debe seguir activo y aún en manos del emisor.
+    const { data: tk } = await db
+      .from("tickets")
+      .select("*, ticket_type:ticket_types!inner(event:events!inner(slug))")
+      .eq("id", pendingRow.ticket_id)
+      .single();
+    if (!tk) return err("ticket_not_found");
+    const joined = tk as unknown as TicketRow & { ticket_type: { event: { slug: string } } };
+    if (joined.status !== "active") return err("ticket_not_active");
+    if (joined.current_holder !== pendingRow.from_profile) return err("claim_no_longer_valid");
+
+    const { data: updated, error: upErr } = await db
+      .from("tickets")
+      .update({ current_holder: input.toProfile, transfer_count: joined.transfer_count + 1 })
+      .eq("id", pendingRow.ticket_id)
+      .select("*")
+      .single<TicketRow>();
+    if (upErr || !updated) return err(upErr?.message ?? "claim_failed");
+
+    await db
+      .from("ticket_transfers")
+      .update({ status: "completed", to_profile: input.toProfile })
+      .eq("id", pendingRow.id);
+
+    return ok({ ticket: toTicket(updated), eventSlug: joined.ticket_type.event.slug });
+  },
+
+  async cancelPendingTransfer(input): Promise<Result<{ ok: true }>> {
+    const db = supabaseAdmin();
+    // Solo el emisor original puede cancelar su envío pendiente.
+    const { data: pendingRow } = await db
+      .from("ticket_transfers")
+      .select("id")
+      .eq("ticket_id", input.ticketId)
+      .eq("from_profile", input.fromProfile)
+      .eq("status", "pending")
+      .maybeSingle<{ id: string }>();
+    if (!pendingRow) return err("no_pending_transfer");
+    const { error } = await db
+      .from("ticket_transfers")
+      .update({ status: "cancelled" })
+      .eq("id", pendingRow.id);
+    if (error) return err(error.message);
+    return ok({ ok: true });
   },
 
   async markUsedByQr(qrCode, scannerId, usedAt?: Date) {

@@ -1,13 +1,17 @@
 "use client";
 
-import { Suspense, use, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, use, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import { useSearchParams } from "next/navigation";
+
+// Resetea el scroll ANTES del paint (sin destello). Isomórfico: en SSR cae a
+// useEffect para no disparar el warning de useLayoutEffect en el server.
+const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
 import { useRouter } from "@/i18n/navigation";
 import { useEvent } from "@/lib/events/hooks/useEvents";
 import { useBuyTickets } from "@/lib/tickets/hooks/useTickets";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { useDniLookup } from "@/lib/identity/hooks/useDniLookup";
-import { useProfileLookup } from "@/lib/identity/hooks/useProfileLookup";
 import { formatMoney } from "@/lib/_shared/format";
 import { CardForm } from "@/components/payments/CardForm";
 import { YapeForm } from "@/components/payments/YapeForm";
@@ -66,9 +70,6 @@ function BuyFlowInner({ params }: Props) {
   const [guestEmail, setGuestEmail] = useState("");
   const [guestDni, setGuestDni] = useState("");
   const [guestPhone, setGuestPhone] = useState("");
-  // assignees[i] = WhatsApp del pata al que se le manda la entrada i+1 (slot 0
-  // siempre es el comprador). String vacío = "yo voy con esta entrada".
-  const [assignees, setAssignees] = useState<string[]>([]);
   const nameTouchedRef = useRef(false);
   const { lookup: dniLookup, pending: dniPending } = useDniLookup();
   const [dniHint, setDniHint] = useState<"idle" | "not_found">("idle");
@@ -152,6 +153,59 @@ function BuyFlowInner({ params }: Props) {
     } catch {}
   }, []);
 
+  // Al entrar a comprar, partir desde el inicio (no heredar el scroll del
+  // detalle). Antes del paint para que sea imperceptible (sin destello).
+  useIsomorphicLayoutEffect(() => {
+    window.scrollTo({ top: 0, left: 0 });
+  }, []);
+
+  // "Hay más abajo": un sentinel marca el FINAL real del contenido (el espacio
+  // de seguridad del CTA va debajo de él, así no cuenta como contenido). Si el
+  // sentinel está por debajo de la zona visible (excluyendo el alto del CTA),
+  // mostramos la pista. Solo aparece cuando de verdad falta ver algo.
+  const [moreBelow, setMoreBelow] = useState(false);
+  const contentEndRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = contentEndRef.current;
+    if (!el) {
+      setMoreBelow(false);
+      return;
+    }
+    const io = new IntersectionObserver(
+      ([entry]) => setMoreBelow(!entry.isIntersecting),
+      // -96px abajo ≈ alto del CTA sticky: el sentinel "cuenta como visible"
+      // solo cuando queda por encima del botón.
+      { root: null, rootMargin: "0px 0px -96px 0px", threshold: 0 },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [phase]);
+
+  // Selección inicial desde el detalle: ?qty=N (y opcional ?zone=). Sin esto, la
+  // cantidad elegida en la página del evento se perdía al entrar a /buy.
+  const initSelRef = useRef(false);
+  useEffect(() => {
+    if (initSelRef.current || !data) return;
+    if (search.get("order")) {
+      initSelRef.current = true; // el flujo de restaurar orden ya setea qty
+      return;
+    }
+    const qParam = parseInt(search.get("qty") ?? "", 10);
+    if (!Number.isFinite(qParam) || qParam <= 0) {
+      initSelRef.current = true;
+      return;
+    }
+    const zoneParam = search.get("zone");
+    const candidates = data.ticketTypes.filter((tt) =>
+      zoneParam ? tt.zone === zoneParam : tt.zone === null,
+    );
+    const target = candidates[0] ?? data.ticketTypes[0];
+    if (target) {
+      initSelRef.current = true;
+      setQty((prev) => (Object.keys(prev).length ? prev : { [target.id]: qParam }));
+    }
+  }, [data, search]);
+
   const items = useMemo(
     () =>
       Object.entries(qty)
@@ -173,22 +227,6 @@ function BuyFlowInner({ params }: Props) {
   }, [data, qty]);
   const totalItems = items.reduce((a, b) => a + b.qty, 0);
   const fee = totalItems > 0 ? 300 : 0;
-  const acompCount = Math.max(0, totalItems - 1);
-
-  // Resize assignees al cambiar la cantidad — preserva las entradas ya
-  // ingresadas. Si bajan la cantidad, recortamos.
-  useEffect(() => {
-    setAssignees((prev) => {
-      if (prev.length === acompCount) return prev;
-      const next = [...prev];
-      if (next.length < acompCount) {
-        while (next.length < acompCount) next.push("");
-      } else {
-        next.length = acompCount;
-      }
-      return next;
-    });
-  }, [acompCount]);
 
   // Vence la reserva localmente cuando se cumplen los 30 min (el backend ya la
   // expira en paralelo). Solo corre durante la fase de pago.
@@ -202,13 +240,6 @@ function BuyFlowInner({ params }: Props) {
     return () => clearInterval(id);
   }, [phase, reservedAt, reservationExpired]);
 
-  // Acompañantes válidos: cualquier slot que tenga teléfono debe tener 9
-  // dígitos. Slots vacíos (= "yo voy") son válidos por default.
-  const acompValid = assignees.every((a) => {
-    const digits = a.replace(/\D/g, "");
-    return digits.length === 0 || digits.length === 9;
-  });
-
   const isLogged = !!me.data?.user;
   const emailOk = /.+@.+\..+/.test(guestEmail.trim());
   const phoneOk = guestPhone.replace(/\D/g, "").length === 9;
@@ -218,7 +249,7 @@ function BuyFlowInner({ params }: Props) {
     guestName.trim().length >= 2 &&
     guestDni.trim().length === 8 &&
     phoneOk;
-  const orderValid = totalItems > 0 && guestValid && acompValid;
+  const orderValid = totalItems > 0 && guestValid;
 
   if (!data) return <PageLoader />;
 
@@ -247,7 +278,7 @@ function BuyFlowInner({ params }: Props) {
         const emailQs = !isLogged && guestEmail.trim()
           ? `&email=${encodeURIComponent(guestEmail.trim())}`
           : "";
-        router.push(`/events/${slug}/processing?order=${res.order.id}&total=0${emailQs}`);
+        router.push(`/events/${slug}/processing?order=${res.order.id}&total=0&n=${totalItems}${emailQs}`);
         return;
       }
 
@@ -323,7 +354,6 @@ function BuyFlowInner({ params }: Props) {
     }
     if (phase === "data") {
       if (!dataValid) return "Completa tus datos";
-      if (!acompValid) return "Revisa los acompañantes";
       if (total === 0) return "Confirmar entrada gratuita";
       return `Ir a pagar · ${formatMoney(total)}`;
     }
@@ -370,7 +400,7 @@ function BuyFlowInner({ params }: Props) {
       <div className="mx-auto w-full max-w-[1120px] px-5 lg:flex lg:min-h-[calc(100dvh-72px)] lg:items-start lg:px-8 lg:py-10">
         <div className="grid w-full gap-8 lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-10">
           {/* Main */}
-          <main className="pt-6 pb-44 lg:pb-12">
+          <main className="pt-6 lg:pb-12">
             {phase === "pick" ? (
               <PickPhase
                 ticketTypes={data.ticketTypes}
@@ -380,8 +410,6 @@ function BuyFlowInner({ params }: Props) {
               />
             ) : phase === "data" ? (
               <DataPhase
-                ticketTypes={data.ticketTypes}
-                qty={qty}
                 isLogged={isLogged}
                 userIdent={me.data?.user?.email ?? me.data?.user?.phone ?? null}
                 guestDni={guestDni}
@@ -400,9 +428,6 @@ function BuyFlowInner({ params }: Props) {
                 setGuestEmail={setGuestEmail}
                 dniHint={dniHint}
                 dniPending={dniPending}
-                totalItems={totalItems}
-                assignees={assignees}
-                setAssignees={setAssignees}
               />
             ) : (
               <>
@@ -436,11 +461,15 @@ function BuyFlowInner({ params }: Props) {
                   const emailQs = !isLogged && guestEmail.trim()
                     ? `&email=${encodeURIComponent(guestEmail.trim())}`
                     : "";
-                  router.push(`/events/${slug}/processing?order=${orderId}&total=${total}&method=${payMethod}${emailQs}`);
+                  router.push(`/events/${slug}/processing?order=${orderId}&total=${total}&method=${payMethod}&n=${totalItems}${emailQs}`);
                 }}
                 />
               </>
             )}
+            {/* Sentinel = final real del contenido. El espacio para el CTA va
+                debajo, así no infla la detección de "hay más abajo". */}
+            <div ref={contentEndRef} aria-hidden className="h-px w-full" />
+            <div aria-hidden className="h-40 lg:hidden" />
           </main>
 
           {/* Sidebar summary (desktop) */}
@@ -480,6 +509,32 @@ function BuyFlowInner({ params }: Props) {
           className="fixed inset-x-0 bottom-0 z-40 border-t border-cart-line bg-cart-bg/95 backdrop-blur-md lg:hidden"
           style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)" }}
         >
+          {/* Pista "hay más abajo": el contenido se difumina hacia el CTA y un
+              chevron rebota, hasta que se llega al final del scroll. */}
+          <AnimatePresence>
+            {moreBelow && (
+              <motion.div
+                aria-hidden
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="pointer-events-none absolute inset-x-0 -top-14 h-14 bg-gradient-to-t from-cart-bg via-cart-bg/85 to-transparent"
+              >
+                <div className="flex h-full items-end justify-center pb-1.5">
+                  <motion.span
+                    animate={{ y: [0, 4, 0] }}
+                    transition={{ duration: 1.2, repeat: Infinity, ease: "easeInOut" }}
+                    className="grid size-7 place-items-center rounded-full border border-cart-line bg-cart-bg-elev text-cart-accent shadow-[0_4px_14px_rgba(0,0,0,0.5)]"
+                  >
+                    <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+                      <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </motion.span>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           <div className="mx-auto w-full max-w-[640px] px-5 pt-3">
             {buy.error && (
               <p className="mb-2 text-center text-[12px] text-rose-300">
@@ -696,8 +751,6 @@ function PickPhase({
 }
 
 function DataPhase({
-  ticketTypes,
-  qty,
   isLogged,
   userIdent,
   guestDni,
@@ -710,12 +763,7 @@ function DataPhase({
   setGuestEmail,
   dniHint,
   dniPending,
-  totalItems,
-  assignees,
-  setAssignees,
 }: {
-  ticketTypes: TicketType[];
-  qty: Record<string, number>;
   isLogged: boolean;
   userIdent: string | null;
   guestDni: string;
@@ -728,16 +776,7 @@ function DataPhase({
   setGuestEmail: (v: string) => void;
   dniHint: "idle" | "not_found";
   dniPending: boolean;
-  totalItems: number;
-  assignees: string[];
-  setAssignees: (v: string[]) => void;
 }) {
-  const slotLabels: string[] = [];
-  for (const tt of ticketTypes) {
-    const q = qty[tt.id] ?? 0;
-    for (let i = 0; i < q; i++) slotLabels.push(tt.name);
-  }
-
   return (
     <div className="flex flex-col gap-8">
       <Section
@@ -799,144 +838,6 @@ function DataPhase({
           />
         </div>
       </Section>
-
-      {totalItems > 1 && (
-        <Section
-          title={`Tus acompañantes (${totalItems - 1})`}
-          hint="Mándales su QR desde aquí"
-        >
-          <div className="flex flex-col gap-2.5">
-            {slotLabels.slice(1).map((label, i) => (
-              <AcompCard
-                key={i}
-                slotIndex={i + 1}
-                ticketLabel={label}
-                phone={assignees[i] ?? ""}
-                onChange={(v) => {
-                  const next = [...assignees];
-                  next[i] = v;
-                  setAssignees(next);
-                }}
-              />
-            ))}
-          </div>
-        </Section>
-      )}
-    </div>
-  );
-}
-
-/* ===================== AcompCard (Yape-style) ===================== */
-
-function AcompCard({
-  slotIndex,
-  ticketLabel,
-  phone,
-  onChange,
-}: {
-  slotIndex: number;
-  ticketLabel: string;
-  phone: string;
-  onChange: (v: string) => void;
-}) {
-  const mode: "self" | "friend" = phone === "" ? "self" : "friend";
-  const lookup = useProfileLookup(phone);
-  const digits = phone.replace(/\D/g, "");
-  const showRecipientName = mode === "friend" && digits.length === 9 && !lookup.loading && lookup.result?.found;
-
-  return (
-    <div
-      className={
-        "rounded-2xl border bg-cart-bg-elev p-4 transition " +
-        (mode === "friend"
-          ? "border-cart-accent shadow-[0_0_0_3px_var(--color-cart-accent-soft)]"
-          : "border-cart-line")
-      }
-    >
-      <div className="mb-3 flex items-center justify-between">
-        <div>
-          <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-cart-ink-3">
-            Persona {slotIndex + 1}
-          </div>
-          <div className="mt-0.5 text-[14px] font-semibold">{ticketLabel}</div>
-        </div>
-      </div>
-
-      <div className="flex flex-col gap-1.5">
-        <button
-          type="button"
-          onClick={() => onChange("")}
-          className={
-            "flex items-center gap-3 rounded-xl border p-3 text-left transition " +
-            (mode === "self"
-              ? "border-cart-accent bg-cart-accent-soft"
-              : "border-cart-line bg-cart-bg-elev-2 hover:border-cart-line-strong")
-          }
-        >
-          <Radio active={mode === "self"} color="var(--color-cart-accent)" />
-          <span className="text-[13.5px]">
-            <span className="font-semibold">Yo voy con esta entrada</span>
-            <span className="ml-1.5 text-cart-ink-3">· la transfiero después si quiero</span>
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            if (mode === "self") onChange(" "); // placeholder no vacío para abrir el input
-          }}
-          className={
-            "flex items-center gap-3 rounded-xl border p-3 text-left transition " +
-            (mode === "friend"
-              ? "border-cart-accent bg-cart-accent-soft"
-              : "border-cart-line bg-cart-bg-elev-2 hover:border-cart-line-strong")
-          }
-        >
-          <Radio active={mode === "friend"} color="var(--color-cart-accent)" />
-          <span className="text-[13.5px] font-semibold">Mandársela a un acompañante</span>
-        </button>
-      </div>
-
-      {mode === "friend" && (
-        <div className="mt-3 rounded-xl border border-cart-line bg-cart-bg-elev-2 p-3">
-          <label className="block">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-cart-ink-3">
-              WhatsApp del acompañante
-            </span>
-            <input
-              type="tel"
-              inputMode="numeric"
-              value={phone.trim()}
-              onChange={(e) => onChange(e.target.value.replace(/[^\d\s]/g, "").slice(0, 11))}
-              placeholder="987 654 321"
-              autoFocus
-              className="mt-1.5 block w-full rounded-xl border border-cart-line bg-cart-bg px-3.5 py-3 font-mono text-[15px] tracking-[0.04em] text-white outline-none transition focus:border-cart-accent focus:shadow-[0_0_0_3px_var(--color-cart-accent-soft)]"
-            />
-          </label>
-
-          {lookup.loading && digits.length === 9 && (
-            <div className="mt-2 text-[11.5px] text-cart-ink-3">Buscando…</div>
-          )}
-          {showRecipientName && lookup.result?.found && (
-            <div className="mt-2 flex items-center gap-2 text-[12.5px] text-emerald-300">
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                <path d="M3 8l3.5 3.5L13 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              Le mandas su entrada a <strong className="text-white">{lookup.result.displayName}</strong>
-            </div>
-          )}
-          {digits.length === 9 && !lookup.loading && lookup.result?.found === false && (
-            <div className="mt-2 text-[11.5px] text-cart-ink-3">
-              Le llegará un enlace por WhatsApp para confirmar su DNI y abrir su QR.
-            </div>
-          )}
-          {digits.length > 0 && digits.length < 9 && (
-            <div className="mt-2 text-[11.5px] text-cart-ink-4">
-              Faltan {9 - digits.length} dígitos
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }

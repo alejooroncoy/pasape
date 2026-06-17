@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/_shared/api-client";
-import type { Order, Ticket, WalletTicket } from "@/server/tickets/domain/Ticket";
+import type { Order, Ticket, TransferOutcome, WalletTicket } from "@/server/tickets/domain/Ticket";
 
 export const myTicketsKey = ["tickets", "mine"] as const;
 
@@ -51,11 +51,33 @@ export const useBuyTickets = () => {
   });
 };
 
+// Invalida todo el prefijo ["tickets"] (wallet + detalle) — el detalle usa una
+// key distinta a myTicketsKey, así que el estado pendiente debe refrescar ahí.
+const ticketsRoot = ["tickets"] as const;
+
 export const useTransferTicket = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { ticketId: string; toIdentifier: string }) =>
-      api.post<Ticket>("/api/tickets/transfer", input),
-    onSuccess: () => qc.invalidateQueries({ queryKey: myTicketsKey }),
+    mutationFn: (input: { ticketId: string; toPhone: string }) =>
+      api.post<TransferOutcome>("/api/tickets/transfer", input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ticketsRoot }),
+  });
+};
+
+export const useCancelTransfer = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { ticketId: string }) =>
+      api.post<{ ok: true }>("/api/tickets/cancel-transfer", input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ticketsRoot }),
+  });
+};
+
+export const useClaimTransfer = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { token: string }) =>
+      api.post<{ ticketId: string; eventSlug: string }>("/api/tickets/claim", input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ticketsRoot }),
   });
 };

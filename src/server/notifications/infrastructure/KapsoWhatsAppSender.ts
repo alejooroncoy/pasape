@@ -38,7 +38,100 @@ const formatDateForTemplate = (iso: string): string => {
 
 const KAPSO_BASE = "https://api.kapso.ai/meta/whatsapp/v24.0";
 
+type NamedParam = { name: string; text: string };
+
+// Envía un template NAMED por el proxy Meta de Kapso. Devuelve true si Meta lo
+// aceptó. Si faltan credenciales o el teléfono, degrada a false sin romper.
+const sendNamedTemplate = async (
+  phone: string,
+  templateName: string,
+  templateLang: string,
+  params: NamedParam[],
+): Promise<boolean> => {
+  const apiKey = process.env.KAPSO_API_KEY;
+  const phoneNumberId =
+    process.env.KAPSO_WA_PHONE_NUMBER_ID ?? process.env.KAPSO_WA_NUMBER_ID;
+  if (!apiKey || !phoneNumberId || !templateName) {
+    console.warn("[KapsoWhatsAppSender] Faltan credenciales/template — skip WhatsApp");
+    return false;
+  }
+  const res = await fetch(`${KAPSO_BASE}/${phoneNumberId}/messages`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-API-Key": apiKey },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to: formatPhone(phone),
+      type: "template",
+      template: {
+        name: templateName,
+        language: { code: templateLang },
+        components: [
+          {
+            type: "body",
+            parameters: params.map((p) => ({
+              type: "text",
+              parameter_name: p.name,
+              text: p.text,
+            })),
+          },
+        ],
+      },
+    }),
+  });
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "");
+    throw new Error(`kapso ${res.status}: ${errText.slice(0, 200)}`);
+  }
+  return true;
+};
+
 export class KapsoWhatsAppSender implements NotificationSender {
+  // Aviso de transferencia: a un número (con o sin cuenta) le llega el link de
+  // reclamo. Usa un template propio (ticket_claim_invite) que NO depende del
+  // nombre del receptor — solo el del emisor.
+  async sendTransferClaim(input: {
+    phone: string;
+    senderName: string;
+    eventTitle: string;
+    eventStartsAt: string;
+    claimUrl: string;
+  }): Promise<boolean> {
+    const templateName =
+      process.env.KAPSO_WA_CLAIM_TEMPLATE_NAME ?? "ticket_claim_invite_v1";
+    const templateLang = process.env.KAPSO_WA_TEMPLATE_LANG ?? "es";
+    const startsAt = formatDateForTemplate(input.eventStartsAt);
+
+    // 1) Template propio (sin nombre del receptor, lenguaje de "reclamo").
+    try {
+      return await sendNamedTemplate(input.phone, templateName, templateLang, [
+        { name: "sender_name", text: input.senderName },
+        { name: "event_title", text: input.eventTitle },
+        { name: "event_starts_at", text: startsAt },
+        { name: "claim_url", text: input.claimUrl },
+      ]);
+    } catch (err) {
+      // Aún no aprobado (o error): caemos al template aprobado de "transferencia
+      // recibida". No conocemos el nombre del receptor → saludo neutro.
+      console.warn("[KapsoWhatsAppSender] claim template falló, uso fallback:", err);
+    }
+
+    const fallbackName =
+      process.env.KAPSO_WA_CLAIM_FALLBACK_TEMPLATE_NAME ?? "ticket_transferred_in_v7";
+    try {
+      return await sendNamedTemplate(input.phone, fallbackName, templateLang, [
+        { name: "holder_name", text: "👋" },
+        { name: "sender_name", text: input.senderName },
+        { name: "event_title", text: input.eventTitle },
+        { name: "event_starts_at", text: startsAt },
+        { name: "ticket_url", text: input.claimUrl },
+      ]);
+    } catch (err) {
+      console.error("[KapsoWhatsAppSender] aviso de transferencia falló:", err);
+      return false;
+    }
+  }
+
   async sendTicketDelivery(input: TicketDeliveryInput): Promise<TicketDeliveryResult> {
     const apiKey = process.env.KAPSO_API_KEY;
     // Why: aceptamos tanto el nombre nuevo (PHONE_NUMBER_ID) como el alias antiguo

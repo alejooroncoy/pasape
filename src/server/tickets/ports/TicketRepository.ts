@@ -36,6 +36,26 @@ export interface TicketRepository {
     toProfile: string | null;
     toContact: string | null;
   }): Promise<Result<Ticket>>;
+  /** Deja la entrada en espera de reclamo (destinatario sin cuenta). No cambia
+      el dueño: el emisor la conserva hasta que el receptor abra su link. */
+  createPendingTransfer(input: {
+    ticketId: string;
+    fromProfile: string;
+    toContact: string;
+    token: string;
+    expiresAt: string;
+  }): Promise<Result<{ event: { title: string; startsAt: string } }>>;
+  /** Reclama una transferencia pendiente: el ticket pasa a `toProfile`. */
+  claimTransfer(input: {
+    token: string;
+    toProfile: string;
+  }): Promise<Result<{ ticket: Ticket; eventSlug: string }>>;
+  /** Cancela el envío pendiente del ticket (el emisor lo recupera al instante).
+      El link enviado deja de servir. */
+  cancelPendingTransfer(input: {
+    ticketId: string;
+    fromProfile: string;
+  }): Promise<Result<{ ok: true }>>;
   markUsedByQr(qrCode: string, scannerId: string, usedAt?: Date): Promise<Result<MarkUsedResult>>;
   /** Admisión confiable por ticketId (alta manual o sync de scan ya verificado). */
   markUsedByTicketId(ticketId: string, scannerId: string, usedAt?: Date): Promise<Result<MarkUsedResult>>;

@@ -47,8 +47,14 @@ function Inner({ params }: Props) {
           await tickets.refetch();
           setTimeout(() => {
             // Para guests usamos ticketUrl firmado (no requiere sesión).
-            // Para logueados va a /tickets (su wallet).
-            const dest = res.ticketUrl ?? "/tickets";
+            // Para logueados con varias entradas → pantalla de reparto (/done);
+            // con una sola → su wallet (/tickets).
+            const n = parseInt(search.get("n") ?? "1", 10);
+            const dest = res.ticketUrl
+              ? res.ticketUrl
+              : n > 1
+                ? `/events/${slug}/done?order=${orderId}`
+                : "/tickets";
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             router.replace(dest as any);
           }, 1600);
