@@ -29,7 +29,7 @@ export function UserHeader() {
   return (
     <>
       <AppHeader>
-        <HeaderBrand />
+        <HeaderBrand mobileLabel />
         <HeaderCity />
         <HeaderSpacer />
         <HeaderActions user={user} onOpenMenu={() => setDrawerOpen(true)} />

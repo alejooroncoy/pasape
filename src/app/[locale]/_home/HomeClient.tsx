@@ -1,7 +1,6 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { useRouter } from "@/i18n/navigation";
 import type { EventCategory } from "@/server/events/domain/Event";
 import { Nav, type NavUser } from "./Nav";
 import { NextEventHero } from "./NextEventHero";
@@ -9,12 +8,11 @@ import { HeroCarousel } from "./HeroCarousel";
 import { EventsSection } from "./EventsSection";
 import { Footer } from "./Footer";
 import { WaFloat } from "./WaFloat";
-import { MobileTabbar } from "./MobileTabbar";
+import { UserTabbar } from "@/components/layout/UserTabbar";
 import { SideDrawer } from "./SideDrawer";
 import { SignInDrawer } from "./SignInDrawer";
 
 export function HomeClient({ user }: { user: NavUser | null }) {
-  const router = useRouter();
   const loggedIn = !!user;
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [signInOpen, setSignInOpen] = useState(false);
@@ -59,22 +57,14 @@ export function HomeClient({ user }: { user: NavUser | null }) {
         onSelectCategory={selectCategoryFromNav}
         selectedCategory={category}
       />
-      <main className="max-[560px]:pb-[72px]">
+      <main className="pb-[72px] lg:pb-0">
         {loggedIn && <NextEventHero />}
         <HeroCarousel />
         <EventsSection sectionRef={eventsSectionRef} category={category} onCategoryChange={setCategory} search={search} />
       </main>
       <Footer />
       <WaFloat />
-      <MobileTabbar
-        onHome={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-        onExplore={() =>
-          eventsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
-        }
-        onTickets={() => (loggedIn ? router.push("/tickets" as never) : setSignInOpen(true))}
-        onFavs={() => (loggedIn ? router.push("/profile" as never) : setSignInOpen(true))}
-        onAccount={() => (loggedIn ? router.push("/profile" as never) : setSignInOpen(true))}
-      />
+      <UserTabbar />
       <SideDrawer
         user={user}
         open={drawerOpen}

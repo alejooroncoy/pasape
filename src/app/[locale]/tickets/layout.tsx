@@ -5,13 +5,13 @@ import { UserTabbar } from "@/components/layout/UserTabbar";
 
 export default function TicketsLayout({ children }: { children: ReactNode }) {
   return (
-    <>
+    <div className="min-h-dvh overflow-x-clip bg-cart-bg">
       <UserHeader />
-      <div className="mx-auto w-full max-w-[1320px] lg:flex lg:gap-6 lg:px-6 lg:pt-6">
+      <div className="mx-auto flex w-full max-w-[1440px]">
         <UserSidebar />
-        <div className="min-w-0 flex-1 pb-[72px] lg:pb-12">{children}</div>
+        <main className="min-w-0 flex-1 pb-[72px] lg:pb-0 lg:pt-6">{children}</main>
       </div>
       <UserTabbar />
-    </>
+    </div>
   );
 }

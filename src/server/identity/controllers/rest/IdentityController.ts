@@ -8,6 +8,8 @@ import { updateProfile } from "../../application/UpdateProfile";
 import { listNotifications, type Notification } from "../../application/ListNotifications";
 import { listFollows, type FollowedOrg } from "../../application/ListFollows";
 import { followOrg, unfollowOrg } from "../../application/ToggleFollow";
+import { listSavedEvents, type SavedEvent } from "@/server/events/application/ListSavedEvents";
+import { saveEvent, unsaveEvent } from "@/server/events/application/ToggleSaveEvent";
 import { lookupProfileByPhone, type LookupResult } from "../../application/LookupProfile";
 import { supabaseUserRepository } from "../../infrastructure/repositories/SupabaseUserRepository";
 import { supabaseOrganizationRepository } from "../../organizations/infrastructure/repositories/SupabaseOrganizationRepository";
@@ -130,6 +132,28 @@ export const IdentityController = {
     const parsed = z.object({ organizationId: z.string().uuid() }).safeParse(input);
     if (!parsed.success) return err("invalid_input");
     return unfollowOrg(auth.value.profileId, parsed.data.organizationId);
+  },
+
+  async listSavedEvents(): Promise<Result<SavedEvent[]>> {
+    const auth = await getAuthContext();
+    if (!auth.ok) return err(auth.error);
+    return listSavedEvents(auth.value.profileId);
+  },
+
+  async saveEvent(input: unknown): Promise<Result<{ saved: true }>> {
+    const auth = await getAuthContext();
+    if (!auth.ok) return err(auth.error);
+    const parsed = z.object({ eventId: z.string().uuid() }).safeParse(input);
+    if (!parsed.success) return err("invalid_input");
+    return saveEvent(auth.value.profileId, parsed.data.eventId);
+  },
+
+  async unsaveEvent(input: unknown): Promise<Result<{ saved: false }>> {
+    const auth = await getAuthContext();
+    if (!auth.ok) return err(auth.error);
+    const parsed = z.object({ eventId: z.string().uuid() }).safeParse(input);
+    if (!parsed.success) return err("invalid_input");
+    return unsaveEvent(auth.value.profileId, parsed.data.eventId);
   },
 
   // Lookup pública por WhatsApp — usada para confirmar al destinatario al que

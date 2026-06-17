@@ -23,6 +23,14 @@ export default function BuyerProfilePage() {
   const fullName = user?.fullName ?? "Tu perfil";
   const sub = user?.email ?? user?.phone ?? "";
 
+  // Reportar un problema → WhatsApp de soporte (número en variable de entorno).
+  const supportPhone = process.env.NEXT_PUBLIC_SUPPORT_WHATSAPP;
+  const reportUrl = supportPhone
+    ? `https://wa.me/${supportPhone}?text=${encodeURIComponent(
+        `Hola, quiero reportar un problema en Pasape.\n\nMi cuenta: ${sub || "(invitado)"}`,
+      )}`
+    : null;
+
   const stats = useMemo(() => {
     const all = tickets.data ?? [];
     const entradas = all.length;
@@ -96,24 +104,43 @@ export default function BuyerProfilePage() {
         {/* Cuenta */}
         <SectionLabel>Cuenta</SectionLabel>
         <Card>
-          <Row icon={<IconCard />} label="Métodos de pago" sub="Yape · tarjetas" onClick={() => router.push("/profile/payment-methods" as never)} />
           <Row icon={<IconBell />} label="Notificaciones" sub="WhatsApp · email" onClick={() => router.push("/profile/notifications" as never)} />
-          <Row icon={<IconHeart />} label="Organizadores que sigues" onClick={() => router.push("/profile/following" as never)} />
+          <Row
+            icon={<IconHeart />}
+            label="Organizadores que sigues"
+            last={!data?.activeOrgSlug}
+            onClick={() => router.push("/profile/following" as never)}
+          />
           {data?.activeOrgSlug && (
             <Row
               icon={<IconBuilding />}
               label="Tu marca"
               sub={`@${data.activeOrgSlug}`}
+              last
               onClick={() => router.push(`/org/${data.activeOrgSlug}` as never)}
             />
           )}
-          <Row icon={<IconShield />} label="Privacidad y datos" last />
         </Card>
 
         {/* Ayuda */}
-        <SectionLabel>Ayuda</SectionLabel>
+        {reportUrl && (
+          <>
+            <SectionLabel>Ayuda</SectionLabel>
+            <Card>
+              <Row
+                icon={<IconHelp />}
+                label="Reportar un problema"
+                sub="Te respondemos por WhatsApp"
+                last
+                onClick={() => window.open(reportUrl, "_blank", "noopener,noreferrer")}
+              />
+            </Card>
+          </>
+        )}
+
+        {/* Sesión */}
+        <SectionLabel>Sesión</SectionLabel>
         <Card>
-          <Row icon={<IconHelp />} label="Reportar un problema" />
           <Row icon={<IconOut />} label="Cerrar sesión" danger last onClick={() => void signOut()} />
         </Card>
       </div>
@@ -188,10 +215,8 @@ function Row({
 }
 
 const sw = { stroke: "currentColor", strokeWidth: 1.4, fill: "none" } as const;
-const IconCard = () => (<svg width="18" height="18" viewBox="0 0 18 18"><rect x="2" y="4" width="14" height="10" rx="1.6" {...sw} /><path d="M2 7h14" {...sw} /></svg>);
 const IconBell = () => (<svg width="18" height="18" viewBox="0 0 18 18"><path d="M4 12V8a5 5 0 0 1 10 0v4l1.5 2h-13L4 12Z" {...sw} strokeLinejoin="round" /><path d="M7 15a2 2 0 0 0 4 0" {...sw} strokeLinecap="round" /></svg>);
 const IconHeart = () => (<svg width="18" height="18" viewBox="0 0 18 18"><path d="M9 15s-6-4-6-8a3 3 0 0 1 6-1 3 3 0 0 1 6 1c0 4-6 8-6 8Z" {...sw} strokeLinejoin="round" /></svg>);
-const IconShield = () => (<svg width="18" height="18" viewBox="0 0 18 18"><path d="M9 2L3 4v5c0 3.5 2.5 6.5 6 8 3.5-1.5 6-4.5 6-8V4L9 2Z" {...sw} strokeLinejoin="round" /></svg>);
 const IconBuilding = () => (<svg width="18" height="18" viewBox="0 0 18 18"><rect x="3" y="3" width="12" height="12" rx="1.5" {...sw} /><path d="M6 6h1M6 9h1M6 12h1M11 6h1M11 9h1M11 12h1" {...sw} strokeLinecap="round" /></svg>);
 const IconHelp = () => (<svg width="18" height="18" viewBox="0 0 18 18"><circle cx="9" cy="9" r="7" {...sw} /><path d="M7 7.5c.3-1 1.1-1.5 2-1.5 1.2 0 2 .8 2 1.7 0 .8-.5 1.2-1 1.5-.7.4-1 .8-1 1.3M9 13v.1" {...sw} strokeLinecap="round" /></svg>);
 const IconOut = () => (<svg width="18" height="18" viewBox="0 0 18 18"><path d="M11 4H4v10h7M14 9H7M11 6l3 3-3 3" {...sw} strokeLinecap="round" strokeLinejoin="round" /></svg>);

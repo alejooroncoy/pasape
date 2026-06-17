@@ -48,6 +48,9 @@ const nextConfig: NextConfig = {
     "/opengraph-image": ["./public/icons/logo-icon-min-512.png"],
     "/twitter-image": ["./public/icons/logo-icon-min-512.png"],
   },
+  // Oculta el indicador flotante de Next en dev (el círculo "N" abajo-izquierda
+  // que se confundía con la UI al emular en celular).
+  devIndicators: false,
 };
 
 // Sentry envuelve por fuera de PWA/intl. El authToken se lee de

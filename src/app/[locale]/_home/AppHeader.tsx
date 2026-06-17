@@ -47,16 +47,22 @@ export function AppHeader({ children, below }: { children: ReactNode; below?: Re
 }
 
 // ── Piezas componibles ───────────────────────────────────────────────────────
-export function HeaderBrand() {
+// `mobileLabel`: mostrar el texto "Pasape" también en móvil. La home lo oculta
+// porque el buscador ocupa la fila; en /tickets y /profile no hay buscador, así
+// que conviene mostrarlo para que el header no se vea vacío.
+export function HeaderBrand({ mobileLabel = false }: { mobileLabel?: boolean }) {
   return (
     <Link
       href="/"
-      className="inline-flex items-center gap-2.5 text-[19px] font-semibold tracking-[-0.01em] max-[560px]:text-[0]"
+      className={
+        "inline-flex items-center gap-2.5 text-[19px] font-semibold tracking-[-0.01em] " +
+        (mobileLabel ? "max-[560px]:text-[17px]" : "max-[560px]:text-[0]")
+      }
     >
       <span className="grid size-[40px] place-items-center max-[560px]:size-9">
         <Logo className="size-full drop-shadow-[0_2px_10px_rgba(184,124,255,0.35)]" />
       </span>
-      <span className="max-[560px]:sr-only">Pasape</span>
+      <span className={mobileLabel ? "" : "max-[560px]:sr-only"}>Pasape</span>
     </Link>
   );
 }
