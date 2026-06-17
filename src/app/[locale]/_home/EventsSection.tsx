@@ -2,8 +2,45 @@
 
 import { Link } from "@/i18n/navigation";
 import { useBrowseEvents } from "@/lib/events/hooks/useEvents";
+import { useSaveEvent } from "@/lib/identity/hooks/useSaveEvent";
 import type { Event, EventCategory } from "@/server/events/domain/Event";
 import { CATEGORIES } from "./categories";
+
+// Corazón para guardar el evento. Overlay sobre la card (hermano del Link para
+// no anidar <button> dentro de <a>). Para invitados el toggle no persiste.
+function SaveHeart({ eventId }: { eventId: string }) {
+  const { isSaved, toggle, isPending } = useSaveEvent(eventId);
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        toggle();
+      }}
+      disabled={isPending}
+      aria-label={isSaved ? "Quitar de favoritos" : "Guardar en favoritos"}
+      aria-pressed={isSaved}
+      className="absolute right-[10px] top-[10px] z-10 grid size-8 place-items-center rounded-full border border-white/10 bg-black/45 backdrop-blur-md transition hover:bg-black/65 active:scale-90 disabled:opacity-60"
+    >
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 18 18"
+        fill={isSaved ? "var(--color-cart-accent)" : "none"}
+        className={isSaved ? "text-cart-accent" : "text-white"}
+        aria-hidden
+      >
+        <path
+          d="M9 15.5s-6-4-6-8a3 3 0 0 1 6-1 3 3 0 0 1 6 1c0 4-6 8-6 8Z"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </button>
+  );
+}
 
 const shortDay = (iso: string, tz: string) =>
   new Intl.DateTimeFormat("es-PE", {
@@ -23,12 +60,16 @@ function CardSkeleton() {
 
 function EventCard({ event }: { event: Event }) {
   return (
-    <Link
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      href={`/events/${event.slug}` as any}
-      className="group flex-shrink-0 cursor-pointer"
+    <div
+      className="group relative flex-shrink-0"
       style={{ width: "clamp(170px,20vw,240px)", scrollSnapAlign: "start" }}
     >
+      <SaveHeart eventId={event.id} />
+      <Link
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        href={`/events/${event.slug}` as any}
+        className="block cursor-pointer"
+      >
       <div
         className="relative w-full overflow-hidden rounded-[16px] border border-white/[0.07] transition-colors duration-200 group-hover:border-white/[0.18]"
         style={{ aspectRatio: "3/4" }}
@@ -62,7 +103,8 @@ function EventCard({ event }: { event: Event }) {
           )}
         </div>
       </div>
-    </Link>
+      </Link>
+    </div>
   );
 }
 
@@ -139,6 +181,10 @@ export function EventsSection({ sectionRef, category, onCategoryChange, search }
         style={{
           paddingLeft: "calc(clamp(20px, 4vw, 56px) + max(0px, (100vw - 1320px) / 2))",
           paddingRight: "clamp(20px, 4vw, 56px)",
+          // Sin esto, el scroll-snap pega la 1ª card al borde y "se come" el
+          // padding izquierdo (quedaba flush). Con scroll-padding el snap respeta
+          // el inset y la card queda alineada con el título.
+          scrollPaddingLeft: "calc(clamp(20px, 4vw, 56px) + max(0px, (100vw - 1320px) / 2))",
           scrollSnapType: "x mandatory",
           scrollbarWidth: "none",
           WebkitOverflowScrolling: "touch",

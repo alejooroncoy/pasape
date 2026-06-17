@@ -4,6 +4,7 @@ import { Suspense, use, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Link, useRouter } from "@/i18n/navigation";
 import { useEvent } from "@/lib/events/hooks/useEvents";
+import { useSaveEvent } from "@/lib/identity/hooks/useSaveEvent";
 import { useEventShowcase } from "@/lib/events/hooks/useEventShowcase";
 import { useEventPartners } from "@/lib/events/hooks/useEventPartners";
 import type { ShowcaseEvent, ShowcaseOrg } from "@/server/events/application/GetEventOrgShowcase";
@@ -119,7 +120,7 @@ function EventDetailInner({ params }: Props) {
             {/* Flyer contenido (estilo Joinnus): el afiche vertical se ve
                 completo — nunca recortado — y un gradiente con los colores
                 del propio flyer rellena el marco. */}
-            <FlyerCard event={event} startsAt={startsAt} />
+            <FlyerCard event={event} eventId={event.id} startsAt={startsAt} />
 
             <div className="pt-5 lg:hidden">
               <h1 className="text-[30px] font-bold leading-[1.05] tracking-[-0.02em] sm:text-[34px]">
@@ -635,9 +636,11 @@ function BoxAvailabilityBar({
 
 function FlyerCard({
   event,
+  eventId,
   startsAt,
 }: {
   event: { title: string; coverUrl: string | null; timezone: string };
+  eventId: string;
   startsAt: Date;
 }) {
   const palette = useImagePalette(event.coverUrl);
@@ -722,7 +725,10 @@ function FlyerCard({
 
         <div className="absolute inset-x-0 top-0 z-10 flex items-start justify-between p-4 sm:p-5">
           <BackButton />
-          <ShareButton title={event.title} />
+          <div className="flex items-center gap-2">
+            <SaveEventButton eventId={eventId} />
+            <ShareButton title={event.title} />
+          </div>
         </div>
 
       </div>
@@ -768,6 +774,36 @@ function BackButton() {
           />
         </svg>
       )}
+    </button>
+  );
+}
+
+function SaveEventButton({ eventId }: { eventId: string }) {
+  const { isSaved, toggle, isPending } = useSaveEvent(eventId);
+  return (
+    <button
+      type="button"
+      onClick={toggle}
+      disabled={isPending}
+      aria-label={isSaved ? "Quitar de favoritos" : "Guardar en favoritos"}
+      aria-pressed={isSaved}
+      className="grid size-10 place-items-center rounded-full bg-black/45 backdrop-blur-md transition hover:bg-black/65 active:scale-90 disabled:opacity-60"
+    >
+      <svg
+        width="17"
+        height="17"
+        viewBox="0 0 18 18"
+        fill={isSaved ? "var(--color-cart-accent)" : "none"}
+        className={isSaved ? "text-cart-accent" : "text-white"}
+        aria-hidden
+      >
+        <path
+          d="M9 15.5s-6-4-6-8a3 3 0 0 1 6-1 3 3 0 0 1 6 1c0 4-6 8-6 8Z"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinejoin="round"
+        />
+      </svg>
     </button>
   );
 }
