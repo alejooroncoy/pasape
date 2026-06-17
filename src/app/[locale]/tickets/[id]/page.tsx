@@ -1,14 +1,18 @@
 "use client";
 
-import { use, useState } from "react";
+import { use, useRef, useState } from "react";
 import Link from "next/link";
+import { AnimatePresence, motion } from "motion/react";
 import { useRouter } from "@/i18n/navigation";
 import { QrSquare } from "@/components/design";
-import { useTicket, useTransferTicket } from "@/lib/tickets/hooks/useTickets";
+import { useTicket, useTransferTicket, useCancelTransfer } from "@/lib/tickets/hooks/useTickets";
+import { useProfileLookup } from "@/lib/identity/hooks/useProfileLookup";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { useLocalRotatingQr } from "@/lib/tickets/hooks/useLocalRotatingQr";
 import { useBoxForTicket, useRealtimeBox } from "@/lib/boxes/hooks/useBoxes";
 import { formatDate } from "@/lib/_shared/format";
+import { CATEGORY_BY_ID } from "@/app/[locale]/_home/categories";
+import type { WalletTicket } from "@/server/tickets/domain/Ticket";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -17,6 +21,7 @@ export default function TicketDetailPage({ params }: Props) {
   const me = useCurrentUser();
   const { data, isLoading, error } = useTicket(id);
   const transfer = useTransferTicket();
+  const cancelTransfer = useCancelTransfer();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [recipient, setRecipient] = useState("");
@@ -30,6 +35,10 @@ export default function TicketDetailPage({ params }: Props) {
   const boxQuery = useBoxForTicket(isHost ? id : "");
   const box = boxQuery.data ?? null;
   useRealtimeBox(box?.inviteToken);
+  // Eco de confirmación: al escribir el número, buscamos a quién pertenece para
+  // mostrarlo antes de soltar la entrada (capa anti-typo).
+  const recipientDigits = recipient.replace(/\D/g, "");
+  const recipientLookup = useProfileLookup(recipient);
 
   if (isLoading) {
     return (
@@ -79,7 +88,10 @@ export default function TicketDetailPage({ params }: Props) {
 
       <main className="mx-auto w-full max-w-[640px] px-5 pb-16 pt-6 lg:max-w-[440px]">
         {/* QR card */}
-        <div
+        <motion.div
+          initial={{ opacity: 0, y: 24, scale: 0.97 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ type: "spring", stiffness: 200, damping: 24 }}
           className="overflow-hidden rounded-[28px] border border-cart-accent/40"
           style={{
             background:
@@ -88,34 +100,13 @@ export default function TicketDetailPage({ params }: Props) {
               "0 30px 60px -20px rgba(124,58,237,0.5), 0 0 0 1px rgba(255,255,255,0.04) inset",
           }}
         >
-          {/* Card header */}
-          <div className="px-6 pt-5">
-            <div className="flex items-center justify-between">
-              <span className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-cart-accent">
-                Muestra en puerta
-              </span>
-              <span className="font-mono text-[11px] text-cart-ink-3">
-                #{data.id.slice(0, 8).toUpperCase()}
-              </span>
-            </div>
-
-            {isBoxTicket && (
-              <div className="mt-4">
-                <div className="text-[28px] font-bold leading-none tracking-[-0.02em]">
-                  BOX {data.boxLabel}
-                </div>
-                <div className="mt-1 text-[13.5px] text-cart-ink-2">{holderName}</div>
-              </div>
-            )}
-
-            <h1 className="mt-3 text-[22px] font-bold leading-[1.15] tracking-[-0.02em]">
-              {data.event.title}
-            </h1>
-            <p className="mt-1 text-[12.5px] text-cart-ink-3">
-              {eventDate}
-              {data.event.venue ? ` · ${data.event.venue}` : ""}
-            </p>
-          </div>
+          {/* Héroe: portada del evento con estado, fecha y título */}
+          <CoverHero
+            event={data.event}
+            eventDate={eventDate}
+            status={data.status}
+            boxLabel={isBoxTicket ? data.boxLabel : null}
+          />
 
           {/* QR slot — white bg, padding tight, rotating ring overlay */}
           <div className="mx-6 mt-5 rounded-2xl bg-white p-5">
@@ -146,27 +137,51 @@ export default function TicketDetailPage({ params }: Props) {
               </div>
               <div className="text-[11.5px] text-cart-ink-3">{data.ticketType.name}</div>
             </div>
-            {data.status === "active" && (
+            {data.status === "active" && !data.pendingTransferTo && (
               <button
                 type="button"
                 onClick={() => setOpen(true)}
                 className="rounded-full bg-white/10 px-3.5 py-2 text-[12px] font-semibold text-white transition hover:bg-white/15"
               >
-                Transferir
+                Enviar
               </button>
             )}
-            {data.status === "used" && (
-              <span className="rounded-full bg-rose-500/20 px-3 py-1.5 text-[10.5px] font-bold uppercase tracking-[0.1em] text-rose-300">
-                Ya usada
-              </span>
-            )}
-            {data.status === "void" && (
-              <span className="rounded-full bg-cart-bg-elev-2 px-3 py-1.5 text-[10.5px] font-bold uppercase tracking-[0.1em] text-cart-ink-3">
-                Anulada
-              </span>
-            )}
           </div>
-        </div>
+        </motion.div>
+
+        {/* Envío pendiente: la entrada sigue siendo tuya hasta que la reclamen.
+            El emisor ve a quién la mandó y puede recuperarla al instante. */}
+        {data.status === "active" && data.pendingTransferTo && (
+          <div className="mt-4 rounded-2xl border border-amber-400/30 bg-amber-400/[0.06] px-4 py-3.5">
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 text-amber-300">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                  <circle cx="9" cy="9" r="6.5" stroke="currentColor" strokeWidth="1.5" />
+                  <path d="M9 5.5V9l2.3 1.6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="text-[13.5px] font-semibold text-white">
+                  Enviada al {maskPhone(data.pendingTransferTo)}
+                </div>
+                <p className="mt-0.5 text-[11.5px] leading-[1.45] text-cart-ink-3">
+                  Esperando que la reclame por WhatsApp. Sigue siendo tuya hasta
+                  entonces — puedes recuperarla cuando quieras.
+                </p>
+                <div className="mt-2.5 flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => cancelTransfer.mutate({ ticketId: data.id })}
+                    disabled={cancelTransfer.isPending}
+                    className="text-[12.5px] font-semibold text-amber-300 transition hover:text-amber-200 disabled:opacity-50"
+                  >
+                    {cancelTransfer.isPending ? "Recuperando…" : "Cancelar envío"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Box info + invite (only host) */}
         {isBoxTicket && box && (
@@ -216,60 +231,219 @@ export default function TicketDetailPage({ params }: Props) {
       </main>
 
       {/* Transfer sheet */}
-      {open && (
-        <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm lg:items-center"
-          onClick={() => setOpen(false)}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-[460px] rounded-t-[24px] border-t border-cart-line-strong bg-cart-bg-elev p-6 lg:rounded-3xl lg:border"
-            style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 28px)" }}
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            className="fixed inset-0 z-[80] flex items-end justify-center bg-black/60 backdrop-blur-sm lg:items-center"
+            onClick={() => setOpen(false)}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
           >
-            <div className="mb-4 flex justify-center lg:hidden">
-              <span className="h-1 w-9 rounded-full bg-white/15" />
-            </div>
-            <h2 className="text-[22px] font-bold tracking-[-0.02em]">
-              Transferir entrada
-            </h2>
-            <p className="mt-2 text-[13px] leading-[1.5] text-cart-ink-3">
-              La entrada deja de ser tuya. El receptor recibe su propio QR.
-            </p>
-
-            <label className="mt-5 block">
-              <span className="text-[11.5px] font-semibold uppercase tracking-[0.12em] text-cart-ink-3">
-                Email o celular del receptor
-              </span>
-              <input
-                type="text"
-                value={recipient}
-                onChange={(e) => setRecipient(e.target.value)}
-                placeholder="alguien@gmail.com o 987 654 321"
-                className="mt-1.5 block w-full rounded-2xl border border-cart-line bg-cart-bg-elev-2 px-4 py-3.5 text-[15px] text-white outline-none transition focus:border-cart-accent focus:shadow-[0_0_0_3px_var(--color-cart-accent-soft)]"
-              />
-            </label>
-
-            <button
-              type="button"
-              onClick={async () => {
-                await transfer.mutateAsync({ ticketId: data.id, toIdentifier: recipient });
-                setOpen(false);
-                setRecipient("");
-              }}
-              disabled={transfer.isPending || !recipient}
-              className="mt-5 w-full rounded-full bg-cart-accent py-3.5 text-[14.5px] font-semibold text-cart-bg shadow-[0_8px_24px_-6px_var(--color-cart-accent-glow)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:bg-cart-bg-elev-2 disabled:text-cart-ink-3 disabled:shadow-none"
+            <motion.div
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-[460px] rounded-t-[24px] border-t border-cart-line-strong bg-cart-bg-elev p-6 lg:rounded-3xl lg:border"
+              style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 28px)" }}
+              initial={{ y: 60, opacity: 0, scale: 0.98 }}
+              animate={{ y: 0, opacity: 1, scale: 1 }}
+              exit={{ y: 60, opacity: 0, scale: 0.98 }}
+              transition={{ type: "spring", stiffness: 380, damping: 32, mass: 0.8 }}
             >
-              {transfer.isPending ? "Transfiriendo…" : "Confirmar transferencia"}
-            </button>
-            {transfer.error && (
-              <p className="mt-3 text-center text-[12px] text-rose-300">
-                {transferErrorCopy((transfer.error as Error).message)}
+              <div className="mb-4 flex justify-center lg:hidden">
+                <span className="h-1 w-9 rounded-full bg-white/15" />
+              </div>
+              <h2 className="text-[22px] font-bold tracking-[-0.02em]">
+                Enviar entrada
+              </h2>
+              <p className="mt-2 text-[13px] leading-[1.5] text-cart-ink-3">
+                Le llega por WhatsApp. La entrada <span className="font-semibold text-white">sigue siendo tuya</span> hasta
+                que la abra y la reclame.
               </p>
-            )}
-          </div>
-        </div>
-      )}
+
+              <label className="mt-5 block">
+                <span className="text-[11.5px] font-semibold uppercase tracking-[0.12em] text-cart-ink-3">
+                  WhatsApp del receptor
+                </span>
+                <input
+                  type="tel"
+                  inputMode="numeric"
+                  value={recipient}
+                  onChange={(e) => setRecipient(e.target.value.replace(/[^\d\s]/g, "").slice(0, 11))}
+                  placeholder="987 654 321"
+                  autoFocus
+                  className="mt-1.5 block w-full rounded-2xl border border-cart-line bg-cart-bg-elev-2 px-4 py-3.5 font-mono text-[15px] tracking-[0.04em] text-white outline-none transition focus:border-cart-accent focus:shadow-[0_0_0_3px_var(--color-cart-accent-soft)]"
+                />
+              </label>
+
+              {/* Eco de confirmación: a quién le estás mandando, antes de soltar */}
+              <div className="mt-2 min-h-[20px] text-[12.5px]">
+                {recipientDigits.length > 0 && recipientDigits.length < 9 ? (
+                  <span className="text-cart-ink-4">Faltan {9 - recipientDigits.length} dígitos</span>
+                ) : recipientDigits.length === 9 && recipientLookup.loading ? (
+                  <span className="text-cart-ink-3">Buscando…</span>
+                ) : recipientDigits.length === 9 && recipientLookup.result?.found ? (
+                  <span className="inline-flex items-center gap-1.5 text-emerald-300">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 8l3.5 3.5L13 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                    Le envías a <strong className="text-white">{recipientLookup.result.displayName}</strong>
+                  </span>
+                ) : recipientDigits.length === 9 ? (
+                  <span className="text-cart-ink-3">Le llegará al <strong className="text-white">{formatPhone(recipientDigits)}</strong> por WhatsApp.</span>
+                ) : null}
+              </div>
+
+              <motion.button
+                type="button"
+                whileTap={{ scale: 0.97 }}
+                onClick={async () => {
+                  try {
+                    await transfer.mutateAsync({ ticketId: data.id, toPhone: recipientDigits });
+                    setOpen(false);
+                    setRecipient("");
+                  } catch {
+                    /* el error se muestra abajo */
+                  }
+                }}
+                disabled={transfer.isPending || recipientDigits.length !== 9}
+                className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-cart-accent py-3.5 text-[14.5px] font-semibold text-cart-bg shadow-[0_8px_24px_-6px_var(--color-cart-accent-glow)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:bg-cart-bg-elev-2 disabled:text-cart-ink-3 disabled:shadow-none"
+              >
+                {transfer.isPending && (
+                  <motion.span
+                    aria-hidden
+                    className="size-4 rounded-full border-2 border-cart-bg/40 border-t-cart-bg"
+                    animate={{ rotate: 360 }}
+                    transition={{ repeat: Infinity, ease: "linear", duration: 0.7 }}
+                  />
+                )}
+                {transfer.isPending
+                  ? "Enviando…"
+                  : recipientDigits.length === 9
+                    ? `Enviar al ${formatPhone(recipientDigits)}`
+                    : "Enviar entrada"}
+              </motion.button>
+              <AnimatePresence>
+                {transfer.error && (
+                  <motion.p
+                    initial={{ opacity: 0, y: -4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    className="mt-3 text-center text-[12px] text-rose-300"
+                  >
+                    {transferErrorCopy((transfer.error as Error).message)}
+                  </motion.p>
+                )}
+              </AnimatePresence>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
+  );
+}
+
+// Héroe del activo: portada del evento con spotlight en hover (desktop),
+// estado, fecha y título sobre la imagen. Identidad del ticket como activo.
+function CoverHero({
+  event,
+  eventDate,
+  status,
+  boxLabel,
+}: {
+  event: WalletTicket["event"];
+  eventDate: string;
+  status: WalletTicket["status"];
+  boxLabel: string | null;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [spot, setSpot] = useState({ x: 50, y: 50, on: false });
+  const onMove = (e: React.PointerEvent) => {
+    const el = ref.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setSpot({ x: ((e.clientX - r.left) / r.width) * 100, y: ((e.clientY - r.top) / r.height) * 100, on: true });
+  };
+  const cover = event.coverUrl;
+  const gradient =
+    event.category && CATEGORY_BY_ID[event.category]
+      ? CATEGORY_BY_ID[event.category].gradient
+      : "linear-gradient(150deg, rgba(124,58,237,0.6), rgba(124,58,237,0.15))";
+  const dim = status !== "active";
+
+  return (
+    <div
+      ref={ref}
+      onPointerMove={onMove}
+      onPointerLeave={() => setSpot((s) => ({ ...s, on: false }))}
+      className="relative h-[180px] w-full"
+    >
+      {cover ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={cover} alt="" className={"absolute inset-0 size-full object-cover " + (dim ? "grayscale" : "")} />
+      ) : (
+        <div className="absolute inset-0" style={{ background: gradient }} />
+      )}
+      {/* Scrim fuerte abajo para que fecha/título siempre se lean,
+          aunque el flyer sea claro. */}
+      <div
+        className="absolute inset-0"
+        style={{
+          background:
+            "linear-gradient(to top, rgba(0,0,0,0.96) 0%, rgba(0,0,0,0.78) 26%, rgba(0,0,0,0.32) 55%, transparent 82%)",
+        }}
+      />
+
+      {/* Spotlight (solo desktop con hover) */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 transition-opacity duration-300"
+        style={{
+          opacity: spot.on ? 1 : 0,
+          background: `radial-gradient(200px circle at ${spot.x}% ${spot.y}%, rgba(255,255,255,0.16) 0%, transparent 24%, rgba(0,0,0,0.45) 72%)`,
+          mixBlendMode: "soft-light",
+        }}
+      />
+
+      {/* Top: estado */}
+      <div className="absolute inset-x-0 top-0 flex items-start justify-between p-4">
+        <StatusBadge status={status} />
+        {boxLabel && (
+          <span className="rounded-full bg-black/45 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.1em] text-white backdrop-blur-md">
+            Box {boxLabel}
+          </span>
+        )}
+      </div>
+
+      {/* Bottom: fecha + título — con sombra para legibilidad sobre cualquier flyer */}
+      <div className="absolute inset-x-0 bottom-0 p-4 [text-shadow:0_1px_10px_rgba(0,0,0,0.9)]">
+        <p className="text-[10.5px] font-bold uppercase tracking-[0.12em] text-[#e0d0ff] [text-shadow:0_1px_3px_rgba(0,0,0,0.95),0_2px_12px_rgba(0,0,0,0.85)]">{eventDate}</p>
+        <h1 className="mt-0.5 text-[22px] font-bold leading-tight tracking-[-0.02em] text-white">
+          {event.title}
+        </h1>
+        {event.venue && <p className="mt-0.5 text-[12px] text-white/85">{event.venue}</p>}
+      </div>
+    </div>
+  );
+}
+
+function StatusBadge({ status }: { status: WalletTicket["status"] }) {
+  if (status === "used") {
+    return (
+      <span className="rounded-full bg-black/50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/70 backdrop-blur-md">
+        Ya usada
+      </span>
+    );
+  }
+  if (status === "void" || status === "refunded") {
+    return (
+      <span className="rounded-full bg-black/50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/60 backdrop-blur-md">
+        Anulada
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-black/45 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-300 backdrop-blur-md">
+      <span className="size-1.5 rounded-full bg-emerald-400" /> Válida · firmada
+    </span>
   );
 }
 
@@ -310,10 +484,24 @@ function CountdownRing({ seconds }: { seconds: number }) {
   );
 }
 
+// 987654321 → "987 654 321"
+function formatPhone(digits: string): string {
+  const d = digits.replace(/\D/g, "");
+  if (d.length !== 9) return d;
+  return `${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6)}`;
+}
+
+// 987654321 → "987•••321" (oculta el medio en el estado pendiente)
+function maskPhone(digits: string): string {
+  const d = digits.replace(/\D/g, "");
+  if (d.length < 6) return d;
+  return `${d.slice(0, 3)}•••${d.slice(-3)}`;
+}
+
 function transferErrorCopy(raw: string): string {
   switch (raw) {
     case "transfer_window_closed":
-      return "Ya no se puede transferir — la ventana cerró cerca del evento.";
+      return "Ya no se puede enviar — la ventana cerró cerca del evento.";
     case "transfers_disabled":
       return "Este evento no permite transferencias.";
     case "transfer_limit_reached":
@@ -322,8 +510,10 @@ function transferErrorCopy(raw: string): string {
       return "No eres el dueño actual de esta entrada.";
     case "ticket_not_active":
       return "Esta entrada ya no está activa (usada o anulada).";
+    case "invalid_phone":
+      return "Revisa el número — deben ser 9 dígitos.";
     case "recipient_required":
-      return "Necesitamos a quién transferir.";
+      return "Necesitamos a quién enviarla.";
     default:
       return raw;
   }

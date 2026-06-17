@@ -6,6 +6,25 @@ import { Link, useRouter } from "@/i18n/navigation";
 import { useMyTickets } from "@/lib/tickets/hooks/useTickets";
 import { formatDate } from "@/lib/_shared/format";
 import type { WalletTicket } from "@/server/tickets/domain/Ticket";
+import { CATEGORY_BY_ID } from "../_home/categories";
+
+// Gradiente de respaldo cuando el evento no tiene portada — tinta por categoría
+// para dar variedad sin imagen.
+function fallbackGradient(ticket: WalletTicket): string {
+  const cat = ticket.event.category;
+  if (cat && CATEGORY_BY_ID[cat]) return CATEGORY_BY_ID[cat].gradient;
+  return "linear-gradient(150deg, rgba(124,58,237,0.55), rgba(124,58,237,0.12))";
+}
+
+// Hora corta para la jerarquía tipo Eventbrite (fecha + hora destacadas).
+function shortTime(iso: string, tz: string): string {
+  return new Intl.DateTimeFormat("es-PE", {
+    timeZone: tz,
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).format(new Date(iso));
+}
 
 const isToday = (iso: string, tz: string): boolean => {
   const key = (d: Date) =>
@@ -55,8 +74,8 @@ export default function WalletPage() {
           </h1>
         </header>
 
-        {/* Tabs */}
-        <div className="mt-1 flex gap-1 rounded-2xl bg-white/[0.04] p-1 shadow-[0_0_0_1px_var(--color-cart-line)_inset]">
+        {/* Tabs — píldora en móvil, subrayadas a la izquierda en desktop */}
+        <div className="mt-1 flex gap-1 rounded-2xl bg-white/[0.04] p-1 shadow-[0_0_0_1px_var(--color-cart-line)_inset] lg:mt-2 lg:gap-7 lg:rounded-none lg:border-b lg:border-cart-line lg:bg-transparent lg:p-0 lg:shadow-none">
           <TabBtn label="Próximas" count={upcoming.length} on={tab === "next"} onClick={() => setTab("next")} />
           <TabBtn label="Pasadas" count={past.length} on={tab === "past"} onClick={() => setTab("past")} />
         </div>
@@ -119,11 +138,19 @@ function TabBtn({ label, count, on, onClick }: { label: string; count: number; o
       onClick={onClick}
       className={
         "flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-[13.5px] font-semibold transition " +
-        (on ? "bg-cart-accent text-white shadow-[0_8px_24px_-12px_var(--color-cart-accent-glow)]" : "text-white/55 hover:text-white")
+        "lg:flex-none lg:justify-start lg:rounded-none lg:px-0 lg:pb-3 lg:pt-1 lg:-mb-px lg:border-b-2 " +
+        (on
+          ? "bg-cart-accent text-white shadow-[0_8px_24px_-12px_var(--color-cart-accent-glow)] lg:bg-transparent lg:text-white lg:shadow-none lg:border-cart-accent"
+          : "text-white/55 hover:text-white lg:border-transparent")
       }
     >
       {label}
-      <span className={"rounded-full px-1.5 py-px text-[10.5px] font-bold " + (on ? "bg-white/20" : "bg-white/8 text-white/50")}>
+      <span
+        className={
+          "rounded-full px-1.5 py-px text-[10.5px] font-bold " +
+          (on ? "bg-white/20 lg:bg-cart-accent/20 lg:text-cart-accent" : "bg-white/8 text-white/50")
+        }
+      >
         {count}
       </span>
     </button>
@@ -136,81 +163,123 @@ function SectionLabel({ children, className = "" }: { children: React.ReactNode;
   );
 }
 
-// Card destacada para la entrada de hoy.
+// Card destacada para la entrada de hoy — portada del evento a sangre + overlay.
 function LiveCard({ ticket, onClick }: { ticket: WalletTicket; onClick: () => void }) {
-  return (
-    <motion.button
-      type="button"
-      onClick={onClick}
-      whileTap={{ scale: 0.98 }}
-      className="relative w-full overflow-hidden rounded-[24px] border border-cart-accent/30 p-5 text-left"
-      style={{
-        background: "linear-gradient(155deg, rgba(124,58,237,0.32) 0%, rgba(124,58,237,0.08) 60%, rgba(10,10,15,0.4) 100%)",
-      }}
-    >
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -right-12 -top-12 h-44 w-44 rounded-full blur-3xl"
-        style={{ background: "radial-gradient(closest-side, rgba(184,124,255,0.4), transparent)" }}
-      />
-      <div className="relative flex items-center justify-between">
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] backdrop-blur">
-          <span className="size-1.5 animate-pulse rounded-full bg-cart-accent" /> Es hoy
-        </span>
-        <span className="text-[12px] font-semibold text-cart-accent">Mostrar QR →</span>
-      </div>
-      <h3 className="relative mt-3 text-[22px] font-bold leading-tight tracking-[-0.02em]">{ticket.event.title}</h3>
-      <p className="relative mt-1 text-[12.5px] text-white/70">
-        {formatDate(ticket.event.startsAt, ticket.event.timezone)}
-        {ticket.event.venue ? ` · ${ticket.event.venue}` : ""}
-      </p>
-      <div className="relative mt-3 flex items-center gap-1.5">
-        <Chip>{ticket.ticketType.name}</Chip>
-        {ticket.boxLabel && <Chip accent>{ticket.boxLabel}</Chip>}
-      </div>
-    </motion.button>
-  );
-}
-
-// Fila de entrada (próxima o pasada).
-function TicketRow({ ticket, onClick, past = false }: { ticket: WalletTicket; onClick: () => void; past?: boolean }) {
+  const cover = ticket.event.coverUrl;
   return (
     <motion.button
       type="button"
       onClick={onClick}
       whileTap={{ scale: 0.985 }}
-      className={
-        "flex w-full items-center gap-3 rounded-2xl border border-cart-line bg-cart-bg-elev px-3.5 py-3 text-left transition hover:border-white/20 " +
-        (past ? "opacity-65" : "")
-      }
+      className="relative block w-full overflow-hidden rounded-[24px] border border-cart-accent/30 text-left shadow-[0_24px_60px_-24px_rgba(124,58,237,0.7)]"
     >
-      {/* Marca de color por evento */}
-      <div
-        className="grid size-11 shrink-0 place-items-center rounded-xl text-[15px] font-bold"
-        style={{
-          background: past
-            ? "rgba(255,255,255,0.06)"
-            : "linear-gradient(150deg, rgba(124,58,237,0.5), rgba(124,58,237,0.15))",
-        }}
-      >
-        {ticket.event.title.charAt(0).toUpperCase()}
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-[14.5px] font-semibold leading-tight">{ticket.event.title}</p>
-        <p className="mt-0.5 truncate text-[12px] text-white/55">
-          {formatDate(ticket.event.startsAt, ticket.event.timezone)}
-        </p>
-        <div className="mt-1.5 flex items-center gap-1.5">
-          <Chip small>{ticket.ticketType.name}</Chip>
-          {ticket.boxLabel && <Chip small accent>{ticket.boxLabel}</Chip>}
-          {past && <span className="text-[11px] text-white/40">· {ticket.status === "used" ? "usada" : "finalizada"}</span>}
+      <div className="relative h-[230px] w-full sm:h-[260px]">
+        {cover ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={cover} alt="" className="absolute inset-0 size-full object-cover" />
+        ) : (
+          <div className="absolute inset-0" style={{ background: fallbackGradient(ticket) }} />
+        )}
+        {/* Oscurecido inferior para legibilidad del texto */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/92 via-black/45 to-black/20" />
+
+        {/* Fila superior: estado + acción */}
+        <div className="absolute inset-x-0 top-0 flex items-center justify-between p-4">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-black/45 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-white backdrop-blur-md">
+            <span className="size-1.5 animate-pulse rounded-full bg-cart-accent" /> Es hoy
+          </span>
+          <span className="inline-flex items-center gap-1 rounded-full bg-cart-accent px-3 py-1.5 text-[11.5px] font-semibold text-white shadow-[0_8px_24px_-8px_var(--color-cart-accent-glow-strong)]">
+            Mostrar QR
+            <svg width="13" height="13" viewBox="0 0 20 20" fill="none" aria-hidden>
+              <path d="M7 5l5 5-5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </span>
+        </div>
+
+        {/* Info inferior */}
+        <div className="absolute inset-x-0 bottom-0 p-4">
+          <h3 className="text-[24px] font-bold leading-tight tracking-[-0.02em] text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
+            {ticket.event.title}
+          </h3>
+          <p className="mt-1 text-[12.5px] text-white/85">
+            {shortTime(ticket.event.startsAt, ticket.event.timezone)}
+            {ticket.event.venue ? ` · ${ticket.event.venue}` : ""}
+          </p>
+          <div className="mt-2.5 flex items-center gap-1.5">
+            <Chip>{ticket.ticketType.name}</Chip>
+            {ticket.boxLabel && <Chip accent>{ticket.boxLabel}</Chip>}
+          </div>
         </div>
       </div>
-      {!past && (
-        <svg width="18" height="18" viewBox="0 0 20 20" fill="none" className="shrink-0 text-white/30">
-          <path d="M7 5l5 5-5 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      )}
+    </motion.button>
+  );
+}
+
+// Fila de entrada (próxima o pasada) — thumbnail de portada + info.
+function TicketRow({ ticket, onClick, past = false }: { ticket: WalletTicket; onClick: () => void; past?: boolean }) {
+  const cover = ticket.event.coverUrl;
+  return (
+    <motion.button
+      type="button"
+      onClick={onClick}
+      whileTap={{ scale: 0.99 }}
+      className={
+        "flex w-full items-stretch overflow-hidden rounded-2xl border border-cart-line bg-cart-bg-elev text-left transition hover:border-white/20 " +
+        (past ? "opacity-70" : "")
+      }
+    >
+      {/* Portada */}
+      <div className="relative w-[88px] shrink-0 sm:w-[104px]">
+        {cover ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={cover} alt="" className={"absolute inset-0 size-full object-cover " + (past ? "grayscale" : "")} />
+        ) : (
+          <div className="absolute inset-0 grid place-items-center text-[20px] font-bold text-white/90" style={{ background: fallbackGradient(ticket) }}>
+            {ticket.event.title.charAt(0).toUpperCase()}
+          </div>
+        )}
+        {/* Punto de estado: válida (verde) / pasada (gris) */}
+        <span
+          className={
+            "absolute left-2 top-2 size-2 rounded-full ring-2 ring-black/40 " +
+            (past ? "bg-white/40" : "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]")
+          }
+        />
+      </div>
+
+      {/* Troquel: notch + línea punteada, como un ticket real */}
+      <div className="relative w-0 shrink-0">
+        <span className="absolute -top-1.5 left-1/2 size-3 -translate-x-1/2 rounded-full bg-cart-bg" />
+        <span className="absolute -bottom-1.5 left-1/2 size-3 -translate-x-1/2 rounded-full bg-cart-bg" />
+        <span className="absolute inset-y-2 left-1/2 -translate-x-1/2 border-l border-dashed border-white/15" />
+      </div>
+
+      <div className="flex min-w-0 flex-1 items-center gap-3 px-3.5 py-3">
+        <div className="min-w-0 flex-1">
+          <p className="mb-0.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-cart-accent">
+            {formatDate(ticket.event.startsAt, ticket.event.timezone)}
+          </p>
+          <p className="truncate text-[15px] font-semibold leading-tight">{ticket.event.title}</p>
+          {ticket.event.venue && (
+            <p className="mt-0.5 truncate text-[12px] text-white/55">{ticket.event.venue}</p>
+          )}
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            <Chip small>{ticket.ticketType.name}</Chip>
+            {ticket.boxLabel && <Chip small accent>{ticket.boxLabel}</Chip>}
+            {!past && ticket.pendingTransferTo && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[10.5px] font-semibold text-amber-300">
+                <span className="size-1.5 rounded-full bg-amber-400" /> Enviada · esperando
+              </span>
+            )}
+            {past && <span className="text-[11px] text-white/40">· {ticket.status === "used" ? "usada" : "finalizada"}</span>}
+          </div>
+        </div>
+        {!past && (
+          <svg width="18" height="18" viewBox="0 0 20 20" fill="none" className="shrink-0 text-white/30">
+            <path d="M7 5l5 5-5 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        )}
+      </div>
     </motion.button>
   );
 }
