@@ -90,7 +90,15 @@ function EventDetailInner({ params }: Props) {
   const buyHrefAll = () => {
     const p = new URLSearchParams();
     if (promo) p.set("promo", promo);
-    if (liveUnits > 0) p.set("qty", String(liveUnits));
+    // Desglose por tipo de entrada (id:cantidad) para no perder qué eligió en
+    // cada card. Las claves "tt:" son entradas; las "zone:" (boxes) se eligen
+    // por separado en la compra, así que solo arrastramos la cantidad total.
+    const sel: string[] = [];
+    for (const [key, qty] of Object.entries(zoneQty)) {
+      if (qty > 0 && key.startsWith("tt:")) sel.push(`${key.slice(3)}:${qty}`);
+    }
+    if (sel.length) p.set("sel", sel.join(","));
+    else if (liveUnits > 0) p.set("qty", String(liveUnits));
     const qs = p.toString();
     return `/events/${slug}/buy${qs ? `?${qs}` : ""}`;
   };

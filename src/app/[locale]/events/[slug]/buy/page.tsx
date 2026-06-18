@@ -191,6 +191,24 @@ function BuyFlowInner({ params }: Props) {
       initSelRef.current = true; // el flujo de restaurar orden ya setea qty
       return;
     }
+    // ?sel = selección completa por tipo "id:cantidad,id:cantidad" (cuando se
+    // eligen varias entradas distintas en el detalle). Preserva el desglose.
+    const selParam = search.get("sel");
+    if (selParam) {
+      const next: Record<string, number> = {};
+      for (const part of selParam.split(",")) {
+        const [id, q] = part.split(":");
+        const n = parseInt(q ?? "", 10);
+        if (id && Number.isFinite(n) && n > 0 && data.ticketTypes.some((tt) => tt.id === id)) {
+          next[id] = n;
+        }
+      }
+      initSelRef.current = true;
+      if (Object.keys(next).length) {
+        setQty((prev) => (Object.keys(prev).length ? prev : next));
+      }
+      return;
+    }
     const qParam = parseInt(search.get("qty") ?? "", 10);
     if (!Number.isFinite(qParam) || qParam <= 0) {
       initSelRef.current = true;
