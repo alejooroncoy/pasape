@@ -457,12 +457,16 @@ export function EventComposer(props: EventComposerProps) {
 
   const validTickets = tickets.filter(
     (t) =>
-      t.name &&
+      t.name.trim() &&
       Number(t.capacity) > 0 &&
       (t.kind !== "box" || t.boxLabel.trim().length > 0),
   );
 
   const hasValidSpace = spaceGroups.some((g) => spaceCount(g) >= 1);
+
+  // Nombres de entrada repetidos (sin distinción de mayúsculas ni espacios):
+  // confunden al comprador (no sabe cuál elegir). Se bloquea publicar.
+  const dupTicketKeys = useMemo(() => duplicateTicketRowKeys(tickets), [tickets]);
 
   const missingFields = useMemo(() => {
     const m: string[] = [];
@@ -473,12 +477,17 @@ export function EventComposer(props: EventComposerProps) {
     return m;
   }, [title, date, time, validTickets.length, hasValidSpace]);
 
-  const ready = missingFields.length === 0;
+  const ready = missingFields.length === 0 && dupTicketKeys.size === 0;
 
   // ---------- focus al campo faltante ----------
   const focusFirstMissing = () => {
     const first = missingFields[0];
-    if (!first) return;
+    // Sin campos faltantes pero con nombres repetidos → abre el editor de
+    // entradas para que vea el error marcado en rojo.
+    if (!first) {
+      if (dupTicketKeys.size > 0) setOpenSheet("tickets");
+      return;
+    }
     const id = first as "nombre" | "fecha" | "hora" | "entradas";
     setHighlight(id);
     if (id === "nombre") {
@@ -1967,6 +1976,28 @@ function AdvancedToggle({ open, onToggle, hasContent }: { open: boolean; onToggl
   );
 }
 
+// Nombre normalizado para comparar entradas: sin espacios al borde, espacios
+// internos colapsados y en minúscula → "General", "general " y "General  "
+// cuentan como el mismo nombre.
+const normTicketName = (s: string): string => s.trim().replace(/\s+/g, " ").toLowerCase();
+
+// rowKeys de entradas (no-box) cuyo nombre se repite. Los boxes se distinguen
+// por su etiqueta, no aplica.
+function duplicateTicketRowKeys(rows: TicketRow[]): Set<string> {
+  const byName = new Map<string, string[]>();
+  for (const t of rows) {
+    if (t.kind === "box") continue;
+    const norm = normTicketName(t.name);
+    if (!norm) continue;
+    const arr = byName.get(norm) ?? [];
+    arr.push(t.rowKey);
+    byName.set(norm, arr);
+  }
+  const dups = new Set<string>();
+  for (const arr of byName.values()) if (arr.length > 1) arr.forEach((k) => dups.add(k));
+  return dups;
+}
+
 // ============================================================
 function TicketsEditor({
   tickets,
@@ -2044,13 +2075,17 @@ function TicketsEditor({
     return Array.from(map.values());
   })();
 
+  const dupKeys = duplicateTicketRowKeys(tickets);
+
   return (
     <div className="flex flex-col gap-3 pb-4">
-      {nonBoxTickets.map((t) => (
+      {nonBoxTickets.map((t) => {
+        const isDup = dupKeys.has(t.rowKey);
+        return (
         <div
           key={t.rowKey}
           className="rounded-2xl border border-cart-line bg-cart-bg-elev-2 p-3"
-          style={{ boxShadow: `inset 0 0 0 1px ${TICKET_KIND_META[t.kind].tint}` }}
+          style={{ boxShadow: `inset 0 0 0 1px ${isDup ? "rgba(244,63,94,0.55)" : TICKET_KIND_META[t.kind].tint}` }}
         >
           <div className="flex flex-col gap-0.5">
             <span className="text-[9.5px] font-semibold uppercase tracking-[0.12em] text-cart-ink-4">
@@ -2063,7 +2098,10 @@ function TicketsEditor({
               <input
                 value={t.name}
                 onChange={(e) => update(t.rowKey, { name: e.target.value })}
-                className="flex-1 bg-transparent text-[15px] font-semibold tracking-[-0.01em] text-white outline-none placeholder:text-cart-ink-3 border-b border-white/20 pb-0.5 focus:border-cart-accent transition-colors"
+                className={
+                  "flex-1 bg-transparent text-[15px] font-semibold tracking-[-0.01em] text-white outline-none placeholder:text-cart-ink-3 border-b pb-0.5 transition-colors " +
+                  (isDup ? "border-rose-400/70 focus:border-rose-400" : "border-white/20 focus:border-cart-accent")
+                }
                 placeholder="Nombre — ej. General, VIP, After"
               />
               {tickets.length > 1 && (
@@ -2080,6 +2118,11 @@ function TicketsEditor({
               )}
             </div>
           </div>
+          {isDup && (
+            <p className="mt-1.5 text-[11px] font-medium text-rose-300">
+              Ya tienes una entrada con este nombre. Ponle uno distinto (ej. General, VIP, General VIP).
+            </p>
+          )}
           <div className="mt-3 grid grid-cols-2 gap-2">
             <div className="relative">
               <Stepper
@@ -2130,7 +2173,8 @@ function TicketsEditor({
             </>
           )}
         </div>
-      ))}
+        );
+      })}
 
       {/* Un grupo por tipo de unidad (Boxes, Mesas, Lounges…), no todo en uno */}
       {boxGroups.map((group) => {
