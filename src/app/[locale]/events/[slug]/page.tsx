@@ -745,10 +745,15 @@ function FlyerCard({
               )
             }
             className={
-              // Como estaba antes (tamaño/object-fit original) — el único cambio
-              // es el border-radius del afiche.
-              "relative z-[1] mx-auto h-auto max-h-[72vh] w-auto max-w-full rounded-[20px] object-contain lg:absolute lg:inset-0 lg:size-full lg:max-h-none " +
-              (isWide ? "lg:object-cover" : "lg:p-5")
+              // El radius debe ir en el AFICHE, no en el marco. Por eso en desktop
+              // la imagen toma el ALTO del marco y su ancho natural (centrada), no
+              // size-full: así el <img> = el afiche y rounded-[20px] lo redondea.
+              // (Con size-full el afiche "flota" en el blur y queda cuadrado.)
+              // Tamaño del marco intacto (frameH original); solo cambia el radius.
+              "relative z-[1] mx-auto h-auto max-h-[72vh] w-auto max-w-full rounded-[20px] object-contain " +
+              (isWide
+                ? "lg:absolute lg:inset-0 lg:size-full lg:max-h-none lg:object-cover"
+                : "lg:absolute lg:inset-y-0 lg:left-1/2 lg:h-full lg:w-auto lg:max-h-none lg:-translate-x-1/2")
             }
             style={
               isWide
