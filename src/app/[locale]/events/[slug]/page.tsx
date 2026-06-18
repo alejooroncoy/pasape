@@ -9,7 +9,7 @@ import { useEventShowcase } from "@/lib/events/hooks/useEventShowcase";
 import { useEventPartners } from "@/lib/events/hooks/useEventPartners";
 import type { ShowcaseEvent, ShowcaseOrg } from "@/server/events/application/GetEventOrgShowcase";
 import type { EventPartner } from "@/server/events/application/EventPartners";
-import { formatMoney } from "@/lib/_shared/format";
+import { formatMoney, formatPrice } from "@/lib/_shared/format";
 import { Price } from "@/components/ui/Price";
 import { useImagePalette } from "@/lib/_shared/useImagePalette";
 import type { TicketType } from "@/server/events/domain/Event";
@@ -223,7 +223,7 @@ function EventDetailInner({ params }: Props) {
                   {allSoldOut
                     ? "Agotado"
                     : liveUnits > 0
-                      ? `${liveUnits} ${liveUnits === 1 ? "entrada" : "entradas"} · ${formatMoney(liveTotalCents, "PEN")}`
+                      ? `${liveUnits} ${liveUnits === 1 ? "entrada" : "entradas"} · ${formatPrice(liveTotalCents, "PEN")}`
                       : "Comprar entradas"}
                 </button>
 
@@ -690,7 +690,7 @@ function FlyerCard({
 
   // Alto del marco en desktop según el ratio: retrato → alto, apaisado →
   // banner, cuadrado/intermedio → estándar. Acotado a un rango.
-  const frameH = ratio == null ? 520 : ratio < 0.85 ? 620 : ratio > 1.3 ? 400 : 520;
+  const frameH = ratio == null ? 460 : ratio < 0.85 ? 540 : ratio > 1.3 ? 360 : 460;
 
   // Apaisado → el flyer llena el marco a sangre (object-cover): el recorte es
   // mínimo porque su ratio ya es ancho, y evita las barras de blur laterales.
@@ -745,15 +745,10 @@ function FlyerCard({
               )
             }
             className={
-              "relative z-[1] mx-auto h-auto max-h-[72vh] w-auto max-w-full rounded-[20px] object-contain " +
-              // Desktop apaisado: llena el marco a sangre (object-cover).
-              // Desktop vertical/cuadrado: la imagen toma el ALTO del marco y su
-              // ancho natural (no size-full), centrada — así el <img> es del
-              // tamaño del afiche y el rounded-[20px] redondea el afiche real
-              // (con size-full el radius caía en el letterbox de blur).
-              (isWide
-                ? "lg:absolute lg:inset-0 lg:size-full lg:max-h-none lg:object-cover"
-                : "lg:absolute lg:inset-y-0 lg:left-1/2 lg:h-full lg:w-auto lg:max-h-none lg:-translate-x-1/2")
+              // Como estaba antes (tamaño/object-fit original) — el único cambio
+              // es el border-radius del afiche.
+              "relative z-[1] mx-auto h-auto max-h-[72vh] w-auto max-w-full rounded-[20px] object-contain lg:absolute lg:inset-0 lg:size-full lg:max-h-none " +
+              (isWide ? "lg:object-cover" : "lg:p-5")
             }
             style={
               isWide

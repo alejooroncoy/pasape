@@ -12,7 +12,7 @@ import { useEvent } from "@/lib/events/hooks/useEvents";
 import { useBuyTickets } from "@/lib/tickets/hooks/useTickets";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { useDniLookup } from "@/lib/identity/hooks/useDniLookup";
-import { formatMoney } from "@/lib/_shared/format";
+import { formatMoney, formatPrice } from "@/lib/_shared/format";
 import { Price } from "@/components/ui/Price";
 import { CardForm } from "@/components/payments/CardForm";
 import { YapeForm } from "@/components/payments/YapeForm";
@@ -355,7 +355,7 @@ function BuyFlowInner({ params }: Props) {
     if (buy.isPending) return "Preparando…";
     if (phase === "pick") {
       if (!pickValid) return "Elige una entrada";
-      return compact ? `Continuar · ${formatMoney(total)}` : `Continuar · ${formatMoney(total)}`;
+      return `Continuar · ${formatPrice(total)}`;
     }
     if (phase === "data") {
       if (!dataValid) return "Completa tus datos";
