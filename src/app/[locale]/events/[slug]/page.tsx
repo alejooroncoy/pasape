@@ -737,7 +737,7 @@ function FlyerCard({
           "relative w-full lg:[height:var(--fh)] " +
           (event.coverUrl ? "" : "aspect-[16/10] lg:aspect-auto")
         }
-        style={{ ["--fh" as string]: `${frameH}px` }}
+        style={{ ["--fh" as string]: `${frameH + 48}px` }}
       >
         {event.coverUrl && (
           // Mobile: el card toma el ratio natural del flyer (vertical u
@@ -746,22 +746,22 @@ function FlyerCard({
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={event.coverUrl}
-            alt=""
+            alt={event.title}
             onLoad={(e) =>
               setRatio(
                 e.currentTarget.naturalWidth / e.currentTarget.naturalHeight,
               )
             }
             className={
-              // El radius debe ir en el AFICHE, no en el marco. Por eso en desktop
-              // la imagen toma el ALTO del marco y su ancho natural (centrada), no
-              // size-full: así el <img> = el afiche y rounded-[20px] lo redondea.
-              // (Con size-full el afiche "flota" en el blur y queda cuadrado.)
-              // Tamaño del marco intacto (frameH original); solo cambia el radius.
-              "relative z-[1] mx-auto h-auto max-h-[72vh] w-auto max-w-full rounded-[20px] object-contain " +
+              // El radius va en el AFICHE, no en el marco. En desktop la imagen
+              // toma el alto del marco MENOS un margen (inset-y-6) y su ancho
+              // natural, centrada → el afiche mantiene su tamaño (el marco creció
+              // +48px para compensar) y deja respiro arriba/abajo sin tocar el
+              // recuadro. En móvil, my-5 da el mismo respiro.
+              "relative z-[1] mx-auto my-5 h-auto max-h-[72vh] w-auto max-w-full rounded-[20px] object-contain lg:my-0 " +
               (isWide
                 ? "lg:absolute lg:inset-0 lg:size-full lg:max-h-none lg:object-cover"
-                : "lg:absolute lg:inset-y-0 lg:left-1/2 lg:h-full lg:w-auto lg:max-h-none lg:-translate-x-1/2")
+                : "lg:absolute lg:inset-y-6 lg:left-1/2 lg:w-auto lg:max-h-none lg:-translate-x-1/2")
             }
             style={
               isWide
