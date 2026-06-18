@@ -9,7 +9,7 @@ import { useEventShowcase } from "@/lib/events/hooks/useEventShowcase";
 import { useEventPartners } from "@/lib/events/hooks/useEventPartners";
 import type { ShowcaseEvent, ShowcaseOrg } from "@/server/events/application/GetEventOrgShowcase";
 import type { EventPartner } from "@/server/events/application/EventPartners";
-import { formatMoney } from "@/lib/_shared/format";
+import { formatMoney, formatPrice } from "@/lib/_shared/format";
 import { useImagePalette } from "@/lib/_shared/useImagePalette";
 import type { TicketType } from "@/server/events/domain/Event";
 import { VenueLayoutModal } from "@/components/ui/VenueLayoutModal";
@@ -45,7 +45,7 @@ function EventDetailInner({ params }: Props) {
   const router = useRouter();
 
   const groups = useMemo(
-    () => (data ? groupTicketTypesByZone(data.ticketTypes) : []),
+    () => (data ? groupForDetail(data.ticketTypes) : []),
     [data],
   );
 
@@ -64,21 +64,24 @@ function EventDetailInner({ params }: Props) {
   const liveTotalCents = useMemo(
     () =>
       groups.reduce((sum, group) => {
-        const key = group.zone ?? "__ungrouped__";
-        const qty = zoneQty[key] ?? 0;
+        const qty = zoneQty[detailGroupKey(group)] ?? 0;
         const price = summarizeZone(group).minPriceCents ?? 0;
         return sum + qty * price;
       }, 0),
     [groups, zoneQty],
   );
 
-  const buyHref = (zone?: string | null) => {
+  const buyHref = (group?: TicketGroup) => {
     const p = new URLSearchParams();
     if (promo) p.set("promo", promo);
-    if (zone) p.set("zone", zone);
-    const key = zone ?? "__ungrouped__";
-    const qty = zoneQty[key];
-    if (qty) p.set("qty", String(qty));
+    if (group) {
+      const single = group.items.length === 1 ? group.items[0] : null;
+      // Entrada convencional → pre-selecciona por id; box → por zona.
+      if (single && single.kind !== "box") p.set("tt", single.id);
+      else if (group.zone) p.set("zone", group.zone);
+      const qty = zoneQty[detailGroupKey(group)];
+      if (qty) p.set("qty", String(qty));
+    }
     const qs = p.toString();
     return `/events/${slug}/buy${qs ? `?${qs}` : ""}`;
   };
@@ -168,10 +171,10 @@ function EventDetailInner({ params }: Props) {
               <ZoneCardList
                 groups={groups}
                 zoneQty={zoneQty}
-                onZoneQtyChange={(zone, qty) =>
-                  setZoneQty((prev) => ({ ...prev, [zone ?? "__ungrouped__"]: qty }))
+                onZoneQtyChange={(key, qty) =>
+                  setZoneQty((prev) => ({ ...prev, [key]: qty }))
                 }
-                onPickZone={(zone) => router.push(buyHref(zone) as never)}
+                onPickZone={(group) => router.push(buyHref(group) as never)}
               />
             </div>
 
@@ -203,10 +206,10 @@ function EventDetailInner({ params }: Props) {
                     groups={groups}
                     compact
                     zoneQty={zoneQty}
-                    onZoneQtyChange={(zone, qty) =>
-                      setZoneQty((prev) => ({ ...prev, [zone ?? "__ungrouped__"]: qty }))
+                    onZoneQtyChange={(key, qty) =>
+                      setZoneQty((prev) => ({ ...prev, [key]: qty }))
                     }
-                    onPickZone={(zone) => router.push(buyHref(zone) as never)}
+                    onPickZone={(group) => router.push(buyHref(group) as never)}
                   />
                 </div>
 
@@ -326,7 +329,7 @@ function MoreFromOrg({ org, events }: { org: ShowcaseOrg; events: ShowcaseEvent[
               </div>
               {e.minPriceCents != null && (
                 <div className="mt-0.5 text-[12.5px] font-semibold">
-                  Desde {formatMoney(e.minPriceCents, "PEN")}
+                  {e.minPriceCents <= 0 ? "Gratis" : `Desde ${formatMoney(e.minPriceCents, "PEN")}`}
                 </div>
               )}
             </div>
@@ -382,6 +385,29 @@ function AvailabilityHeader({
 
 /* ============================== Zone cards ============================== */
 
+// Agrupación para el detalle: las entradas convencionales se muestran UNA POR
+// TIPO (titulada por su nombre — "General", "VIP", "General VIP"). Ya no se
+// agrupan por zona (concepto removido); el nombre se explica solo. Los boxes sí
+// se siguen agrupando en una grilla.
+function groupForDetail(items: TicketType[]): TicketGroup[] {
+  const out: TicketGroup[] = [];
+  const boxes: TicketType[] = [];
+  for (const tt of items) {
+    if (tt.kind === "box") boxes.push(tt);
+    else out.push({ zone: tt.zone, items: [tt] });
+  }
+  for (const g of groupTicketTypesByZone(boxes)) out.push(g);
+  return out;
+}
+
+// Key estable de selección por grupo: por id de entrada (cada tipo su card) o,
+// para boxes, por zona. Reemplaza la vieja key por zona (colisionaba cuando
+// varias entradas no tenían zona).
+function detailGroupKey(g: TicketGroup): string {
+  const single = g.items.length === 1 ? g.items[0] : null;
+  return single && single.kind !== "box" ? `tt:${single.id}` : `zone:${g.zone ?? "__box__"}`;
+}
+
 function ZoneCardList({
   groups,
   compact,
@@ -392,25 +418,25 @@ function ZoneCardList({
   groups: TicketGroup[];
   compact?: boolean;
   zoneQty?: Record<string, number>;
-  onZoneQtyChange?: (zone: string | null, qty: number) => void;
-  onPickZone: (zone: string | null) => void;
+  onZoneQtyChange?: (key: string, qty: number) => void;
+  onPickZone: (group: TicketGroup) => void;
 }) {
   return (
     <div className={"flex flex-col " + (compact ? "gap-2" : "gap-2.5")}>
-      {groups.map((group, idx) => {
-        const key = group.zone ?? "__ungrouped__";
+      {groups.map((group) => {
+        const key = detailGroupKey(group);
         const summary = summarizeZone(group);
         const maxQty = summary.freeBoxes + summary.freeSeats;
         return (
           <ZoneCard
-            key={group.zone ?? `__ungrouped__-${idx}`}
+            key={key}
             group={group}
             summary={summary}
             compact={compact}
             qty={zoneQty?.[key] ?? 0}
             maxQty={maxQty}
-            onQtyChange={onZoneQtyChange ? (q) => onZoneQtyChange(group.zone, q) : undefined}
-            onClick={() => onPickZone(group.zone)}
+            onQtyChange={onZoneQtyChange ? (q) => onZoneQtyChange(key, q) : undefined}
+            onClick={() => onPickZone(group)}
           />
         );
       })}
@@ -435,7 +461,13 @@ function ZoneCard({
   onQtyChange?: (qty: number) => void;
   onClick: () => void;
 }) {
-  const zoneLabel = group.zone ?? "Entradas generales";
+  // Título de la card: el NOMBRE de la entrada (una card por tipo). Los boxes
+  // mantienen su etiqueta de grupo.
+  const single = group.items.length === 1 ? group.items[0] : null;
+  const zoneLabel =
+    single && single.kind !== "box"
+      ? single.name
+      : group.zone ?? "Entradas generales";
   const presaleItem = group.items.find((i) => activePricing(i).isPresale);
   const ap = presaleItem ? activePricing(presaleItem) : null;
 
@@ -509,7 +541,7 @@ function ZoneCard({
             }
           >
             {summary.minPriceCents !== null
-              ? formatMoney(summary.minPriceCents, summary.currency)
+              ? formatPrice(summary.minPriceCents, summary.currency)
               : "—"}
           </span>
         </div>

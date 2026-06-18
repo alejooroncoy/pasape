@@ -12,7 +12,7 @@ import { useEvent } from "@/lib/events/hooks/useEvents";
 import { useBuyTickets } from "@/lib/tickets/hooks/useTickets";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { useDniLookup } from "@/lib/identity/hooks/useDniLookup";
-import { formatMoney } from "@/lib/_shared/format";
+import { formatMoney, formatPrice } from "@/lib/_shared/format";
 import { CardForm } from "@/components/payments/CardForm";
 import { YapeForm } from "@/components/payments/YapeForm";
 import { PresaleCountdown, shouldCountdown } from "@/components/ui/PresaleCountdown";
@@ -195,11 +195,15 @@ function BuyFlowInner({ params }: Props) {
       initSelRef.current = true;
       return;
     }
+    // ?tt = id exacto del tipo de entrada (una card por entrada en el detalle).
+    // Fallback: ?zone (boxes) o la primera entrada.
+    const ttParam = search.get("tt");
     const zoneParam = search.get("zone");
-    const candidates = data.ticketTypes.filter((tt) =>
-      zoneParam ? tt.zone === zoneParam : tt.zone === null,
-    );
-    const target = candidates[0] ?? data.ticketTypes[0];
+    const target = ttParam
+      ? data.ticketTypes.find((tt) => tt.id === ttParam)
+      : (data.ticketTypes.filter((tt) =>
+          zoneParam ? tt.zone === zoneParam : tt.zone === null,
+        )[0] ?? data.ticketTypes[0]);
     if (target) {
       initSelRef.current = true;
       setQty((prev) => (Object.keys(prev).length ? prev : { [target.id]: qParam }));
@@ -1026,8 +1030,10 @@ function BoxGrid({
         </p>
         {commonPriceCents !== null && (
           <p className="text-[14px] font-bold tracking-[-0.01em] text-white">
-            {formatMoney(commonPriceCents, currency)}
-            <span className="ml-0.5 text-[10.5px] font-medium text-cart-ink-3">/{noun}</span>
+            {formatPrice(commonPriceCents, currency)}
+            {commonPriceCents > 0 && (
+              <span className="ml-0.5 text-[10.5px] font-medium text-cart-ink-3">/{noun}</span>
+            )}
           </p>
         )}
       </div>
@@ -1067,7 +1073,7 @@ function BoxGrid({
               </span>
               {showPriceOnTile && !sold && (
                 <span className="mt-0.5 text-[9.5px] font-medium opacity-80">
-                  {formatMoney(tt.priceCents, tt.currency)}
+                  {formatPrice(tt.priceCents, tt.currency)}
                 </span>
               )}
               {sold && (
@@ -1221,7 +1227,7 @@ function TicketCard({
             </div>
           )}
           <div className="text-[16px] font-bold tracking-[-0.01em]">
-            {formatMoney(ap.priceCents, tt.currency)}
+            {formatPrice(ap.priceCents, tt.currency)}
           </div>
         </div>
       </div>
@@ -1609,7 +1615,7 @@ function OrderSummary({
                 {tt.name} <span className="text-cart-ink-3">× {qty[tt.id]}</span>
               </span>
               <span className="text-[13px] font-semibold tabular-nums">
-                {formatMoney(tt.priceCents * (qty[tt.id] ?? 0), tt.currency)}
+                {formatPrice(tt.priceCents * (qty[tt.id] ?? 0), tt.currency)}
               </span>
             </div>
           ))}

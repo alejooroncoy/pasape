@@ -13,6 +13,14 @@ export const formatMoney = (
   locale: string = "es-PE",
 ): string => Money.format(cents, currency, locale);
 
+// Precio de una entrada para mostrar: 0 → "Gratis" (nunca "S/ 0", confunde).
+// Usar en cards/listas de entradas; para totales/sumas seguir con formatMoney.
+export const formatPrice = (
+  cents: number,
+  currency: string = "PEN",
+  locale: string = "es-PE",
+): string => (cents <= 0 ? "Gratis" : Money.format(cents, currency, locale));
+
 export const formatDate = (
   date: Date | string,
   timezone: string = "America/Lima",
