@@ -742,10 +742,15 @@ function FlyerCard({
               )
             }
             className={
-              "relative z-[1] mx-auto h-auto max-h-[72vh] w-auto max-w-full rounded-2xl object-contain lg:absolute lg:inset-0 lg:size-full lg:max-h-none " +
-              // Apaisado: llena a sangre y el contenedor lo recorta redondeado
-              // (sin radius propio). Vertical/cuadrado: radius en el afiche.
-              (isWide ? "lg:rounded-none lg:object-cover" : "lg:p-5")
+              "relative z-[1] mx-auto h-auto max-h-[72vh] w-auto max-w-full rounded-[20px] object-contain " +
+              // Desktop apaisado: llena el marco a sangre (object-cover).
+              // Desktop vertical/cuadrado: la imagen toma el ALTO del marco y su
+              // ancho natural (no size-full), centrada — así el <img> es del
+              // tamaño del afiche y el rounded-[20px] redondea el afiche real
+              // (con size-full el radius caía en el letterbox de blur).
+              (isWide
+                ? "lg:absolute lg:inset-0 lg:size-full lg:max-h-none lg:object-cover"
+                : "lg:absolute lg:inset-y-0 lg:left-1/2 lg:h-full lg:w-auto lg:max-h-none lg:-translate-x-1/2")
             }
             style={
               isWide
