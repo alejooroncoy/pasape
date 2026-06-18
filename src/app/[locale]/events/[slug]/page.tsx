@@ -1234,14 +1234,42 @@ function SidebarMoreFromOrg({ org, events }: { org: ShowcaseOrg; events: Showcas
 
 function PageSkeleton() {
   return (
-    <div className="min-h-dvh bg-cart-bg">
-      <div className="aspect-[16/10] w-full animate-pulse bg-cart-bg-elev sm:aspect-[16/8] lg:aspect-[1120/440] lg:rounded-b-[36px]" />
-      <div className="mx-auto max-w-[1120px] px-5 pt-6 lg:px-8 lg:pt-8">
-        <div className="h-7 w-2/3 animate-pulse rounded-lg bg-cart-bg-elev" />
-        <div className="mt-3 h-4 w-1/3 animate-pulse rounded-lg bg-cart-bg-elev" />
-        <div className="mt-8 space-y-2">
-          <div className="h-14 animate-pulse rounded-2xl bg-cart-bg-elev" />
-          <div className="h-14 animate-pulse rounded-2xl bg-cart-bg-elev" />
+    <div className="min-h-dvh bg-cart-bg text-white">
+      <div className="mx-auto w-full max-w-[1120px] px-5 lg:px-8">
+        <div className="grid gap-8 pt-4 lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-10 lg:pt-8">
+          {/* Columna izquierda: flyer + título + entradas (móvil) */}
+          <div className="pb-12">
+            {/* Flyer redondeado (igual que FlyerCard) */}
+            <div className="aspect-[4/5] w-full animate-pulse rounded-[24px] bg-cart-bg-elev ring-1 ring-white/10 sm:aspect-[16/11] lg:aspect-[16/12] lg:rounded-[28px]" />
+
+            {/* Título + meta (solo móvil, como en el layout real) */}
+            <div className="pt-5 lg:hidden">
+              <div className="h-8 w-3/4 animate-pulse rounded-lg bg-cart-bg-elev" />
+              <div className="mt-3 h-4 w-1/2 animate-pulse rounded bg-cart-bg-elev" />
+              <div className="mt-2 h-4 w-1/3 animate-pulse rounded bg-cart-bg-elev" />
+            </div>
+
+            {/* Entradas (solo móvil) */}
+            <div className="mt-8 lg:hidden">
+              <div className="h-5 w-28 animate-pulse rounded bg-cart-bg-elev" />
+              <div className="mt-4 flex flex-col gap-2.5">
+                <div className="h-[76px] animate-pulse rounded-2xl bg-cart-bg-elev" />
+                <div className="h-[76px] animate-pulse rounded-2xl bg-cart-bg-elev" />
+              </div>
+            </div>
+          </div>
+
+          {/* Sidebar (desktop): card de compra */}
+          <aside className="hidden lg:block">
+            <div className="sticky top-20 rounded-3xl border border-cart-line bg-cart-bg-elev p-5">
+              <div className="h-4 w-1/2 animate-pulse rounded bg-cart-bg-elev-2" />
+              <div className="mt-4 flex flex-col gap-2.5">
+                <div className="h-[76px] animate-pulse rounded-2xl bg-cart-bg-elev-2" />
+                <div className="h-[76px] animate-pulse rounded-2xl bg-cart-bg-elev-2" />
+              </div>
+              <div className="mt-5 h-12 animate-pulse rounded-full bg-cart-bg-elev-2" />
+            </div>
+          </aside>
         </div>
       </div>
     </div>
