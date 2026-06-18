@@ -12,7 +12,8 @@ import { useEvent } from "@/lib/events/hooks/useEvents";
 import { useBuyTickets } from "@/lib/tickets/hooks/useTickets";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { useDniLookup } from "@/lib/identity/hooks/useDniLookup";
-import { formatMoney, formatPrice } from "@/lib/_shared/format";
+import { formatMoney } from "@/lib/_shared/format";
+import { Price } from "@/components/ui/Price";
 import { CardForm } from "@/components/payments/CardForm";
 import { YapeForm } from "@/components/payments/YapeForm";
 import { PresaleCountdown, shouldCountdown } from "@/components/ui/PresaleCountdown";
@@ -1030,7 +1031,7 @@ function BoxGrid({
         </p>
         {commonPriceCents !== null && (
           <p className="text-[14px] font-bold tracking-[-0.01em] text-white">
-            {formatPrice(commonPriceCents, currency)}
+            <Price cents={commonPriceCents} currency={currency} />
             {commonPriceCents > 0 && (
               <span className="ml-0.5 text-[10.5px] font-medium text-cart-ink-3">/{noun}</span>
             )}
@@ -1072,9 +1073,7 @@ function BoxGrid({
                 {tileLabel(tt)}
               </span>
               {showPriceOnTile && !sold && (
-                <span className="mt-0.5 text-[9.5px] font-medium opacity-80">
-                  {formatPrice(tt.priceCents, tt.currency)}
-                </span>
+                <Price cents={tt.priceCents} currency={tt.currency} className="mt-0.5 block text-[9.5px] font-medium opacity-80" />
               )}
               {sold && (
                 <span className="absolute inset-x-2 top-1/2 h-px -translate-y-1/2 -rotate-45 bg-cart-ink-4/60" />
@@ -1226,9 +1225,7 @@ function TicketCard({
               {formatMoney(ap.basePriceCents, tt.currency)}
             </div>
           )}
-          <div className="text-[16px] font-bold tracking-[-0.01em]">
-            {formatPrice(ap.priceCents, tt.currency)}
-          </div>
+          <Price cents={ap.priceCents} currency={tt.currency} className="block text-[16px] font-bold tracking-[-0.01em]" />
         </div>
       </div>
       <div className="mt-4 flex items-center justify-between">
@@ -1615,7 +1612,7 @@ function OrderSummary({
                 {tt.name} <span className="text-cart-ink-3">× {qty[tt.id]}</span>
               </span>
               <span className="text-[13px] font-semibold tabular-nums">
-                {formatPrice(tt.priceCents * (qty[tt.id] ?? 0), tt.currency)}
+                <Price cents={tt.priceCents * (qty[tt.id] ?? 0)} currency={tt.currency} />
               </span>
             </div>
           ))}

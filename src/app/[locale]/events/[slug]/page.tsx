@@ -9,7 +9,8 @@ import { useEventShowcase } from "@/lib/events/hooks/useEventShowcase";
 import { useEventPartners } from "@/lib/events/hooks/useEventPartners";
 import type { ShowcaseEvent, ShowcaseOrg } from "@/server/events/application/GetEventOrgShowcase";
 import type { EventPartner } from "@/server/events/application/EventPartners";
-import { formatMoney, formatPrice } from "@/lib/_shared/format";
+import { formatMoney } from "@/lib/_shared/format";
+import { Price } from "@/components/ui/Price";
 import { useImagePalette } from "@/lib/_shared/useImagePalette";
 import type { TicketType } from "@/server/events/domain/Event";
 import { VenueLayoutModal } from "@/components/ui/VenueLayoutModal";
@@ -540,9 +541,11 @@ function ZoneCard({
               (summary.isAllSoldOut ? "text-cart-ink-3" : "")
             }
           >
-            {summary.minPriceCents !== null
-              ? formatPrice(summary.minPriceCents, summary.currency)
-              : "—"}
+            {summary.minPriceCents !== null ? (
+              <Price cents={summary.minPriceCents} currency={summary.currency} />
+            ) : (
+              "—"
+            )}
           </span>
         </div>
         {/* Contador +/- cuando hay onQtyChange y no está agotado */}
@@ -687,7 +690,7 @@ function FlyerCard({
 
   // Alto del marco en desktop según el ratio: retrato → alto, apaisado →
   // banner, cuadrado/intermedio → estándar. Acotado a un rango.
-  const frameH = ratio == null ? 460 : ratio < 0.85 ? 540 : ratio > 1.3 ? 360 : 460;
+  const frameH = ratio == null ? 520 : ratio < 0.85 ? 620 : ratio > 1.3 ? 400 : 520;
 
   // Apaisado → el flyer llena el marco a sangre (object-cover): el recorte es
   // mínimo porque su ratio ya es ancho, y evita las barras de blur laterales.
