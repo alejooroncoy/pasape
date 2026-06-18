@@ -6,8 +6,17 @@ import type { Order, Ticket, TransferOutcome, WalletTicket } from "@/server/tick
 
 export const myTicketsKey = ["tickets", "mine"] as const;
 
+// gcTime largo (7 días): mantiene la wallet en cache para que el persister la
+// conserve → disponible offline y sin parpadeo. Coincide con el maxAge del
+// persister (ver query-client.tsx).
+const PERSIST_GC_TIME = 7 * 24 * 60 * 60 * 1000;
+
 export const useMyTickets = () =>
-  useQuery({ queryKey: myTicketsKey, queryFn: () => api.get<WalletTicket[]>("/api/tickets/my") });
+  useQuery({
+    queryKey: myTicketsKey,
+    queryFn: () => api.get<WalletTicket[]>("/api/tickets/my"),
+    gcTime: PERSIST_GC_TIME,
+  });
 
 export const useTicket = (id: string, linkToken?: string | null) =>
   useQuery({
@@ -17,6 +26,7 @@ export const useTicket = (id: string, linkToken?: string | null) =>
       return api.get<WalletTicket>(`/api/tickets/${id}${qs}`);
     },
     enabled: !!id,
+    gcTime: PERSIST_GC_TIME,
   });
 
 export type GuestBuyer = {

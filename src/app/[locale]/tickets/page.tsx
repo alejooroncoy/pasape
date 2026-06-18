@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { motion } from "motion/react";
 import { Link, useRouter } from "@/i18n/navigation";
 import { useMyTickets } from "@/lib/tickets/hooks/useTickets";
+import { useOnline } from "@/lib/_shared/useOnline";
 import { formatDate } from "@/lib/_shared/format";
 import type { WalletTicket } from "@/server/tickets/domain/Ticket";
 import { CATEGORY_BY_ID } from "../_home/categories";
@@ -34,6 +35,7 @@ const isToday = (iso: string, tz: string): boolean => {
 
 export default function WalletPage() {
   const tickets = useMyTickets();
+  const online = useOnline();
   const router = useRouter();
   const [tab, setTab] = useState<"next" | "past">("next");
 
@@ -64,6 +66,14 @@ export default function WalletPage() {
       />
 
       <div className="relative z-[1] mx-auto w-full max-w-[640px] px-4 pb-[96px] pt-[max(16px,env(safe-area-inset-top))] sm:px-6">
+        {/* Aviso offline: las entradas se ven igual (guardadas en el device) */}
+        {!online && (
+          <div className="mt-2 flex items-center gap-2 rounded-xl border border-amber-400/25 bg-amber-400/[0.07] px-3 py-2 text-[12px] text-amber-200">
+            <span className="size-1.5 rounded-full bg-amber-400" />
+            Sin conexión · mostramos tus entradas guardadas. Tu QR funciona igual.
+          </div>
+        )}
+
         {/* Header */}
         <header className="py-3">
           <p className="text-[12px] font-medium text-white/50">Mis entradas</p>

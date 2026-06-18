@@ -8,6 +8,7 @@ import { QrSquare } from "@/components/design";
 import { useTicket, useTransferTicket, useCancelTransfer } from "@/lib/tickets/hooks/useTickets";
 import { useProfileLookup } from "@/lib/identity/hooks/useProfileLookup";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
+import { useOnline } from "@/lib/_shared/useOnline";
 import { useLocalRotatingQr } from "@/lib/tickets/hooks/useLocalRotatingQr";
 import { useBoxForTicket, useRealtimeBox } from "@/lib/boxes/hooks/useBoxes";
 import { formatDate } from "@/lib/_shared/format";
@@ -22,6 +23,7 @@ export default function TicketDetailPage({ params }: Props) {
   const { data, isLoading, error } = useTicket(id);
   const transfer = useTransferTicket();
   const cancelTransfer = useCancelTransfer();
+  const online = useOnline();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [recipient, setRecipient] = useState("");
@@ -141,9 +143,11 @@ export default function TicketDetailPage({ params }: Props) {
               <button
                 type="button"
                 onClick={() => setOpen(true)}
-                className="rounded-full bg-white/10 px-3.5 py-2 text-[12px] font-semibold text-white transition hover:bg-white/15"
+                disabled={!online}
+                title={online ? undefined : "Necesitas conexión para transferir"}
+                className="rounded-full bg-white/10 px-3.5 py-2 text-[12px] font-semibold text-white transition hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                Enviar
+                Transferir
               </button>
             )}
           </div>
@@ -172,7 +176,8 @@ export default function TicketDetailPage({ params }: Props) {
                   <button
                     type="button"
                     onClick={() => cancelTransfer.mutate({ ticketId: data.id })}
-                    disabled={cancelTransfer.isPending}
+                    disabled={cancelTransfer.isPending || !online}
+                    title={online ? undefined : "Necesitas conexión para cancelar"}
                     className="text-[12.5px] font-semibold text-amber-300 transition hover:text-amber-200 disabled:opacity-50"
                   >
                     {cancelTransfer.isPending ? "Recuperando…" : "Cancelar envío"}

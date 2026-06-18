@@ -1,36 +1,14 @@
 import type { NextConfig } from "next";
 import createNextIntlPlugin from "next-intl/plugin";
-import withPWAInit from "next-pwa";
 import { withSentryConfig } from "@sentry/nextjs";
 
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
-const withPWA = withPWAInit({
-  dest: "public",
-  register: true,
-  skipWaiting: true,
-  disable: process.env.NODE_ENV === "development",
-  runtimeCaching: [
-    {
-      urlPattern: /^https?:\/\/.*\/api\/scanning/,
-      handler: "NetworkOnly",
-    },
-    {
-      urlPattern: /^https?:\/\/.*\/api\/events\/.*\/scan-cache/,
-      handler: "NetworkFirst",
-      options: { cacheName: "scan-cache", networkTimeoutSeconds: 5 },
-    },
-    {
-      urlPattern: ({ request }: { request: Request }) => request.mode === "navigate",
-      handler: "NetworkFirst",
-      options: { cacheName: "pages", networkTimeoutSeconds: 3 },
-    },
-    {
-      urlPattern: /\.(?:js|css|woff2?|png|jpg|svg|ico)$/,
-      handler: "StaleWhileRevalidate",
-      options: { cacheName: "assets" },
-    },
-  ],
-});
+
+// Service worker: NO usamos plugins de PWA atados al bundler (next-pwa/@serwist
+// son de webpack y no corren bajo Turbopack, el build por defecto de Next 16).
+// El SW vive escrito a mano en public/sw.js y se registra desde
+// ServiceWorkerRegister. Cachea en runtime (shell + assets) → la wallet carga
+// offline; los datos los aporta la persistencia de React Query.
 
 const nextConfig: NextConfig = {
   // Permite que el dev server acepte requests proxied desde ngrok (HTTPS).
@@ -56,7 +34,7 @@ const nextConfig: NextConfig = {
 // Sentry envuelve por fuera de PWA/intl. El authToken se lee de
 // .env.sentry-build-plugin (gitignored); sin él, el plugin solo omite la subida
 // de sourcemaps con un warning (no rompe el build).
-export default withSentryConfig(withPWA(withNextIntl(nextConfig)), {
+export default withSentryConfig(withNextIntl(nextConfig), {
   org: "pasape",
   project: "javascript-nextjs",
   authToken: process.env.SENTRY_AUTH_TOKEN,
