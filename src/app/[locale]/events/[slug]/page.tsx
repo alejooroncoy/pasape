@@ -690,7 +690,7 @@ function FlyerCard({
 
   // Alto del marco en desktop según el ratio: retrato → alto, apaisado →
   // banner, cuadrado/intermedio → estándar. Acotado a un rango.
-  const frameH = ratio == null ? 460 : ratio < 0.85 ? 540 : ratio > 1.3 ? 360 : 460;
+  const frameH = ratio == null ? 400 : ratio < 0.85 ? 460 : ratio > 1.3 ? 300 : 400;
 
   // Apaisado → el flyer llena el marco a sangre (object-cover): el recorte es
   // mínimo porque su ratio ya es ancho, y evita las barras de blur laterales.
