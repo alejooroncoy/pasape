@@ -690,7 +690,7 @@ function FlyerCard({
 
   // Alto del marco en desktop según el ratio: retrato → alto, apaisado →
   // banner, cuadrado/intermedio → estándar. Acotado a un rango.
-  const frameH = ratio == null ? 400 : ratio < 0.85 ? 460 : ratio > 1.3 ? 300 : 400;
+  const frameH = ratio == null ? 360 : ratio < 0.85 ? 410 : ratio > 1.3 ? 270 : 360;
 
   // Apaisado → el flyer llena el marco a sangre (object-cover): el recorte es
   // mínimo porque su ratio ya es ancho, y evita las barras de blur laterales.
@@ -751,11 +751,9 @@ function FlyerCard({
               // (Con size-full el afiche "flota" en el blur y queda cuadrado.)
               // Tamaño del marco intacto (frameH original); solo cambia el radius.
               "relative z-[1] mx-auto h-auto max-h-[72vh] w-auto max-w-full rounded-[20px] object-contain " +
-              // inset-y-5 deja un margen arriba/abajo (que no toque el recuadro);
-              // la altura la define el inset, el ancho es natural (centrado).
               (isWide
                 ? "lg:absolute lg:inset-0 lg:size-full lg:max-h-none lg:object-cover"
-                : "lg:absolute lg:inset-y-5 lg:left-1/2 lg:w-auto lg:max-h-none lg:-translate-x-1/2")
+                : "lg:absolute lg:inset-y-0 lg:left-1/2 lg:h-full lg:w-auto lg:max-h-none lg:-translate-x-1/2")
             }
             style={
               isWide
