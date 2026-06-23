@@ -4,6 +4,8 @@ import { motion } from "motion/react";
 import { Link, useRouter } from "@/i18n/navigation";
 import { useSavedEvents } from "@/lib/identity/hooks/useSavedEvents";
 import { useSaveEvent } from "@/lib/identity/hooks/useSaveEvent";
+import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
+import { LoginGate } from "@/components/ui/LoginGate";
 import { formatDate } from "@/lib/_shared/format";
 import { CATEGORY_BY_ID } from "../_home/categories";
 import type { SavedEvent } from "@/server/events/application/ListSavedEvents";
@@ -15,8 +17,20 @@ function fallbackGradient(ev: SavedEvent): string {
 
 export default function FavoritesPage() {
   const saved = useSavedEvents();
+  const { data: me, isLoading: meLoading } = useCurrentUser();
   const router = useRouter();
   const items = saved.data ?? [];
+
+  // Sin sesión → gate amable en vez de favoritos vacíos.
+  if (!meLoading && !me?.user) {
+    return (
+      <LoginGate
+        title="Inicia sesión para ver tus favoritos"
+        subtitle="Guarda los eventos que te interesan y encuéntralos aquí cuando inicies sesión."
+        next="/favorites"
+      />
+    );
+  }
 
   return (
     <div className="cart-grain relative min-h-screen bg-cart-bg font-sans text-white">

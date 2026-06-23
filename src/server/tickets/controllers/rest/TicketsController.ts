@@ -8,7 +8,7 @@ import { buyTickets } from "../../application/BuyTickets";
 import { getMyTicketById, getMyTickets } from "../../application/GetMyTickets";
 import { transferTicket } from "../../application/TransferTicket";
 import { claimTransfer } from "../../application/ClaimTransfer";
-import type { TransferOutcome, WalletTicket } from "../../domain/Ticket";
+import type { Ticket, TransferOutcome, WalletTicket } from "../../domain/Ticket";
 import type { BuyOutput } from "../../ports/TicketRepository";
 
 // Why: el QR llega por WhatsApp o email — exigimos al menos uno. DNI es
@@ -52,6 +52,19 @@ const transferSchema = z.object({
 
 const claimSchema = z.object({
   token: z.string().min(10),
+});
+
+// Reparto post-compra: el dueño nombra al titular de su entrada. Nombre opcional
+// (puede limpiarlo) y DNI de 8 dígitos (guardamos solo los últimos 2, como en la
+// compra; el portero valida por ahí).
+const setHolderSchema = z.object({
+  ticketId: z.string().uuid(),
+  holderName: z.string().trim().min(1).max(120).nullable(),
+  dni: z
+    .string()
+    .regex(/^\d{8}$/)
+    .nullable()
+    .optional(),
 });
 
 export const TicketsController = {
@@ -118,6 +131,21 @@ export const TicketsController = {
     );
   },
 
+  async setHolder(input: unknown): Promise<Result<Ticket>> {
+    const auth = await getAuthContext();
+    if (!auth.ok) return err(auth.error);
+    const parsed = setHolderSchema.safeParse(input);
+    if (!parsed.success) return err("invalid_input");
+    return repo.setHolder({
+      ticketId: parsed.data.ticketId,
+      ownerId: auth.value.profileId,
+      holderName: parsed.data.holderName,
+      // dni omitido (undefined) → no tocar; null → limpiar; 8 dígitos → últimos 2.
+      dniLast2:
+        parsed.data.dni === undefined ? undefined : parsed.data.dni ? parsed.data.dni.slice(-2) : null,
+    });
+  },
+
   async claim(input: unknown): Promise<Result<{ ticketId: string; eventSlug: string }>> {
     const auth = await getAuthContext();
     if (!auth.ok) return err("unauthenticated");
@@ -129,6 +157,12 @@ export const TicketsController = {
     );
     if (!res.ok) return res;
     return { ok: true, value: { ticketId: res.value.ticket.id, eventSlug: res.value.eventSlug } };
+  },
+
+  async carouselScope(ticketId: string): Promise<Result<{ ids: string[]; currentIndex: number; eventTicketCount: number }>> {
+    const auth = await getAuthContext();
+    if (!auth.ok) return err(auth.error);
+    return repo.getCarouselScope(ticketId, auth.value.profileId);
   },
 
   async cancelTransfer(input: unknown): Promise<Result<{ ok: true }>> {

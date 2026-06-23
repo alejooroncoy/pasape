@@ -83,6 +83,25 @@ export const useCancelTransfer = () => {
   });
 };
 
+// Reparto post-compra: asigna nombre/DNI del titular de una entrada propia.
+export const useSetHolder = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { ticketId: string; holderName: string | null; dni?: string | null }) =>
+      api.post<Ticket>("/api/tickets/set-holder", input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ticketsRoot }),
+  });
+};
+
+export type CarouselScope = { ids: string[]; currentIndex: number; eventTicketCount: number };
+
+export const useCarouselScope = (ticketId: string) =>
+  useQuery({
+    queryKey: ["tickets", "carousel", ticketId] as const,
+    queryFn: () => api.get<CarouselScope>(`/api/tickets/${ticketId}/carousel-scope`),
+    enabled: !!ticketId,
+  });
+
 export const useClaimTransfer = () => {
   const qc = useQueryClient();
   return useMutation({

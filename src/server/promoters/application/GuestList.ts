@@ -17,9 +17,10 @@ export type AddGuestInput = {
   phone?: string | null;
 };
 
-// El promotor agrega un invitado a su lista: emitimos una cortesía (ticket S/0
-// kind='invitation') atribuida a su link. Reusa el flujo buy:free, que marca la
-// orden pagada y despacha el QR al invitado por WhatsApp/correo automáticamente.
+// El promotor agrega un invitado a su lista: emitimos una cortesía (ticket S/0,
+// is_courtesy) sobre la entrada general real del evento, atribuida a su link.
+// Reusa el flujo buy:free, que marca la orden pagada y despacha el QR al invitado
+// por WhatsApp/correo automáticamente.
 export const addGuest = async (
   { promoterRepo, eventRepo, ticketRepo }: Deps,
   promoterId: string,
@@ -34,12 +35,32 @@ export const addGuest = async (
   if (!home) return err("not_a_promoter");
   const { link } = home;
 
-  const tt = await eventRepo.ensureInvitationTicketType(link.eventId);
+  // Destino: la entrada general con la lista activada por el organizador.
+  // Respeta el cupo total de cortesías configurado en el composer.
+  const tt = await eventRepo.getGuestListTicketType(link.eventId);
   if (!tt.ok) return tt;
+  // Cupo total del evento (cortesías de todos los promotores).
+  if (tt.value.cap != null && tt.value.courtesyCount >= tt.value.cap) {
+    return err("guest_list_full");
+  }
+  // Cupo individual de este promotor: el suyo o, si no tiene, el default del
+  // evento (herencia promotor → evento). null = sin tope individual; -1 =
+  // personalizado a "sin tope" (no hereda el default del evento).
+  const scheme = await eventRepo.getPromoterScheme(link.eventId);
+  const effectiveGuestQuota =
+    link.guestListQuota === -1
+      ? null
+      : link.guestListQuota ?? scheme.defaultGuestListQuota;
+  if (effectiveGuestQuota != null) {
+    const mine = await promoterRepo.countCourtesies(link.id);
+    if (mine >= effectiveGuestQuota) return err("guest_list_promoter_full");
+  }
 
   const res = await ticketRepo.buy({
     eventId: link.eventId,
     items: [{ ticketTypeId: tt.value.id, qty: 1, holderName: input.name.trim() }],
+    // Cortesía: gratis sobre la entrada real, marcada is_courtesy, sin agotar stock.
+    courtesy: true,
     // promoCode atribuye la cortesía al promotor (misma vía que una venta).
     promoCode: link.code,
     guest: {

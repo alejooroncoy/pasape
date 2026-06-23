@@ -12,6 +12,8 @@ export type PromoterRepository = {
   getHomeData(promoterId: string, slug: string): Promise<PromoterHomeData | null>;
   /** Invitados (cortesías) que el promotor emitió por este link. */
   listGuests(linkId: string): Promise<PromoterGuest[]>;
+  /** Cortesías vigentes (active/used) emitidas por este link — para el cupo del promotor. */
+  countCourtesies(linkId: string): Promise<number>;
   getEarnings(promoterId: string): Promise<PromoterEventEarning[]>;
   generateInviteToken(input: {
     eventSlug: string;

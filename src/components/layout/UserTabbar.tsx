@@ -14,6 +14,11 @@ import {
 // donde manda el rail lateral). Navega por ruta y resalta el tab activo.
 // Componente único compartido por todas las superficies del comprador
 // (home, tickets, perfil, favoritos) — micro-animaciones centralizadas aquí.
+//
+// Login: los tabs protegidos navegan normal a su página aunque no haya sesión.
+// Cada página muestra su LoginGate con `next`, de modo que tras el login con
+// Google (round-trip que saca de la app) el usuario vuelve EXACTO a su destino.
+// Un drawer aquí perdería ese destino, así que a propósito no se usa.
 type Tab = {
   id: string;
   label: string;

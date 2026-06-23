@@ -30,6 +30,31 @@ type State = {
 const CERT_REFRESH_MS = 24 * 60 * 60 * 1000; // refrescar cert si tiene >24h y hay red
 
 /**
+ * Precalienta el cert (y la clave no-extraíble) de una entrada SIN renderizar su
+ * QR. Se usa para las entradas vecinas del carrusel: al precargar online, el
+ * swipe muestra el QR al instante y 100% offline. Best-effort: si ya hay cert
+ * cacheado o estamos offline, no hace nada y nunca lanza.
+ */
+export async function prewarmTicketCert(
+  ticketId: string,
+  k?: string | null,
+): Promise<void> {
+  try {
+    const cached = await getCachedCert(ticketId);
+    if (cached) return; // ya disponible offline
+    if (typeof navigator !== "undefined" && !navigator.onLine) return;
+    const { pubJwk } = await getOrCreateTicketKey(ticketId);
+    const path = k
+      ? `/api/t/${ticketId}/secret?k=${encodeURIComponent(k)}`
+      : `/api/t/${ticketId}/secret`;
+    const resp = await api.post<CertResp>(path, { publicJwk: pubJwk });
+    await saveCert(ticketId, resp.cert);
+  } catch {
+    // best-effort: el cert se obtendrá al abrir la entrada si hace falta
+  }
+}
+
+/**
  * Genera el QR rotativo firmado (ECDSA P-256) en el device, 100% offline tras la
  * primera carga online. La privada del ticket es no-extraíble (IndexedDB); el
  * server solo entregó un cert que liga la pública al evento. Cada window (10s)

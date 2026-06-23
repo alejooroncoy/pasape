@@ -6,6 +6,7 @@ import { Link, useRouter } from "@/i18n/navigation";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { useSignOut } from "@/lib/identity/hooks/useFirebaseAuth";
 import { useMyTickets } from "@/lib/tickets/hooks/useTickets";
+import { LoginGate } from "@/components/ui/LoginGate";
 
 const initialsOf = (name: string | null | undefined) => {
   if (!name) return "·";
@@ -41,6 +42,17 @@ export default function BuyerProfilePage() {
     ).size;
     return { entradas, noches };
   }, [tickets.data]);
+
+  // Sin sesión → gate amable en vez de un perfil vacío.
+  if (!isLoading && !user) {
+    return (
+      <LoginGate
+        title="Inicia sesión para ver tu cuenta"
+        subtitle="Aquí están tu perfil, tus datos y tus entradas. Inicia sesión para continuar."
+        next="/profile"
+      />
+    );
+  }
 
   return (
     <div className="cart-grain relative min-h-screen bg-cart-bg font-sans text-white">

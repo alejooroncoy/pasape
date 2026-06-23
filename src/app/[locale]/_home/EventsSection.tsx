@@ -117,6 +117,13 @@ type Props = {
 
 export function EventsSection({ sectionRef, category, onCategoryChange, search }: Props) {
   const events = useBrowseEvents(category);
+  // Siempre traemos todos para saber qué categorías tienen al menos 1 evento
+  const allEvents = useBrowseEvents(null);
+  const categoriesWithEvents = new Set(
+    (allEvents.data ?? []).map((e) => e.category).filter(Boolean),
+  );
+  const visibleCategories = CATEGORIES.filter((c) => categoriesWithEvents.has(c.id));
+
   const q = search?.trim().toLowerCase() ?? "";
   const filtered = q
     ? (events.data ?? []).filter(
@@ -155,7 +162,7 @@ export function EventsSection({ sectionRef, category, onCategoryChange, search }
           >
             Todos
           </button>
-          {CATEGORIES.map(({ id, label, color }) => {
+          {visibleCategories.map(({ id, label, color }) => {
             const active = category === id;
             return (
               <button

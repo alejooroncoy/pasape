@@ -6,6 +6,7 @@ import { useEvent } from "@/lib/events/hooks/useEvents";
 import { useEventStats } from "@/lib/events/hooks/useEventStats";
 import { useRealtimeEventStats } from "@/lib/events/hooks/useRealtimeEventStats";
 import { formatMoney } from "@/lib/_shared/format";
+import { soldLine } from "@/lib/events/ticketDisplay";
 import { BackBtn } from "../_components";
 
 type Params = Promise<{ slug: string; locale: string }>;
@@ -151,7 +152,7 @@ export default function OrgReportPage({ params }: { params: Params }) {
                   {t.name}
                 </div>
                 <div style={{ fontSize: 11, color: C.dim }}>
-                  {t.sold} de {t.capacity} vendidas
+                  {soldLine(t)}
                 </div>
               </div>
               <div style={{ fontFamily: FONT_DISPLAY, fontWeight: 700, fontSize: 14 }}>

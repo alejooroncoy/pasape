@@ -12,7 +12,7 @@ export default async function NewOrgPage({
 }) {
   const { locale } = await params;
   const auth = await getAuthContext();
-  if (!auth.ok) redirect(`/${locale}/login?next=/${locale}/org/new`);
+  if (!auth.ok) redirect(`/${locale}/org/login?next=/${locale}/org/new`);
 
   const orgs = await supabaseOrganizationRepository.listByMember(auth.value.profileId);
   // Si todavía no tiene marca, mandamos al flow único de onboarding —

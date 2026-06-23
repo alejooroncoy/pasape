@@ -1,11 +1,8 @@
 import type { ReactNode } from "react";
-import { PublicHeader } from "@/components/layout/PublicHeader";
 
+// Sin header global: el detalle del evento monta su propio UserHeader (header de
+// usuario), y las páginas de flujo (buy/done/processing/sold-out/pay-error) traen
+// su propio top bar. Así se evita el doble header.
 export default function EventsLayout({ children }: { children: ReactNode }) {
-  return (
-    <>
-      <PublicHeader />
-      {children}
-    </>
-  );
+  return <>{children}</>;
 }

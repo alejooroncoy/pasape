@@ -12,12 +12,17 @@ export default async function OrgLayout({
   params: Promise<{ locale: string }>;
 }) {
   const { locale } = await params;
+  const h = await headers();
+  const pathname = h.get("x-pathname") ?? `/${locale}/org`;
+
+  // La propia página de login de organizador vive bajo /org pero NO debe pasar
+  // por el gate (si no, sin sesión entraría en bucle de redirect).
+  if (pathname.endsWith("/org/login")) return <>{children}</>;
+
   const auth = await getAuthContext();
   if (!auth.ok) {
-    // Construimos el ?next con el path actual para volver acá tras el login.
-    const h = await headers();
-    const pathname = h.get("x-pathname") ?? `/${locale}/org`;
-    redirect(`/${locale}/login?next=${encodeURIComponent(pathname)}`);
+    // ?next con el path actual para volver acá tras el login (de organizador).
+    redirect(`/${locale}/org/login?next=${encodeURIComponent(pathname)}`);
   }
   return <>{children}</>;
 }

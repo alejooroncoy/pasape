@@ -58,6 +58,26 @@ export const useCreateBox = (linkToken?: string | null) => {
   });
 };
 
+// El host agrega un acompañante sin celular (su QR lo lleva el host).
+export const useAddBoxCompanion = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { token: string; holderName: string; holderDni?: string | null }) =>
+      api.post<Box>("/api/boxes/add-companion", input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["boxes"] }),
+  });
+};
+
+// El host quita a un integrante del box (anula su QR, libera el asiento).
+export const useRemoveBoxMember = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { token: string; memberProfileId: string }) =>
+      api.post<Box>("/api/boxes/remove-member", input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["boxes"] }),
+  });
+};
+
 export const useJoinBox = () => {
   const qc = useQueryClient();
   return useMutation({

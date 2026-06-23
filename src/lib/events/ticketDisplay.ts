@@ -1,4 +1,4 @@
-import type { TicketType } from "@/server/events/domain/Event";
+import type { TicketType, BoxTicketType } from "@/server/events/domain/Event";
 import { activePricing } from "./pricing";
 
 /**
@@ -38,8 +38,53 @@ export function ticketStatus(tt: TicketType): TicketStatus {
   if (tt.saleStatus === "expired") return { kind: "expired" };
   if (tt.saleStatus === "soldout") return { kind: "soldout" };
   if (tt.kind === "box") return { kind: "available", remaining: 1 };
-  const remaining = Math.max(0, tt.capacity - tt.sold);
+  const remaining = Math.max(0, tt.stock - tt.sold);
   return { kind: "available", remaining };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Semántica box vs entrada — ÚNICA fuente de verdad.
+//
+// El dominio `TicketType` ya es una unión discriminada (BoxTicketType.seats vs
+// AdmissionTicketType.stock), así que el compilador impide confundirlos. Estos
+// helpers evitan repetir el `switch (kind)` por las pantallas. Ver AGENTS.md.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** ¿Es un espacio reservable (box/mesa/lounge…)? Type guard para estrechar la unión. */
+export function isBox(tt: TicketType): tt is BoxTicketType {
+  return tt.kind === "box";
+}
+
+/** Asientos de un box (personas que entran). 0 si no es box — no tiene asientos. */
+export function boxSeats(tt: TicketType): number {
+  return tt.kind === "box" ? tt.seats : 0;
+}
+
+/** Unidades vendibles totales. Box = 1 (se vende entero). Entrada = su stock. */
+export function stockTotal(tt: TicketType): number {
+  return tt.kind === "box" ? 1 : tt.stock;
+}
+
+/** Unidades tomadas. Box = 1 si alguien lo reservó, si no 0. Entrada = sold. */
+export function unitsSold(tt: TicketType): number {
+  return tt.kind === "box" ? (tt.sold > 0 ? 1 : 0) : tt.sold;
+}
+
+/** Unidades disponibles para vender. Box: 1 o 0. Entrada: stock − vendidas. */
+export function unitsRemaining(tt: TicketType): number {
+  return Math.max(0, stockTotal(tt) - unitsSold(tt));
+}
+
+/**
+ * Copy "X de Y vendidas" / "Reservado". Estructural a propósito: el read-model
+ * de stats del organizador NO es el dominio `TicketType` — todavía expone la
+ * columna cruda `capacity` (asientos en box, stock en entrada). Este helper es
+ * el único punto que interpreta ese shape de stats.
+ */
+export type StatTicketRow = { kind: string; sold: number; capacity: number };
+export function soldLine(tt: StatTicketRow): string {
+  if (tt.kind === "box") return tt.sold > 0 ? "Reservado" : "Disponible";
+  return `${tt.sold} de ${tt.capacity} vendidas`;
 }
 
 /**
@@ -49,10 +94,10 @@ export function ticketStatus(tt: TicketType): TicketStatus {
 export function ticketSubtitle(tt: TicketType): string {
   const status = ticketStatus(tt);
   if (status.kind === "expired") return "Preventa cerrada";
-  if (tt.kind === "box") {
+  if (isBox(tt)) {
     return status.kind === "soldout"
       ? "Reservado"
-      : `Para ${tt.capacity} personas · Tú invitas`;
+      : `Para ${boxSeats(tt)} personas · Tú invitas`;
   }
   return status.kind === "soldout"
     ? "Agotado"
@@ -64,29 +109,29 @@ export function capitalize(s: string): string {
   return s.length === 0 ? s : s[0].toUpperCase() + s.slice(1);
 }
 
-export type TicketGroup = { zone: string | null; items: TicketType[] };
+// `label` = etiqueta de agrupación de la card (ya NO es "zona" de venue —
+// concepto eliminado). Para boxes es el unit_noun en plural ("Boxes", "Mesas");
+// para entradas normales es null (cada tipo es su propia card).
+export type TicketGroup = { label: string | null; items: TicketType[] };
 
-export function groupTicketTypesByZone(items: TicketType[]): TicketGroup[] {
+// Agrupa SOLO boxes por su unit_noun (espacios del mismo tipo en una grilla).
+// Las entradas normales no se agrupan: cada tipo es su card (su nombre ya las
+// diferencia — VIP, General). Reemplaza la vieja agrupación por zona.
+export function groupBoxesByNoun(boxes: TicketType[]): TicketGroup[] {
   const map = new Map<string, TicketGroup>();
-  for (const tt of items) {
-    const key = tt.zone ?? "__ungrouped__";
-    let group = map.get(key);
+  for (const tt of boxes) {
+    const noun = unitNoun(tt);
+    let group = map.get(noun);
     if (!group) {
-      group = { zone: tt.zone, items: [] };
-      map.set(key, group);
+      group = { label: capitalize(unitNounPlural(noun)), items: [] };
+      map.set(noun, group);
     }
     group.items.push(tt);
   }
-  const ordered: TicketGroup[] = [];
-  for (const [key, group] of map) {
-    if (key !== "__ungrouped__") ordered.push(group);
-  }
-  const ungrouped = map.get("__ungrouped__");
-  if (ungrouped) ordered.push(ungrouped);
-  return ordered;
+  return [...map.values()];
 }
 
-export type ZoneSummary = {
+export type GroupSummary = {
   totalBoxes: number;
   freeBoxes: number;
   totalSeats: number;
@@ -99,7 +144,7 @@ export type ZoneSummary = {
   noun: string;
 };
 
-export function summarizeZone(group: TicketGroup): ZoneSummary {
+export function summarizeGroup(group: TicketGroup): GroupSummary {
   let totalBoxes = 0;
   let freeBoxes = 0;
   let totalSeats = 0;
@@ -118,8 +163,8 @@ export function summarizeZone(group: TicketGroup): ZoneSummary {
       nounCounts.set(n, (nounCounts.get(n) ?? 0) + 1);
     } else {
       nonBoxCount += 1;
-      totalSeats += tt.capacity;
-      freeSeats += Math.max(0, tt.capacity - tt.sold);
+      totalSeats += tt.stock;
+      freeSeats += Math.max(0, tt.stock - tt.sold);
     }
     const status = ticketStatus(tt);
     if (status.kind === "available") {
@@ -167,7 +212,7 @@ export function eventAvailability(items: TicketType[]): {
     if (tt.kind === "box") {
       if (tt.sold === 0) freeBoxes += 1;
     } else {
-      freeSeats += Math.max(0, tt.capacity - tt.sold);
+      freeSeats += Math.max(0, tt.stock - tt.sold);
     }
   }
   return { freeBoxes, freeSeats, total: freeBoxes + freeSeats };

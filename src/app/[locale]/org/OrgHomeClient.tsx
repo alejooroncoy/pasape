@@ -61,8 +61,8 @@ export function OrgHomeClient() {
         </div>
       </header>
 
-      {!orgs.data || orgs.data.length === 0 ? (
-        <OrgEmpty />
+      {orgs.isPending || events.isPending ? (
+        <OrgHomeSkeleton />
       ) : (
         <div className="pb-[calc(env(safe-area-inset-bottom,0px)+24px)] sm:pb-0">
           <section className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -253,6 +253,31 @@ function StatusPill({ status }: { status: string }) {
     <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10.5px] font-medium uppercase tracking-wide ${v.cls}`}>
       {v.label}
     </span>
+  );
+}
+
+// Skeleton mientras cargan marcas/eventos: evita el destello del estado vacío
+// ("Arma tu evento") y de los ceros antes de que llegue la data real.
+function OrgHomeSkeleton() {
+  return (
+    <div className="animate-pulse pb-[calc(env(safe-area-inset-bottom,0px)+24px)] sm:pb-0">
+      <section className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="rounded-2xl border border-cart-line bg-cart-bg-elev p-4">
+            <div className="h-3 w-20 rounded bg-white/10" />
+            <div className="mt-3 h-7 w-12 rounded bg-white/10" />
+            <div className="mt-2.5 h-2.5 w-16 rounded bg-white/[0.06]" />
+          </div>
+        ))}
+      </section>
+      <div className="mb-3 h-3 w-24 rounded bg-white/10" />
+      <div className="rounded-3xl border border-cart-line bg-cart-bg-elev p-6 sm:p-10">
+        <div className="h-5 w-40 rounded bg-white/10" />
+        <div className="mt-4 h-3 w-full max-w-[44ch] rounded bg-white/[0.06]" />
+        <div className="mt-2 h-3 w-3/4 max-w-[40ch] rounded bg-white/[0.06]" />
+        <div className="mt-6 h-11 w-52 rounded-full bg-white/10" />
+      </div>
+    </div>
   );
 }
 

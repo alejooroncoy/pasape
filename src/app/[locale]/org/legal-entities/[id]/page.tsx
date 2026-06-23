@@ -11,7 +11,7 @@ export default async function LegalEntityPage({
 }) {
   const { locale, id } = await params;
   const auth = await getAuthContext();
-  if (!auth.ok) redirect(`/${locale}/login?next=/${locale}/org/legal-entities/${id}`);
+  if (!auth.ok) redirect(`/${locale}/org/login?next=/${locale}/org/legal-entities/${id}`);
 
   const entity = await supabaseLegalEntityRepository.findById(id);
   if (!entity) notFound();

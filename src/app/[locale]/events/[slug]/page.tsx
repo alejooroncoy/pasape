@@ -3,6 +3,7 @@
 import { Suspense, use, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Link, useRouter } from "@/i18n/navigation";
+import { UserHeader } from "@/app/[locale]/_home/UserHeader";
 import { useEvent } from "@/lib/events/hooks/useEvents";
 import { useSaveEvent } from "@/lib/identity/hooks/useSaveEvent";
 import { useEventShowcase } from "@/lib/events/hooks/useEventShowcase";
@@ -18,12 +19,12 @@ import { PresaleCountdown, shouldCountdown } from "@/components/ui/PresaleCountd
 import { activePricing } from "@/lib/events/pricing";
 import {
   eventAvailability,
-  groupTicketTypesByZone,
-  summarizeZone,
+  groupBoxesByNoun,
+  summarizeGroup,
   ticketStatus,
   unitNounPlural,
   type TicketGroup,
-  type ZoneSummary,
+  type GroupSummary,
 } from "@/lib/events/ticketDisplay";
 
 type Props = { params: Promise<{ slug: string }> };
@@ -55,21 +56,21 @@ function EventDetailInner({ params }: Props) {
     [data],
   );
 
-  const [zoneQty, setZoneQty] = useState<Record<string, number>>({});
+  const [groupQty, setGroupQty] = useState<Record<string, number>>({});
 
   const liveUnits = useMemo(
-    () => Object.values(zoneQty).reduce((a, b) => a + b, 0),
-    [zoneQty],
+    () => Object.values(groupQty).reduce((a, b) => a + b, 0),
+    [groupQty],
   );
 
   const liveTotalCents = useMemo(
     () =>
       groups.reduce((sum, group) => {
-        const qty = zoneQty[detailGroupKey(group)] ?? 0;
-        const price = summarizeZone(group).minPriceCents ?? 0;
+        const qty = groupQty[detailGroupKey(group)] ?? 0;
+        const price = summarizeGroup(group).minPriceCents ?? 0;
         return sum + qty * price;
       }, 0),
-    [groups, zoneQty],
+    [groups, groupQty],
   );
 
   const buyHref = (group?: TicketGroup) => {
@@ -79,8 +80,7 @@ function EventDetailInner({ params }: Props) {
       const single = group.items.length === 1 ? group.items[0] : null;
       // Entrada convencional → pre-selecciona por id; box → por zona.
       if (single && single.kind !== "box") p.set("tt", single.id);
-      else if (group.zone) p.set("zone", group.zone);
-      const qty = zoneQty[detailGroupKey(group)];
+      const qty = groupQty[detailGroupKey(group)];
       if (qty) p.set("qty", String(qty));
     }
     const qs = p.toString();
@@ -94,7 +94,7 @@ function EventDetailInner({ params }: Props) {
     // cada card. Las claves "tt:" son entradas; las "zone:" (boxes) se eligen
     // por separado en la compra, así que solo arrastramos la cantidad total.
     const sel: string[] = [];
-    for (const [key, qty] of Object.entries(zoneQty)) {
+    for (const [key, qty] of Object.entries(groupQty)) {
       if (qty > 0 && key.startsWith("tt:")) sel.push(`${key.slice(3)}:${qty}`);
     }
     if (sel.length) p.set("sel", sel.join(","));
@@ -106,7 +106,9 @@ function EventDetailInner({ params }: Props) {
   if (isLoading) return <PageSkeleton />;
   if (error || !data) {
     return (
-      <div className="grid min-h-dvh place-items-center bg-cart-bg px-6 text-center text-cart-ink-2">
+      <div className="min-h-dvh bg-cart-bg text-cart-ink-2">
+        <UserHeader />
+        <div className="grid min-h-[60dvh] place-items-center px-6 text-center">
         <div>
           <p className="text-[15px]">No pudimos cargar este evento.</p>
           <Link
@@ -116,16 +118,19 @@ function EventDetailInner({ params }: Props) {
             Volver al inicio
           </Link>
         </div>
+        </div>
       </div>
     );
   }
 
   const { event } = data;
   const startsAt = new Date(event.startsAt);
+  const isClosed = event.status === "closed";
   const allSoldOut = availability.total === 0;
 
   return (
     <div className="min-h-dvh bg-cart-bg text-white">
+      <UserHeader />
       <div className="mx-auto w-full max-w-[1120px] px-5 lg:px-8">
         <div className="grid gap-8 pt-4 lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-10 lg:pt-8">
           <div className="pb-32 lg:pb-12">
@@ -138,6 +143,7 @@ function EventDetailInner({ params }: Props) {
               <h1 className="text-[30px] font-bold leading-[1.05] tracking-[-0.02em] sm:text-[34px]">
                 {event.title}
               </h1>
+              {isClosed && <EndedBadge />}
               <div className="mt-3 flex flex-col gap-1 text-[14px] text-cart-ink-2">
                 <span className="font-medium">
                   <CalendarIcon /> {formatLongDate(startsAt, event.timezone)}
@@ -154,6 +160,7 @@ function EventDetailInner({ params }: Props) {
               <h1 className="text-[44px] font-bold leading-[1.02] tracking-[-0.022em]">
                 {event.title}
               </h1>
+              {isClosed && <EndedBadge />}
               <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[14px] text-cart-ink-2">
                 <span className="font-medium">
                   <CalendarIcon /> {formatLongDate(startsAt, event.timezone)}
@@ -175,17 +182,19 @@ function EventDetailInner({ params }: Props) {
               <VenueLayoutBanner url={event.venueLayoutUrl} venue={event.venue} />
             )}
 
-            <div className="mt-8 lg:hidden">
-              <SectionTitle>Entradas</SectionTitle>
-              <ZoneCardList
-                groups={groups}
-                zoneQty={zoneQty}
-                onZoneQtyChange={(key, qty) =>
-                  setZoneQty((prev) => ({ ...prev, [key]: qty }))
-                }
-                onPickZone={(group) => router.push(buyHref(group) as never)}
-              />
-            </div>
+            {!isClosed && (
+              <div className="mt-8 lg:hidden">
+                <SectionTitle>Entradas</SectionTitle>
+                <GroupCardList
+                  groups={groups}
+                  groupQty={groupQty}
+                  onGroupQtyChange={(key, qty) =>
+                    setGroupQty((prev) => ({ ...prev, [key]: qty }))
+                  }
+                  onPickGroup={(group) => router.push(buyHref(group) as never)}
+                />
+              </div>
+            )}
 
             {event.description && <DescriptionBlock text={event.description} />}
 
@@ -208,36 +217,42 @@ function EventDetailInner({ params }: Props) {
             {/* top-20 = altura del PublicHeader sticky (~57px) + respiro */}
             <div className="sticky top-20">
               <div className="rounded-3xl border border-cart-line bg-cart-bg-elev p-5 shadow-[0_20px_60px_-20px_rgba(0,0,0,0.6)]">
-                <AvailabilityHeader availability={availability} />
+                {isClosed ? (
+                  <EndedPanel org={showcase.data?.org} />
+                ) : (
+                  <>
+                    <AvailabilityHeader availability={availability} />
 
-                <div className="mt-4">
-                  <ZoneCardList
-                    groups={groups}
-                    compact
-                    zoneQty={zoneQty}
-                    onZoneQtyChange={(key, qty) =>
-                      setZoneQty((prev) => ({ ...prev, [key]: qty }))
-                    }
-                    onPickZone={(group) => router.push(buyHref(group) as never)}
-                  />
-                </div>
+                    <div className="mt-4">
+                      <GroupCardList
+                        groups={groups}
+                        compact
+                        groupQty={groupQty}
+                        onGroupQtyChange={(key, qty) =>
+                          setGroupQty((prev) => ({ ...prev, [key]: qty }))
+                        }
+                        onPickGroup={(group) => router.push(buyHref(group) as never)}
+                      />
+                    </div>
 
-                <button
-                  type="button"
-                  onClick={() => router.push(buyHrefAll() as never)}
-                  disabled={allSoldOut}
-                  className="mt-5 w-full rounded-full bg-cart-accent py-3.5 text-[14.5px] font-semibold text-cart-bg shadow-[0_8px_24px_-6px_var(--color-cart-accent-glow)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:bg-cart-bg-elev-2 disabled:text-cart-ink-3 disabled:shadow-none"
-                >
-                  {allSoldOut
-                    ? "Agotado"
-                    : liveUnits > 0
-                      ? `${liveUnits} ${liveUnits === 1 ? "entrada" : "entradas"} · ${formatPrice(liveTotalCents, "PEN")}`
-                      : "Comprar entradas"}
-                </button>
+                    <button
+                      type="button"
+                      onClick={() => router.push(buyHrefAll() as never)}
+                      disabled={allSoldOut}
+                      className="mt-5 w-full rounded-full bg-cart-accent py-3.5 text-[14.5px] font-semibold text-cart-bg shadow-[0_8px_24px_-6px_var(--color-cart-accent-glow)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:bg-cart-bg-elev-2 disabled:text-cart-ink-3 disabled:shadow-none"
+                    >
+                      {allSoldOut
+                        ? "Agotado"
+                        : liveUnits > 0
+                          ? `${liveUnits} ${liveUnits === 1 ? "entrada" : "entradas"} · ${formatPrice(liveTotalCents, "PEN")}`
+                          : "Comprar entradas"}
+                    </button>
 
-                <p className="mt-3 text-center text-[11.5px] text-cart-ink-4">
-                  Yape, tarjeta o transferencia · QR al instante
-                </p>
+                    <p className="mt-3 text-center text-[11.5px] text-cart-ink-4">
+                      Yape, tarjeta o transferencia · QR al instante
+                    </p>
+                  </>
+                )}
               </div>
 
               {showcase.data && showcase.data.events.length > 0 && (
@@ -256,17 +271,61 @@ function EventDetailInner({ params }: Props) {
           <button
             type="button"
             onClick={() => router.push(buyHrefAll() as never)}
-            disabled={allSoldOut}
+            disabled={isClosed || allSoldOut}
             className="w-full rounded-full bg-cart-accent py-3.5 text-[15px] font-semibold text-cart-bg shadow-[0_8px_24px_-6px_var(--color-cart-accent-glow)] transition active:brightness-110 disabled:cursor-not-allowed disabled:bg-cart-bg-elev-2 disabled:text-cart-ink-3 disabled:shadow-none"
           >
-            {allSoldOut
-              ? "Agotado"
-              : liveUnits > 0
-                ? `${liveUnits} ${liveUnits === 1 ? "entrada" : "entradas"} · ${formatMoney(liveTotalCents, "PEN")}`
-                : "Comprar entradas"}
+            {isClosed
+              ? "Evento terminado"
+              : allSoldOut
+                ? "Agotado"
+                : liveUnits > 0
+                  ? `${liveUnits} ${liveUnits === 1 ? "entrada" : "entradas"} · ${formatMoney(liveTotalCents, "PEN")}`
+                  : "Comprar entradas"}
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function EndedBadge() {
+  return (
+    <span className="mt-3 inline-flex items-center gap-2 rounded-full border border-cart-line bg-cart-bg-elev px-3 py-1.5 text-[12px] font-semibold uppercase tracking-[0.06em] text-cart-ink-3">
+      <span className="size-1.5 rounded-full bg-cart-ink-4" />
+      Evento terminado
+    </span>
+  );
+}
+
+/** Panel lateral cuando el evento ya terminó: cierre cálido + CTA a la vitrina. */
+function EndedPanel({ org }: { org?: ShowcaseOrg }) {
+  return (
+    <div className="flex flex-col items-center py-3 text-center">
+      <div className="grid size-14 place-items-center rounded-full bg-cart-bg-elev-2 ring-1 ring-cart-line">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" className="text-cart-ink-2">
+          <path
+            d="M5 12.5l4.5 4.5L19 7"
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </div>
+      <h2 className="mt-4 text-[17px] font-bold tracking-[-0.01em] text-white">
+        Este evento ya terminó
+      </h2>
+      <p className="mt-1.5 text-[13px] leading-snug text-cart-ink-3">
+        Las ventas están cerradas. ¡Gracias a todos los que asistieron!
+      </p>
+      {org && (
+        <Link
+          href={`/${org.slug}` as never}
+          className="mt-5 w-full rounded-full border border-cart-line bg-cart-bg-elev-2 py-3 text-[13.5px] font-semibold text-white transition hover:border-cart-line-strong"
+        >
+          Ver más de {org.name}
+        </Link>
+      )}
     </div>
   );
 }
@@ -392,60 +451,58 @@ function AvailabilityHeader({
   );
 }
 
-/* ============================== Zone cards ============================== */
+/* ============================== Group cards ============================== */
 
 // Agrupación para el detalle: las entradas convencionales se muestran UNA POR
-// TIPO (titulada por su nombre — "General", "VIP", "General VIP"). Ya no se
-// agrupan por zona (concepto removido); el nombre se explica solo. Los boxes sí
-// se siguen agrupando en una grilla.
+// TIPO (titulada por su nombre — "General", "VIP"); su nombre ya las diferencia.
+// Los boxes ("espacios") se agrupan en una grilla por su unit_noun.
 function groupForDetail(items: TicketType[]): TicketGroup[] {
   const out: TicketGroup[] = [];
   const boxes: TicketType[] = [];
   for (const tt of items) {
     if (tt.kind === "box") boxes.push(tt);
-    else out.push({ zone: tt.zone, items: [tt] });
+    else out.push({ label: null, items: [tt] });
   }
-  for (const g of groupTicketTypesByZone(boxes)) out.push(g);
+  for (const g of groupBoxesByNoun(boxes)) out.push(g);
   return out;
 }
 
 // Key estable de selección por grupo: por id de entrada (cada tipo su card) o,
-// para boxes, por zona. Reemplaza la vieja key por zona (colisionaba cuando
-// varias entradas no tenían zona).
+// para boxes, por su etiqueta de agrupación (unit_noun en plural).
 function detailGroupKey(g: TicketGroup): string {
   const single = g.items.length === 1 ? g.items[0] : null;
-  return single && single.kind !== "box" ? `tt:${single.id}` : `zone:${g.zone ?? "__box__"}`;
+  return single && single.kind !== "box" ? `tt:${single.id}` : `box:${g.label ?? "__box__"}`;
 }
 
-function ZoneCardList({
+function GroupCardList({
   groups,
   compact,
-  zoneQty,
-  onZoneQtyChange,
-  onPickZone,
+  groupQty,
+  onGroupQtyChange,
+  onPickGroup,
 }: {
   groups: TicketGroup[];
   compact?: boolean;
-  zoneQty?: Record<string, number>;
-  onZoneQtyChange?: (key: string, qty: number) => void;
-  onPickZone: (group: TicketGroup) => void;
+  groupQty?: Record<string, number>;
+  onGroupQtyChange?: (key: string, qty: number) => void;
+  onPickGroup: (group: TicketGroup) => void;
 }) {
   return (
     <div className={"flex flex-col " + (compact ? "gap-2" : "gap-2.5")}>
       {groups.map((group) => {
         const key = detailGroupKey(group);
-        const summary = summarizeZone(group);
+        const summary = summarizeGroup(group);
         const maxQty = summary.freeBoxes + summary.freeSeats;
         return (
-          <ZoneCard
+          <GroupCard
             key={key}
             group={group}
             summary={summary}
             compact={compact}
-            qty={zoneQty?.[key] ?? 0}
+            qty={groupQty?.[key] ?? 0}
             maxQty={maxQty}
-            onQtyChange={onZoneQtyChange ? (q) => onZoneQtyChange(key, q) : undefined}
-            onClick={() => onPickZone(group)}
+            onQtyChange={onGroupQtyChange ? (q) => onGroupQtyChange(key, q) : undefined}
+            onClick={() => onPickGroup(group)}
           />
         );
       })}
@@ -453,7 +510,7 @@ function ZoneCardList({
   );
 }
 
-function ZoneCard({
+function GroupCard({
   group,
   summary,
   compact,
@@ -463,7 +520,7 @@ function ZoneCard({
   onClick,
 }: {
   group: TicketGroup;
-  summary: ZoneSummary;
+  summary: GroupSummary;
   compact?: boolean;
   qty: number;
   maxQty: number;
@@ -471,12 +528,10 @@ function ZoneCard({
   onClick: () => void;
 }) {
   // Título de la card: el NOMBRE de la entrada (una card por tipo). Los boxes
-  // mantienen su etiqueta de grupo.
+  // usan su etiqueta de grupo (unit_noun en plural: "Boxes", "Mesas").
   const single = group.items.length === 1 ? group.items[0] : null;
-  const zoneLabel =
-    single && single.kind !== "box"
-      ? single.name
-      : group.zone ?? "Entradas generales";
+  const groupTitle =
+    single && single.kind !== "box" ? single.name : group.label ?? "Entradas";
   const presaleItem = group.items.find((i) => activePricing(i).isPresale);
   const ap = presaleItem ? activePricing(presaleItem) : null;
 
@@ -510,7 +565,7 @@ function ZoneCard({
             (compact ? "text-[13.5px]" : "text-[15.5px]")
           }
         >
-          {zoneLabel}
+          {groupTitle}
           {ap?.isPresale && (
             <span className="rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-[0.06em] text-emerald-300">
               Preventa
@@ -518,7 +573,7 @@ function ZoneCard({
           )}
         </span>
         <div className={"text-cart-ink-3 " + (compact ? "mt-0.5 text-[11px]" : "mt-1 text-[12.5px]")}>
-          <ZoneAvailabilityLine summary={summary} />
+          <GroupAvailabilityLine summary={summary} />
         </div>
         {!compact && group.items[0]?.description && (
           <p className="mt-1 text-[11.5px] leading-snug text-cart-ink-3">
@@ -631,7 +686,7 @@ function ZoneCard({
   );
 }
 
-function ZoneAvailabilityLine({ summary }: { summary: ZoneSummary }) {
+function GroupAvailabilityLine({ summary }: { summary: GroupSummary }) {
   if (summary.isAllSoldOut) return <>Agotado</>;
   const parts: string[] = [];
   if (summary.totalBoxes > 0) {
@@ -687,23 +742,9 @@ function FlyerCard({
   startsAt: Date;
 }) {
   const palette = useImagePalette(event.coverUrl);
-  // Ratio (ancho/alto) del flyer, medido al cargar la imagen. Permite que el
-  // marco "respire" según la proporción (estilo Posh/DICE): un afiche vertical
-  // toma un marco alto y uno apaisado un marco banner.
-  const [ratio, setRatio] = useState<number | null>(null);
-
   // Tinte oscuro del propio flyer para el overlay del blur-fill. Mientras
   // carga o si falla CORS → base de marca.
   const tint = palette?.dark ?? "#0D0B14";
-
-  // Alto del marco en desktop según el ratio: retrato → alto, apaisado →
-  // banner, cuadrado/intermedio → estándar. Acotado a un rango.
-  const frameH = ratio == null ? 360 : ratio < 0.85 ? 410 : ratio > 1.3 ? 270 : 360;
-
-  // Apaisado → el flyer llena el marco a sangre (object-cover): el recorte es
-  // mínimo porque su ratio ya es ancho, y evita las barras de blur laterales.
-  // Vertical/cuadrado → object-contain + blur-fill (cover recortaría su info).
-  const isWide = ratio != null && ratio > 1.3;
 
   return (
     <div className="relative w-full overflow-hidden rounded-[24px] ring-1 ring-white/10 lg:rounded-[28px]">
@@ -732,42 +773,18 @@ function FlyerCard({
         }}
       />
 
-      <div
-        className={
-          "relative w-full lg:[height:var(--fh)] " +
-          (event.coverUrl ? "" : "aspect-[16/10] lg:aspect-auto")
-        }
-        style={{ ["--fh" as string]: `${frameH + 48}px` }}
-      >
+      <div className={"relative w-full " + (event.coverUrl ? "" : "aspect-[16/10]")}>
         {event.coverUrl && (
-          // Mobile: el card toma el ratio natural del flyer (vertical u
-          // horizontal, se ve completo). Desktop: marco adaptativo y el
-          // blur-fill rellena el letterbox.
+          // La imagen SIEMPRE se ve completa (object-contain), limitada por el
+          // ancho del panel y por una altura máxima. El panel se ajusta a ella y
+          // el blur-fill rellena cualquier hueco (afiches verticales). Nunca se
+          // recorta, ni en móvil ni en desktop.
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={event.coverUrl}
             alt={event.title}
-            onLoad={(e) =>
-              setRatio(
-                e.currentTarget.naturalWidth / e.currentTarget.naturalHeight,
-              )
-            }
-            className={
-              // El radius va en el AFICHE, no en el marco. En desktop la imagen
-              // toma el alto del marco MENOS un margen (inset-y-6) y su ancho
-              // natural, centrada → el afiche mantiene su tamaño (el marco creció
-              // +48px para compensar) y deja respiro arriba/abajo sin tocar el
-              // recuadro. En móvil, my-5 da el mismo respiro.
-              "relative z-[1] mx-auto my-5 h-auto max-h-[72vh] w-auto max-w-full rounded-[20px] object-contain lg:my-0 " +
-              (isWide
-                ? "lg:absolute lg:inset-0 lg:size-full lg:max-h-none lg:object-cover"
-                : "lg:absolute lg:inset-y-6 lg:left-1/2 lg:w-auto lg:max-h-none lg:-translate-x-1/2")
-            }
-            style={
-              isWide
-                ? undefined
-                : { filter: "drop-shadow(0 18px 50px rgba(0,0,0,0.55))" }
-            }
+            className="relative z-[1] mx-auto block h-auto w-auto max-w-[calc(100%-2.5rem)] rounded-[28px] max-h-[52vh] my-5 lg:my-7 lg:max-w-[calc(100%-3.5rem)]"
+            style={{ filter: "drop-shadow(0 18px 50px rgba(0,0,0,0.55))" }}
           />
         )}
 
@@ -1251,6 +1268,7 @@ function SidebarMoreFromOrg({ org, events }: { org: ShowcaseOrg; events: Showcas
 function PageSkeleton() {
   return (
     <div className="min-h-dvh bg-cart-bg text-white">
+      <UserHeader />
       <div className="mx-auto w-full max-w-[1120px] px-5 lg:px-8">
         <div className="grid gap-8 pt-4 lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-10 lg:pt-8">
           {/* Columna izquierda: flyer + título + entradas (móvil) */}

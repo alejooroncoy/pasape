@@ -60,9 +60,9 @@ function Inner() {
       <h1 className="mt-5 text-center text-[24px] font-bold tracking-[-0.02em] text-white">
         {n > 0 ? `¡Listo! Tienes ${n} ${n === 1 ? "entrada" : "entradas"}` : "¡Listo! Pago confirmado"}
       </h1>
-      <p className="mx-auto mt-1.5 max-w-[320px] text-center text-[13.5px] text-cart-ink-2">
+      <p className="mx-auto mt-1.5 max-w-[330px] text-center text-[13.5px] text-cart-ink-2">
         {n > 1
-          ? "Una es tuya. ¿Las otras para quién? Mándaselas y le llega su QR — la entrada sigue siendo tuya hasta que la reclame."
+          ? "Una es tuya. A las demás ponles el nombre de quién va, o envíaselas por WhatsApp — siguen siendo tuyas hasta que las reclamen."
           : "Tu entrada ya está en tu wallet, lista para mostrar en la puerta."}
       </p>
 
@@ -88,7 +88,13 @@ function Inner() {
         )}
 
         {rest.map((t, i) => (
-          <SendRow key={t.id} ticket={t} index={i + 2} onSend={() => router.push(`/tickets/${t.id}` as never)} />
+          <SendRow
+            key={t.id}
+            ticket={t}
+            index={i + 2}
+            onName={() => router.push(`/tickets/${t.id}?action=holder` as never)}
+            onSend={() => router.push(`/tickets/${t.id}?action=transfer` as never)}
+          />
         ))}
       </div>
 
@@ -97,7 +103,7 @@ function Inner() {
         {rest.length > 0 && (
           <button
             type="button"
-            onClick={() => router.push(`/tickets/${rest[0].id}` as never)}
+            onClick={() => router.push(`/tickets/${rest[0].id}?action=transfer` as never)}
             className="w-full rounded-full bg-cart-accent py-3.5 text-[15px] font-semibold text-cart-bg shadow-[0_10px_30px_-10px_var(--color-cart-accent-glow-strong)] transition active:scale-[0.98]"
           >
             Enviar la de tu amigo
@@ -123,37 +129,55 @@ function Inner() {
 function SendRow({
   ticket,
   index,
+  onName,
   onSend,
 }: {
   ticket: WalletTicket;
   index: number;
+  onName: () => void;
   onSend: () => void;
 }) {
   const pending = ticket.pendingTransferTo;
+  const named = !pending && !!ticket.holderName;
   return (
     <div
       className={
-        "flex items-center gap-3 rounded-2xl border bg-cart-bg-elev px-4 py-3.5 transition " +
+        "rounded-2xl border bg-cart-bg-elev px-4 py-3.5 transition " +
         (pending ? "border-amber-400/40" : "border-cart-accent/40")
       }
     >
-      <span className="grid size-9 shrink-0 place-items-center rounded-full bg-white/8 text-cart-ink-2">
-        <svg width="17" height="17" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="6" r="2.6" stroke="currentColor" strokeWidth="1.4" /><path d="M3.5 15c.6-3 2.8-4.5 5.5-4.5s4.9 1.5 5.5 4.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="text-[14px] font-semibold leading-tight">{index}ª entrada</p>
-        <p className="mt-0.5 truncate text-[12px] text-cart-ink-3">
-          {pending ? `Enviada al ${maskPhone(pending)} · esperando` : "Aún sin enviar"}
-        </p>
+      <div className="flex items-center gap-3">
+        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-white/8 text-cart-ink-2">
+          <svg width="17" height="17" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="6" r="2.6" stroke="currentColor" strokeWidth="1.4" /><path d="M3.5 15c.6-3 2.8-4.5 5.5-4.5s4.9 1.5 5.5 4.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-[14px] font-semibold leading-tight">{index}ª entrada</p>
+          <p className="mt-0.5 truncate text-[12px] text-cart-ink-3">
+            {pending
+              ? `Enviada al ${maskPhone(pending)} · esperando`
+              : named
+                ? ticket.holderName
+                : "¿Para quién es?"}
+          </p>
+        </div>
       </div>
       {!pending && (
-        <button
-          type="button"
-          onClick={onSend}
-          className="rounded-full bg-cart-accent px-3.5 py-1.5 text-[12px] font-semibold text-cart-bg transition active:scale-95"
-        >
-          Enviar
-        </button>
+        <div className="mt-3 flex gap-2">
+          <button
+            type="button"
+            onClick={onName}
+            className="flex-1 rounded-full bg-white/10 px-3.5 py-2 text-[12.5px] font-semibold text-white transition hover:bg-white/15 active:scale-95"
+          >
+            Cambiar datos
+          </button>
+          <button
+            type="button"
+            onClick={onSend}
+            className="flex-1 rounded-full bg-cart-accent px-3.5 py-2 text-[12.5px] font-semibold text-cart-bg transition active:scale-95"
+          >
+            Enviar
+          </button>
+        </div>
       )}
     </div>
   );

@@ -128,6 +128,12 @@ export function messageFor(code: string): string {
     case "event_sales_closed":
     case "event_not_published":
       return "El evento ya no admite invitados.";
+    case "guest_list_not_enabled":
+      return "El organizador aún no activó la lista de invitados para este evento.";
+    case "guest_list_full":
+      return "Se llenó el cupo de invitados de este evento.";
+    case "guest_list_promoter_full":
+      return "Llegaste a tu cupo de invitados para este evento.";
     default:
       return "No se pudo enviar la entrada. Intenta de nuevo.";
   }

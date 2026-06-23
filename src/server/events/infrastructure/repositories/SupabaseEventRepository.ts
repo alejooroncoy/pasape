@@ -4,8 +4,10 @@ import type {
   AttendeeRow,
   CreateEventInput,
   CreateTicketTypeInput,
+  EventPromoterScheme,
   EventRepository,
   EventStats,
+  GuestListTicketType,
   PromoInput,
   PromoterReportRow,
   ScanFeedItem,
@@ -13,50 +15,14 @@ import type {
   UpdateTicketTypeInput,
 } from "@/server/events/ports/EventRepository";
 import type { Event, EventCategory, Promo, PresaleTier, TicketType } from "@/server/events/domain/Event";
-import { computePromoterPayout } from "@/server/promoters/application/CommissionResolver";
+import {
+  computePromoterPayout,
+  resolveCommissionScheme,
+} from "@/server/promoters/application/CommissionResolver";
 import type {
   CommissionConfig,
   CommissionType,
 } from "@/server/promoters/domain/OrgPromoter";
-
-/**
- * Parse a raw jsonb `commission_config` value into the typed shape used by
- * the commission resolver. Malformed input collapses to `null` so callers
- * can safely fall back to defaults.
- */
-const coerceCommissionConfig = (
-  type: CommissionType,
-  raw: unknown,
-): CommissionConfig => {
-  if (raw == null || type === "percentage") return null;
-  if (typeof raw !== "object" || Array.isArray(raw)) return null;
-  const obj = raw as Record<string, unknown>;
-  if (type === "tiered") {
-    const tiers = obj.tiers;
-    if (!Array.isArray(tiers)) return null;
-    const clean = tiers.flatMap((t) => {
-      if (!t || typeof t !== "object") return [];
-      const row = t as Record<string, unknown>;
-      const salesCount = Number(row.salesCount);
-      const payoutCents = Number(row.payoutCents);
-      if (!Number.isFinite(salesCount) || !Number.isFinite(payoutCents)) return [];
-      return [{ salesCount: Math.trunc(salesCount), payoutCents: Math.trunc(payoutCents) }];
-    });
-    return { tiers: clean };
-  }
-  const rewards = obj.rewards;
-  if (!Array.isArray(rewards)) return null;
-  const clean = rewards.flatMap((r) => {
-    if (!r || typeof r !== "object") return [];
-    const row = r as Record<string, unknown>;
-    const salesCount = Number(row.salesCount);
-    const label = typeof row.label === "string" ? row.label : "";
-    const icon = typeof row.icon === "string" ? row.icon : "";
-    if (!Number.isFinite(salesCount) || !label || !icon) return [];
-    return [{ salesCount: Math.trunc(salesCount), label, icon }];
-  });
-  return { rewards: clean };
-};
 
 type EventRow = {
   id: string;
@@ -99,13 +65,14 @@ type TicketTypeRow = {
   sold: number;
   position: number;
   box_label: string | null;
-  zone: string | null;
   unit_noun: string | null;
   sale_ends_at: string | null;
   presale_price_cents: number | null;
   presale_qty: number | null;
   presale_ends_at: string | null;
   description: string | null;
+  guest_list_enabled: boolean;
+  guest_list_cap: number | null;
 };
 
 type PromoRow = {
@@ -186,18 +153,18 @@ const toTicketType = (r: TicketTypeRow, tiers: PresaleTierRow[] = [], now: Date 
   const myTiers = tiers.filter(t => t.ticket_type_id === r.id);
   const active = activePresaleTier(myTiers, now);
   const sorted = [...myTiers].sort((a, b) => new Date(a.ends_at).getTime() - new Date(b.ends_at).getTime());
-  return {
+  // Frontera ÚNICA donde la columna `capacity` (ambigua) se traduce a su
+  // significado tipado: `seats` en un box, `stock` en una entrada. De aquí en
+  // adelante el resto del código no puede confundirlos (unión discriminada).
+  const base = {
     id: r.id,
     eventId: r.event_id,
     name: r.name,
-    kind: r.kind,
     priceCents: r.price_cents,
     currency: r.currency,
-    capacity: r.capacity,
     sold: r.sold,
     position: r.position,
     boxLabel: r.box_label,
-    zone: r.zone,
     unitNoun: r.unit_noun,
     saleEndsAt: r.sale_ends_at,
     // presalePriceCents e isPresaleActive ahora vienen de los tiers
@@ -214,6 +181,17 @@ const toTicketType = (r: TicketTypeRow, tiers: PresaleTierRow[] = [], now: Date 
       endsAt: t.ends_at,
       position: t.position,
     })),
+  };
+  // Normaliza kinds: 'box' aparte; cualquier otro (incl. 'vip' rezagado o
+  // 'invitation' previo a la migración de cortesías) cae a 'general'. Desacopla
+  // el código del momento exacto en que corre la migración de DB.
+  if (r.kind === "box") return { ...base, kind: "box", seats: r.capacity };
+  return {
+    ...base,
+    kind: "general",
+    stock: r.capacity,
+    guestListEnabled: r.guest_list_enabled ?? false,
+    guestListCap: r.guest_list_cap ?? null,
   };
 };
 
@@ -287,9 +265,6 @@ export const supabaseEventRepository: EventRepository = {
       .from("ticket_types")
       .select("*")
       .eq("event_id", event.id)
-      // Las cortesías (kind='invitation') son internas de la lista de invitados
-      // del promotor — nunca se muestran ni se venden en la página pública.
-      .neq("kind", "invitation")
       .order("position", { ascending: true });
     const { data: promos } = await db
       .from("ticket_promos")
@@ -437,41 +412,87 @@ export const supabaseEventRepository: EventRepository = {
     return data ? toTicketType(data) : null;
   },
 
-  async ensureInvitationTicketType(eventId): Promise<Result<{ id: string }>> {
+  async getDefaultGeneralTicketType(eventId): Promise<Result<{ id: string }>> {
     const db = supabaseAdmin();
-    const { data: existing } = await db
-      .from("ticket_types")
-      .select("id")
-      .eq("event_id", eventId)
-      .eq("kind", "invitation")
-      .maybeSingle<{ id: string }>();
-    if (existing) return ok({ id: existing.id });
-
-    // Capacity alta: la cortesía no tiene tope en v1 (la regla de negocio del
-    // cupo por promotor se evalúa aparte). El guard de `sold_out` en buy nunca
-    // debe dispararse para una invitación.
-    const { data: maxRow } = await db
-      .from("ticket_types")
-      .select("position")
-      .eq("event_id", eventId)
-      .order("position", { ascending: false })
-      .limit(1)
-      .maybeSingle<{ position: number }>();
-    const position = (maxRow?.position ?? -1) + 1;
+    // La general activa más barata (desempata por position). La cortesía se emite
+    // sobre esta entrada real, gratis y marcada is_courtesy.
     const { data, error } = await db
       .from("ticket_types")
-      .insert({
-        event_id: eventId,
-        name: "Invitación",
-        kind: "invitation",
-        price_cents: 0,
-        capacity: 1_000_000,
-        position,
-      })
       .select("id")
-      .single<{ id: string }>();
-    if (error || !data) return err(error?.message ?? "invitation_type_create_failed");
+      .eq("event_id", eventId)
+      .eq("kind", "general")
+      .order("price_cents", { ascending: true })
+      .order("position", { ascending: true })
+      .limit(1)
+      .maybeSingle<{ id: string }>();
+    if (error) return err(error.message);
+    if (!data) return err("no_general_ticket_type");
     return ok({ id: data.id });
+  },
+
+  async getGuestListTicketType(eventId): Promise<Result<GuestListTicketType>> {
+    const db = supabaseAdmin();
+    // La entrada general con la lista activada (desempata por position). Las
+    // cortesías del promotor se emiten sobre esta entrada real.
+    const { data, error } = await db
+      .from("ticket_types")
+      .select("id, guest_list_cap")
+      .eq("event_id", eventId)
+      .eq("kind", "general")
+      .eq("guest_list_enabled", true)
+      .order("position", { ascending: true })
+      .limit(1)
+      .maybeSingle<{ id: string; guest_list_cap: number | null }>();
+    if (error) return err(error.message);
+    if (!data) return err("guest_list_not_enabled");
+    // Conteo actual de cortesías (is_courtesy) vigentes de esta entrada.
+    const { count, error: countErr } = await db
+      .from("tickets")
+      .select("id", { count: "exact", head: true })
+      .eq("ticket_type_id", data.id)
+      .eq("is_courtesy", true)
+      .in("status", ["active", "used"]);
+    if (countErr) return err(countErr.message);
+    return ok({ id: data.id, cap: data.guest_list_cap, courtesyCount: count ?? 0 });
+  },
+
+  async getPromoterScheme(eventId): Promise<EventPromoterScheme> {
+    const db = supabaseAdmin();
+    const { data } = await db
+      .from("events")
+      .select(
+        "promoter_commission_pct, promoter_commission_type, promoter_commission_config, promoter_default_quota, promoter_default_guest_list_quota",
+      )
+      .eq("id", eventId)
+      .maybeSingle<{
+        promoter_commission_pct: number | null;
+        promoter_commission_type: CommissionType | null;
+        promoter_commission_config: CommissionConfig | null;
+        promoter_default_quota: number | null;
+        promoter_default_guest_list_quota: number | null;
+      }>();
+    return {
+      commissionPct: data?.promoter_commission_pct ?? null,
+      commissionType: data?.promoter_commission_type ?? null,
+      commissionConfig: data?.promoter_commission_config ?? null,
+      defaultQuota: data?.promoter_default_quota ?? null,
+      defaultGuestListQuota: data?.promoter_default_guest_list_quota ?? null,
+    };
+  },
+
+  async updatePromoterScheme(eventId, patch): Promise<Result<true>> {
+    const db = supabaseAdmin();
+    const row: Record<string, unknown> = {};
+    if ("commissionPct" in patch) row.promoter_commission_pct = patch.commissionPct;
+    if ("commissionType" in patch) row.promoter_commission_type = patch.commissionType;
+    if ("commissionConfig" in patch) row.promoter_commission_config = patch.commissionConfig;
+    if ("defaultQuota" in patch) row.promoter_default_quota = patch.defaultQuota;
+    if ("defaultGuestListQuota" in patch)
+      row.promoter_default_guest_list_quota = patch.defaultGuestListQuota;
+    if (Object.keys(row).length === 0) return ok(true);
+    const { error } = await db.from("events").update(row).eq("id", eventId);
+    if (error) return err(error.message);
+    return ok(true);
   },
 
   async listPromos(eventId): Promise<Promo[]> {
@@ -524,7 +545,6 @@ export const supabaseEventRepository: EventRepository = {
         capacity: input.capacity,
         position,
         box_label: input.kind === "box" ? input.boxLabel?.trim() ?? null : null,
-        zone: input.zone?.trim() || null,
         unit_noun:
           input.kind === "box" && input.unitNoun?.trim()
             ? input.unitNoun.trim()
@@ -534,6 +554,9 @@ export const supabaseEventRepository: EventRepository = {
         presale_qty: input.presaleQty ?? null,
         presale_ends_at: input.presaleEndsAt ?? null,
         description: input.description ?? null,
+        // Lista de invitados: solo en entradas generales (un box no la usa).
+        guest_list_enabled: input.kind === "box" ? false : input.guestListEnabled ?? false,
+        guest_list_cap: input.kind === "box" ? null : input.guestListCap ?? null,
       })
       .select("*")
       .single<TicketTypeRow>();
@@ -562,7 +585,6 @@ export const supabaseEventRepository: EventRepository = {
     if (input.priceCents !== undefined) patch.price_cents = input.priceCents;
     if (input.capacity !== undefined) patch.capacity = input.capacity;
     if (input.boxLabel !== undefined) patch.box_label = input.boxLabel;
-    if (input.zone !== undefined) patch.zone = input.zone?.trim() || null;
     if (input.unitNoun !== undefined)
       patch.unit_noun = input.unitNoun?.trim() || null;
     if ("saleEndsAt" in input) patch.sale_ends_at = input.saleEndsAt ?? null;
@@ -570,6 +592,8 @@ export const supabaseEventRepository: EventRepository = {
     if ("presaleQty" in input) patch.presale_qty = input.presaleQty ?? null;
     if ("presaleEndsAt" in input) patch.presale_ends_at = input.presaleEndsAt ?? null;
     if ("description" in input) patch.description = input.description ?? null;
+    if ("guestListEnabled" in input) patch.guest_list_enabled = input.guestListEnabled ?? false;
+    if ("guestListCap" in input) patch.guest_list_cap = input.guestListCap ?? null;
     // presaleTiers se gestiona por separado (delete+insert)
     const hasTierUpdate = "presaleTiers" in input;
     if (Object.keys(patch).length === 0 && !hasTierUpdate) return err("nothing_to_update");
@@ -698,10 +722,29 @@ export const supabaseEventRepository: EventRepository = {
       revenueCents: revenueByType.get(t.id) ?? 0,
     }));
 
+    // Esquema de comisión a nivel evento (default para todos los promotores).
+    // Se hereda entre el override del link y el default de la marca.
+    const { data: schemeRow } = await db
+      .from("events")
+      .select(
+        "promoter_commission_pct, promoter_commission_type, promoter_commission_config",
+      )
+      .eq("id", eventId)
+      .maybeSingle<{
+        promoter_commission_pct: number | null;
+        promoter_commission_type: CommissionType | null;
+        promoter_commission_config: unknown;
+      }>();
+    const eventScheme = schemeRow ?? {
+      promoter_commission_pct: null,
+      promoter_commission_type: null,
+      promoter_commission_config: null,
+    };
+
     const { data: promoterOrders } = await db
       .from("orders")
       .select(
-        "id, total_cents, promoter_link_id, promoter_link:promoter_links!inner(id, code, promoter_id, org_promoter_id, commission_pct, commission_config_override, profile:profiles(id, full_name), org_promoter:org_promoters(id, name, default_commission_pct, commission_type, commission_config))",
+        "id, total_cents, promoter_link_id, promoter_link:promoter_links!inner(id, code, promoter_id, org_promoter_id, commission_pct, commission_type, commission_config_override, profile:profiles(id, full_name), org_promoter:org_promoters(id, name, default_commission_pct, commission_type, commission_config))",
       )
       .eq("event_id", eventId)
       .eq("status", "paid")
@@ -716,7 +759,8 @@ export const supabaseEventRepository: EventRepository = {
         code: string;
         promoter_id: string | null;
         org_promoter_id: string | null;
-        commission_pct: number;
+        commission_pct: number | null;
+        commission_type: CommissionType | null;
         commission_config_override: unknown;
         profile: { id: string; full_name: string | null } | null;
         org_promoter: {
@@ -780,22 +824,23 @@ export const supabaseEventRepository: EventRepository = {
         o.promoter_link.profile?.full_name ??
         o.promoter_link.org_promoter?.name ??
         o.promoter_link.code;
-      // Commission resolution:
-      //   - type comes from org_promoter (the per-event link doesn't carry it yet);
-      //     falls back to "percentage" for legacy links without an org_promoter.
-      //   - pct uses the per-link override (commission_pct) when present.
-      //   - config: per-link override jsonb if present, otherwise the org default.
+      // Esquema efectivo por herencia: link override → esquema del evento → marca.
       const op = o.promoter_link.org_promoter;
-      const commissionType: CommissionType = op?.commission_type ?? "percentage";
-      const overrideCfg = coerceCommissionConfig(
-        commissionType,
-        o.promoter_link.commission_config_override,
-      );
-      const baseCfg = op
-        ? coerceCommissionConfig(commissionType, op.commission_config)
-        : null;
-      const commissionConfig = overrideCfg ?? baseCfg;
-      const commissionPct = o.promoter_link.commission_pct ?? op?.default_commission_pct ?? 0;
+      const {
+        type: commissionType,
+        config: commissionConfig,
+        pct: commissionPct,
+      } = resolveCommissionScheme({
+        linkType: o.promoter_link.commission_type,
+        linkPct: o.promoter_link.commission_pct,
+        linkConfigOverride: o.promoter_link.commission_config_override,
+        eventType: eventScheme.promoter_commission_type,
+        eventConfig: eventScheme.promoter_commission_config,
+        eventPct: eventScheme.promoter_commission_pct,
+        orgType: op?.commission_type ?? null,
+        orgConfig: op?.commission_config ?? null,
+        orgPct: op?.default_commission_pct ?? null,
+      });
       const entry = promoterAgg.get(key) ?? {
         promoterId: o.promoter_link.promoter_id ?? o.promoter_link.org_promoter_id ?? o.promoter_link.id,
         promoterLinkId: o.promoter_link.id,

@@ -9,6 +9,8 @@ import {
   getBoxByTicket,
   getBoxByToken,
   joinBox,
+  removeBoxMember,
+  addBoxCompanion,
 } from "../../application/BoxServices";
 import type { Box } from "../../domain/Box";
 
@@ -75,6 +77,17 @@ const joinSchema = z.object({
   holderName: z.string().min(1),
   holderDni: z.string().nullable().optional(),
   holderPhone: z.string().nullable().optional(),
+});
+
+const removeMemberSchema = z.object({
+  token: z.string().min(1),
+  memberProfileId: z.string().uuid(),
+});
+
+const addCompanionSchema = z.object({
+  token: z.string().min(1),
+  holderName: z.string().trim().min(2).max(120),
+  holderDni: z.string().regex(/^\d{8}$/).nullable().optional(),
 });
 
 export const BoxesController = {
@@ -146,5 +159,36 @@ export const BoxesController = {
       ? { id: mine.ticketId, k: signTicketLink(mine.ticketId) }
       : null;
     return { ok: true, value: { ...result.value, joinedTicket } };
+  },
+
+  async removeMember(input: unknown): Promise<Result<Box>> {
+    const parsed = removeMemberSchema.safeParse(input);
+    if (!parsed.success) return err("invalid_input");
+    const auth = await getAuthContext();
+    if (!auth.ok) return err(auth.error);
+    return removeBoxMember(
+      { repo },
+      {
+        token: parsed.data.token,
+        ownerId: auth.value.profileId,
+        memberProfileId: parsed.data.memberProfileId,
+      },
+    );
+  },
+
+  async addCompanion(input: unknown): Promise<Result<Box>> {
+    const parsed = addCompanionSchema.safeParse(input);
+    if (!parsed.success) return err("invalid_input");
+    const auth = await getAuthContext();
+    if (!auth.ok) return err(auth.error);
+    return addBoxCompanion(
+      { repo },
+      {
+        token: parsed.data.token,
+        ownerId: auth.value.profileId,
+        holderName: parsed.data.holderName,
+        holderDni: parsed.data.holderDni ?? null,
+      },
+    );
   },
 };

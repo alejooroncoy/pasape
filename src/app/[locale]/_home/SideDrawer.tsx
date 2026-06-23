@@ -10,6 +10,7 @@ import { CloseIcon, WaIcon, PinIcon } from "./icons";
 import { Logo } from "@/components/brand/Logo";
 import { WA_HREF } from "./wa";
 import { CATEGORIES } from "./categories";
+import { useBrowseEvents } from "@/lib/events/hooks/useEvents";
 import type { NavUser } from "./Nav";
 import type { EventCategory } from "@/server/events/domain/Event";
 
@@ -20,6 +21,14 @@ export function SideDrawer({ user, open, onClose, onSignIn, onSelectCategory }: 
   onSignIn: () => void;
   onSelectCategory?: (cat: EventCategory | null) => void;
 }) {
+  // Solo categorías que tienen al menos 1 evento publicado y en vivo (el backend
+  // ya filtra por estado en /api/events). Mismo criterio que los chips del home.
+  const allEvents = useBrowseEvents(null);
+  const categoriesWithEvents = new Set(
+    (allEvents.data ?? []).map((e) => e.category).filter(Boolean),
+  );
+  const visibleCategories = CATEGORIES.filter((c) => categoriesWithEvents.has(c.id));
+
   useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
@@ -90,19 +99,21 @@ export function SideDrawer({ user, open, onClose, onSignIn, onSelectCategory }: 
                 <Item Icon={PinIcon} label="Lima" meta="cambiar" />
               </Section>
 
-              <Section title="Categorías" topBorder>
-                {CATEGORIES.map(({ id, label, Icon }) => (
-                  <Item
-                    key={id}
-                    Icon={Icon}
-                    label={label}
-                    onClick={() => {
-                      onSelectCategory?.(id);
-                      onClose();
-                    }}
-                  />
-                ))}
-              </Section>
+              {visibleCategories.length > 0 && (
+                <Section title="Categorías" topBorder>
+                  {visibleCategories.map(({ id, label, Icon }) => (
+                    <Item
+                      key={id}
+                      Icon={Icon}
+                      label={label}
+                      onClick={() => {
+                        onSelectCategory?.(id);
+                        onClose();
+                      }}
+                    />
+                  ))}
+                </Section>
+              )}
 
               <Section title="Pasape" topBorder>
                 <Link

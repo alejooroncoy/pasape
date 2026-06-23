@@ -8,13 +8,11 @@ type Deps = { repo: EventRepository };
 
 type TicketTypeInput = {
   name: string;
-  kind: "general" | "vip" | "box";
+  kind: "general" | "box";
   priceCents: number;
   capacity: number;
   /** Etiqueta del box (A, B, VIP-1). Requerido cuando kind === "box". */
   boxLabel?: string | null;
-  /** Zona del venue para agrupar visualmente. Opcional. */
-  zone?: string | null;
   /** Cómo llamar a la unidad reservable (box, mesa, lounge...). Opcional. */
   unitNoun?: string | null;
   /** Cierre de venta del tipo (no de la preventa). Opcional. */
@@ -23,6 +21,10 @@ type TicketTypeInput = {
   presalePriceCents?: number | null;
   presaleQty?: number | null;
   presaleEndsAt?: string | null;
+  /** LISTA DE INVITADOS — activar la lista sobre esta entrada (solo kind general). */
+  guestListEnabled?: boolean;
+  /** Tope de cortesías de la lista. null = sin tope. */
+  guestListCap?: number | null;
 };
 
 export const createEvent = async (
@@ -50,13 +52,15 @@ export const createEvent = async (
       capacity: tt.capacity,
       position: i,
       box_label: tt.kind === "box" ? tt.boxLabel?.trim() ?? null : null,
-      zone: tt.zone?.trim() || null,
       unit_noun:
         tt.kind === "box" && tt.unitNoun?.trim() ? tt.unitNoun.trim() : null,
       sale_ends_at: tt.saleEndsAt ?? null,
       presale_price_cents: tt.presalePriceCents ?? null,
       presale_qty: tt.presaleQty ?? null,
       presale_ends_at: tt.presaleEndsAt ?? null,
+      // Lista de invitados: solo en entradas generales (un box no la usa).
+      guest_list_enabled: tt.kind === "box" ? false : tt.guestListEnabled ?? false,
+      guest_list_cap: tt.kind === "box" ? null : tt.guestListCap ?? null,
     })),
   );
   if (error) return err(error.message);

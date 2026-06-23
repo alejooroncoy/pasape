@@ -8,7 +8,7 @@ const intlMiddleware = createIntlMiddleware(routing);
 // Compone: primero refresca la sesión de Supabase (cookies), después aplica intl.
 // Si Supabase setea cookies en el response, las preservamos en el response final.
 export default async function proxy(req: NextRequest) {
-  const supabaseResponse = updateSupabaseSession(req);
+  const supabaseResponse = await updateSupabaseSession(req);
   const intlResponse = intlMiddleware(req);
 
   supabaseResponse.cookies.getAll().forEach((c) => {

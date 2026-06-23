@@ -7,9 +7,11 @@ import { GoogleBtn } from "@/components/design";
 import { useGoogleSignIn } from "@/lib/identity/hooks/useFirebaseAuth";
 import { Logo } from "@/components/brand/Logo";
 
+// Login de asistentes (comprar entradas, guardar eventos, seguir productoras).
+// Para el panel de organizador ver /org/login (OrgLoginClient). Default next → home.
 export function LoginClient() {
   const search = useSearchParams();
-  const next = search.get("next") ?? "/es/org";
+  const next = search.get("next") ?? "/es";
   const { signIn, pending, error } = useGoogleSignIn({ redirectTo: next });
 
   return (
@@ -54,10 +56,10 @@ export function LoginClient() {
         </div>
 
         <h1 className="font-sans text-[28px] font-semibold leading-[1.1] tracking-[-0.03em] text-white sm:text-[32px]">
-          Entra al panel
+          Entra a Pasape
         </h1>
         <p className="mx-auto mt-2 max-w-[34ch] text-[13.5px] leading-snug text-cart-ink-3">
-          Inicia sesión para gestionar tus marcas, eventos y ventas.
+          Inicia sesión para comprar entradas, ver tus QR y seguir a tus productoras.
         </p>
 
         <motion.div
@@ -78,9 +80,9 @@ export function LoginClient() {
         <div className="mt-5 text-[11px] text-cart-ink-4">Sin contraseña · sin apps</div>
 
         <div className="mt-10 flex items-center justify-center gap-2 text-[11.5px] text-cart-ink-4">
-          <span>¿No eres organizador?</span>
-          <Link href="/" className="font-medium text-cart-ink-2 hover:text-white">
-            Explorar eventos
+          <span>¿Eres organizador?</span>
+          <Link href="/org/login" className="font-medium text-cart-ink-2 hover:text-white">
+            Entra al panel
           </Link>
         </div>
       </motion.div>

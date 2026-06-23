@@ -8,6 +8,7 @@ import { useSearchParams } from "next/navigation";
 // useEffect para no disparar el warning de useLayoutEffect en el server.
 const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
 import { useRouter } from "@/i18n/navigation";
+import { UserHeader } from "@/app/[locale]/_home/UserHeader";
 import { useEvent } from "@/lib/events/hooks/useEvents";
 import { useBuyTickets } from "@/lib/tickets/hooks/useTickets";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
@@ -19,8 +20,11 @@ import { YapeForm } from "@/components/payments/YapeForm";
 import { PresaleCountdown, shouldCountdown } from "@/components/ui/PresaleCountdown";
 import type { TicketType } from "@/server/events/domain/Event";
 import {
+  boxSeats,
   capitalize,
-  groupTicketTypesByZone,
+  groupBoxesByNoun,
+  stockTotal,
+  type TicketGroup,
   ticketStatus,
   ticketSubtitle,
   unitNoun,
@@ -182,7 +186,7 @@ function BuyFlowInner({ params }: Props) {
     return () => io.disconnect();
   }, [phase]);
 
-  // Selección inicial desde el detalle: ?qty=N (y opcional ?zone=). Sin esto, la
+  // Selección inicial desde el detalle: ?qty=N (+ opcional ?tt=id). Sin esto, la
   // cantidad elegida en la página del evento se perdía al entrar a /buy.
   const initSelRef = useRef(false);
   useEffect(() => {
@@ -215,14 +219,11 @@ function BuyFlowInner({ params }: Props) {
       return;
     }
     // ?tt = id exacto del tipo de entrada (una card por entrada en el detalle).
-    // Fallback: ?zone (boxes) o la primera entrada.
+    // Fallback: la primera entrada del evento.
     const ttParam = search.get("tt");
-    const zoneParam = search.get("zone");
     const target = ttParam
       ? data.ticketTypes.find((tt) => tt.id === ttParam)
-      : (data.ticketTypes.filter((tt) =>
-          zoneParam ? tt.zone === zoneParam : tt.zone === null,
-        )[0] ?? data.ticketTypes[0]);
+      : data.ticketTypes[0];
     if (target) {
       initSelRef.current = true;
       setQty((prev) => (Object.keys(prev).length ? prev : { [target.id]: qParam }));
@@ -264,6 +265,9 @@ function BuyFlowInner({ params }: Props) {
   }, [phase, reservedAt, reservationExpired]);
 
   const isLogged = !!me.data?.user;
+  // Pedido gratis: hay entradas pero el total es 0 → no hay pago. El flujo es de
+  // 2 pasos (pedido → datos) y se omite todo el lenguaje/paso de checkout.
+  const isFreeOrder = total === 0 && totalItems > 0;
   const emailOk = /.+@.+\..+/.test(guestEmail.trim());
   const phoneOk = guestPhone.replace(/\D/g, "").length === 9;
   // El portero valida por DNI — es obligatorio también para logueados. La
@@ -363,16 +367,24 @@ function BuyFlowInner({ params }: Props) {
     setPhase("pick");
   };
 
-  const phaseLabel: Record<Phase, string> = {
-    pick: "1 de 3 · Tu pedido",
-    data: "2 de 3 · Tus datos",
-    pay: "3 de 3 · Pago",
-  };
+  // Stepper honesto: gratis = 2 pasos (sin "Pago"); pagado = 3.
+  const phaseLabel: Record<Phase, string> = isFreeOrder
+    ? {
+        pick: "1 de 2 · Tu pedido",
+        data: "2 de 2 · Tus datos",
+        pay: "2 de 2 · Tus datos",
+      }
+    : {
+        pick: "1 de 3 · Tu pedido",
+        data: "2 de 3 · Tus datos",
+        pay: "3 de 3 · Pago",
+      };
 
   const primaryCtaLabel = (compact: boolean): string => {
     if (buy.isPending) return "Preparando…";
     if (phase === "pick") {
       if (!pickValid) return "Elige una entrada";
+      if (isFreeOrder) return "Continuar · Gratis";
       return `Continuar · ${formatPrice(total)}`;
     }
     if (phase === "data") {
@@ -391,46 +403,32 @@ function BuyFlowInner({ params }: Props) {
 
   return (
     <div className="min-h-dvh bg-cart-bg text-white">
-      {/* Top bar */}
-      <header className="sticky top-0 z-30 border-b border-cart-line bg-cart-bg/85 backdrop-blur-md">
-        <div className="mx-auto flex max-w-[1120px] items-center justify-between px-5 py-3.5 lg:px-8">
+      {/* Header de usuario reutilizado */}
+      <UserHeader />
+
+      {/* Fila contextual del checkout: volver + paso actual */}
+      <div className="mx-auto w-full max-w-[1120px] px-5 lg:px-8">
+        <div className="flex items-center gap-3 py-3.5">
           <button
             type="button"
             onClick={onBack}
             aria-label="Volver"
-            className="grid size-9 place-items-center rounded-full bg-cart-bg-elev text-cart-ink-2 transition hover:bg-cart-bg-elev-2 hover:text-white"
+            className="grid size-9 shrink-0 place-items-center rounded-full bg-cart-bg-elev text-cart-ink-2 transition hover:bg-cart-bg-elev-2 hover:text-white"
           >
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
               <path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </button>
-          <div className="text-[12.5px] font-medium text-cart-ink-3">
-            {phaseLabel[phase]}
-          </div>
-          <button
-            type="button"
-            onClick={() => router.back()}
-            aria-label="Cerrar"
-            className="grid size-9 place-items-center rounded-full bg-cart-bg-elev text-cart-ink-2 transition hover:bg-cart-bg-elev-2 hover:text-white"
-          >
-            <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
-              <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-            </svg>
-          </button>
+          <span className="text-[12.5px] font-medium text-cart-ink-3">{phaseLabel[phase]}</span>
         </div>
-      </header>
+      </div>
 
-      <div className="mx-auto w-full max-w-[1120px] px-5 lg:flex lg:min-h-[calc(100dvh-72px)] lg:items-start lg:px-8 lg:py-10">
+      <div className="mx-auto w-full max-w-[1120px] px-5 lg:flex lg:items-start lg:px-8 lg:pb-10">
         <div className="grid w-full gap-8 lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-10">
           {/* Main */}
           <main className="pt-6 lg:pb-12">
             {phase === "pick" ? (
-              <PickPhase
-                ticketTypes={data.ticketTypes}
-                initialZone={search.get("zone")}
-                qty={qty}
-                setQty={setQty}
-              />
+              <PickPhase ticketTypes={data.ticketTypes} qty={qty} setQty={setQty} />
             ) : phase === "data" ? (
               <DataPhase
                 isLogged={isLogged}
@@ -668,88 +666,41 @@ function ReservationExpiredModal({
 
 function PickPhase({
   ticketTypes,
-  initialZone,
   qty,
   setQty,
 }: {
   ticketTypes: TicketType[];
-  initialZone: string | null;
   qty: Record<string, number>;
   setQty: (next: Record<string, number>) => void;
 }) {
-  const groups = useMemo(() => groupTicketTypesByZone(ticketTypes), [ticketTypes]);
-  // Precio máximo del evento — define qué zona es "la top" (dorada). Usa el
-  // precio base (no preventa) para que el estatus no cambie durante la preventa.
-  const eventMaxPriceCents = useMemo(
-    () => ticketTypes.reduce((mx, t) => Math.max(mx, t.priceCents), 0),
-    [ticketTypes],
-  );
-  // Tab "Todos" siempre primero. initialZone viene desde /events/[slug]
-  // cuando el comprador tappeó una zone card específica.
-  const tabs = useMemo(() => {
-    const list: Array<{ id: string; label: string }> = [
-      { id: "__all", label: "Todos" },
-    ];
-    for (const g of groups) {
-      list.push({ id: g.zone ?? "__ungrouped__", label: g.zone ?? "Otros" });
+  // Entradas normales: cada tipo su card (su nombre las diferencia). Boxes
+  // ("espacios"): agrupados por unit_noun en una grilla. Sin tabs de zona.
+  const groups = useMemo<TicketGroup[]>(() => {
+    const out: TicketGroup[] = [];
+    const boxes: TicketType[] = [];
+    for (const tt of ticketTypes) {
+      if (tt.kind === "box") boxes.push(tt);
+      else out.push({ label: null, items: [tt] });
     }
-    return list;
-  }, [groups]);
-  const initialTab = useMemo(() => {
-    if (!initialZone) return "__all";
-    return tabs.find((t) => t.id === initialZone)?.id ?? "__all";
-  }, [initialZone, tabs]);
-  const [selectedTab, setSelectedTab] = useState(initialTab);
-
-  const visibleGroups = useMemo(() => {
-    if (selectedTab === "__all") return groups;
-    return groups.filter((g) => (g.zone ?? "__ungrouped__") === selectedTab);
-  }, [selectedTab, groups]);
+    for (const g of groupBoxesByNoun(boxes)) out.push(g);
+    return out;
+  }, [ticketTypes]);
 
   return (
     <div className="flex flex-col gap-8">
       <Section title="Entradas">
-        {tabs.length > 2 && (
-          <div className="-mx-5 mb-4 overflow-x-auto px-5 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-            <div className="flex min-w-min gap-1.5">
-              {tabs.map((tab) => {
-                const active = selectedTab === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => setSelectedTab(tab.id)}
-                    className={
-                      "shrink-0 rounded-full px-3.5 py-1.5 text-[12.5px] font-semibold transition " +
-                      (active
-                        ? "bg-cart-accent text-cart-bg"
-                        : "border border-cart-line bg-cart-bg-elev text-cart-ink-2 hover:border-cart-line-strong hover:text-white")
-                    }
-                  >
-                    {tab.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
         <div className="flex flex-col gap-5">
-          {visibleGroups.map((group, gi) => {
+          {groups.map((group, gi) => {
             const allBoxes =
               group.items.length > 0 && group.items.every((i) => i.kind === "box");
-            // Grid de tiles cuando es zona pura de boxes y hay 4+ (evita
-            // mostrar cards idénticas con sólo el número cambiando). Aplica
-            // también en el tab "Todos" — cada grupo se renderiza como grid.
+            // Grilla de tiles para espacios (boxes) con 4+ — evita repetir cards
+            // idénticas que solo cambian de número.
             const useGrid = allBoxes && group.items.length >= 4;
             return (
-              <div key={group.zone ?? `__ungrouped__-${gi}`} className="flex flex-col gap-2.5">
-                {/* La zona vive como chip dorado dentro de cada tarjeta (ZoneBadge),
-                    así que no repetimos un encabezado gris arriba. */}
+              <div key={group.label ?? `tt-${gi}`} className="flex flex-col gap-2.5">
                 {useGrid ? (
                   <BoxGrid
                     items={group.items}
-                    zone={group.zone}
-                    maxPriceCents={eventMaxPriceCents}
                     qty={qty}
                     onChange={(id, v) => setQty({ ...qty, [id]: v })}
                   />
@@ -758,7 +709,6 @@ function PickPhase({
                     <TicketCard
                       key={tt.id}
                       tt={tt}
-                      maxPriceCents={eventMaxPriceCents}
                       value={qty[tt.id] ?? 0}
                       onChange={(v) => setQty({ ...qty, [tt.id]: v })}
                     />
@@ -769,6 +719,124 @@ function PickPhase({
           })}
         </div>
       </Section>
+
+      {/* Preview de reparto: SOLO entradas individuales. Un box no se "reparte"
+          aquí — se invita por link desde su panel después de pagar, así que ni
+          dispara este aviso ni se cuenta en él. */}
+      {(() => {
+        const individualUnits = ticketTypes.reduce(
+          (a, tt) => a + (tt.kind === "box" ? 0 : (qty[tt.id] ?? 0)),
+          0,
+        );
+        return individualUnits >= 2 ? <SeatHandoffPreview units={individualUnits} /> : null;
+      })()}
+    </div>
+  );
+}
+
+/**
+ * Vista previa del reparto en el checkout: muestra "caritas" (tú + una por cada
+ * acompañante) para que el comprador entienda, sin leer, que cada entrada tiene
+ * un dueño. NO es interactivo aquí: la asignación real se hace al terminar de
+ * pagar (checkout liviano). Si tocan algo, un toast lo aclara.
+ */
+function SeatHandoffPreview({ units }: { units: number }) {
+  const [toast, setToast] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const poke = () => {
+    setToast(true);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setToast(false), 2400);
+  };
+
+  // Cap visual para que la fila no explote con cantidades altas.
+  const others = units - 1;
+  const shown = Math.min(others, 6);
+  const overflow = others - shown;
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={poke}
+        className="w-full cursor-default rounded-2xl border border-cart-line bg-cart-bg-elev p-4 text-left"
+      >
+        <div className="flex items-center justify-center gap-2 text-[13.5px] font-semibold">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" className="text-cart-ink-2" aria-hidden>
+            <path d="M3 9a2 2 0 002-2V6h14v1a2 2 0 000 4v1a2 2 0 000 4v1H5v-1a2 2 0 00-2-2 2 2 0 010-4z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M9 6v12" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          Compraste {units} entradas
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-start justify-center gap-x-4 gap-y-3">
+          <Avatar kind="me" label="Tú" />
+          {Array.from({ length: shown }).map((_, i) => (
+            <Avatar key={i} kind="add" label="Persona" />
+          ))}
+          {overflow > 0 && <Avatar kind="more" label="" count={overflow} />}
+        </div>
+
+        <p className="mt-4 border-t border-cart-line pt-3 text-center text-[12px] text-cart-ink-2">
+          A cada una le pones sus datos o se la envías
+          <span className="ml-1.5 inline-flex items-center gap-1 rounded-full bg-cart-accent-soft px-2 py-0.5 text-[11px] font-semibold text-cart-accent">
+            al pagar
+          </span>
+        </p>
+      </button>
+
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 12 }}
+            transition={{ duration: 0.2 }}
+            className="pointer-events-none fixed inset-x-0 bottom-[96px] z-50 flex justify-center px-5"
+          >
+            <span className="rounded-full bg-white/95 px-4 py-2.5 text-[13px] font-medium text-gray-900 shadow-lg backdrop-blur-sm">
+              Lo podrás seleccionar al finalizar el pago
+            </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
+  );
+}
+
+function Avatar({
+  kind,
+  label,
+  count,
+}: {
+  kind: "me" | "add" | "more";
+  label: string;
+  count?: number;
+}) {
+  return (
+    <div className="text-center">
+      {kind === "me" ? (
+        <div
+          className="mx-auto grid size-12 place-items-center rounded-full text-[16px] font-extrabold text-white"
+          style={{ background: "linear-gradient(135deg, #FF4D5E, #7C3AED 60%, #4B1F9A)" }}
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM4 20v-1a6 6 0 016-6h4a6 6 0 016 6v1" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </div>
+      ) : kind === "more" ? (
+        <div className="mx-auto grid size-12 place-items-center rounded-full border-2 border-dashed border-cart-line-strong text-[14px] font-bold text-cart-ink-2">
+          +{count}
+        </div>
+      ) : (
+        <div className="mx-auto grid size-12 place-items-center rounded-full border-2 border-dashed border-cart-line-strong text-cart-ink-3">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </div>
+      )}
+      {label && <div className="mt-1.5 text-[11.5px] text-cart-ink-2">{label}</div>}
     </div>
   );
 }
@@ -898,67 +966,8 @@ function TicketBadge({
         Box{boxLabel ? ` · ${boxLabel}` : ""}
       </span>
     );
-  if (kind === "vip")
-    return (
-      <span className="rounded-full bg-yellow-400/15 px-1.5 py-px text-[9.5px] font-bold uppercase tracking-[0.1em] text-yellow-300">
-        VIP
-      </span>
-    );
+  // VIP/General ya no son tipos: el nombre de la entrada los distingue.
   return null;
-}
-
-/**
- * Etiqueta de zona como ESTATUS, no como pin de mapa. Una zona "Platinum" o
- * "VIP" es aspiracional: se trata en dorado para que genere deseo. Solo se
- * muestra si el organizador definió la zona.
- */
-/**
- * Estilos del distintivo de zona según jerarquía de PRECIO (no por nombre):
- * - "top": la(s) zona(s) más cara(s) del evento → dorado con estrella.
- * - "mid": el resto de zonas con nombre → plateado con diamante (visible, no gris
- *   apagado, pero subordinado al dorado). Las entradas sin zona no llevan chip.
- * Decidir por precio es honesto y automático: lo caro brilla más.
- */
-const ZONE_TIER_STYLE = {
-  top: {
-    color: "#f5d98b",
-    background:
-      "linear-gradient(180deg, rgba(245,217,139,0.16), rgba(245,217,139,0.05))",
-    border: "1px solid rgba(245,217,139,0.32)",
-  },
-  mid: {
-    color: "#cfd8ee",
-    background:
-      "linear-gradient(180deg, rgba(207,216,238,0.16), rgba(207,216,238,0.05))",
-    border: "1px solid rgba(207,216,238,0.34)",
-  },
-} as const;
-
-function ZoneBadge({ label, tier = "top" }: { label: string; tier?: "top" | "mid" }) {
-  // Quita el prefijo "Zona " redundante: el chip ya comunica que es zona.
-  const clean = label.replace(/^zona\s+/i, "").trim() || label;
-  return (
-    <span
-      className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-[0.07em]"
-      style={ZONE_TIER_STYLE[tier]}
-    >
-      <svg viewBox="0 0 24 24" className="h-2.5 w-2.5 shrink-0" fill="currentColor" aria-hidden>
-        {tier === "top" ? (
-          /* estrella — máximo estatus */
-          <path d="M12 2l2.4 6.9H21l-5.3 4 2 6.9L12 16l-5.7 3.8 2-6.9L3 8.9h6.6z" />
-        ) : (
-          /* diamante — premium subordinado */
-          <path d="M12 2l7 10-7 10-7-10z" />
-        )}
-      </svg>
-      {clean}
-    </span>
-  );
-}
-
-/** Tier de una zona según su precio vs el máximo del evento. */
-function zoneTier(priceCents: number, eventMaxPriceCents: number): "top" | "mid" {
-  return priceCents >= eventMaxPriceCents ? "top" : "mid";
 }
 
 /** Escasez por umbral porcentual: solo "enciende" cuando queda ≤30% del stock. */
@@ -999,46 +1008,38 @@ function ScarcityNote({
 
 function BoxGrid({
   items,
-  zone,
-  maxPriceCents,
   qty,
   onChange,
 }: {
   items: TicketType[];
-  zone: string | null;
-  maxPriceCents: number;
   qty: Record<string, number>;
   onChange: (ticketTypeId: string, value: number) => void;
 }) {
   const selectedItems = items.filter((tt) => (qty[tt.id] ?? 0) > 0);
   const totalCents = selectedItems.reduce((acc, tt) => acc + tt.priceCents, 0);
-  const totalPeople = selectedItems.reduce((acc, tt) => acc + tt.capacity, 0);
+  const totalPeople = selectedItems.reduce((acc, tt) => acc + boxSeats(tt), 0);
 
-  // Si todos los boxes de la zona tienen el mismo precio y capacidad, se
-  // muestra una sola vez arriba del grid. Es el caso típico.
+  // Si todos los espacios tienen el mismo precio y capacidad, se muestra una
+  // sola vez arriba del grid. Es el caso típico.
   const uniqPrices = new Set(items.map((i) => i.priceCents));
-  const uniqCaps = new Set(items.map((i) => i.capacity));
+  const uniqCaps = new Set(items.map((i) => boxSeats(i)));
   const samePrice = uniqPrices.size === 1;
   const sameCap = uniqCaps.size === 1;
   const commonPriceCents = samePrice ? items[0].priceCents : null;
-  const commonCap = sameCap ? items[0].capacity : null;
+  const commonCap = sameCap ? boxSeats(items[0]) : null;
   const currency = items[0].currency;
-  // Noun más usado en la zona (los items suelen compartirlo). Default "box".
+  // Noun más usado en el grupo (los items suelen compartirlo). Default "box".
   const noun = unitNoun(items[0]);
-  // Espacios libres de la zona (cada box/mesa es una unidad reservable).
+  // Espacios libres del grupo (cada box/mesa es una unidad reservable).
   const freeCount = items.filter((tt) => ticketStatus(tt).kind !== "soldout").length;
-  // Tier del distintivo según el precio más alto del grupo vs el del evento.
-  const groupPriceCents = items.reduce((mx, i) => Math.max(mx, i.priceCents), 0);
-  const tier = zoneTier(groupPriceCents, maxPriceCents);
 
   return (
     <div className="rounded-2xl border border-cart-line bg-cart-bg-elev p-4">
-      {/* Título de la tarjeta + zona como estatus (dorado) — consistente con las entradas */}
+      {/* Título de la tarjeta de espacios */}
       <div className="mb-2 flex items-center gap-2">
         <span className="text-[15.5px] font-semibold tracking-[-0.01em]">
           {capitalize(unitNounPlural(noun))}
         </span>
-        {zone ? <ZoneBadge label={zone} tier={tier} /> : null}
       </div>
       {/* Header común — info que se repetía en cada card */}
       <div className="flex items-baseline justify-between">
@@ -1131,7 +1132,7 @@ function BoxGrid({
               </p>
               <p className="mt-0.5 text-[11.5px] text-cart-ink-3">
                 {selectedItems.length === 1
-                  ? `${selectedItems[0].capacity} personas`
+                  ? `${boxSeats(selectedItems[0])} personas`
                   : `${selectedItems.length} ${unitNounPlural(noun)} · ${totalPeople} personas`}
               </p>
             </div>
@@ -1165,12 +1166,10 @@ function tileLabel(tt: TicketType): string {
 
 function TicketCard({
   tt,
-  maxPriceCents,
   value,
   onChange,
 }: {
   tt: TicketType;
-  maxPriceCents: number;
   value: number;
   onChange: (v: number) => void;
 }) {
@@ -1182,7 +1181,8 @@ function TicketCard({
   const remaining = status.kind === "available" ? status.remaining : 0;
   const selected = value > 0;
   const ap = activePricing(tt);
-  const stock = lowStock(tt.sold, tt.capacity);
+  // Solo aplica a entradas (no box); stockTotal() resuelve el cupo correcto.
+  const stock = lowStock(tt.sold, stockTotal(tt));
 
   const saleDeadline =
     tt.saleEndsAt && status.kind !== "expired"
@@ -1212,7 +1212,6 @@ function TicketCard({
               {tt.name}
             </span>
             <TicketBadge kind={tt.kind} boxLabel={tt.boxLabel} />
-            {tt.zone ? <ZoneBadge label={tt.zone} tier={zoneTier(tt.priceCents, maxPriceCents)} /> : null}
             {ap.isPresale && (
               <span className="rounded-md bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.06em] text-emerald-300">
                 Preventa
@@ -1652,7 +1651,7 @@ function OrderSummary({
           Total
         </span>
         <span className="text-[22px] font-bold tabular-nums tracking-[-0.02em]">
-          {formatMoney(total + fee)}
+          <Price cents={total + fee} />
         </span>
       </div>
 

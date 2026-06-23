@@ -13,6 +13,11 @@ export type PromoterLink = {
   commissionPct: number;
   active: boolean;
   createdAt: string;
+  /**
+   * Cupo de cortesías de la lista de invitados para este promotor.
+   * null = sin tope individual (solo lo limita el cupo total del evento).
+   */
+  guestListQuota: number | null;
   /** Backend-computed: estado del evento relativo al momento de fetch. */
   eventStatus: "live" | "upcoming" | "closed";
 };

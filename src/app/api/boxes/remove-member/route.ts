@@ -1,0 +1,8 @@
+import type { NextRequest } from "next/server";
+import { BoxesController } from "@/server/boxes/controllers/rest/BoxesController";
+import { json } from "@/server/_shared/http";
+
+export const POST = async (req: NextRequest) => {
+  const body = await req.json().catch(() => ({}));
+  return json(await BoxesController.removeMember(body));
+};

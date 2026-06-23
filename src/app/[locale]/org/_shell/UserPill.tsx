@@ -105,7 +105,7 @@ export function UserPill() {
   if (!user) {
     return (
       <Link
-        href={"/login" as never}
+        href={"/org/login" as never}
         className="flex items-center justify-center gap-2 rounded-2xl border border-cart-line bg-cart-bg-elev px-3 py-2.5 text-[13px] font-medium text-cart-ink-2 transition-colors hover:border-cart-accent hover:text-white"
       >
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>

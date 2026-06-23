@@ -92,16 +92,17 @@ const createSchema = z.object({
     .array(
       z.object({
         name: z.string().min(1),
-        kind: z.enum(["general", "vip", "box"]).default("general"),
+        kind: z.enum(["general", "box"]).default("general"),
         priceCents: z.number().int().min(0),
         capacity: z.number().int().min(0),
         boxLabel: z.string().trim().min(1).max(40).nullable().optional(),
-        zone: z.string().trim().max(60).nullable().optional(),
         unitNoun: z.string().trim().max(24).nullable().optional(),
         saleEndsAt: z.string().datetime().nullable().optional(),
         presalePriceCents: z.number().int().min(0).nullable().optional(),
         presaleQty: z.number().int().min(0).nullable().optional(),
         presaleEndsAt: z.string().datetime().nullable().optional(),
+        guestListEnabled: z.boolean().optional(),
+        guestListCap: z.number().int().min(0).nullable().optional(),
       }),
     )
     .min(1),
@@ -118,9 +119,10 @@ export const EventsController = {
   ): Promise<Result<{ event: Event; ticketTypes: TicketType[]; promos: Promo[] }>> {
     const data = await getEventBySlug({ repo }, slug);
     if (!data) return err("not_found");
-    // Si el evento está publicado, acceso libre. Si está en draft/closed/
-    // cancelled, sólo lo ve un miembro de la org dueña (preview interno).
-    if (data.event.status !== "published") {
+    // Published y closed son públicos: un evento que terminó sigue siendo
+    // visible (se muestra como "terminado"), no un 404. Draft y cancelled
+    // sólo los ve un miembro de la org dueña (preview interno).
+    if (data.event.status !== "published" && data.event.status !== "closed") {
       const auth = await getAuthContext();
       if (!auth.ok) return err("not_found");
       const { data: membership } = await supabaseAdmin()
@@ -229,7 +231,6 @@ export const EventsController = {
       priceCents: parsed.data.priceCents,
       capacity: parsed.data.capacity,
       boxLabel: parsed.data.boxLabel ?? null,
-      zone: parsed.data.zone ?? null,
       unitNoun: parsed.data.unitNoun ?? null,
       saleEndsAt: parsed.data.saleEndsAt ?? null,
       description: parsed.data.description ?? null,
@@ -237,6 +238,8 @@ export const EventsController = {
       presalePriceCents: parsed.data.presalePriceCents ?? null,
       presaleQty: parsed.data.presaleQty ?? null,
       presaleEndsAt: parsed.data.presaleEndsAt ?? null,
+      guestListEnabled: parsed.data.guestListEnabled ?? false,
+      guestListCap: parsed.data.guestListCap ?? null,
     });
   },
 
@@ -430,11 +433,10 @@ const presaleFields = {
 
 const createTicketTypeSchema = z.object({
   name: z.string().min(1),
-  kind: z.enum(["general", "vip", "box"]).default("general"),
+  kind: z.enum(["general", "box"]).default("general"),
   priceCents: z.number().int().min(0),
   capacity: z.number().int().min(0),
   boxLabel: z.string().trim().min(1).max(40).nullable().optional(),
-  zone: z.string().trim().max(60).nullable().optional(),
   unitNoun: z.string().trim().max(24).nullable().optional(),
   saleEndsAt: z.string().datetime().nullable().optional(),
   description: z.string().max(300).nullable().optional(),
@@ -442,6 +444,8 @@ const createTicketTypeSchema = z.object({
     priceCents: z.number().int().min(0),
     endsAt: z.string().datetime(),
   })).max(10).optional(),
+  guestListEnabled: z.boolean().optional(),
+  guestListCap: z.number().int().min(0).nullable().optional(),
   ...presaleFields,
 });
 
@@ -450,7 +454,6 @@ const updateTicketTypeSchema = z.object({
   priceCents: z.number().int().min(0).optional(),
   capacity: z.number().int().min(0).optional(),
   boxLabel: z.string().trim().min(1).max(40).nullable().optional(),
-  zone: z.string().trim().max(60).nullable().optional(),
   unitNoun: z.string().trim().max(24).nullable().optional(),
   saleEndsAt: z.string().datetime().nullable().optional(),
   description: z.string().max(300).nullable().optional(),
@@ -458,6 +461,8 @@ const updateTicketTypeSchema = z.object({
     priceCents: z.number().int().min(0),
     endsAt: z.string().datetime(),
   })).max(10).optional(),
+  guestListEnabled: z.boolean().optional(),
+  guestListCap: z.number().int().min(0).nullable().optional(),
   ...presaleFields,
 });
 

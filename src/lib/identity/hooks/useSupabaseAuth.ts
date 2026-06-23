@@ -15,7 +15,10 @@ export const useGoogleSignIn = (opts: { redirectTo?: string } = {}) => {
     setError(null);
     try {
       const supabase = createSupabaseBrowserClient();
-      const next = opts.redirectTo ?? window.location.pathname;
+      // Preserva el query string (ej. ?k=… de los links de ticket): sin él la
+      // página vuelve del login sin su llave secreta y da 404.
+      const next =
+        opts.redirectTo ?? window.location.pathname + window.location.search;
       const callbackUrl = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
       const { error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: "google",

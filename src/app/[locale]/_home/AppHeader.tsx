@@ -3,11 +3,9 @@
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import * as Dialog from "@radix-ui/react-dialog";
 import { CaretIcon, PinIcon, SearchIcon } from "./icons";
 import { Logo } from "@/components/brand/Logo";
-import { GoogleBtn } from "@/components/design";
-import { useGoogleSignIn } from "@/lib/identity/hooks/useFirebaseAuth";
+import { SignInDrawer } from "./SignInDrawer";
 import { CATEGORIES, CATEGORY_BY_ID } from "./categories";
 import type { EventCategory } from "@/server/events/domain/Event";
 
@@ -115,6 +113,21 @@ export function HeaderSpacer() {
 
 /** Acciones de cuenta: Soy organizador · Mis entradas · avatar/Ingresar · menú. */
 export function HeaderActions({ user, onOpenMenu }: { user: NavUser | null; onOpenMenu: () => void }) {
+  // Modal de login controlado: lo abren tanto "Ingresar" como "Mis entradas"
+  // cuando no hay sesión (en vez de navegar a una página que igual redirige).
+  const [signInOpen, setSignInOpen] = useState(false);
+  const ticketsClass =
+    "relative inline-flex h-10 items-center gap-2 rounded-full border border-transparent px-3 text-[13.5px] font-medium text-cart-ink-2 transition-colors hover:border-cart-line hover:bg-cart-bg-elev hover:text-white max-[900px]:hidden";
+  const ticketsInner = (
+    <>
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+        <path d="M2 6a1 1 0 011-1h10a1 1 0 011 1v1a1 1 0 100 2v1a1 1 0 01-1 1H3a1 1 0 01-1-1V9a1 1 0 100-2V6z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+        <path d="M6.5 5v6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeDasharray="1.5 1.5" />
+      </svg>
+      <span className="max-[1180px]:hidden">Mis entradas</span>
+    </>
+  );
+
   return (
     <div className="flex items-center gap-2.5 max-[560px]:gap-0">
       <Link
@@ -126,16 +139,15 @@ export function HeaderActions({ user, onOpenMenu }: { user: NavUser | null; onOp
 
       <span className="h-5 w-px bg-cart-line max-[1180px]:hidden" aria-hidden />
 
-      <Link
-        href={"/tickets" as never}
-        className="relative inline-flex h-10 items-center gap-2 rounded-full border border-transparent px-3 text-[13.5px] font-medium text-cart-ink-2 transition-colors hover:border-cart-line hover:bg-cart-bg-elev hover:text-white max-[900px]:hidden"
-      >
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
-          <path d="M2 6a1 1 0 011-1h10a1 1 0 011 1v1a1 1 0 100 2v1a1 1 0 01-1 1H3a1 1 0 01-1-1V9a1 1 0 100-2V6z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
-          <path d="M6.5 5v6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeDasharray="1.5 1.5" />
-        </svg>
-        <span className="max-[1180px]:hidden">Mis entradas</span>
-      </Link>
+      {user ? (
+        <Link href={"/tickets" as never} className={ticketsClass}>
+          {ticketsInner}
+        </Link>
+      ) : (
+        <button type="button" onClick={() => setSignInOpen(true)} className={ticketsClass}>
+          {ticketsInner}
+        </button>
+      )}
 
       {user ? (
         <motion.button
@@ -153,7 +165,19 @@ export function HeaderActions({ user, onOpenMenu }: { user: NavUser | null; onOp
           </span>
         </motion.button>
       ) : (
-        <DesktopSignInModal />
+        <>
+          <motion.button
+            type="button"
+            onClick={() => setSignInOpen(true)}
+            whileHover={{ y: -1, filter: "brightness(1.1)" }}
+            whileTap={{ scale: 0.96 }}
+            transition={TAP_SPRING}
+            className="whitespace-nowrap rounded-full border-0 bg-cart-accent px-[18px] py-2.5 text-sm font-medium text-white shadow-[0_0_0_1px_rgba(255,255,255,0.08)_inset,0_6px_22px_-6px_var(--color-cart-accent-glow-strong)] max-[900px]:hidden"
+          >
+            Ingresar
+          </motion.button>
+          <SignInDrawer open={signInOpen} onClose={() => setSignInOpen(false)} />
+        </>
       )}
 
       <motion.button
@@ -170,75 +194,6 @@ export function HeaderActions({ user, onOpenMenu }: { user: NavUser | null; onOp
   );
 }
 
-function DesktopSignInModal() {
-  const [open, setOpen] = useState(false);
-  const { signIn, pending, error } = useGoogleSignIn({});
-
-  return (
-    <Dialog.Root open={open} onOpenChange={setOpen}>
-      <Dialog.Trigger asChild>
-        <motion.button
-          type="button"
-          whileHover={{ y: -1, filter: "brightness(1.1)" }}
-          whileTap={{ scale: 0.96 }}
-          transition={TAP_SPRING}
-          className="whitespace-nowrap rounded-full border-0 bg-cart-accent px-[18px] py-2.5 text-sm font-medium text-white shadow-[0_0_0_1px_rgba(255,255,255,0.08)_inset,0_6px_22px_-6px_var(--color-cart-accent-glow-strong)] max-[900px]:hidden"
-        >
-          Ingresar
-        </motion.button>
-      </Dialog.Trigger>
-      <Dialog.Portal forceMount>
-        <AnimatePresence>
-          {open && (
-            <>
-              <Dialog.Overlay asChild>
-                <motion.div
-                  key="overlay"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.2 }}
-                  className="fixed inset-0 z-[190] bg-black/60 backdrop-blur-sm"
-                />
-              </Dialog.Overlay>
-              <Dialog.Content asChild>
-                <motion.div
-                  key="modal"
-                  initial={{ opacity: 0, scale: 0.94, y: 8 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.94, y: 8 }}
-                  transition={{ type: "spring", stiffness: 420, damping: 28, mass: 0.7 }}
-                  className="fixed left-1/2 top-1/2 z-[200] w-[min(360px,90vw)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-cart-line bg-cart-bg-elev p-6 shadow-[0_32px_80px_-12px_rgba(0,0,0,0.9),0_0_0_1px_rgba(255,255,255,0.06)_inset] outline-none"
-                >
-                  <Dialog.Title className="mb-0.5 text-[20px] font-bold leading-tight tracking-[-0.02em] text-white">
-                    Entra a Pasape
-                  </Dialog.Title>
-                  <Dialog.Description className="mb-5 text-[13px] leading-snug text-cart-ink-3">
-                    Guarda eventos, compra entradas y sigue a tus productoras favoritas.
-                  </Dialog.Description>
-                  <GoogleBtn onClick={() => void signIn()} disabled={pending} />
-                  {error && <p className="mt-2 text-center text-[11px] text-rose-400">{error}</p>}
-                  <p className="mt-3 text-center text-[11px] text-cart-ink-4">Sin contraseña · sin apps</p>
-                  <Dialog.Close asChild>
-                    <button
-                      type="button"
-                      aria-label="Cerrar"
-                      className="absolute right-3.5 top-3.5 grid size-8 place-items-center rounded-full border border-cart-line bg-cart-bg-elev-2 text-cart-ink-3 transition-colors hover:border-cart-line-strong hover:text-white"
-                    >
-                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
-                        <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                      </svg>
-                    </button>
-                  </Dialog.Close>
-                </motion.div>
-              </Dialog.Content>
-            </>
-          )}
-        </AnimatePresence>
-      </Dialog.Portal>
-    </Dialog.Root>
-  );
-}
 
 export function CitySelector({ className = "" }: { className?: string }) {
   const [showSoon, setShowSoon] = useState(false);

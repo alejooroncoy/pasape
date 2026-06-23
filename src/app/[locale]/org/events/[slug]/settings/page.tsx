@@ -39,19 +39,22 @@ export default function OrgEventConfigPage({ params }: { params: Params }) {
           />
           {ev?.transferPolicy.enabled && (
             <>
-              <Row
-                label="Cierre"
-                value={
-                  ev.transferPolicy.deadlineHours != null
-                    ? `${ev.transferPolicy.deadlineHours}h antes`
-                    : "Sin límite"
-                }
-                mono
+              <EditNumberRow
+                label="Se puede transferir hasta"
+                value={ev.transferPolicy.deadlineHours}
+                suffix="h antes"
+                unit="h antes"
+                min={1}
+                allowNull
+                onSave={(v) => update.mutate({ transferDeadlineHours: v })}
+                saving={update.isPending && "transferDeadlineHours" in (update.variables ?? {})}
               />
-              <Row
+              <EditNumberRow
                 label="Máximo por entrada"
-                value={`${ev.transferPolicy.maxCount}`}
-                mono
+                value={ev.transferPolicy.maxCount}
+                min={1}
+                onSave={(v) => update.mutate({ transferMaxCount: v ?? 1 })}
+                saving={update.isPending && "transferMaxCount" in (update.variables ?? {})}
                 last
               />
             </>
@@ -162,17 +165,102 @@ function Section({
   );
 }
 
-function Row({
+// Detecta desktop para elegir popover (≥lg) vs drawer (móvil).
+function useIsDesktop() {
+  const [desktop, setDesktop] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const on = () => setDesktop(mq.matches);
+    on();
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
+  return desktop;
+}
+
+// Fila editable: clic en el valor → popover en desktop, drawer en móvil.
+// El editor comparte cuerpo entre ambos; guarda con "Listo"/Enter o "Sin límite".
+function EditNumberRow({
   label,
   value,
-  mono,
+  suffix,
+  unit,
+  min,
+  allowNull,
+  nullLabel = "Sin límite",
+  onSave,
+  saving,
   last,
 }: {
   label: string;
-  value: string;
-  mono?: boolean;
+  value: number | null;
+  suffix?: string;
+  unit?: string;
+  min: number;
+  allowNull?: boolean;
+  nullLabel?: string;
+  onSave: (v: number | null) => void;
+  saving?: boolean;
   last?: boolean;
 }) {
+  const isDesktop = useIsDesktop();
+  const [open, setOpen] = useState(false);
+  const [local, setLocal] = useState("");
+  const close = () => setOpen(false);
+  const openEditor = () => {
+    setLocal(value != null ? String(value) : "");
+    setOpen(true);
+  };
+  const commit = () => {
+    const n = parseInt(local, 10);
+    if (!(local.trim() === "" || isNaN(n) || n < min)) onSave(n);
+    close();
+  };
+  const display = value == null ? nullLabel : `${value}${suffix ?? ""}`;
+
+  const body = (
+    <div className="flex flex-col gap-3">
+      <div className="text-[13.5px] font-semibold">{label}</div>
+      <div className="flex items-center gap-2">
+        <input
+          type="number"
+          min={min}
+          value={local}
+          autoFocus
+          placeholder={allowNull ? "sin límite" : undefined}
+          onChange={(e) => setLocal(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") commit();
+            if (e.key === "Escape") close();
+          }}
+          className="w-24 rounded-lg bg-cart-bg-elev-2 px-2.5 py-2 text-center font-mono text-[15px] font-semibold outline-none ring-1 ring-cart-line-strong focus:ring-cart-accent"
+        />
+        {unit && <span className="text-[13px] text-cart-ink-3">{unit}</span>}
+      </div>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={commit}
+          className="rounded-full bg-cart-accent px-4 py-2 text-[13px] font-semibold text-white"
+        >
+          Listo
+        </button>
+        {allowNull && (
+          <button
+            type="button"
+            onClick={() => {
+              onSave(null);
+              close();
+            }}
+            className="rounded-full bg-cart-bg-elev-2 px-3 py-2 text-[12.5px] font-semibold text-cart-ink-2 ring-1 ring-cart-line-strong transition hover:text-white"
+          >
+            Sin límite
+          </button>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <div
       className={
@@ -181,14 +269,70 @@ function Row({
       }
     >
       <span className="text-[13px] text-cart-ink-3">{label}</span>
-      <span
-        className={
-          "max-w-[60%] truncate text-right text-[13.5px] font-medium text-white " +
-          (mono ? "font-mono" : "")
-        }
-      >
-        {value}
-      </span>
+      <div className="relative">
+        <button
+          type="button"
+          onClick={openEditor}
+          disabled={saving}
+          className="inline-flex items-center gap-1.5 font-mono text-[13.5px] font-medium text-white transition hover:text-cart-accent disabled:opacity-70"
+        >
+          {display}
+          {saving ? (
+            <svg width="13" height="13" viewBox="0 0 14 14" fill="none" className="animate-spin text-cart-accent" aria-hidden>
+              <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.6" strokeOpacity="0.25" />
+              <path d="M7 1.5a5.5 5.5 0 0 1 5.5 5.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
+          ) : (
+            <svg width="13" height="13" viewBox="0 0 14 14" fill="none" className="text-cart-ink-4" aria-hidden>
+              <path d="M9 2.5l2.5 2.5-6 6H3v-2.5l6-6z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+            </svg>
+          )}
+        </button>
+        <AnimatePresence>
+          {open && isDesktop && (
+            <div key="pop">
+              <div className="fixed inset-0 z-[70]" onClick={close} aria-hidden />
+              <motion.div
+                initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                transition={{ duration: 0.15 }}
+                className="absolute top-full right-0 z-[71] mt-2 w-60 origin-top-right rounded-2xl border border-cart-line bg-cart-bg-elev p-4 shadow-[0_20px_60px_-10px_rgba(0,0,0,0.7)]"
+              >
+                {body}
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      <AnimatePresence>
+        {open && !isDesktop && (
+          <div key="drawer">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={close}
+              aria-hidden
+              className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm"
+            />
+            <motion.div
+              role="dialog"
+              aria-modal="true"
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 32, stiffness: 360 }}
+              className="fixed inset-x-0 bottom-0 z-[81] mx-auto w-full max-w-[480px] rounded-t-[28px] border-t border-cart-line bg-cart-bg-elev p-5 shadow-[0_-20px_60px_-10px_rgba(0,0,0,0.7)]"
+              style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 22px)" }}
+            >
+              <div className="mx-auto mb-3 h-1 w-9 rounded-full bg-white/15" />
+              {body}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

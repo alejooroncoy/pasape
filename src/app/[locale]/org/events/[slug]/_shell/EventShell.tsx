@@ -8,7 +8,7 @@ import { useEvent } from "@/lib/events/hooks/useEvents";
 import { ShareEventDialog } from "@/components/ui/ShareEventDialog";
 import { EventComposer } from "@/app/[locale]/org/events/_components/EventComposer";
 
-export type EventTab = "panel" | "team" | "settings";
+export type EventTab = "panel" | "team" | "promoters" | "settings";
 
 const TABS: Array<{ key: EventTab; label: string; href: (slug: string) => string; icon: ReactNode }> = [
   {
@@ -33,6 +33,18 @@ const TABS: Array<{ key: EventTab; label: string; href: (slug: string) => string
           strokeWidth="1.6"
           strokeLinecap="round"
         />
+      </svg>
+    ),
+  },
+  {
+    key: "promoters",
+    label: "Promotores",
+    href: (s) => `/org/events/${s}/promoters`,
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
+        <circle cx="7" cy="7" r="2.6" stroke="currentColor" strokeWidth="1.6" />
+        <path d="M2.5 16c.4-2.3 2.2-3.8 4.5-3.8s4.1 1.5 4.5 3.8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        <path d="M13.5 8.5l1.6 1.6L18 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     ),
   },

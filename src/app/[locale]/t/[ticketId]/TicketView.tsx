@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { AnimatePresence, motion } from "motion/react";
-import { GoogleBtn, QrSquare } from "@/components/design";
+import { motion } from "motion/react";
+import { QrSquare } from "@/components/design";
 import { useLocalRotatingQr } from "@/lib/tickets/hooks/useLocalRotatingQr";
-import { useGoogleSignIn } from "@/lib/identity/hooks/useFirebaseAuth";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
+import { SignInDrawer } from "@/app/[locale]/_home/SignInDrawer";
 import { Logo } from "@/components/brand/Logo";
 import { useBoxForTicket, useCreateBox, useRealtimeBox } from "@/lib/boxes/hooks/useBoxes";
 
@@ -90,7 +90,6 @@ export const TicketView = ({
   );
 
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const { signIn, pending: signInPending, error: signInError } = useGoogleSignIn();
   const me = useCurrentUser();
   const isLogged = !!me.data?.user;
 
@@ -224,16 +223,7 @@ export const TicketView = ({
         </div>
       </div>
 
-      <AnimatePresence>
-        {drawerOpen && (
-          <SignInDrawer
-            onClose={() => setDrawerOpen(false)}
-            onGoogle={() => void signIn()}
-            pending={signInPending}
-            error={signInError}
-          />
-        )}
-      </AnimatePresence>
+      <SignInDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
     </div>
   );
 };
@@ -703,86 +693,6 @@ function SignInPromo({
     </div>
   );
 }
-
-/* ============================== SignInDrawer ============================== */
-
-const SignInDrawer = ({
-  onClose,
-  onGoogle,
-  pending,
-  error,
-}: {
-  onClose: () => void;
-  onGoogle: () => void;
-  pending: boolean;
-  error: string | null;
-}) => (
-  <motion.div
-    initial={{ opacity: 0 }}
-    animate={{ opacity: 1 }}
-    exit={{ opacity: 0 }}
-    transition={{ duration: 0.18 }}
-    onClick={onClose}
-    className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-md lg:items-center"
-  >
-    <motion.div
-      initial={{ y: "100%", opacity: 0.8 }}
-      animate={{ y: 0, opacity: 1 }}
-      exit={{ y: "100%", opacity: 0 }}
-      transition={{ type: "spring", damping: 30, stiffness: 320, mass: 0.8 }}
-      onClick={(e) => e.stopPropagation()}
-      drag="y"
-      dragConstraints={{ top: 0, bottom: 0 }}
-      dragElastic={{ top: 0, bottom: 0.5 }}
-      onDragEnd={(_, info) => {
-        if (info.offset.y > 120 || info.velocity.y > 800) onClose();
-      }}
-      className="w-full max-w-[420px] touch-none rounded-t-[26px] bg-cart-bg-elev-2 p-5 pb-9 ring-1 ring-cart-line lg:rounded-[26px]"
-    >
-      <div className="mb-4 flex justify-center lg:hidden">
-        <div className="h-1 w-9 rounded-full bg-white/15" />
-      </div>
-      <motion.h2
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.08, duration: 0.25 }}
-        className="text-[24px] font-bold leading-tight tracking-[-0.03em]"
-      >
-        Crea tu cuenta
-      </motion.h2>
-      <motion.p
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.14, duration: 0.25 }}
-        className="mb-5 mt-1.5 text-[13px] leading-relaxed text-cart-ink-3"
-      >
-        Un toque y todas tus entradas quedan guardadas.
-      </motion.p>
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2, duration: 0.3 }}
-      >
-        <GoogleBtn onClick={onGoogle} disabled={pending} />
-      </motion.div>
-      <AnimatePresence>
-        {error && (
-          <motion.p
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            className="mt-3 overflow-hidden text-center text-[12px] text-rose-300"
-          >
-            {error}
-          </motion.p>
-        )}
-      </AnimatePresence>
-      <p className="mt-3.5 text-center text-[11px] text-cart-ink-4">
-        Sin contraseña · sin apps
-      </p>
-    </motion.div>
-  </motion.div>
-);
 
 /* ============================== Icons + ring ============================== */
 

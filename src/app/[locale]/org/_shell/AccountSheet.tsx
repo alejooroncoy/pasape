@@ -118,7 +118,7 @@ export function AccountSheet({ open, onClose }: { open: boolean; onClose: () => 
                   Inicia sesión para gestionar tus eventos y ventas.
                 </div>
                 <Link
-                  href={"/login" as never}
+                  href={"/org/login" as never}
                   onClick={onClose}
                   className="flex w-full items-center justify-center gap-2 rounded-full bg-cart-accent px-5 py-3.5 text-[14.5px] font-semibold text-white shadow-[0_0_0_1px_rgba(255,255,255,0.08)_inset,0_8px_24px_-8px_var(--color-cart-accent-glow-strong)]"
                 >

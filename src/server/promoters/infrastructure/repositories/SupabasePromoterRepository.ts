@@ -18,6 +18,7 @@ type LinkRow = {
   commission_pct: number;
   active: boolean;
   created_at: string;
+  guest_list_quota: number | null;
   event: {
     id: string;
     slug: string;
@@ -53,6 +54,7 @@ const toLink = (r: LinkRow, now: Date = new Date()): PromoterLink => ({
   commissionPct: r.commission_pct,
   active: r.active,
   createdAt: r.created_at,
+  guestListQuota: r.guest_list_quota ?? null,
   eventStatus: computeEventStatus(r.event.starts_at, r.event.status, now),
 });
 
@@ -125,10 +127,10 @@ export const supabasePromoterRepository: PromoterRepository = {
       .from("tickets")
       .select(
         "id, holder_name, holder_email, holder_phone, status, used_at, created_at, " +
-          "ticket_type:ticket_types!inner(kind), order:orders!inner(promoter_link_id)",
+          "order:orders!inner(promoter_link_id)",
       )
       .eq("order.promoter_link_id", linkId)
-      .eq("ticket_type.kind", "invitation")
+      .eq("is_courtesy", true)
       .order("created_at", { ascending: false });
 
     type GuestTicketRow = {
@@ -149,6 +151,18 @@ export const supabasePromoterRepository: PromoterRepository = {
       enteredAt: t.used_at,
       createdAt: t.created_at,
     }));
+  },
+
+  async countCourtesies(linkId): Promise<number> {
+    const db = supabaseAdmin();
+    // Mismo criterio que el cupo del evento: solo cortesías vigentes (active/used).
+    const { count } = await db
+      .from("tickets")
+      .select("id, order:orders!inner(promoter_link_id)", { count: "exact", head: true })
+      .eq("order.promoter_link_id", linkId)
+      .eq("is_courtesy", true)
+      .in("status", ["active", "used"]);
+    return count ?? 0;
   },
 
   async getEarnings(promoterId) {

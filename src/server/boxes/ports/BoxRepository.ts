@@ -16,4 +16,19 @@ export type BoxRepository = {
     holderDni: string | null;
     holderPhone: string | null;
   }): Promise<Result<Box>>;
+  /** El host quita a un integrante: anula su QR y libera el asiento. Solo el
+      dueño del box; no puede quitarse a sí mismo. */
+  removeMember(input: {
+    token: string;
+    ownerId: string;
+    memberProfileId: string;
+  }): Promise<Result<Box>>;
+  /** El host agrega un acompañante SIN celular: ocupa un asiento, pero su QR lo
+      lleva el host (current_holder = ownerId). Solo el dueño del box. */
+  addCompanion(input: {
+    token: string;
+    ownerId: string;
+    holderName: string;
+    holderDni: string | null;
+  }): Promise<Result<Box>>;
 };
