@@ -50,6 +50,17 @@ calculadora.html
 gaa.ts
 pasape/
 
+# Scratch en la raíz (screenshots/research/mockups) — no subir
+/*.png
+/*.jpg
+/*.jpeg
+/*.gif
+/*.webp
+/*.html
+paula.json
+do-sales-cadence.md
+skills-lock.json
+
 .claude/
 .vscode/
 package-lock.json
