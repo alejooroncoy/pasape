@@ -1,3 +1,5 @@
+import type { CommissionConfig, CommissionType } from "./OrgPromoter";
+
 export type PromoterLink = {
   id: string;
   eventId: string;
@@ -43,6 +45,22 @@ export type PromoterHomeData = {
   link: PromoterLink;
   soldCount: number;
   recent: RecentBuyer[];
+  // ── Cómo le pagan (resuelto: link → evento → marca) ──
+  /** Modalidad efectiva: % por venta, hitos en efectivo o premios en especie. */
+  commissionType: CommissionType;
+  /** % efectivo (relevante solo si commissionType === "percentage"). */
+  commissionPct: number;
+  /** Config de hitos/especie efectiva (null si es %). */
+  commissionConfig: CommissionConfig;
+  // ── Estado de la lista de invitados de este promotor en el evento ──
+  /** El organizador activó la lista de invitados en una entrada del evento. */
+  guestListEnabled: boolean;
+  /** Cupo de cortesías efectivo (propio → default del evento). null = sin tope. */
+  guestListQuota: number | null;
+  /** Cortesías ya emitidas por este promotor (vigentes). */
+  guestListUsed: number;
+  /** Cupo restante. null = sin tope; si no, max(0, quota - used). */
+  guestListRemaining: number | null;
 };
 
 // Un invitado de la lista del promotor: una cortesía (ticket S/0) que él emitió.

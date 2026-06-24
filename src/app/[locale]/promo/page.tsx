@@ -7,9 +7,8 @@ import { Link } from "@/i18n/navigation";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { useMyPromoterLinks, usePromoterGuests, usePromoterHome } from "@/lib/promoters/hooks/usePromoter";
 import { useRealtimePromoterStats } from "@/lib/events/hooks/useRealtimeEventStats";
-import { useCommissionTiers } from "@/lib/promoters/tiers/hooks/useCommissionTiers";
 import type { PromoterLink } from "@/server/promoters/domain/Promoter";
-import type { CommissionTier } from "@/server/promoters/tiers/domain/CommissionTier";
+import type { CommissionConfig, CommissionType } from "@/server/promoters/domain/OrgPromoter";
 import { PromoterShell } from "./_shell/PromoterShell";
 import { AddGuestForm } from "./_components/AddGuestForm";
 import { GuestList } from "./_components/GuestList";
@@ -209,8 +208,6 @@ export default function PromoHomePage() {
 // ============================================================
 function ActiveEventPanel({ link }: { link: PromoterLink }) {
   const home = usePromoterHome(link.eventSlug);
-  const tiers = useCommissionTiers(link.id);
-  const allTiers = tiers.data ?? [];
 
   // El promotor ve sus ventas/hitos en vivo: mismo Broadcast del evento que usa
   // el panel del organizador.
@@ -232,13 +229,21 @@ function ActiveEventPanel({ link }: { link: PromoterLink }) {
 
       <KpiRow sold={sold} validated={validated} generatedCents={generatedCents} />
 
-      <GuestsSection slug={link.eventSlug} />
-
-      <HitosCarousel
+      <GuestsSection
         slug={link.eventSlug}
-        tiers={allTiers}
+        loading={home.isLoading}
+        enabled={home.data?.guestListEnabled ?? false}
+        quota={home.data?.guestListQuota ?? null}
+        used={home.data?.guestListUsed ?? 0}
+        remaining={home.data?.guestListRemaining ?? null}
+      />
+
+      <PaySection
+        type={home.data?.commissionType ?? "percentage"}
+        pct={home.data?.commissionPct ?? 0}
+        config={home.data?.commissionConfig ?? null}
         sold={sold}
-        loading={tiers.isLoading}
+        loading={home.isLoading}
       />
 
       <ActivityFeed recent={recent} loading={home.isLoading} />
@@ -249,11 +254,36 @@ function ActiveEventPanel({ link }: { link: PromoterLink }) {
 // ============================================================
 // Lista de invitados del evento activo (resumen + alta inline)
 // ============================================================
-function GuestsSection({ slug }: { slug: string }) {
+function GuestsSection({
+  slug,
+  loading,
+  enabled,
+  quota,
+  used,
+  remaining,
+}: {
+  slug: string;
+  loading: boolean;
+  enabled: boolean;
+  quota: number | null;
+  used: number;
+  remaining: number | null;
+}) {
   const guests = usePromoterGuests(slug);
   const [adding, setAdding] = useState(false);
   const list = guests.data ?? [];
   const entered = list.filter((g) => g.status === "used").length;
+
+  // El organizador no activó la lista para este evento: no mostramos la sección
+  // (mientras carga tampoco, para no parpadear algo que puede no aplicar).
+  if (loading || !enabled) return null;
+
+  const noTope = quota == null;
+  const full = remaining != null && remaining <= 0;
+  // Copy del cupo: "sin tope" o "te quedan N de M".
+  const cupoLabel = noTope
+    ? "Invitaciones sin tope"
+    : `Te quedan ${remaining} de ${quota}`;
 
   return (
     <section>
@@ -271,16 +301,46 @@ function GuestsSection({ slug }: { slug: string }) {
         )}
       </div>
 
-      {list.length > 0 && (
+      {/* Cupo del promotor: lo que el organizador le asignó. */}
+      <div className="mb-3 flex items-center justify-between rounded-2xl border border-cart-line bg-cart-bg-elev px-3.5 py-2.5">
+        <span className="text-[12.5px] text-cart-ink-2">
+          {cupoLabel}
+        </span>
+        {!noTope && (
+          <span
+            className={
+              "rounded-full px-2.5 py-0.5 text-[11.5px] font-semibold " +
+              (full
+                ? "bg-rose-500/12 text-rose-300"
+                : "bg-cart-accent-soft text-cart-accent")
+            }
+          >
+            {used}/{quota}
+          </span>
+        )}
+      </div>
+
+      {list.length > 0 ? (
         <p className="mb-3 text-[12.5px] text-cart-ink-3">
           <b className="text-white">{list.length}</b> invitados ·{" "}
           <b className="text-white">{entered}</b> entraron
         </p>
+      ) : (
+        !full && (
+          <p className="mb-3 text-[12.5px] leading-snug text-cart-ink-3">
+            Invita gratis a tu gente — le llega su entrada por WhatsApp.
+            Basta su número, o agrégalo con nombre y DNI.
+          </p>
+        )
       )}
 
       <GuestList guests={list} loading={guests.isLoading} limit={4} />
 
-      {adding ? (
+      {full ? (
+        <div className="mt-3 rounded-2xl border border-dashed border-cart-line bg-transparent px-4 py-3 text-center text-[12.5px] font-medium text-cart-ink-3">
+          Llegaste a tu cupo de invitados ({used}/{quota}).
+        </div>
+      ) : adding ? (
         <div className="mt-3 rounded-2xl border border-cart-line-strong bg-cart-bg-elev/60 p-4">
           <AddGuestForm slug={slug} onAdded={() => setAdding(false)} />
           <button
@@ -353,10 +413,6 @@ function HeroCard({ link }: { link: PromoterLink }) {
             <span>{link.eventVenue}</span>
           </>
         )}
-        <span className="text-cart-ink-4">·</span>
-        <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10.5px] font-semibold text-white">
-          {link.commissionPct}%
-        </span>
       </div>
 
       {/* Link box */}
@@ -431,38 +487,70 @@ function Kpi({ label, value, mono }: { label: string; value: string; mono?: bool
 }
 
 // ============================================================
-// Hitos carousel (horizontal scroll, compacto)
+// "Cómo te pagan" — bloque adaptativo a la modalidad real del promotor.
+//   percentage → % por venta · tiered → hitos en efectivo · inkind → premios.
 // ============================================================
-function HitosCarousel({
-  slug,
-  tiers,
+function PaySection({
+  type,
+  pct,
+  config,
   sold,
   loading,
 }: {
-  slug: string;
-  tiers: CommissionTier[];
+  type: CommissionType;
+  pct: number;
+  config: CommissionConfig;
   sold: number;
   loading: boolean;
 }) {
-  // Próximos al desbloqueo primero, después desbloqueados.
-  const sorted = useMemo(() => {
-    return [...tiers].sort((a, b) => {
-      const aLocked = !a.unlockedAt;
-      const bLocked = !b.unlockedAt;
-      if (aLocked !== bLocked) return aLocked ? -1 : 1;
-      return a.thresholdCount - b.thresholdCount;
-    });
-  }, [tiers]);
-
   if (loading) {
     return (
       <section>
-        <SectionTitle title="Tus hitos" />
-        <div className="mt-2 flex gap-3 overflow-hidden">
-          {[0, 1, 2].map((i) => (
-            <div
+        <SectionTitle title="Cómo te pagan" />
+        <div className="mt-2 h-24 animate-pulse rounded-2xl border border-cart-line bg-cart-bg-elev/50" />
+      </section>
+    );
+  }
+
+  // % por venta: una sola tarjeta, clara. Si no hay % configurado (0), es que
+  // el organizador todavía no definió nada → estado vacío en vez de "0%".
+  if (type === "percentage") {
+    if (pct <= 0) return <PayEmpty />;
+    return (
+      <section>
+        <SectionTitle title="Cómo te pagan" />
+        <div
+          className="mt-2 flex items-center gap-4 rounded-2xl border border-cart-line-strong p-4"
+          style={{ background: "linear-gradient(135deg, rgba(184,124,255,0.14), rgba(184,124,255,0.02))" }}
+        >
+          <div className="font-sans text-[34px] font-semibold leading-none tracking-[-0.03em] text-cart-accent">
+            {pct}%
+          </div>
+          <div className="text-[13px] leading-snug text-cart-ink-2">
+            de comisión por <b className="text-white">cada entrada</b> que vendas con tu link.
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  // Hitos en efectivo.
+  if (type === "tiered") {
+    const tiers = config && "tiers" in config ? [...config.tiers].sort((a, b) => a.salesCount - b.salesCount) : [];
+    if (tiers.length === 0) return <PayEmpty />;
+    return (
+      <section>
+        <SectionTitle title="Cómo te pagan" />
+        <p className="mb-2 mt-1 text-[12px] text-cart-ink-3">Ganas en efectivo al llegar a estas ventas.</p>
+        <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-2">
+          {tiers.map((t, i) => (
+            <MilestoneCard
               key={i}
-              className="h-32 w-44 shrink-0 animate-pulse rounded-2xl border border-cart-line bg-cart-bg-elev/50"
+              headline={formatSoles(t.payoutCents)}
+              threshold={t.salesCount}
+              sold={sold}
+              tag="Efectivo"
+              accent="var(--color-cart-accent)"
             />
           ))}
         </div>
@@ -470,99 +558,89 @@ function HitosCarousel({
     );
   }
 
-  if (sorted.length === 0) {
-    return (
-      <section>
-        <SectionTitle title="Tus hitos" />
-        <div className="mt-2 rounded-2xl border border-dashed border-cart-line bg-cart-bg-elev px-4 py-6 text-center text-[13px] text-cart-ink-3">
-          El organizador todavía no configuró tus hitos.
-        </div>
-      </section>
-    );
-  }
-
+  // Premios en especie.
+  const rewards = config && "rewards" in config ? [...config.rewards].sort((a, b) => a.salesCount - b.salesCount) : [];
+  if (rewards.length === 0) return <PayEmpty />;
   return (
     <section>
-      <div className="flex items-center justify-between">
-        <SectionTitle title="Tus hitos" />
-        <Link
-          href={`/promo/${slug}/hitos` as never}
-          className="text-[12.5px] font-medium text-cart-accent transition hover:brightness-110"
-        >
-          Ver todos
-        </Link>
-      </div>
-      <div className="-mx-1 mt-2 flex gap-3 overflow-x-auto px-1 pb-2">
-        {sorted.map((t) => (
-          <HitoCard key={t.id} tier={t} sold={sold} slug={slug} />
+      <SectionTitle title="Cómo te pagan" />
+      <p className="mb-2 mt-1 text-[12px] text-cart-ink-3">Te ganas estos premios al llegar a estas ventas.</p>
+      <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-2">
+        {rewards.map((r, i) => (
+          <MilestoneCard
+            key={i}
+            headline={r.label}
+            icon={r.icon}
+            threshold={r.salesCount}
+            sold={sold}
+            tag="Premio"
+            accent="#FFCE3B"
+          />
         ))}
       </div>
     </section>
   );
 }
 
-function HitoCard({
-  tier,
-  sold,
-  slug,
-}: {
-  tier: CommissionTier;
-  sold: number;
-  slug: string;
-}) {
-  const unlocked = !!tier.unlockedAt;
-  const isCash = tier.rewardKind === "cash";
-  const accent = isCash
-    ? "var(--color-cart-accent)"
-    : tier.rewardKind === "bottle"
-      ? "#22D17F"
-      : "#FFCE3B";
-  const pct = Math.min(100, Math.round((sold / Math.max(1, tier.thresholdCount)) * 100));
-  const remaining = Math.max(0, tier.thresholdCount - sold);
-
+function PayEmpty() {
   return (
-    <Link
-      href={`/promo/${slug}/hitos` as never}
+    <section>
+      <SectionTitle title="Cómo te pagan" />
+      <div className="mt-2 rounded-2xl border border-dashed border-cart-line bg-cart-bg-elev px-4 py-6 text-center text-[13px] text-cart-ink-3">
+        El organizador todavía no definió cómo te paga.
+      </div>
+    </section>
+  );
+}
+
+// Tarjeta de meta (hito o premio): headline + umbral + progreso vs ventas.
+function MilestoneCard({
+  headline,
+  icon,
+  threshold,
+  sold,
+  tag,
+  accent,
+}: {
+  headline: string;
+  icon?: string;
+  threshold: number;
+  sold: number;
+  tag: string;
+  accent: string;
+}) {
+  const reached = sold >= threshold;
+  const pct = Math.min(100, Math.round((sold / Math.max(1, threshold)) * 100));
+  const remaining = Math.max(0, threshold - sold);
+  return (
+    <div
       className={
-        "group block w-56 shrink-0 rounded-2xl border p-3.5 transition lg:w-64 " +
-        (unlocked
-          ? "border-cart-line-strong"
-          : "border-cart-line hover:border-cart-line-strong")
+        "block w-56 shrink-0 rounded-2xl border p-3.5 lg:w-64 " +
+        (reached ? "border-cart-line-strong" : "border-cart-line")
       }
       style={
-        unlocked
-          ? {
-              background: `linear-gradient(135deg, ${accent}22, ${accent}04)`,
-              boxShadow: `inset 0 0 0 1px ${accent}55`,
-            }
+        reached
+          ? { background: `linear-gradient(135deg, ${accent}22, ${accent}04)`, boxShadow: `inset 0 0 0 1px ${accent}55` }
           : { background: "var(--color-cart-bg-elev)" }
       }
     >
       <div className="flex items-center justify-between">
         <span
           className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]"
-          style={{
-            background: `${accent}22`,
-            color: accent,
-          }}
+          style={{ background: `${accent}22`, color: accent }}
         >
-          {isCash ? "Efectivo" : tier.rewardKind === "bottle" ? "Botella" : "Premio"}
+          {tag}
         </span>
-        {unlocked && (
-          <span className="text-[14px]" aria-label="Desbloqueado">
-            ✓
-          </span>
-        )}
+        {reached && <span className="text-[13px] font-semibold text-emerald-300">✓ Logrado</span>}
       </div>
-
-      <div className="mt-2 font-sans text-[17px] font-semibold tracking-[-0.01em]">
-        {isCash ? formatSoles(tier.rewardAmountCents) : tier.rewardLabel}
+      <div className="mt-2 flex items-center gap-1.5 font-sans text-[17px] font-semibold tracking-[-0.01em]">
+        {icon && <span aria-hidden>{icon}</span>}
+        <span className="truncate">{headline}</span>
       </div>
       <div className="mt-0.5 truncate text-[11.5px] text-cart-ink-3">
-        al alcanzar {tier.thresholdCount} {tier.thresholdCount === 1 ? "venta" : "ventas"}
+        al llegar a {threshold} {threshold === 1 ? "venta" : "ventas"}
       </div>
-
-      {!unlocked && (
+      {!reached && (
         <div className="mt-3">
           <div className="h-1.5 overflow-hidden rounded-full bg-white/5">
             <div
@@ -575,7 +653,7 @@ function HitoCard({
           </div>
         </div>
       )}
-    </Link>
+    </div>
   );
 }
 

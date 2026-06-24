@@ -8,7 +8,11 @@ import { useRealtimeEventStats } from "@/lib/events/hooks/useRealtimeEventStats"
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { useMyOrgs } from "@/lib/identity/organizations/hooks/useMyOrgs";
 import { formatDate, formatMoney } from "@/lib/_shared/format";
+import { setEventBackTarget } from "@/lib/_shared/eventBackTarget";
 import { OrgShell } from "./_shell/OrgShell";
+
+// Al entrar a un evento desde el home, el breadcrumb debe volver al home.
+const backToHome = () => setEventBackTarget({ href: "/org", label: "Inicio" });
 
 // La decisión "sin sesión" y "sin marcas" se resuelve en el server
 // (src/app/[locale]/org/page.tsx). Acá ya asumimos auth + ≥1 marca.
@@ -80,6 +84,7 @@ export function OrgHomeClient() {
                 </h2>
                 <Link
                   href={`/org/events/${liveEvent.slug}` as never}
+                  onClick={backToHome}
                   className="inline-flex min-h-[36px] items-center gap-1 text-[13px] font-medium text-cart-ink-2 hover:text-white"
                 >
                   Ver panel →
@@ -88,6 +93,7 @@ export function OrgHomeClient() {
               <motion.div whileTap={{ scale: 0.97 }} transition={{ type: "spring", stiffness: 400, damping: 30 }}>
                 <Link
                   href={`/org/events/${liveEvent.slug}` as never}
+                  onClick={backToHome}
                   className="group relative block overflow-hidden rounded-[22px] border border-cart-line-strong bg-cart-bg-elev p-6 transition-colors hover:border-cart-accent sm:p-7"
                   style={{
                     background:
@@ -150,6 +156,7 @@ export function OrgHomeClient() {
                   >
                     <Link
                       href={`/org/events/${e.slug}` as never}
+                      onClick={backToHome}
                       className={`flex min-h-[64px] items-center gap-3 px-3.5 py-3 active:bg-cart-bg-elev-2 ${
                         idx > 0 ? "border-t border-cart-line/60" : ""
                       }`}
@@ -184,6 +191,7 @@ export function OrgHomeClient() {
                   <Link
                     key={e.id}
                     href={`/org/events/${e.slug}` as never}
+                    onClick={backToHome}
                     className="group flex items-center gap-3 rounded-2xl border border-cart-line bg-cart-bg-elev p-3 transition-colors hover:border-cart-line-strong hover:bg-cart-bg-elev-2"
                   >
                     <div
