@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react";
 import { motion, AnimatePresence, useMotionValue, useTransform, animate } from "motion/react";
+import { Link } from "@/i18n/navigation";
 
 // ─── Mock data ────────────────────────────────────────────────────────────────
 const MOCK_EVENT = {
@@ -853,7 +854,7 @@ export default function TicketsDemoPage() {
         </div>
 
         <div className="mt-10 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 text-center">
-          <p className="text-[12px] text-white/35">Esta página es solo para demo · <a href="/es/tickets" className="text-purple-400 hover:underline">← Volver a Mis Entradas</a></p>
+          <p className="text-[12px] text-white/35">Esta página es solo para demo · <Link href={"/tickets" as never} className="text-purple-400 hover:underline">← Volver a Mis Entradas</Link></p>
         </div>
       </div>
     </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import { Money } from "@/lib/_shared/money";
 import { useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
@@ -28,6 +28,14 @@ import type {
 type Tab = "coorg" | "promoters";
 
 export default function OrgTeamPage() {
+  return (
+    <Suspense fallback={null}>
+      <OrgTeamPageInner />
+    </Suspense>
+  );
+}
+
+function OrgTeamPageInner() {
   const params = useSearchParams();
   const initialTab: Tab = params.get("tab") === "promoters" ? "promoters" : "coorg";
   const [tab, setTab] = useState<Tab>(initialTab);

@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useRef, useState } from "react";
+import { Suspense, use, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
@@ -31,6 +31,14 @@ const cardVariants = {
 
 export default function TicketDetailPage({ params }: Props) {
   const { id } = use(params);
+  return (
+    <Suspense fallback={null}>
+      <TicketDetailInner id={id} />
+    </Suspense>
+  );
+}
+
+function TicketDetailInner({ id }: { id: string }) {
   const me = useCurrentUser();
   const qc = useQueryClient();
   // Entrada activa: la maneja un estado local (no la ruta) para poder cambiar de

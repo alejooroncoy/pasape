@@ -17,11 +17,20 @@ const eslintConfig = defineConfig([
   },
   // Override default ignores of eslint-config-next.
   globalIgnores([
-    // Default ignores of eslint-config-next:
-    ".next/**",
-    "out/**",
-    "build/**",
+    // Default ignores of eslint-config-next (anclados a cualquier nivel para
+    // cubrir también copias en worktrees):
+    "**/.next/**",
+    "**/out/**",
+    "**/build/**",
     "next-env.d.ts",
+    // Worktrees locales de Claude: copias completas del repo (gitignored).
+    ".claude/**",
+    // Builds nativos de Capacitor (web build copiado + artefactos generados).
+    "android/**",
+    "ios/**",
+    "capacitor-www/**",
+    // Assets públicos generados (service worker, etc.) — no son fuente.
+    "public/**",
     // Design handoff bundles — read-only reference, not source.
     "pasape/**",
     "pasapem/**",
