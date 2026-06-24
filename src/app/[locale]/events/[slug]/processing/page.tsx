@@ -47,8 +47,14 @@ function Inner({ params }: Props) {
           await tickets.refetch();
           setTimeout(() => {
             // Para guests usamos ticketUrl firmado (no requiere sesión).
-            // Para logueados va a /tickets (su wallet).
-            const dest = res.ticketUrl ?? "/tickets";
+            // Para logueados con varias entradas → pantalla de reparto (/done);
+            // con una sola → su wallet (/tickets).
+            const n = parseInt(search.get("n") ?? "1", 10);
+            const dest = res.ticketUrl
+              ? res.ticketUrl
+              : n > 1
+                ? `/events/${slug}/done?order=${orderId}`
+                : "/tickets";
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             router.replace(dest as any);
           }, 1600);
@@ -187,11 +193,13 @@ function Inner({ params }: Props) {
             />
             <div className="absolute inset-[20px] grid place-items-center rounded-full border border-cart-line bg-cart-bg-elev">
               {payMethod === "mp" ? (
-                <svg width="32" height="32" viewBox="0 0 22 22" fill="none" className="text-white">
-                  <rect x="2" y="4" width="18" height="14" rx="2.5" stroke="currentColor" strokeWidth="1.6" />
-                  <rect x="2" y="7.5" width="18" height="2.5" fill="currentColor" />
-                  <rect x="5" y="13" width="4" height="2" rx="0.5" fill="currentColor" opacity="0.7" />
-                </svg>
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src="/brand/mercadopago.svg"
+                  alt="Mercado Pago"
+                  width={48}
+                  height={48}
+                />
               ) : (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img

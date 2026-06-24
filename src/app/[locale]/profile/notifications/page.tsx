@@ -1,20 +1,22 @@
 "use client";
 
-import { BackBtn, C, FONT_DISPLAY, Phone } from "@/components/design";
 import { useNotifications } from "@/lib/identity/hooks/useNotifications";
 import type { Notification } from "@/server/identity/application/ListNotifications";
+import { PageShell, BackLink, PageTitle } from "../_components/PageShell";
 
 const labelFor = (kind: string): string => {
   const map: Record<string, string> = {
+    ticket_ready: "Tu entrada está lista",
     purchase_confirmed: "Compra confirmada",
     qr_ready: "Tu QR está listo",
     event_reminder: "Recordatorio de evento",
     transfer_received: "Entrada transferida",
+    promoter_claimed: "Nuevo promotor",
     new_event: "Nuevo evento",
     promo: "Promoción",
     event_updated: "Cambios en tu evento",
   };
-  return map[kind] ?? kind.replace(/_/g, " ");
+  return map[kind] ?? "Novedad";
 };
 
 const FIELD_LABELS: Record<string, string> = {
@@ -56,8 +58,23 @@ const formatEventUpdated = (n: Notification): string => {
 };
 
 const summaryFor = (n: Notification): string => {
-  if (n.kind === "event_updated") return formatEventUpdated(n);
   const p = n.payload;
+  if (n.kind === "event_updated") return formatEventUpdated(n);
+
+  if (n.kind === "ticket_ready") {
+    const title = typeof p.eventTitle === "string" ? p.eventTitle : "tu evento";
+    const count = typeof p.ticketsCount === "number" ? p.ticketsCount : 1;
+    return count > 1
+      ? `Tus ${count} entradas para ${title} ya están listas. Tócalas para ver el QR.`
+      : `Tu entrada para ${title} ya está lista. Tócala para ver el QR.`;
+  }
+
+  if (n.kind === "promoter_claimed") {
+    const who =
+      typeof p.claimedByName === "string" && p.claimedByName ? p.claimedByName : "Alguien";
+    return `${who} se registró como promotor.`;
+  }
+
   if (typeof p.message === "string") return p.message;
   if (typeof p.title === "string") return p.title;
   if (typeof p.event_title === "string") return String(p.event_title);
@@ -86,69 +103,61 @@ const groupByDate = (notifs: Notification[]) => {
   return Array.from(groups.entries());
 };
 
+// Ícono según el tipo de notificación.
+function NotifIcon({ kind }: { kind: string }) {
+  const sw = { stroke: "currentColor", strokeWidth: 1.4, fill: "none" as const };
+  if (kind === "ticket_ready" || kind === "qr_ready" || kind === "transfer_received") {
+    return (
+      <svg width="16" height="16" viewBox="0 0 18 18">
+        <path d="M2 6a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1 1.5 1.5 0 0 0 0 3 1 1 0 0 1-1 1H3a1 1 0 0 1-1-1 1.5 1.5 0 0 0 0-3Z" {...sw} strokeLinejoin="round" />
+        <path d="M11 5v6" {...sw} strokeDasharray="1.5 1.5" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (kind === "event_updated" || kind === "event_reminder" || kind === "new_event") {
+    return (
+      <svg width="16" height="16" viewBox="0 0 18 18">
+        <rect x="3" y="4" width="12" height="11" rx="1.6" {...sw} />
+        <path d="M3 7.5h12M6 2.5v3M12 2.5v3" {...sw} strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (kind === "promoter_claimed") {
+    return (
+      <svg width="16" height="16" viewBox="0 0 18 18">
+        <circle cx="9" cy="6" r="2.6" {...sw} />
+        <path d="M3.5 15c.6-3 2.8-4.5 5.5-4.5s4.9 1.5 5.5 4.5" {...sw} strokeLinecap="round" />
+      </svg>
+    );
+  }
+  return (
+    <svg width="16" height="16" viewBox="0 0 18 18">
+      <path d="M4 12V8a5 5 0 0 1 10 0v4l1.5 2h-13L4 12Z" {...sw} strokeLinejoin="round" />
+      <path d="M7 15a2 2 0 0 0 4 0" {...sw} strokeLinecap="round" />
+    </svg>
+  );
+}
+
 const NotifCard = ({ n }: { n: Notification }) => {
   const isUnread = !n.readAt;
   return (
     <div
-      style={{
-        display: "flex",
-        alignItems: "flex-start",
-        gap: 12,
-        padding: "14px 16px",
-        marginBottom: 8,
-        background: isUnread ? C.purpleSoft : "rgba(255,255,255,0.03)",
-        boxShadow: `0 0 0 1px ${isUnread ? C.purpleEdge : C.line} inset`,
-        borderRadius: 14,
-      }}
+      className={
+        "flex items-start gap-3 rounded-2xl border px-4 py-3.5 transition " +
+        (isUnread ? "border-cart-accent/30 bg-cart-accent/10" : "border-cart-line bg-cart-bg-elev")
+      }
     >
-      <div
-        style={{
-          width: 36,
-          height: 36,
-          borderRadius: 11,
-          background: "rgba(124,58,237,0.18)",
-          color: C.purple,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          flexShrink: 0,
-        }}
-      >
-        <svg width="16" height="16" viewBox="0 0 18 18" fill="none">
-          <path
-            d="M4 12V8a5 5 0 0 1 10 0v4l1.5 2h-13L4 12Z"
-            stroke={C.purple}
-            strokeWidth="1.4"
-            strokeLinejoin="round"
-          />
-          <path d="M7 15a2 2 0 0 0 4 0" stroke={C.purple} strokeWidth="1.4" strokeLinecap="round" />
-        </svg>
-      </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            fontFamily: FONT_DISPLAY,
-            fontWeight: 600,
-            fontSize: 14,
-          }}
-        >
+      <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-cart-accent/15 text-cart-accent">
+        <NotifIcon kind={n.kind} />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5 text-[14px] font-semibold">
           {labelFor(n.kind)}
           {isUnread && (
-            <span
-              style={{
-                width: 6,
-                height: 6,
-                borderRadius: 999,
-                background: C.purple,
-                boxShadow: `0 0 8px ${C.purple}`,
-              }}
-            />
+            <span className="size-1.5 rounded-full bg-cart-accent shadow-[0_0_8px_var(--color-cart-accent)]" />
           )}
         </div>
-        <div style={{ fontSize: 12, color: C.dim, marginTop: 2 }}>{summaryFor(n)}</div>
+        <p className="mt-0.5 text-[12.5px] leading-snug text-white/55">{summaryFor(n)}</p>
       </div>
     </div>
   );
@@ -160,75 +169,35 @@ export default function BuyerNotificationsPage() {
   const groups = groupByDate(items);
 
   return (
-    <Phone>
-      <div
-        style={{
-          padding: "6px 22px 0",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}
-      >
-        <BackBtn />
-        <div style={{ fontSize: 12, color: C.dim, letterSpacing: "0.06em" }}>NOTIFICACIONES</div>
-        <div style={{ width: 38 }} />
-      </div>
+    <PageShell>
+      <BackLink />
+      <PageTitle title="Tu actividad" subtitle="Solo lo que importa de tu noche." />
 
-      <div style={{ padding: "14px 22px" }}>
-        <div
-          style={{
-            fontFamily: FONT_DISPLAY,
-            fontSize: 26,
-            fontWeight: 700,
-            letterSpacing: "-0.03em",
-            lineHeight: 1,
-          }}
-        >
-          Tu actividad.
+      {isLoading && (
+        <div className="flex flex-col gap-2.5 pt-5">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="h-[68px] animate-pulse rounded-2xl bg-white/[0.04]" />
+          ))}
         </div>
-        <div style={{ fontSize: 13, color: C.dim, marginTop: 8, lineHeight: 1.4 }}>
-          Solo lo que importa de tu noche.
+      )}
+      {error && <p className="pt-6 text-[13px] text-red-300">{(error as Error).message}</p>}
+
+      {!isLoading && !error && items.length === 0 && (
+        <div className="mt-6 rounded-2xl border border-cart-line bg-cart-bg-elev p-6 text-center text-[13.5px] text-white/55">
+          Sin novedades por ahora.
         </div>
+      )}
 
-        {isLoading && <div style={{ marginTop: 22, color: C.dim }}>Cargando…</div>}
-        {error && <div style={{ marginTop: 22, color: C.red }}>{(error as Error).message}</div>}
-
-        {!isLoading && !error && items.length === 0 && (
-          <div
-            style={{
-              marginTop: 22,
-              padding: 22,
-              borderRadius: 14,
-              boxShadow: `0 0 0 1px ${C.line} inset`,
-              background: "rgba(255,255,255,0.02)",
-              color: C.dim,
-              fontSize: 13,
-              textAlign: "center",
-            }}
-          >
-            Sin novedades por ahora.
-          </div>
-        )}
-
-        {groups.map(([label, list]) => (
-          <div key={label} style={{ marginTop: 18 }}>
-            <div
-              style={{
-                fontSize: 11,
-                color: C.dim,
-                letterSpacing: "0.08em",
-                fontWeight: 600,
-                marginBottom: 8,
-              }}
-            >
-              {label}
-            </div>
+      {groups.map(([label, list]) => (
+        <div key={label} className="pt-5">
+          <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/45">{label}</p>
+          <div className="flex flex-col gap-2.5">
             {list.map((n) => (
               <NotifCard key={n.id} n={n} />
             ))}
           </div>
-        ))}
-      </div>
-    </Phone>
+        </div>
+      ))}
+    </PageShell>
   );
 }

@@ -95,6 +95,7 @@ export const completeOnboarding = async (
       email: profile.email,
       phone: profile.phone,
       fullName: profile.full_name,
+      dni: input.dni ?? null,
       avatarUrl: profile.avatar_url,
       initialRole: profile.initial_role,
       organizerType: profile.organizer_type ?? null,

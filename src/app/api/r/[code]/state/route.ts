@@ -1,47 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { headers } from "next/headers";
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
-import { computePromoterPayout } from "@/server/promoters/application/CommissionResolver";
-import type {
-  CommissionConfig,
-  CommissionType,
-} from "@/server/promoters/domain/OrgPromoter";
-
-// Same json-coercion as in SupabaseEventRepository — kept local to avoid an
-// extra module just for this. If we add another consumer we'll extract it.
-const coerceCommissionConfig = (
-  type: CommissionType,
-  raw: unknown,
-): CommissionConfig => {
-  if (raw == null || type === "percentage") return null;
-  if (typeof raw !== "object" || Array.isArray(raw)) return null;
-  const obj = raw as Record<string, unknown>;
-  if (type === "tiered") {
-    const tiers = obj.tiers;
-    if (!Array.isArray(tiers)) return null;
-    const clean = tiers.flatMap((t) => {
-      if (!t || typeof t !== "object") return [];
-      const r = t as Record<string, unknown>;
-      const salesCount = Number(r.salesCount);
-      const payoutCents = Number(r.payoutCents);
-      if (!Number.isFinite(salesCount) || !Number.isFinite(payoutCents)) return [];
-      return [{ salesCount: Math.trunc(salesCount), payoutCents: Math.trunc(payoutCents) }];
-    });
-    return { tiers: clean };
-  }
-  const rewards = obj.rewards;
-  if (!Array.isArray(rewards)) return null;
-  const clean = rewards.flatMap((r) => {
-    if (!r || typeof r !== "object") return [];
-    const row = r as Record<string, unknown>;
-    const salesCount = Number(row.salesCount);
-    const label = typeof row.label === "string" ? row.label : "";
-    const icon = typeof row.icon === "string" ? row.icon : "";
-    if (!Number.isFinite(salesCount) || !label || !icon) return [];
-    return [{ salesCount: Math.trunc(salesCount), label, icon }];
-  });
-  return { rewards: clean };
-};
+import {
+  computePromoterPayout,
+  resolveCommissionScheme,
+} from "@/server/promoters/application/CommissionResolver";
+import type { CommissionType } from "@/server/promoters/domain/OrgPromoter";
 
 const resolveOrigin = async (req: NextRequest) => {
   const h = await headers();
@@ -66,7 +30,7 @@ export const GET = async (
   const { data: linkRow } = await db
     .from("promoter_links")
     .select(
-      "id, code, commission_pct, commission_config_override, event:events!inner(id, slug, title, starts_at, venue, organization_id), profile:profiles(id, full_name), org_promoter:org_promoters(id, name, default_commission_pct, commission_type, commission_config)",
+      "id, code, commission_pct, commission_type, commission_config_override, event:events!inner(id, slug, title, starts_at, venue, organization_id, promoter_commission_pct, promoter_commission_type, promoter_commission_config), profile:profiles(id, full_name), org_promoter:org_promoters(id, name, default_commission_pct, commission_type, commission_config)",
     )
     .eq("code", code)
     .maybeSingle();
@@ -74,7 +38,8 @@ export const GET = async (
   type Row = {
     id: string;
     code: string;
-    commission_pct: number;
+    commission_pct: number | null;
+    commission_type: CommissionType | null;
     commission_config_override: unknown;
     event: {
       id: string;
@@ -83,6 +48,9 @@ export const GET = async (
       starts_at: string;
       venue: string | null;
       organization_id: string;
+      promoter_commission_pct: number | null;
+      promoter_commission_type: CommissionType | null;
+      promoter_commission_config: unknown;
     };
     profile: { id: string; full_name: string | null } | null;
     org_promoter: {
@@ -99,16 +67,23 @@ export const GET = async (
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
 
-  // Resolve commission scheme: per-event override > org default. Falls back to
-  // "percentage" for legacy links without an org_promoter row.
-  const commissionType: CommissionType = link.org_promoter?.commission_type ?? "percentage";
-  const overrideCfg = coerceCommissionConfig(commissionType, link.commission_config_override);
-  const baseCfg = link.org_promoter
-    ? coerceCommissionConfig(commissionType, link.org_promoter.commission_config)
-    : null;
-  const commissionConfig = overrideCfg ?? baseCfg;
-  const commissionPct =
-    link.commission_pct ?? link.org_promoter?.default_commission_pct ?? 0;
+  // Esquema efectivo por herencia: promotor en el evento → esquema del evento →
+  // marca. "percentage" como fallback para links legacy sin org_promoter.
+  const {
+    type: commissionType,
+    config: commissionConfig,
+    pct: commissionPct,
+  } = resolveCommissionScheme({
+    linkType: link.commission_type,
+    linkPct: link.commission_pct,
+    linkConfigOverride: link.commission_config_override,
+    eventType: link.event.promoter_commission_type,
+    eventConfig: link.event.promoter_commission_config,
+    eventPct: link.event.promoter_commission_pct,
+    orgType: link.org_promoter?.commission_type ?? null,
+    orgConfig: link.org_promoter?.commission_config ?? null,
+    orgPct: link.org_promoter?.default_commission_pct ?? null,
+  });
 
   // Paid orders attributed to this link
   const { data: orders } = await db

@@ -3,6 +3,7 @@
 import { use } from "react";
 import { useRouter } from "@/i18n/navigation";
 import { useEvent } from "@/lib/events/hooks/useEvents";
+import { unitsRemaining } from "@/lib/events/ticketDisplay";
 
 type Props = {
   params: Promise<{ slug: string }>;
@@ -72,7 +73,7 @@ export default function BuyerPayErrorPage({ params, searchParams }: Props) {
   const info = REASON_MAP[reasonKey] ?? fallback;
 
   const remaining = data?.ticketTypes.reduce(
-    (sum, tt) => sum + Math.max(0, tt.capacity - tt.sold),
+    (sum, tt) => sum + unitsRemaining(tt),
     0,
   ) ?? null;
 

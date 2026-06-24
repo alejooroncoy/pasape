@@ -16,10 +16,11 @@ export type CreateTicketTypePayload = {
   priceCents: number;
   capacity: number;
   boxLabel?: string | null;
-  zone?: string | null;
   unitNoun?: string | null;
   saleEndsAt?: string | null;
   description?: string | null;
+  guestListEnabled?: boolean;
+  guestListCap?: number | null;
   presaleTiers?: Array<{ priceCents: number; endsAt: string }>;
 } & PresalePayload;
 
@@ -28,10 +29,11 @@ export type UpdateTicketTypePayload = {
   priceCents?: number;
   capacity?: number;
   boxLabel?: string | null;
-  zone?: string | null;
   unitNoun?: string | null;
   saleEndsAt?: string | null;
   description?: string | null;
+  guestListEnabled?: boolean;
+  guestListCap?: number | null;
   presaleTiers?: Array<{ priceCents: number; endsAt: string }>;
 } & PresalePayload;
 

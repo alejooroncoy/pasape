@@ -516,7 +516,7 @@ function PromoterRow({
 
   return (
     <Link
-      href={`/org/events/${slug}/promoter-detail/${promoter.promoterLinkId}` as never}
+      href={`/org/events/${slug}/team` as never}
       className="grid grid-cols-[auto_1fr_auto] items-center gap-3 px-4 py-3 transition hover:bg-white/[0.02] lg:px-5"
     >
       <div className="grid size-8 shrink-0 place-items-center rounded-full bg-cart-bg-elev-2 text-[12px] font-semibold text-cart-ink-2">

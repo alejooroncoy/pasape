@@ -5,6 +5,7 @@ import { getAuthContext } from "@/server/_shared/AuthContext";
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
 import { getEventBySlug } from "@/server/events/application/GetEventBySlug";
 import { supabaseEventRepository } from "@/server/events/infrastructure/repositories/SupabaseEventRepository";
+import type { EventPromoterScheme } from "@/server/events/ports/EventRepository";
 import {
   assignOrgPromotersToEvent,
   listAssignmentsForEvent,
@@ -94,14 +95,50 @@ export const EventPromotersController = {
   ): Promise<Result<true>> {
     const g = await guard(slug);
     if (!g.ok) return err(g.error);
+    const tier = z.object({ salesCount: z.number().int().min(0), payoutCents: z.number().int().min(0) });
+    const reward = z.object({ salesCount: z.number().int().min(0), label: z.string(), icon: z.string() });
     const parsed = z
       .object({
-        commissionPct: z.number().int().min(0).max(100).optional(),
+        commissionPct: z.number().int().min(0).max(100).nullable().optional(),
+        commissionType: z.enum(["percentage", "tiered", "inkind"]).nullable().optional(),
+        commissionConfig: z
+          .union([z.object({ tiers: z.array(tier) }), z.object({ rewards: z.array(reward) })])
+          .nullable()
+          .optional(),
         quota: z.number().int().min(1).nullable().optional(),
+        guestListQuota: z.number().int().min(0).nullable().optional(),
       })
       .safeParse(input);
     if (!parsed.success) return err(parsed.error.issues[0]?.message ?? "invalid_input");
     return updateAssignmentCommission(promoterLinkId, g.value.eventId, parsed.data);
+  },
+
+  // Esquema de promotores del evento ("así pago y reparto a todos").
+  async getScheme(slug: string): Promise<Result<EventPromoterScheme>> {
+    const g = await guard(slug);
+    if (!g.ok) return err(g.error);
+    return ok(await repo.getPromoterScheme(g.value.eventId));
+  },
+
+  async updateScheme(slug: string, input: unknown): Promise<Result<true>> {
+    const g = await guard(slug);
+    if (!g.ok) return err(g.error);
+    const tier = z.object({ salesCount: z.number().int().min(0), payoutCents: z.number().int().min(0) });
+    const reward = z.object({ salesCount: z.number().int().min(0), label: z.string(), icon: z.string() });
+    const parsed = z
+      .object({
+        commissionPct: z.number().int().min(0).max(100).nullable().optional(),
+        commissionType: z.enum(["percentage", "tiered", "inkind"]).nullable().optional(),
+        commissionConfig: z
+          .union([z.object({ tiers: z.array(tier) }), z.object({ rewards: z.array(reward) })])
+          .nullable()
+          .optional(),
+        defaultQuota: z.number().int().min(1).nullable().optional(),
+        defaultGuestListQuota: z.number().int().min(0).nullable().optional(),
+      })
+      .safeParse(input);
+    if (!parsed.success) return err(parsed.error.issues[0]?.message ?? "invalid_input");
+    return repo.updatePromoterScheme(g.value.eventId, parsed.data);
   },
 
   async remove(slug: string, promoterLinkId: string): Promise<Result<true>> {

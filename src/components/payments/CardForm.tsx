@@ -116,7 +116,7 @@ export function CardForm({
     expParts.year.length === 2 &&
     cvv.length === cvvLen &&
     holder.trim().length >= 2 &&
-    dni.length === 8 &&
+    dni.length >= 8 &&
     !!paymentMethodId;
 
   const onSubmit = async (e: React.FormEvent) => {
@@ -272,7 +272,7 @@ export function CardForm({
             type="tel"
             inputMode="numeric"
             value={dni}
-            onChange={(e) => setDni(e.target.value.replace(/\D/g, "").slice(0, 8))}
+            onChange={(e) => setDni(e.target.value.replace(/\D/g, "").slice(0, 12))}
             placeholder="71234567"
             className="block w-full rounded-2xl border border-cart-line bg-cart-bg-elev-2 px-4 py-3.5 font-mono text-[15px] tracking-[0.04em] text-white outline-none transition focus:border-cart-accent focus:shadow-[0_0_0_3px_var(--color-cart-accent-soft)]"
           />
@@ -294,7 +294,7 @@ export function CardForm({
       </button>
 
       <p className="mt-3 text-center text-[11px] text-cart-ink-4">
-        🔒 Pago seguro · Procesado por Mercado Pago
+        Pago seguro · Procesado por Mercado Pago
       </p>
     </form>
   );

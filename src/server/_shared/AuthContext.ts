@@ -18,12 +18,19 @@ export type AuthContext = {
 export const getAuthContext = cache(
   async (): Promise<Result<AuthContext>> => {
     const supabase = await createSupabaseServerClient();
-    const { data, error } = await supabase.auth.getUser();
-    if (error || !data?.user) return err("unauthenticated");
-    return ok({
-      profileId: data.user.id,
-      email: data.user.email ?? null,
-    });
+    // getUser() puede LANZAR (no solo devolver {error}) cuando el refresh token
+    // está vencido/ausente — p. ej. "Invalid Refresh Token: Refresh Token Not
+    // Found". Sin sesión válida = unauthenticated, nunca romper el render.
+    try {
+      const { data, error } = await supabase.auth.getUser();
+      if (error || !data?.user) return err("unauthenticated");
+      return ok({
+        profileId: data.user.id,
+        email: data.user.email ?? null,
+      });
+    } catch {
+      return err("unauthenticated");
+    }
   },
 );
 

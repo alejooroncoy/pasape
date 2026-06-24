@@ -4,11 +4,12 @@ import { useEffect, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { OrgShell } from "@/app/[locale]/org/_shell/OrgShell";
 import { Link, useRouter } from "@/i18n/navigation";
+import { getEventBackTarget, type EventBackTarget } from "@/lib/_shared/eventBackTarget";
 import { useEvent } from "@/lib/events/hooks/useEvents";
 import { ShareEventDialog } from "@/components/ui/ShareEventDialog";
 import { EventComposer } from "@/app/[locale]/org/events/_components/EventComposer";
 
-export type EventTab = "panel" | "team" | "settings";
+export type EventTab = "panel" | "team" | "promoters" | "settings";
 
 const TABS: Array<{ key: EventTab; label: string; href: (slug: string) => string; icon: ReactNode }> = [
   {
@@ -33,6 +34,18 @@ const TABS: Array<{ key: EventTab; label: string; href: (slug: string) => string
           strokeWidth="1.6"
           strokeLinecap="round"
         />
+      </svg>
+    ),
+  },
+  {
+    key: "promoters",
+    label: "Promotores",
+    href: (s) => `/org/events/${s}/promoters`,
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
+        <circle cx="7" cy="7" r="2.6" stroke="currentColor" strokeWidth="1.6" />
+        <path d="M2.5 16c.4-2.3 2.2-3.8 4.5-3.8s4.1 1.5 4.5 3.8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        <path d="M13.5 8.5l1.6 1.6L18 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     ),
   },
@@ -69,6 +82,9 @@ export function EventShell({
   const router = useRouter();
   const [shareOpen, setShareOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  // Origen real (home vs eventos). Default en SSR; se ajusta al montar.
+  const [back, setBack] = useState<EventBackTarget>({ href: "/org/events", label: "Eventos" });
+  useEffect(() => setBack(getEventBackTarget()), []);
 
   const dateLabel = ev
     ? new Intl.DateTimeFormat("es-PE", {
@@ -95,18 +111,18 @@ export function EventShell({
           <div className="flex items-center gap-2 text-[12.5px]">
             <button
               type="button"
-              onClick={() => router.push("/org/events" as never)}
+              onClick={() => router.push(back.href as never)}
               className="hidden items-center gap-1.5 rounded-full px-2 py-1 text-cart-ink-3 transition hover:bg-white/5 hover:text-white lg:inline-flex"
             >
               <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
                 <path d="M10 3L5 7l5 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
-              Eventos
+              {back.label}
             </button>
             <span className="hidden text-cart-ink-4 lg:inline">›</span>
             <button
               type="button"
-              onClick={() => router.push("/org/events" as never)}
+              onClick={() => router.push(back.href as never)}
               aria-label="Atrás"
               className="grid size-9 place-items-center rounded-full border border-cart-line bg-cart-bg-elev text-cart-ink-2 transition hover:border-cart-line-strong hover:text-white lg:hidden"
             >

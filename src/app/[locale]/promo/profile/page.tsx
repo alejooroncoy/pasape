@@ -36,7 +36,7 @@ export default function PromoProfilePage() {
     setSigningOut(true);
     try {
       await signOut();
-      router.push("/login" as never);
+      router.push("/org/login" as never);
     } catch {
       setSigningOut(false);
     }

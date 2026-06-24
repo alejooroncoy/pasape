@@ -8,7 +8,11 @@ import { useRealtimeEventStats } from "@/lib/events/hooks/useRealtimeEventStats"
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { useMyOrgs } from "@/lib/identity/organizations/hooks/useMyOrgs";
 import { formatDate, formatMoney } from "@/lib/_shared/format";
+import { setEventBackTarget } from "@/lib/_shared/eventBackTarget";
 import { OrgShell } from "./_shell/OrgShell";
+
+// Al entrar a un evento desde el home, el breadcrumb debe volver al home.
+const backToHome = () => setEventBackTarget({ href: "/org", label: "Inicio" });
 
 // La decisión "sin sesión" y "sin marcas" se resuelve en el server
 // (src/app/[locale]/org/page.tsx). Acá ya asumimos auth + ≥1 marca.
@@ -61,8 +65,8 @@ export function OrgHomeClient() {
         </div>
       </header>
 
-      {!orgs.data || orgs.data.length === 0 ? (
-        <OrgEmpty />
+      {orgs.isPending || events.isPending ? (
+        <OrgHomeSkeleton />
       ) : (
         <div className="pb-[calc(env(safe-area-inset-bottom,0px)+24px)] sm:pb-0">
           <section className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -80,6 +84,7 @@ export function OrgHomeClient() {
                 </h2>
                 <Link
                   href={`/org/events/${liveEvent.slug}` as never}
+                  onClick={backToHome}
                   className="inline-flex min-h-[36px] items-center gap-1 text-[13px] font-medium text-cart-ink-2 hover:text-white"
                 >
                   Ver panel →
@@ -88,6 +93,7 @@ export function OrgHomeClient() {
               <motion.div whileTap={{ scale: 0.97 }} transition={{ type: "spring", stiffness: 400, damping: 30 }}>
                 <Link
                   href={`/org/events/${liveEvent.slug}` as never}
+                  onClick={backToHome}
                   className="group relative block overflow-hidden rounded-[22px] border border-cart-line-strong bg-cart-bg-elev p-6 transition-colors hover:border-cart-accent sm:p-7"
                   style={{
                     background:
@@ -150,6 +156,7 @@ export function OrgHomeClient() {
                   >
                     <Link
                       href={`/org/events/${e.slug}` as never}
+                      onClick={backToHome}
                       className={`flex min-h-[64px] items-center gap-3 px-3.5 py-3 active:bg-cart-bg-elev-2 ${
                         idx > 0 ? "border-t border-cart-line/60" : ""
                       }`}
@@ -184,6 +191,7 @@ export function OrgHomeClient() {
                   <Link
                     key={e.id}
                     href={`/org/events/${e.slug}` as never}
+                    onClick={backToHome}
                     className="group flex items-center gap-3 rounded-2xl border border-cart-line bg-cart-bg-elev p-3 transition-colors hover:border-cart-line-strong hover:bg-cart-bg-elev-2"
                   >
                     <div
@@ -253,6 +261,31 @@ function StatusPill({ status }: { status: string }) {
     <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10.5px] font-medium uppercase tracking-wide ${v.cls}`}>
       {v.label}
     </span>
+  );
+}
+
+// Skeleton mientras cargan marcas/eventos: evita el destello del estado vacío
+// ("Arma tu evento") y de los ceros antes de que llegue la data real.
+function OrgHomeSkeleton() {
+  return (
+    <div className="animate-pulse pb-[calc(env(safe-area-inset-bottom,0px)+24px)] sm:pb-0">
+      <section className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="rounded-2xl border border-cart-line bg-cart-bg-elev p-4">
+            <div className="h-3 w-20 rounded bg-white/10" />
+            <div className="mt-3 h-7 w-12 rounded bg-white/10" />
+            <div className="mt-2.5 h-2.5 w-16 rounded bg-white/[0.06]" />
+          </div>
+        ))}
+      </section>
+      <div className="mb-3 h-3 w-24 rounded bg-white/10" />
+      <div className="rounded-3xl border border-cart-line bg-cart-bg-elev p-6 sm:p-10">
+        <div className="h-5 w-40 rounded bg-white/10" />
+        <div className="mt-4 h-3 w-full max-w-[44ch] rounded bg-white/[0.06]" />
+        <div className="mt-2 h-3 w-3/4 max-w-[40ch] rounded bg-white/[0.06]" />
+        <div className="mt-6 h-11 w-52 rounded-full bg-white/10" />
+      </div>
+    </div>
   );
 }
 

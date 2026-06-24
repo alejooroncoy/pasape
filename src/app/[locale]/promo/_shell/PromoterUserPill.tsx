@@ -13,7 +13,7 @@ function initialsOf(name?: string | null, email?: string | null) {
   return src.slice(0, 2).toUpperCase();
 }
 
-export function PromoterUserPill() {
+export function PromoterUserPill({ compact = false }: { compact?: boolean } = {}) {
   const me = useCurrentUser();
   const signOut = useSignOut();
   const router = useRouter();
@@ -41,7 +41,7 @@ export function PromoterUserPill() {
   if (!user) {
     return (
       <Link
-        href={"/login" as never}
+        href={"/org/login" as never}
         className="flex items-center justify-center gap-2 rounded-2xl border border-cart-line bg-cart-bg-elev px-3 py-2.5 text-[13px] font-medium text-cart-ink-2 transition-colors hover:border-cart-accent hover:text-white"
       >
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
@@ -63,70 +63,103 @@ export function PromoterUserPill() {
 
   return (
     <div ref={ref} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        className={`group flex w-full items-center gap-2.5 rounded-2xl border bg-cart-bg-elev px-2.5 py-2 text-left transition-colors ${
-          open
-            ? "border-cart-accent shadow-[0_0_0_3px_var(--color-cart-accent-soft)]"
-            : "border-cart-line hover:border-cart-line-strong"
-        }`}
-      >
-        {user.avatarUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={user.avatarUrl}
-            alt=""
-            className="size-9 flex-shrink-0 rounded-xl object-cover"
-          />
-        ) : (
-          <span
-            aria-hidden
-            className="grid size-9 flex-shrink-0 place-items-center rounded-xl bg-gradient-to-br from-[#7C3AED] to-[#b87cff] text-[12.5px] font-semibold tracking-wide text-white shadow-[0_0_0_1px_rgba(255,255,255,0.1)_inset]"
-          >
-            {initials}
-          </span>
-        )}
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13px] font-semibold text-white">
-            {displayName}
-          </span>
-          <span className="block truncate text-[11px] text-cart-ink-3">
-            Promotor
-          </span>
-        </span>
-        <svg
-          width="12"
-          height="12"
-          viewBox="0 0 12 12"
-          fill="none"
-          aria-hidden
-          className={`flex-shrink-0 text-cart-ink-3 transition-transform duration-150 group-hover:text-white ${
-            open ? "rotate-180" : ""
+      {compact ? (
+        // Header móvil: solo el avatar como trigger.
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          aria-label="Tu cuenta"
+          className={`grid size-9 place-items-center overflow-hidden rounded-xl border transition-colors ${
+            open
+              ? "border-cart-accent shadow-[0_0_0_3px_var(--color-cart-accent-soft)]"
+              : "border-cart-line hover:border-cart-line-strong"
           }`}
         >
-          <path
-            d="M3 4.5L6 7.5l3-3"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      </button>
+          {user.avatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={user.avatarUrl} alt="" className="size-full object-cover" />
+          ) : (
+            <span
+              aria-hidden
+              className="grid size-full place-items-center bg-gradient-to-br from-[#7C3AED] to-[#b87cff] text-[12.5px] font-semibold tracking-wide text-white"
+            >
+              {initials}
+            </span>
+          )}
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          className={`group flex w-full items-center gap-2.5 rounded-2xl border bg-cart-bg-elev px-2.5 py-2 text-left transition-colors ${
+            open
+              ? "border-cart-accent shadow-[0_0_0_3px_var(--color-cart-accent-soft)]"
+              : "border-cart-line hover:border-cart-line-strong"
+          }`}
+        >
+          {user.avatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={user.avatarUrl}
+              alt=""
+              className="size-9 flex-shrink-0 rounded-xl object-cover"
+            />
+          ) : (
+            <span
+              aria-hidden
+              className="grid size-9 flex-shrink-0 place-items-center rounded-xl bg-gradient-to-br from-[#7C3AED] to-[#b87cff] text-[12.5px] font-semibold tracking-wide text-white shadow-[0_0_0_1px_rgba(255,255,255,0.1)_inset]"
+            >
+              {initials}
+            </span>
+          )}
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[13px] font-semibold text-white">
+              {displayName}
+            </span>
+            <span className="block truncate text-[11px] text-cart-ink-3">
+              Promotor
+            </span>
+          </span>
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 12 12"
+            fill="none"
+            aria-hidden
+            className={`flex-shrink-0 text-cart-ink-3 transition-transform duration-150 group-hover:text-white ${
+              open ? "rotate-180" : ""
+            }`}
+          >
+            <path
+              d="M3 4.5L6 7.5l3-3"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
+      )}
 
       <AnimatePresence>
         {open && (
           <motion.div
             role="menu"
-            initial={{ opacity: 0, y: 6, scale: 0.97 }}
+            initial={{ opacity: 0, y: compact ? -6 : 6, scale: 0.97 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 4, scale: 0.98 }}
+            exit={{ opacity: 0, y: compact ? -4 : 4, scale: 0.98 }}
             transition={{ type: "spring", damping: 26, stiffness: 380, mass: 0.6 }}
-            style={{ transformOrigin: "bottom center" }}
-            className="absolute bottom-[calc(100%+8px)] left-0 right-0 z-50 overflow-hidden rounded-2xl border border-cart-line-strong bg-cart-bg-elev-2 shadow-[0_20px_50px_-10px_rgba(0,0,0,0.6)]"
+            style={{ transformOrigin: compact ? "top right" : "bottom center" }}
+            className={
+              "absolute z-50 overflow-hidden rounded-2xl border border-cart-line-strong bg-cart-bg-elev-2 shadow-[0_20px_50px_-10px_rgba(0,0,0,0.6)] " +
+              (compact
+                ? "top-[calc(100%+8px)] right-0 w-60"
+                : "bottom-[calc(100%+8px)] left-0 right-0")
+            }
           >
             <div className="border-b border-cart-line px-3.5 py-3">
               <div className="text-[11px] font-medium uppercase tracking-wider text-cart-ink-4">

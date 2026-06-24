@@ -136,7 +136,7 @@ export default function OrgPromoterDetailPage({ params }: { params: Params }) {
                     ticketsSold={e.ticketsSold}
                     maxSold={Math.max(1, ...byEvent.map((x) => x.ticketsSold))}
                     commissionCents={e.commissionCents}
-                    href={`/org/events/${e.eventSlug}/promoter-detail/${e.promoterLinkId}`}
+                    href={`/org/events/${e.eventSlug}/team`}
                   />
                 ))}
               </div>

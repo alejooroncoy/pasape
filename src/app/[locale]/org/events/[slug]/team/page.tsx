@@ -15,10 +15,19 @@ import { useOrgPromoters } from "@/lib/promoters/hooks/useOrgPromoters";
 import {
   useAssignPromotersToEvent,
   useEventPromoters,
+  useEventPromoterScheme,
   useRemoveAssignment,
   useUpdateAssignmentCommission,
+  useUpdateEventPromoterScheme,
 } from "@/lib/promoters/hooks/useEventPromoters";
 import type { EventPromoterAssignment } from "@/server/promoters/application/EventPromoterAssignment";
+import type { EventPromoterScheme } from "@/server/events/ports/EventRepository";
+import type {
+  CommissionConfig,
+  CommissionReward,
+  CommissionTier,
+  CommissionType,
+} from "@/server/promoters/domain/OrgPromoter";
 import { EventShell } from "../_shell/EventShell";
 
 type Params = Promise<{ slug: string; locale: string }>;
@@ -33,7 +42,6 @@ export default function OrgEventTeamPage({ params }: { params: Params }) {
       <div className="mt-6 flex flex-col gap-8">
         <InheritedAccessSection />
         <EventCoOrganizersSection slug={slug} />
-        <PromotersSection slug={slug} />
         <DoorSection slug={slug} />
       </div>
     </EventShell>
@@ -305,15 +313,21 @@ function CoOrgPicker({
 // ============================================================
 // PROMOTERS SECTION (sin cambios funcionales — sigue editable)
 // ============================================================
-function PromotersSection({ slug }: { slug: string }) {
+export function PromotersSection({ slug }: { slug: string }) {
   const pool = useOrgPromoters();
   const assignments = useEventPromoters(slug);
   const assign = useAssignPromotersToEvent(slug);
-  const remove = useRemoveAssignment(slug);
+  const scheme = useEventPromoterScheme(slug);
+  const updateScheme = useUpdateEventPromoterScheme(slug);
   const updateCommission = useUpdateAssignmentCommission(slug);
+  const remove = useRemoveAssignment(slug);
   const [picker, setPicker] = useState(false);
+  // Promotor abierto para personalizar (sheet en web / drawer en móvil).
+  const [personalizeId, setPersonalizeId] = useState<string | null>(null);
 
   const assigned = assignments.data ?? [];
+  // Derivar del cache para que el sheet refleje los cambios optimistas en vivo.
+  const personalizeTarget = assigned.find((a) => a.promoterLinkId === personalizeId) ?? null;
   const assignedSet = useMemo(
     () => new Set(assigned.map((a) => a.orgPromoterId)),
     [assigned],
@@ -321,24 +335,40 @@ function PromotersSection({ slug }: { slug: string }) {
   const available = (pool.data ?? []).filter((p) => !assignedSet.has(p.id));
 
   return (
-    <section id="promotores" className="scroll-mt-24">
-      <SectionHeader
-        title="Promotores asignados"
-        subtitle="Cada promotor del pool de tu marca puede vender este evento con su link único."
-        action={
-          <button
-            type="button"
-            onClick={() => setPicker(true)}
-            disabled={available.length === 0}
-            className="inline-flex items-center gap-1.5 rounded-full bg-cart-accent px-4 py-2 text-[13px] font-semibold text-white shadow-[0_8px_24px_-8px_var(--color-cart-accent-glow-strong)] disabled:opacity-50"
-          >
-            <PlusIcon /> Asignar del pool
-          </button>
-        }
-      />
+    <div id="promotores" className="flex flex-col gap-8 scroll-mt-24">
+      {/* 1 · Configuración para todos */}
+      {assigned.length > 0 && (
+        <section>
+          <SectionHeader
+            title="Esquema del evento"
+            subtitle="Comisión y cupos para todos los promotores. Lo defines una vez; personaliza a uno tocándolo abajo."
+          />
+          <EventSchemeCard
+            scheme={scheme.data}
+            onSave={(patch) => updateScheme.mutate(patch)}
+            saving={updateScheme.isPending}
+          />
+        </section>
+      )}
 
-      <div className="rounded-2xl border border-cart-line bg-cart-bg-elev">
-        {assigned.length === 0 ? (
+      {/* 2 · Promotores de este evento */}
+      <section>
+        <SectionHeader
+          title="Promotores asignados"
+          subtitle="Cada promotor del pool de tu marca puede vender este evento con su link único."
+          action={
+            <button
+              type="button"
+              onClick={() => setPicker(true)}
+              disabled={available.length === 0}
+              className="inline-flex items-center gap-1.5 rounded-full bg-cart-accent px-4 py-2 text-[13px] font-semibold text-white shadow-[0_8px_24px_-8px_var(--color-cart-accent-glow-strong)] disabled:opacity-50"
+            >
+              <PlusIcon /> Asignar del pool
+            </button>
+          }
+        />
+        <div className="rounded-2xl border border-cart-line bg-cart-bg-elev">
+          {assigned.length === 0 ? (
           <div className="flex flex-col items-center gap-3 px-4 py-10 text-center lg:px-5">
             <div className="text-[14px] font-semibold">Sin promotores asignados</div>
             <p className="max-w-[360px] text-[12.5px] text-cart-ink-3">
@@ -368,20 +398,19 @@ function PromotersSection({ slug }: { slug: string }) {
               <AssignmentRow
                 key={a.promoterLinkId}
                 assignment={a}
-                onRemove={() => {
-                  if (confirm(`¿Quitar a ${a.name} de este evento?`)) remove.mutate(a.promoterLinkId);
-                }}
-                onChangeCommission={(pct) =>
-                  updateCommission.mutate({ linkId: a.promoterLinkId, commissionPct: pct })
-                }
-                onChangeQuota={(quota) =>
-                  updateCommission.mutate({ linkId: a.promoterLinkId, quota })
-                }
+                onOpen={() => setPersonalizeId(a.promoterLinkId)}
               />
             ))}
           </div>
         )}
       </div>
+        {assigned.length > 0 && (
+          <p className="mt-2 px-1 text-[11px] text-cart-ink-4">
+            Toca un promotor para personalizarlo. El punto <span className="text-cart-accent">•</span> marca
+            un valor propio; el resto sigue el esquema del evento.
+          </p>
+        )}
+      </section>
 
       <AnimatePresence>
         {picker && (
@@ -398,31 +427,386 @@ function PromotersSection({ slug }: { slug: string }) {
             />
           </Sheet>
         )}
+        {personalizeTarget && (
+          <Sheet
+            onClose={() => setPersonalizeId(null)}
+            title={`Personalizar a ${personalizeTarget.name.split(" ")[0]}`}
+          >
+            <PersonalizeSheet
+              assignment={personalizeTarget}
+              saving={updateCommission.isPending}
+              onSet={(patch) =>
+                updateCommission.mutate({ linkId: personalizeTarget.promoterLinkId, ...patch })
+              }
+              onRemove={() => {
+                if (confirm(`¿Quitar a ${personalizeTarget.name} de este evento?`)) {
+                  remove.mutate(personalizeTarget.promoterLinkId, {
+                    onSuccess: () => setPersonalizeId(null),
+                  });
+                }
+              }}
+            />
+          </Sheet>
+        )}
       </AnimatePresence>
-    </section>
+    </div>
   );
 }
 
+// EventSchemeCard — "así pago y reparto a todos". Un solo lugar para el evento:
+// comisión (%/Hitos/Especie) + cupos default. Cada cambio guarda al toque; la
+// herencia hace que los promotores sin valor propio lo tomen.
+// Indicador de auto-guardado: "Se guarda solo" → "Guardando…" → "✓ Guardado".
+// Hace evidente que no hay botón de guardar (es automático).
+function AutoSave({ saving }: { saving: boolean }) {
+  const [justSaved, setJustSaved] = useState(false);
+  const prev = useRef(saving);
+  useEffect(() => {
+    if (prev.current && !saving) {
+      setJustSaved(true);
+      const t = setTimeout(() => setJustSaved(false), 1800);
+      prev.current = saving;
+      return () => clearTimeout(t);
+    }
+    prev.current = saving;
+  }, [saving]);
+  return (
+    <span className="text-[11px] font-medium">
+      {saving ? (
+        <span className="text-cart-ink-3">Guardando…</span>
+      ) : justSaved ? (
+        <span className="text-emerald-300">✓ Guardado</span>
+      ) : (
+        <span className="text-cart-ink-4">Se guarda solo</span>
+      )}
+    </span>
+  );
+}
+
+// Confirmación inline, junto a lo que el organizador acaba de tocar (no arriba,
+// donde no está mirando). flash() la dispara tras cada guardado local.
+function useSavedFlash() {
+  const [saved, setSaved] = useState(false);
+  const t = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flash = () => {
+    setSaved(true);
+    if (t.current) clearTimeout(t.current);
+    t.current = setTimeout(() => setSaved(false), 1600);
+  };
+  useEffect(() => () => { if (t.current) clearTimeout(t.current); }, []);
+  return [saved, flash] as const;
+}
+
+function SavedFlash({ saved }: { saved: boolean }) {
+  return (
+    <AnimatePresence>
+      {saved && (
+        <motion.span
+          initial={{ opacity: 0, x: -4 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.18 }}
+          className="text-[11.5px] font-semibold text-emerald-300"
+        >
+          ✓ Guardado
+        </motion.span>
+      )}
+    </AnimatePresence>
+  );
+}
+
+function EventSchemeCard({
+  scheme,
+  onSave,
+  saving,
+}: {
+  scheme: EventPromoterScheme | undefined;
+  onSave: (patch: Partial<EventPromoterScheme>) => void;
+  saving: boolean;
+}) {
+  const type: CommissionType = scheme?.commissionType ?? "percentage";
+  const tabs: [CommissionType, string][] = [
+    ["percentage", "Comisión %"],
+    ["tiered", "Hitos"],
+    ["inkind", "Especie"],
+  ];
+  return (
+    <div className="rounded-2xl border border-cart-line bg-cart-bg-elev p-4 lg:p-5">
+      <div className="mb-3 flex items-center justify-between">
+        <div className="inline-flex gap-1 rounded-xl bg-cart-bg-elev-2 p-1">
+        {tabs.map(([t, lbl]) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => onSave({ commissionType: t })}
+            className={
+              "rounded-lg px-3.5 py-1.5 text-[13px] font-semibold transition " +
+              (type === t ? "bg-cart-accent text-white" : "text-cart-ink-3 hover:text-white")
+            }
+          >
+            {lbl}
+          </button>
+        ))}
+        </div>
+        <AutoSave saving={saving} />
+      </div>
+
+      <div className="mt-3">
+        {type === "percentage" && (
+          <PctRow
+            value={scheme?.commissionPct ?? 0}
+            onSave={(v) =>
+              onSave({ commissionType: "percentage", commissionPct: v, commissionConfig: null })
+            }
+          />
+        )}
+        {type === "tiered" && (
+          <TiersEditor
+            config={scheme?.commissionConfig}
+            onSave={(tiers) =>
+              onSave({ commissionType: "tiered", commissionConfig: { tiers } })
+            }
+          />
+        )}
+        {type === "inkind" && (
+          <RewardsEditor
+            config={scheme?.commissionConfig}
+            onSave={(rewards) =>
+              onSave({ commissionType: "inkind", commissionConfig: { rewards } })
+            }
+          />
+        )}
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-3 border-t border-cart-line pt-4">
+        <SchemeCupo
+          label="Cada uno vende"
+          value={scheme?.defaultQuota ?? null}
+          min={1}
+          onChange={(v) => onSave({ defaultQuota: v })}
+        />
+        <SchemeCupo
+          label="Cada uno invita"
+          value={scheme?.defaultGuestListQuota ?? null}
+          min={0}
+          onChange={(v) => onSave({ defaultGuestListQuota: v })}
+        />
+      </div>
+    </div>
+  );
+}
+
+// Un cupo default del evento: etiqueta + pastilla editable (popover/drawer).
+// Cupo default del evento, editable INLINE (sin popover): clic en el valor →
+// input en el sitio + "sin tope". Más directo en desktop.
+function SchemeCupo({
+  label,
+  value,
+  min,
+  onChange,
+}: {
+  label: string;
+  value: number | null;
+  min: number;
+  onChange: (v: number | null) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [local, setLocal] = useState("");
+  const start = () => {
+    setLocal(value != null ? String(value) : "");
+    setEditing(true);
+  };
+  const commit = () => {
+    const n = parseInt(local, 10);
+    if (!(local.trim() === "" || isNaN(n) || n < min)) onChange(n);
+    setEditing(false);
+  };
+  return (
+    <div className="rounded-xl bg-cart-bg-elev-2 px-3.5 py-3">
+      <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-cart-ink-4">
+        {label}
+      </div>
+      {editing ? (
+        <div className="mt-1.5 flex items-center gap-2">
+          <input
+            type="number"
+            min={min}
+            value={local}
+            autoFocus
+            placeholder="sin tope"
+            onChange={(e) => setLocal(e.target.value)}
+            onBlur={commit}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commit();
+              if (e.key === "Escape") setEditing(false);
+            }}
+            className="w-24 rounded-lg bg-cart-bg-elev px-2.5 py-1.5 text-[16px] font-bold outline-none ring-1 ring-cart-line-strong focus:ring-cart-accent"
+          />
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => {
+              onChange(null);
+              setEditing(false);
+            }}
+            className="text-[11.5px] font-medium text-cart-ink-3 transition hover:text-white"
+          >
+            Sin tope
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={start}
+          className="mt-1.5 inline-flex items-center gap-1.5 rounded-lg text-[18px] font-bold text-white transition hover:text-cart-accent"
+        >
+          {value == null ? "sin tope" : value}
+          <svg width="13" height="13" viewBox="0 0 14 14" fill="none" className="text-cart-ink-4" aria-hidden>
+            <path d="M9 2.5l2.5 2.5-6 6H3v-2.5l6-6z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+          </svg>
+        </button>
+      )}
+    </div>
+  );
+}
+
+// Hitos en efectivo del evento: lista editable de (ventas → S/). Guarda al editar.
+function TiersEditor({
+  config,
+  onSave,
+}: {
+  config: CommissionConfig | undefined;
+  onSave: (tiers: CommissionTier[]) => void;
+}) {
+  const initial = config && "tiers" in config ? config.tiers : [];
+  const [tiers, setTiers] = useState<CommissionTier[]>(initial);
+  const commit = (next: CommissionTier[]) => {
+    setTiers(next);
+    onSave(next);
+  };
+  return (
+    <div className="flex flex-col gap-2">
+      {tiers.map((t, i) => (
+        <div key={i} className="flex items-center gap-2 text-[13px]">
+          <input
+            type="number"
+            min={1}
+            value={t.salesCount || ""}
+            onChange={(e) =>
+              setTiers((p) => p.map((x, j) => (j === i ? { ...x, salesCount: Number(e.target.value) || 0 } : x)))
+            }
+            onBlur={() => onSave(tiers)}
+            className="w-16 rounded-lg bg-cart-bg-elev-2 px-2 py-1.5 text-center outline-none"
+          />
+          <span className="text-cart-ink-3">ventas →</span>
+          <span className="text-cart-ink-3">S/</span>
+          <input
+            type="number"
+            min={0}
+            value={t.payoutCents ? t.payoutCents / 100 : ""}
+            onChange={(e) =>
+              setTiers((p) =>
+                p.map((x, j) => (j === i ? { ...x, payoutCents: Math.round((Number(e.target.value) || 0) * 100) } : x)),
+              )
+            }
+            onBlur={() => onSave(tiers)}
+            className="w-20 rounded-lg bg-cart-bg-elev-2 px-2 py-1.5 text-center outline-none"
+          />
+          <button
+            type="button"
+            onClick={() => commit(tiers.filter((_, j) => j !== i))}
+            className="ml-auto text-cart-ink-4 hover:text-rose-300"
+          >
+            ✕
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={() => commit([...tiers, { salesCount: 0, payoutCents: 0 }])}
+        className="rounded-xl border border-dashed border-cart-line-strong py-2 text-[12.5px] font-medium text-cart-accent"
+      >
+        + Agregar hito
+      </button>
+    </div>
+  );
+}
+
+// Premios en especie del evento: lista de (ventas → premio).
+function RewardsEditor({
+  config,
+  onSave,
+}: {
+  config: CommissionConfig | undefined;
+  onSave: (rewards: CommissionReward[]) => void;
+}) {
+  const initial = config && "rewards" in config ? config.rewards : [];
+  const [rewards, setRewards] = useState<CommissionReward[]>(initial);
+  const commit = (next: CommissionReward[]) => {
+    setRewards(next);
+    onSave(next);
+  };
+  return (
+    <div className="flex flex-col gap-2">
+      {rewards.map((r, i) => (
+        <div key={i} className="flex items-center gap-2 text-[13px]">
+          <input
+            type="number"
+            min={1}
+            value={r.salesCount || ""}
+            onChange={(e) =>
+              setRewards((p) => p.map((x, j) => (j === i ? { ...x, salesCount: Number(e.target.value) || 0 } : x)))
+            }
+            onBlur={() => onSave(rewards)}
+            className="w-16 rounded-lg bg-cart-bg-elev-2 px-2 py-1.5 text-center outline-none"
+          />
+          <span className="text-cart-ink-3">ventas →</span>
+          <input
+            type="text"
+            value={r.label}
+            placeholder="Botella, entrada VIP…"
+            onChange={(e) =>
+              setRewards((p) => p.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))
+            }
+            onBlur={() => onSave(rewards)}
+            className="flex-1 rounded-lg bg-cart-bg-elev-2 px-2.5 py-1.5 outline-none"
+          />
+          <button
+            type="button"
+            onClick={() => commit(rewards.filter((_, j) => j !== i))}
+            className="text-cart-ink-4 hover:text-rose-300"
+          >
+            ✕
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={() => commit([...rewards, { salesCount: 0, label: "", icon: "🎁" }])}
+        className="rounded-xl border border-dashed border-cart-line-strong py-2 text-[12.5px] font-medium text-cart-accent"
+      >
+        + Agregar premio
+      </button>
+    </div>
+  );
+}
+
+// Fila LIMPIA: nombre + link + copiar/WhatsApp. Los cupos/comisión van como
+// números EFECTIVOS de referencia (un puntito • = personalizado). Tocar la fila
+// abre el sheet de personalización (sin saltar de página). Sin perillas inline.
 function AssignmentRow({
   assignment,
-  onRemove,
-  onChangeCommission,
-  onChangeQuota,
+  onOpen,
 }: {
   assignment: EventPromoterAssignment;
-  onRemove: () => void;
-  onChangeCommission: (pct: number) => void;
-  onChangeQuota: (quota: number | null) => void;
+  onOpen: () => void;
 }) {
   const [copied, setCopied] = useState(false);
+  const a = assignment;
   // Why: assignment.url puede venir absoluta (con origin) o relativa (/r/code).
-  // Si ya es absoluta, no le prependeamos otro origin (causaba el doble URL
-  // http://localhost:3001http://localhost:3001/r/...).
   const absoluteUrl = () => {
-    if (typeof window === "undefined") return assignment.url;
-    return assignment.url.startsWith("/")
-      ? `${window.location.origin}${assignment.url}`
-      : assignment.url;
+    if (typeof window === "undefined") return a.url;
+    return a.url.startsWith("/") ? `${window.location.origin}${a.url}` : a.url;
   };
   const onCopy = async () => {
     try {
@@ -434,37 +818,47 @@ function AssignmentRow({
     }
   };
   const onWa = () => {
-    if (!assignment.whatsapp) return;
+    if (!a.whatsapp) return;
     const text = encodeURIComponent(
-      `Hola ${assignment.name.split(" ")[0]}, este es tu link para vender el evento: ${absoluteUrl()}`,
+      `Hola ${a.name.split(" ")[0]}, este es tu link para vender el evento: ${absoluteUrl()}`,
     );
-    const phone = assignment.whatsapp.replace(/[^\d]/g, "");
-    window.open(`https://wa.me/${phone}?text=${text}`, "_blank");
+    window.open(`https://wa.me/${a.whatsapp.replace(/[^\d]/g, "")}?text=${text}`, "_blank");
   };
-  const inactive = !assignment.active;
+  const inactive = !a.active;
+  const commissionRef =
+    a.commissionType === "percentage"
+      ? `${a.effectiveCommissionPct}%`
+      : a.commissionType === "tiered"
+        ? "hitos"
+        : "especie";
+  const quotaRef = a.effectiveQuota == null ? "sin tope" : String(a.effectiveQuota);
+  const guestRef =
+    a.effectiveGuestQuota == null
+      ? "sin tope"
+      : a.effectiveGuestQuota === 0
+        ? "no"
+        : String(a.effectiveGuestQuota);
+
   return (
-    <div
-      className={
-        "grid grid-cols-1 gap-3 px-4 py-3 lg:grid-cols-[auto_1fr_auto_auto_auto_auto] lg:items-center lg:px-5 " +
-        (inactive ? "opacity-60" : "")
-      }
-    >
-      <div className="flex items-center gap-3">
+    <div className={"flex items-center gap-2 px-4 py-3 lg:px-5 " + (inactive ? "opacity-60" : "")}>
+      <button
+        type="button"
+        onClick={onOpen}
+        className="flex min-w-0 flex-1 items-center gap-3 text-left"
+      >
         <div className="grid size-10 shrink-0 place-items-center rounded-full bg-cart-accent-soft text-[14px] font-semibold text-cart-accent">
-          {(assignment.name[0] ?? "?").toUpperCase()}
+          {(a.name[0] ?? "?").toUpperCase()}
         </div>
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
-            <span className="truncate text-[14px] font-semibold tracking-[-0.01em]">
-              {assignment.name}
-            </span>
+            <span className="truncate text-[14px] font-semibold tracking-[-0.01em]">{a.name}</span>
             {inactive ? (
               <span className="inline-flex items-center gap-1 rounded-full bg-cart-ink-4/15 px-1.5 py-px text-[9px] font-semibold tracking-[0.08em] text-cart-ink-3">
                 <span className="size-1 rounded-full bg-cart-ink-3" />
                 DESACTIVADO
               </span>
             ) : (
-              !assignment.profileId && (
+              !a.profileId && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/12 px-1.5 py-px text-[9px] font-semibold tracking-[0.08em] text-amber-300">
                   <span className="size-1 rounded-full bg-amber-300" />
                   SIN ACTIVAR
@@ -472,182 +866,422 @@ function AssignmentRow({
               )
             )}
           </div>
-          <div className="truncate font-mono text-[10.5px] text-cart-ink-3">/r/{assignment.code}</div>
+          {/* Referencia efectiva. El punto • marca, sin gritar, lo personalizado. */}
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[11px] text-cart-ink-4">
+            <RefBit custom={a.commissionCustom}>{commissionRef}</RefBit>
+            <RefBit custom={a.quotaCustom}>vende {quotaRef}</RefBit>
+            <RefBit custom={a.guestQuotaCustom}>invita {guestRef}</RefBit>
+          </div>
         </div>
-      </div>
-
-      <div className="hidden text-[11.5px] text-cart-ink-3 lg:block">
-        {assignment.whatsapp || "—"}
-      </div>
-
-      <CommissionEditor value={assignment.eventCommissionPct} onChange={onChangeCommission} />
-      <QuotaEditor value={assignment.quota} onChange={onChangeQuota} />
-
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={onCopy}
-          disabled={inactive}
-          title={inactive ? "Link desactivado" : undefined}
-          className="rounded-full bg-cart-bg-elev-2 px-3 py-1.5 text-[12px] font-medium transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-cart-bg-elev-2"
-        >
-          {copied ? "✓" : "Copiar link"}
-        </button>
-        {assignment.whatsapp && !inactive && (
-          <button
-            type="button"
-            onClick={onWa}
-            aria-label="WhatsApp"
-            className="grid size-8 place-items-center rounded-full"
-            style={{ background: "#25D366" }}
-          >
-            <svg width="14" height="14" viewBox="0 0 20 20" fill="#062315">
-              <path d="M16.6 3.4A9 9 0 0 0 2 12.1l-1 4.9 5-1.3a9 9 0 0 0 4 1h0a9 9 0 0 0 9-9 9 9 0 0 0-2.4-4.3z" />
-            </svg>
-          </button>
-        )}
-      </div>
+      </button>
 
       <button
         type="button"
-        onClick={onRemove}
-        aria-label="Quitar"
-        className="grid size-8 place-items-center rounded-full text-cart-ink-3 transition hover:bg-red-500/10 hover:text-red-300"
+        onClick={onCopy}
+        disabled={inactive}
+        title={inactive ? "Link desactivado" : undefined}
+        className="shrink-0 rounded-full bg-cart-bg-elev-2 px-3 py-1.5 text-[12px] font-medium transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-cart-bg-elev-2"
       >
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-          <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-        </svg>
+        {copied ? "✓" : "Copiar link"}
+      </button>
+      {a.whatsapp && !inactive && (
+        <button
+          type="button"
+          onClick={onWa}
+          aria-label="WhatsApp"
+          className="grid size-8 shrink-0 place-items-center rounded-full"
+          style={{ background: "#25D366" }}
+        >
+          <svg width="14" height="14" viewBox="0 0 20 20" fill="#062315">
+            <path d="M16.6 3.4A9 9 0 0 0 2 12.1l-1 4.9 5-1.3a9 9 0 0 0 4 1h0a9 9 0 0 0 9-9 9 9 0 0 0-2.4-4.3z" />
+          </svg>
+        </button>
+      )}
+      <span className="shrink-0 text-[18px] text-cart-ink-4" aria-hidden>
+        ›
+      </span>
+    </div>
+  );
+}
+
+// Un dato de referencia en la fila. Punto • en acento si está personalizado.
+function RefBit({ custom, children }: { custom: boolean; children: ReactNode }) {
+  return (
+    <span className={custom ? "text-cart-accent" : undefined}>
+      {custom && <span aria-hidden>• </span>}
+      {children}
+    </span>
+  );
+}
+
+// Contenido del sheet/drawer de personalización de un promotor. Solo personaliza
+// (comisión / vende / invita + quitar). Cada campo dice "del evento" o el valor
+// propio; nunca aparece la palabra "override". KPIs/ventas viven en otro lado.
+type PayPatch = {
+  commissionPct?: number | null;
+  commissionType?: CommissionType | null;
+  commissionConfig?: CommissionConfig | null;
+  quota?: number | null;
+  guestListQuota?: number | null;
+};
+
+function PersonalizeSheet({
+  assignment,
+  onSet,
+  onRemove,
+  saving,
+}: {
+  assignment: EventPromoterAssignment;
+  onSet: (patch: PayPatch) => void;
+  onRemove: () => void;
+  saving: boolean;
+}) {
+  const a = assignment;
+  const first = a.name.split(" ")[0];
+  const [payOpen, setPayOpen] = useState(false);
+
+  const paySummary =
+    a.commissionType === "percentage"
+      ? `${a.effectiveCommissionPct}%`
+      : a.commissionType === "tiered"
+        ? "hitos"
+        : "especie";
+
+  return (
+    <div className="flex flex-col">
+      <div className="flex items-start justify-between gap-3 px-1 pb-1">
+        <p className="text-[12.5px] leading-relaxed text-cart-ink-3">
+          Cambia solo lo de {first}; el resto sigue el esquema del evento.
+        </p>
+        <span className="shrink-0 pt-0.5 text-[11px] font-medium text-cart-ink-4">
+          Se guarda solo
+        </span>
+      </div>
+      <div className="divide-y divide-cart-line">
+        {/* Cómo le pagas — colapsible: la fila queda y el editor se despliega abajo. */}
+        <div>
+          <button
+            type="button"
+            onClick={() => setPayOpen((v) => !v)}
+            aria-expanded={payOpen}
+            className="group flex w-full items-center justify-between gap-3 py-3.5 text-left"
+          >
+            <div>
+              <div className="text-[13.5px] font-medium">Cómo le pagas</div>
+              <div className="text-[11.5px] text-cart-ink-4">% por venta, hitos o especie</div>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              {a.commissionCustom ? (
+                <span className="rounded-full bg-cart-accent-soft px-2.5 py-1 text-[12.5px] font-semibold text-cart-accent">
+                  {paySummary}
+                </span>
+              ) : (
+                <span className="text-[12.5px] text-cart-ink-3">{paySummary} · del evento</span>
+              )}
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 14 14"
+                fill="none"
+                className={
+                  "transition-transform duration-200 " +
+                  (payOpen ? "rotate-90 text-cart-ink-2" : "text-cart-ink-4 group-hover:text-cart-ink-2")
+                }
+                aria-hidden
+              >
+                <path d="M5 2l5 5-5 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
+          </button>
+          <AnimatePresence initial={false}>
+            {payOpen && (
+              <motion.div
+                key="pay-body"
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+                className="overflow-hidden"
+              >
+                <div className="pb-4">
+                  <PayEditor assignment={a} onSet={onSet} />
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+        <InlineField
+          label="Cuánto vende"
+          hint="entradas que puede vender"
+          custom={a.quotaCustom}
+          inheritedText={(a.effectiveQuota == null ? "sin tope" : a.effectiveQuota) + " · del evento"}
+          ownValue={a.ownQuota}
+          min={1}
+          onSave={(v) => onSet({ quota: v })}
+          onReset={() => onSet({ quota: null })}
+        />
+        <InlineField
+          label="Cuántos invita"
+          hint="cortesías gratis"
+          custom={a.guestQuotaCustom}
+          inheritedText={(a.effectiveGuestQuota == null ? "sin tope" : a.effectiveGuestQuota) + " · del evento"}
+          ownValue={a.ownGuestQuota}
+          min={0}
+          onSave={(v) => onSet({ guestListQuota: v })}
+          onReset={() => onSet({ guestListQuota: null })}
+        />
+      </div>
+      <button
+        type="button"
+        onClick={onRemove}
+        className="mt-4 self-start text-[12.5px] font-medium text-rose-300/80 transition hover:text-rose-300"
+      >
+        Quitar del evento
       </button>
     </div>
   );
 }
 
-function CommissionEditor({
-  value,
-  onChange,
+// Editor de "Cómo le pagas" de UN promotor: 3 modalidades (% / hitos / especie).
+// Se despliega como colapsible en la fila. Escribe el override del link
+// (tipo + % o config); "usar el del evento" lo limpia para heredar.
+function PayEditor({
+  assignment,
+  onSet,
 }: {
-  value: number;
-  onChange: (v: number) => void;
+  assignment: EventPromoterAssignment;
+  onSet: (patch: PayPatch) => void;
 }) {
-  const [editing, setEditing] = useState(false);
-  const [local, setLocal] = useState(value);
-
-  if (!editing) {
-    return (
-      <button
-        type="button"
-        onClick={() => {
-          setLocal(value);
-          setEditing(true);
-        }}
-        className="rounded-full bg-cart-accent-soft px-2.5 py-1 text-[11.5px] font-semibold text-cart-accent transition hover:bg-cart-accent-soft/80"
-      >
-        {value}%
-      </button>
-    );
-  }
+  const a = assignment;
+  const type = a.ownCommissionType ?? a.commissionType;
+  const [saved, flash] = useSavedFlash();
+  const set = (patch: PayPatch) => {
+    onSet(patch);
+    flash();
+  };
+  const modes: [CommissionType, string][] = [
+    ["percentage", "Comisión %"],
+    ["tiered", "Hitos"],
+    ["inkind", "Especie"],
+  ];
   return (
-    <div className="flex items-center gap-1.5">
+    <div>
+      <div className="flex items-center gap-2">
+        <div className="inline-flex gap-1 rounded-xl bg-cart-bg-elev-2 p-1">
+          {modes.map(([t, lbl]) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => set({ commissionType: t })}
+              className={
+                "rounded-lg px-3.5 py-1.5 text-[13px] font-semibold transition " +
+                (type === t ? "bg-cart-accent text-white" : "text-cart-ink-3 hover:text-white")
+              }
+            >
+              {lbl}
+            </button>
+          ))}
+        </div>
+        <SavedFlash saved={saved} />
+      </div>
+      <div className="mt-3">
+        {type === "percentage" && (
+          <PctRow
+            value={a.ownCommissionPct ?? a.effectiveCommissionPct}
+            onSave={(v) =>
+              set({ commissionType: "percentage", commissionPct: v, commissionConfig: null })
+            }
+          />
+        )}
+        {type === "tiered" && (
+          <TiersEditor
+            config={a.ownCommissionConfig ?? undefined}
+            onSave={(tiers) => set({ commissionType: "tiered", commissionConfig: { tiers } })}
+          />
+        )}
+        {type === "inkind" && (
+          <RewardsEditor
+            config={a.ownCommissionConfig ?? undefined}
+            onSave={(rewards) => set({ commissionType: "inkind", commissionConfig: { rewards } })}
+          />
+        )}
+      </div>
+      {a.commissionCustom && (
+        <button
+          type="button"
+          onClick={() => set({ commissionType: null, commissionPct: null, commissionConfig: null })}
+          className="mt-3 rounded-full bg-cart-bg-elev-2 px-3 py-1.5 text-[12.5px] font-semibold text-cart-ink-2 ring-1 ring-cart-line-strong transition hover:text-white"
+        >
+          Usar el del evento
+        </button>
+      )}
+    </div>
+  );
+}
+
+// Input de % por venta. Guarda al salir del campo o con Enter.
+function PctRow({ value, onSave }: { value: number; onSave: (v: number) => void }) {
+  const [local, setLocal] = useState(String(value));
+  const commit = () => {
+    const n = parseInt(local, 10);
+    if (!isNaN(n) && n >= 0 && n <= 100) onSave(n);
+  };
+  return (
+    <div className="flex items-center gap-2">
       <input
         type="number"
         min={0}
         max={100}
         value={local}
-        onChange={(e) => setLocal(Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
-        autoFocus
-        className="w-14 rounded-lg bg-cart-bg-elev-2 px-2 py-1 text-center font-mono text-[12px] outline-none"
-      />
-      <button
-        type="button"
-        onClick={() => {
-          onChange(local);
-          setEditing(false);
+        onChange={(e) => setLocal(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") commit();
         }}
-        className="rounded-lg bg-cart-accent px-2 py-1 text-[11px] font-semibold text-white"
-      >
-        OK
-      </button>
-      <button
-        type="button"
-        onClick={() => setEditing(false)}
-        className="rounded-lg px-1 py-1 text-[11px] text-cart-ink-3 hover:text-white"
-      >
-        ✕
-      </button>
+        className="w-20 rounded-xl bg-cart-bg-elev-2 px-3 py-2 text-center text-[15px] font-semibold outline-none ring-1 ring-cart-line-strong focus:ring-cart-accent"
+      />
+      <span className="text-[13px] text-cart-ink-3">% por venta</span>
     </div>
   );
 }
 
-function QuotaEditor({
-  value,
-  onChange,
+// Campo personalizable: muestra el valor propio o "del evento". Editar inline.
+function InlineField({
+  label,
+  hint,
+  custom,
+  inheritedText,
+  ownValue,
+  min,
+  max,
+  unit,
+  onSave,
+  onReset,
 }: {
-  value: number | null;
-  onChange: (v: number | null) => void;
+  label: string;
+  hint: string;
+  custom: boolean;
+  inheritedText: string;
+  ownValue: number | null;
+  min: number;
+  max?: number;
+  unit?: string;
+  onSave: (v: number) => void;
+  onReset: () => void;
 }) {
-  const [editing, setEditing] = useState(false);
-  const [local, setLocal] = useState<string>("");
+  const [open, setOpen] = useState(false);
+  const [local, setLocal] = useState("");
+  const [saved, flash] = useSavedFlash();
+  const toggle = () => {
+    if (!open) setLocal(ownValue != null && ownValue !== -1 ? String(ownValue) : "");
+    setOpen((v) => !v);
+  };
+  const commit = () => {
+    const num = parseInt(local, 10);
+    if (!(local.trim() === "" || isNaN(num) || num < min || (max != null && num > max))) {
+      onSave(num);
+      flash();
+    }
+  };
 
-  if (!editing) {
-    return (
-      <button
-        type="button"
-        onClick={() => {
-          setLocal(value !== null ? String(value) : "");
-          setEditing(true);
-        }}
-        className="rounded-full bg-white/8 px-2.5 py-1 text-[11.5px] font-semibold text-cart-ink-2 transition hover:bg-white/12"
-      >
-        {value === null ? "∞" : `${value} ent.`}
-      </button>
-    );
-  }
   return (
-    <div className="flex items-center gap-1.5">
-      <input
-        type="number"
-        min={1}
-        value={local}
-        placeholder="∞"
-        onChange={(e) => setLocal(e.target.value)}
-        autoFocus
-        className="w-16 rounded-lg bg-cart-bg-elev-2 px-2 py-1 text-center font-mono text-[12px] outline-none"
-      />
+    <div>
       <button
         type="button"
-        onClick={() => {
-          const num = parseInt(local, 10);
-          // Vacío/<1 NO se interpreta como ilimitado: se descarta el cambio.
-          // Para quitar el tope hay que usar "Sin límite" explícitamente.
-          if (local.trim() === "" || isNaN(num) || num < 1) {
-            setEditing(false);
-            return;
-          }
-          onChange(num);
-          setEditing(false);
-        }}
-        className="rounded-lg bg-cart-accent px-2 py-1 text-[11px] font-semibold text-white"
+        onClick={toggle}
+        aria-expanded={open}
+        className="group flex w-full items-center justify-between gap-3 py-3.5 text-left"
       >
-        OK
+        <div className="min-w-0">
+          <div className="text-[13.5px] font-medium">{label}</div>
+          <div className="text-[11.5px] text-cart-ink-4">{hint}</div>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {custom ? (
+            <span className="rounded-full bg-cart-accent-soft px-2.5 py-1 text-[12.5px] font-semibold text-cart-accent">
+              {ownValue === -1 ? "sin tope" : `${ownValue}${unit ?? ""}`}
+            </span>
+          ) : (
+            <span className="text-[12.5px] text-cart-ink-3">{inheritedText}</span>
+          )}
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 14 14"
+            fill="none"
+            className={
+              "transition-transform duration-200 " +
+              (open ? "rotate-90 text-cart-ink-2" : "text-cart-ink-4 group-hover:text-cart-ink-2")
+            }
+            aria-hidden
+          >
+            <path d="M5 2l5 5-5 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </div>
       </button>
-      <button
-        type="button"
-        onClick={() => {
-          onChange(null);
-          setEditing(false);
-        }}
-        title="Quitar el tope de ventas"
-        className="rounded-lg bg-white/8 px-2 py-1 text-[11px] font-medium text-cart-ink-2 hover:bg-white/12"
-      >
-        ∞ Sin límite
-      </button>
-      <button
-        type="button"
-        onClick={() => setEditing(false)}
-        className="rounded-lg px-1 py-1 text-[11px] text-cart-ink-3 hover:text-white"
-      >
-        ✕
-      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            key="field-body"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
+            className="overflow-hidden"
+          >
+            <div className="flex items-center gap-2 pb-4">
+              <input
+                type="number"
+                min={min}
+                max={max}
+                value={local}
+                autoFocus
+                placeholder="sin tope"
+                onChange={(e) => setLocal(e.target.value)}
+                onBlur={commit}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") commit();
+                  if (e.key === "Escape") setOpen(false);
+                }}
+                className="w-24 rounded-xl bg-cart-bg-elev-2 px-3 py-2 text-center text-[15px] font-semibold outline-none ring-1 ring-cart-line-strong focus:ring-cart-accent"
+              />
+              {unit && <span className="text-[14px] text-cart-ink-3">{unit}</span>}
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  setLocal("");
+                  onSave(-1);
+                  flash();
+                }}
+                className={
+                  "rounded-full px-3 py-1.5 text-[12.5px] font-semibold transition " +
+                  (ownValue === -1
+                    ? "bg-cart-accent-soft text-cart-accent"
+                    : "bg-cart-bg-elev-2 text-cart-ink-2 ring-1 ring-cart-line-strong hover:text-white")
+                }
+              >
+                Sin tope
+              </button>
+              {custom && (
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    setLocal("");
+                    onReset();
+                    flash();
+                  }}
+                  className="rounded-full bg-cart-bg-elev-2 px-3 py-1.5 text-[12.5px] font-semibold text-cart-ink-2 ring-1 ring-cart-line-strong transition hover:text-white"
+                >
+                  Usar el del evento
+                </button>
+              )}
+              <SavedFlash saved={saved} />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -5,8 +5,11 @@ import type { PromoterRepository } from "@/server/promoters/ports/PromoterReposi
 import type {
   PromoterApplication,
   PromoterEventEarning,
+  PromoterGuest,
   PromoterLink,
 } from "@/server/promoters/domain/Promoter";
+import type { CommissionType } from "@/server/promoters/domain/OrgPromoter";
+import { resolveCommissionScheme } from "@/server/promoters/application/CommissionResolver";
 
 type LinkRow = {
   id: string;
@@ -17,6 +20,7 @@ type LinkRow = {
   commission_pct: number;
   active: boolean;
   created_at: string;
+  guest_list_quota: number | null;
   event: {
     id: string;
     slug: string;
@@ -52,6 +56,7 @@ const toLink = (r: LinkRow, now: Date = new Date()): PromoterLink => ({
   commissionPct: r.commission_pct,
   active: r.active,
   createdAt: r.created_at,
+  guestListQuota: r.guest_list_quota ?? null,
   eventStatus: computeEventStatus(r.event.starts_at, r.event.status, now),
 });
 
@@ -82,7 +87,9 @@ export const supabasePromoterRepository: PromoterRepository = {
     const { data: link } = await db
       .from("promoter_links")
       .select(
-        "*, event:events!inner(id, slug, title, starts_at, venue, organization_id, status)",
+        "*, event:events!inner(id, slug, title, starts_at, venue, organization_id, status, " +
+          "promoter_commission_pct, promoter_commission_type, promoter_commission_config), " +
+          "org_promoter:org_promoters(default_commission_pct, commission_type, commission_config)",
       )
       .eq("promoter_id", promoterId)
       .eq("event.slug", slug)
@@ -90,17 +97,51 @@ export const supabasePromoterRepository: PromoterRepository = {
     if (!link) return null;
     const l = toLink(link as unknown as LinkRow);
 
+    // Cómo le pagan: mismo resolver de 3 niveles (link → evento → marca) que
+    // usa el organizador y el route /r/[code]/state.
+    const lr = link as unknown as {
+      commission_type: CommissionType | null;
+      commission_pct: number | null;
+      commission_config_override: unknown;
+      event: {
+        promoter_commission_type: CommissionType | null;
+        promoter_commission_config: unknown;
+        promoter_commission_pct: number | null;
+      };
+      org_promoter: {
+        commission_type: CommissionType | null;
+        commission_config: unknown;
+        default_commission_pct: number | null;
+      } | null;
+    };
+    const scheme = resolveCommissionScheme({
+      linkType: lr.commission_type,
+      linkPct: lr.commission_pct,
+      linkConfigOverride: lr.commission_config_override,
+      eventType: lr.event.promoter_commission_type,
+      eventConfig: lr.event.promoter_commission_config,
+      eventPct: lr.event.promoter_commission_pct,
+      orgType: lr.org_promoter?.commission_type ?? null,
+      orgConfig: lr.org_promoter?.commission_config ?? null,
+      orgPct: lr.org_promoter?.default_commission_pct ?? null,
+    });
+
+    // total_cents > 0 = venta real. Las cortesías (S/0 de la lista de invitados)
+    // también quedan 'paid', así que se excluyen para no inflar "Vendidas" ni
+    // aparecer como "compró" en la actividad.
     const { count } = await db
       .from("orders")
       .select("id", { count: "exact", head: true })
       .eq("promoter_link_id", l.id)
-      .eq("status", "paid");
+      .eq("status", "paid")
+      .gt("total_cents", 0);
 
     const { data: orders } = await db
       .from("orders")
       .select("created_at, buyer:profiles!inner(full_name)")
       .eq("promoter_link_id", l.id)
       .eq("status", "paid")
+      .gt("total_cents", 0)
       .order("created_at", { ascending: false })
       .limit(10);
 
@@ -110,7 +151,104 @@ export const supabasePromoterRepository: PromoterRepository = {
       createdAt: o.created_at,
     }));
 
-    return { link: l, soldCount: count ?? 0, recent };
+    // ── Estado de la lista de invitados ──
+    // ¿Hay una entrada general con la lista activada? (misma consulta que el
+    // EventRepository, replicada acá para no acoplar repos).
+    const { data: glTt } = await db
+      .from("ticket_types")
+      .select("id")
+      .eq("event_id", l.eventId)
+      .eq("kind", "general")
+      .eq("guest_list_enabled", true)
+      .order("position", { ascending: true })
+      .limit(1)
+      .maybeSingle<{ id: string }>();
+    const guestListEnabled = !!glTt;
+
+    let guestListQuota: number | null = null;
+    let guestListUsed = 0;
+    let guestListRemaining: number | null = null;
+    if (guestListEnabled) {
+      // Cupo efectivo: -1 = sin tope propio; null = hereda el default del evento.
+      if (l.guestListQuota === -1) {
+        guestListQuota = null;
+      } else if (l.guestListQuota != null) {
+        guestListQuota = l.guestListQuota;
+      } else {
+        const { data: ev } = await db
+          .from("events")
+          .select("promoter_default_guest_list_quota")
+          .eq("id", l.eventId)
+          .maybeSingle<{ promoter_default_guest_list_quota: number | null }>();
+        guestListQuota = ev?.promoter_default_guest_list_quota ?? null;
+      }
+      const { count: courtesyCount } = await db
+        .from("tickets")
+        .select("id, order:orders!inner(promoter_link_id)", { count: "exact", head: true })
+        .eq("order.promoter_link_id", l.id)
+        .eq("is_courtesy", true)
+        .in("status", ["active", "used"]);
+      guestListUsed = courtesyCount ?? 0;
+      guestListRemaining =
+        guestListQuota == null ? null : Math.max(0, guestListQuota - guestListUsed);
+    }
+
+    return {
+      link: l,
+      soldCount: count ?? 0,
+      recent,
+      commissionType: scheme.type,
+      commissionPct: scheme.pct,
+      commissionConfig: scheme.config,
+      guestListEnabled,
+      guestListQuota,
+      guestListUsed,
+      guestListRemaining,
+    };
+  },
+
+  async listGuests(linkId): Promise<PromoterGuest[]> {
+    const db = supabaseAdmin();
+    const { data } = await db
+      .from("tickets")
+      .select(
+        "id, holder_name, holder_email, holder_phone, status, used_at, created_at, " +
+          "order:orders!inner(promoter_link_id)",
+      )
+      .eq("order.promoter_link_id", linkId)
+      .eq("is_courtesy", true)
+      .order("created_at", { ascending: false });
+
+    type GuestTicketRow = {
+      id: string;
+      holder_name: string | null;
+      holder_email: string | null;
+      holder_phone: string | null;
+      status: PromoterGuest["status"];
+      used_at: string | null;
+      created_at: string;
+    };
+    return ((data as unknown as GuestTicketRow[] | null) ?? []).map((t) => ({
+      ticketId: t.id,
+      name: t.holder_name,
+      email: t.holder_email,
+      phone: t.holder_phone,
+      status: t.status,
+      enteredAt: t.used_at,
+      createdAt: t.created_at,
+    }));
+  },
+
+  async countCourtesies(linkId): Promise<number> {
+    const db = supabaseAdmin();
+    // Mismo criterio que el cupo del evento: solo cortesías vigentes (active/used).
+    const { count } = await db
+      .from("tickets")
+      .select("id, order:orders!inner(promoter_link_id)", { count: "exact", head: true })
+      .eq("order.promoter_link_id", linkId)
+      .eq("is_courtesy", true)
+      .in("status", ["active", "used"]);
+    return count ?? 0;
   },
 
   async getEarnings(promoterId) {

@@ -14,6 +14,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { Btn, C, FONT_DISPLAY, Field } from "@/components/design";
 import { useRouter } from "@/i18n/navigation";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
+import { Logo } from "@/components/brand/Logo";
 import { useDniLookup } from "@/lib/identity/hooks/useDniLookup";
 import { useOnboarding } from "@/lib/identity/hooks/useOnboarding";
 import { useUpdateProfile } from "@/lib/identity/hooks/useUpdateProfile";
@@ -616,7 +617,7 @@ function Shell({
       <aside className="pasape-onb-sidebar">
         <div className="pasape-onb-brand">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/icons/logo-icon-min.svg" alt="Pasape" width={26} height={26} />
+          <Logo className="size-[26px]" />
           <span style={{ fontSize: 12, letterSpacing: "0.22em", fontWeight: 700, color: "#fff" }}>
             PASAPE
           </span>
@@ -686,7 +687,7 @@ function Shell({
       <div className="pasape-onb-topnav">
         <div className="pasape-onb-brand">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/icons/logo-icon-min.svg" alt="Pasape" width={22} height={22} />
+          <Logo className="size-[22px]" />
           <span
             style={{
               fontSize: 11,

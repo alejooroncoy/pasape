@@ -1,19 +1,18 @@
 import { describe, expect, it } from "vitest";
-import type { Promo, TicketType } from "@/server/events/domain/Event";
+import type { AdmissionTicketType, Promo, TicketType } from "@/server/events/domain/Event";
 import { activePricing, applyPromos, chargedUnits } from "./pricing";
 
-const tt = (over: Partial<TicketType>): TicketType => ({
+const tt = (over: Partial<AdmissionTicketType>): TicketType => ({
   id: "tt",
   eventId: "ev",
   name: "General",
   kind: "general",
   priceCents: 3000,
   currency: "PEN",
-  capacity: 100,
+  stock: 100,
   sold: 0,
   position: 0,
   boxLabel: null,
-  zone: null,
   unitNoun: null,
   saleEndsAt: null,
   presalePriceCents: null,
@@ -23,6 +22,8 @@ const tt = (over: Partial<TicketType>): TicketType => ({
   saleStatus: "available",
   isPresaleActive: false,
   presaleTiers: [],
+  guestListEnabled: false,
+  guestListCap: null,
   ...over,
 });
 

@@ -3,6 +3,7 @@
 import { motion } from "motion/react";
 import { Link } from "@/i18n/navigation";
 import { formatDate } from "@/lib/_shared/format";
+import { setEventBackTarget } from "@/lib/_shared/eventBackTarget";
 import type { Event } from "@/server/events/domain/Event";
 
 type Variant = "upcoming" | "past" | "draft";
@@ -41,6 +42,7 @@ export function EventCard({ event, variant }: { event: Event; variant: Variant }
     >
       <Link
         href={`/org/events/${event.slug}` as never}
+        onClick={() => setEventBackTarget({ href: "/org/events", label: "Eventos" })}
         className="flex h-full"
       >
         {/* Mobile: row layout with side thumbnail. Desktop (sm+): stacked card. */}

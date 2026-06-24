@@ -61,9 +61,13 @@ export type Event = {
   listStats?: { sold: number; capacity: number; revenueCents: number };
 };
 
-// "presale" se retiró: la preventa ya no es un tipo de entrada, es un atributo
-// (presalePriceCents/presaleQty/presaleEndsAt). Una entrada = un acceso.
-export type TicketTypeKind = "general" | "vip" | "box";
+// El kind solo codifica COMPORTAMIENTO, no la etiqueta comercial:
+// - "general": entrada individual (1 persona, 1 QR). El NOMBRE carga la
+//   distinción comercial ("VIP", "General", "After") — por eso "vip" se retiró.
+// - "box": espacio reservable (asientos, invita, stock binario).
+// "presale" también se retiró: la preventa es un atributo, no un tipo. Las
+// cortesías ya no son un kind: son tickets reales marcados tickets.is_courtesy.
+export type TicketTypeKind = "general" | "box";
 
 /** Promoción aplicada a una entrada. Solo 2x1 / 3x2 por ahora. */
 export type PromoKind = "2x1" | "3x2";
@@ -79,14 +83,22 @@ export type Promo = {
   isActive: boolean;
 };
 
-export type TicketType = {
+/**
+ * Campos comunes a todo tipo de entrada. NO incluye el cupo: ese es ambiguo
+ * (asientos en un box vs stock en una entrada) y se modela por variante abajo,
+ * para que el compilador impida confundirlos. Ver AGENTS.md ("capacity es
+ * ambiguo") y los helpers en `@/lib/events/ticketDisplay`.
+ */
+type TicketTypeBase = {
   id: string;
   eventId: string;
   name: string;
-  kind: TicketTypeKind;
   priceCents: number;
   currency: string;
-  capacity: number;
+  /**
+   * Unidades tomadas. En una entrada = tickets vendidos. En un box = tickets del
+   * box emitidos (host + acompañantes). Común a ambos, por eso vive en la base.
+   */
   sold: number;
   position: number;
   /**
@@ -95,13 +107,6 @@ export type TicketType = {
    * Para ticket types no-box queda null.
    */
   boxLabel: string | null;
-  /**
-   * Zona del venue ("Boxes Premium 1er Piso", "Mesas Premium", "Zona Chivas")
-   * usada para agrupar la lista al comprador. Coincide con el plano referencial
-   * que el organizador publica. Opcional: si es null, el ticket type aparece sin
-   * agrupar.
-   */
-  zone: string | null;
   /**
    * Sustantivo que el organizador usa para esta unidad reservable: "box",
    * "mesa", "lounge", "espacio" u otro custom. Si es null, el display usa
@@ -134,3 +139,33 @@ export type TicketType = {
   /** Tramos de preventa ordenados por ends_at asc. El backend elige el activo. */
   presaleTiers: PresaleTier[];
 };
+
+/** Espacio reservable. `seats` = personas que entran (NO es stock: el box se vende entero). */
+export type BoxTicketType = TicketTypeBase & {
+  kind: "box";
+  seats: number;
+};
+
+/** Entrada individual (1 acceso = 1 persona). `stock` = cuántas se venden. */
+export type AdmissionTicketType = TicketTypeBase & {
+  kind: Exclude<TicketTypeKind, "box">;
+  stock: number;
+  /**
+   * LISTA DE INVITADOS — el organizador activa la lista sobre esta entrada: los
+   * promotores pueden emitir cortesías (gratis, is_courtesy) sobre ella. Solo
+   * aplica a entradas generales (un box no recibe cortesías de lista).
+   */
+  guestListEnabled: boolean;
+  /**
+   * Tope total de cortesías (cuenta tickets is_courtesy de esta entrada).
+   * null = sin tope. El backend valida el cupo en addGuest; la UI lo limita al aforo.
+   */
+  guestListCap: number | null;
+};
+
+/**
+ * Unión discriminada por `kind`. El cupo NO es un `number` plano: es `seats` en
+ * un box y `stock` en una entrada. El compilador obliga a estrechar por `kind`
+ * antes de leer cualquiera — imposible confundir asientos con stock.
+ */
+export type TicketType = BoxTicketType | AdmissionTicketType;

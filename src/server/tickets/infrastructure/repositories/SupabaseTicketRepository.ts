@@ -6,7 +6,7 @@ import type {
   TicketRepository,
 } from "@/server/tickets/ports/TicketRepository";
 import type { Order, Ticket, WalletTicket } from "@/server/tickets/domain/Ticket";
-import type { EventStatus, Promo } from "@/server/events/domain/Event";
+import type { EventCategory, EventStatus, Promo } from "@/server/events/domain/Event";
 import { activePricing, applyPromos, type PromoLineInput } from "@/lib/events/pricing";
 import { createPreference } from "@/server/payments/application/CreatePreference";
 import { dispatchTicketDelivery } from "@/server/notifications/application/DispatchTicketDelivery";
@@ -70,6 +70,45 @@ const toTicket = (r: TicketRow): Ticket => ({
   boxHostTicketId: r.box_host_ticket_id,
 });
 
+type TransferableEvent = {
+  starts_at: string;
+  title: string;
+  transfers_enabled: boolean;
+  transfer_deadline_hours: number | null;
+  transfer_max_count: number;
+};
+
+// Carga el ticket y valida que se pueda transferir AHORA (dueño correcto,
+// activo, evento con transferencias habilitadas, dentro de la ventana y bajo el
+// límite). Compartido por transfer() y createPendingTransfer().
+const loadTransferable = async (
+  db: ReturnType<typeof supabaseAdmin>,
+  ticketId: string,
+  fromProfile: string,
+): Promise<Result<{ row: TicketRow; event: TransferableEvent }>> => {
+  const { data: existing, error } = await db
+    .from("tickets")
+    .select(
+      "*, ticket_type:ticket_types!inner(event:events!inner(starts_at, title, transfers_enabled, transfer_deadline_hours, transfer_max_count))",
+    )
+    .eq("id", ticketId)
+    .single();
+  if (error || !existing) return err("ticket_not_found");
+  const joined = existing as unknown as TicketRow & {
+    ticket_type: { event: TransferableEvent };
+  };
+  if (joined.current_holder !== fromProfile) return err("not_owner");
+  if (joined.status !== "active") return err("ticket_not_active");
+  const ev = joined.ticket_type.event;
+  if (!ev.transfers_enabled) return err("transfers_disabled");
+  if (ev.transfer_deadline_hours != null) {
+    const hoursUntilStart = (new Date(ev.starts_at).getTime() - Date.now()) / 3_600_000;
+    if (hoursUntilStart < ev.transfer_deadline_hours) return err("transfer_window_closed");
+  }
+  if (joined.transfer_count >= ev.transfer_max_count) return err("transfer_limit_reached");
+  return ok({ row: joined, event: ev });
+};
+
 export const supabaseTicketRepository: TicketRepository = {
   async buy(input: BuyInput): Promise<Result<BuyOutput>> {
     const db = supabaseAdmin();
@@ -120,7 +159,16 @@ export const supabaseTicketRepository: TicketRepository = {
       const tt = tts.find((t) => t.id === item.ticketTypeId);
       if (!tt) return err("ticket_type_missing");
       if (tt.sale_ends_at && new Date(tt.sale_ends_at) < new Date()) return err("ticket_type_sales_closed");
+      // Cortesía y venta compiten por el MISMO aforo de la entrada: una cortesía
+      // ocupa un cupo físico real, así que respeta capacity (no sobrevende el
+      // espacio). Se libera sola al anular el ticket (el trigger recalcula sold).
       if (tt.sold + item.qty > tt.capacity) return err("sold_out");
+      // Cortesía: ocupa aforo pero es gratis. La separación venta/cortesía para
+      // ingresos vive en orders.total_cents, no aquí.
+      if (input.courtesy) {
+        priceItems.push({ ticketTypeId: tt.id, qty: item.qty, unitPriceCents: 0 });
+        continue;
+      }
       const isPresaleActive =
         tt.presale_price_cents != null &&
         (tt.presale_qty == null || tt.sold < tt.presale_qty) &&
@@ -154,8 +202,24 @@ export const supabaseTicketRepository: TicketRepository = {
         .maybeSingle<{ id: string; promoter_id: string; quota: number | null }>();
 
       if (link) {
+        // Cupo efectivo: propio del promotor o, si no tiene, el default del
+        // evento (herencia link → evento). null = sin tope; -1 = personalizado
+        // a "sin tope" (no hereda el default del evento).
+        let effectiveQuota: number | null;
+        if (link.quota === -1) {
+          effectiveQuota = null;
+        } else if (link.quota != null) {
+          effectiveQuota = link.quota;
+        } else {
+          const { data: ev } = await db
+            .from("events")
+            .select("promoter_default_quota")
+            .eq("id", input.eventId)
+            .maybeSingle<{ promoter_default_quota: number | null }>();
+          effectiveQuota = ev?.promoter_default_quota ?? null;
+        }
         // Verificar cuota si está seteada (cuenta tickets activos/usados de este link).
-        if (link.quota != null) {
+        if (effectiveQuota != null) {
           const { data: paidOrders } = await db
             .from("orders")
             .select("id")
@@ -173,7 +237,7 @@ export const supabaseTicketRepository: TicketRepository = {
                     .in("order_id", orderIds)
                     .in("status", ["active", "used"])
                 ).count ?? 0;
-          if (usedCount >= link.quota) {
+          if (usedCount >= effectiveQuota) {
             return err("promoter_quota_exceeded");
           }
         }
@@ -270,6 +334,40 @@ export const supabaseTicketRepository: TicketRepository = {
       .single<OrderRow>();
     if (orderErr || !orderRow) return err(orderErr?.message ?? "order_create_failed");
 
+    // Datos de identidad del que compra: guest o logueado (buyer). Mismo shape;
+    // la diferencia es que buyer no crea auth user — ya existe sesión.
+    const attendee = input.guest ?? input.buyer ?? null;
+
+    // Persistencia para autorrelleno: la primera compra guarda DNI (kyc) y
+    // teléfono (profile); las siguientes el checkout los pre-llena desde /me.
+    if (attendee) {
+      const phoneNorm = attendee.phone?.replace(/\D/g, "") || null;
+      if (phoneNorm) {
+        await db.from("profiles").update({ phone: phoneNorm }).eq("id", effectiveBuyerId);
+      }
+      if (attendee.dni && attendee.dni.length >= 6) {
+        await db.from("kyc_documents").upsert(
+          {
+            profile_id: effectiveBuyerId,
+            doc_kind: "dni",
+            doc_number: attendee.dni,
+            last2: attendee.dni.slice(-2),
+          },
+          { onConflict: "profile_id,doc_kind" },
+        );
+      }
+    }
+
+    // Nombre del comprador como fallback para entradas nominativas: si el
+    // checkout no capturó un holderName por entrada ni datos de guest/buyer,
+    // el ticket hereda el nombre del perfil del comprador.
+    const { data: buyerProfile } = await db
+      .from("profiles")
+      .select("full_name")
+      .eq("id", effectiveBuyerId)
+      .single<{ full_name: string | null }>();
+    const buyerFullName = buyerProfile?.full_name ?? null;
+
     const ticketsToInsert = input.items.flatMap((item) => {
       const tt = tts.find((t) => t.id === item.ticketTypeId);
       // Why: para boxes solo generamos 1 ticket (el "host") sin importar qty.
@@ -288,13 +386,17 @@ export const supabaseTicketRepository: TicketRepository = {
         order_id: orderRow.id,
         ticket_type_id: item.ticketTypeId,
         price_cents: base + (i === 0 ? remainder : 0),
-        holder_name: item.holderName ?? input.guest?.fullName ?? null,
-        holder_email: input.guest?.email ?? null,
-        holder_phone: input.guest?.phone ?? null,
+        holder_name: item.holderName ?? attendee?.fullName ?? buyerFullName,
+        holder_email: attendee?.email ?? null,
+        holder_phone: attendee?.phone ?? null,
+        // El portero busca por últimos 2 dígitos del DNI — sin esto las
+        // entradas de compradores logueados eran inubicables por DNI.
+        holder_dni_last2: attendee?.dni ? attendee.dni.slice(-2) : null,
         qr_code: generateQr(),
         current_holder: effectiveBuyerId,
         box_label: tt?.box_label ?? null,
         box_host_ticket_id: null,
+        is_courtesy: input.courtesy ?? false,
       }));
     });
 
@@ -389,14 +491,44 @@ export const supabaseTicketRepository: TicketRepository = {
 
   async listMine(buyerId: string): Promise<WalletTicket[]> {
     const db = supabaseAdmin();
+    // Solo entradas que existen para el usuario: active (válida) + used (historial
+    // de asistencia). Excluye void/refunded — son ventas que nunca cuajaron
+    // (carrito expirado, pago fallido) o se reembolsaron; no deben aparecer ni
+    // contar en la cuenta. El resto de cálculos (sold, revenue, asistentes) ya
+    // los excluye en sus views/queries.
     const { data } = await db
       .from("tickets")
       .select(
-        "*, ticket_type:ticket_types!inner(id,name,kind,event_id,event:events!inner(id,slug,title,starts_at,venue,timezone,status))",
+        "*, ticket_type:ticket_types!inner(id,name,kind,event_id,event:events!inner(id,slug,title,starts_at,venue,timezone,status,cover_url,category))",
       )
       .eq("current_holder", buyerId)
+      .in("status", ["active", "used"])
       .order("created_at", { ascending: false });
     if (!data) return [];
+    // Un box es UNA entrada en el wallet. El host, además de su propio ticket,
+    // sostiene los QR de acompañantes sin celular (current_holder = host,
+    // box_host_ticket_id → su ticket host). Esos no son entradas aparte: se
+    // gestionan dentro del panel del box. Los ocultamos de la lista cuando el
+    // host también posee el ticket host referenciado. El miembro que se unió por
+    // link no posee al host, así que su box sí aparece (es su entrada).
+    const rawRows = data as unknown as TicketRow[];
+    const ownedIds = new Set(rawRows.map((r) => r.id));
+    const rows = rawRows.filter(
+      (r) => !(r.box_host_ticket_id && ownedIds.has(r.box_host_ticket_id)),
+    );
+    // Transferencias pendientes de estos tickets: el emisor las ve como
+    // "enviada · esperando reclamo" mientras el receptor no abre su link.
+    const ids = rows.map((r) => r.id);
+    const { data: pend } = ids.length
+      ? await db
+          .from("ticket_transfers")
+          .select("ticket_id, to_contact")
+          .eq("status", "pending")
+          .in("ticket_id", ids)
+      : { data: [] as { ticket_id: string; to_contact: string | null }[] };
+    const pendMap = new Map(
+      (pend ?? []).map((p) => [p.ticket_id, p.to_contact]),
+    );
     type Joined = TicketRow & {
       ticket_type: {
         id: string;
@@ -411,10 +543,12 @@ export const supabaseTicketRepository: TicketRepository = {
           venue: string | null;
           timezone: string;
           status: EventStatus;
+          cover_url: string | null;
+          category: EventCategory | null;
         };
       };
     };
-    return (data as unknown as Joined[]).map((row) => ({
+    return (rows as unknown as Joined[]).map((row) => ({
       ...toTicket(row),
       event: {
         id: row.ticket_type.event.id,
@@ -424,67 +558,111 @@ export const supabaseTicketRepository: TicketRepository = {
         venue: row.ticket_type.event.venue,
         timezone: row.ticket_type.event.timezone,
         status: row.ticket_type.event.status,
+        coverUrl: row.ticket_type.event.cover_url,
+        category: row.ticket_type.event.category,
       },
       ticketType: {
         id: row.ticket_type.id,
         name: row.ticket_type.name,
         kind: row.ticket_type.kind,
       },
+      pendingTransferTo: pendMap.get(row.id) ?? null,
     }));
   },
 
   async getById(ticketId, buyerId) {
-    const all = await supabaseTicketRepository.listMine(buyerId);
-    return all.find((t) => t.id === ticketId) ?? null;
+    const db = supabaseAdmin();
+    // A diferencia de listMine, NO colapsamos el box: si el usuario es dueño del
+    // ticket (current_holder), puede abrir su detalle/QR aunque sea un QR de
+    // acompañante que sostiene dentro de su box. La pertenencia ya la garantiza
+    // current_holder = buyerId.
+    const { data } = await db
+      .from("tickets")
+      .select(
+        "*, ticket_type:ticket_types!inner(id,name,kind,event_id,event:events!inner(id,slug,title,starts_at,venue,timezone,status,cover_url,category))",
+      )
+      .eq("id", ticketId)
+      .eq("current_holder", buyerId)
+      .maybeSingle();
+    if (!data) return null;
+    type Joined = TicketRow & {
+      ticket_type: {
+        id: string;
+        name: string;
+        kind: string;
+        event_id: string;
+        event: {
+          id: string;
+          slug: string;
+          title: string;
+          starts_at: string;
+          venue: string | null;
+          timezone: string;
+          status: EventStatus;
+          cover_url: string | null;
+          category: EventCategory | null;
+        };
+      };
+    };
+    const row = data as unknown as Joined;
+    const { data: pend } = await db
+      .from("ticket_transfers")
+      .select("to_contact")
+      .eq("status", "pending")
+      .eq("ticket_id", ticketId)
+      .maybeSingle();
+    return {
+      ...toTicket(row),
+      event: {
+        id: row.ticket_type.event.id,
+        slug: row.ticket_type.event.slug,
+        title: row.ticket_type.event.title,
+        startsAt: row.ticket_type.event.starts_at,
+        venue: row.ticket_type.event.venue,
+        timezone: row.ticket_type.event.timezone,
+        status: row.ticket_type.event.status,
+        coverUrl: row.ticket_type.event.cover_url,
+        category: row.ticket_type.event.category,
+      },
+      ticketType: {
+        id: row.ticket_type.id,
+        name: row.ticket_type.name,
+        kind: row.ticket_type.kind,
+      },
+      pendingTransferTo: (pend as { to_contact: string | null } | null)?.to_contact ?? null,
+    };
+  },
+
+  async setHolder(input): Promise<Result<Ticket>> {
+    const db = supabaseAdmin();
+    // Guarda dueño + estado: solo el dueño actual puede nombrar, y solo si la
+    // entrada sigue active (no tiene sentido nombrar una usada/anulada).
+    // El DNI solo se toca si vino en el input (undefined = preservar el guardado).
+    const patch: { holder_name: string | null; holder_dni_last2?: string | null } = {
+      holder_name: input.holderName,
+    };
+    if (input.dniLast2 !== undefined) patch.holder_dni_last2 = input.dniLast2;
+    const { data: updated, error: upErr } = await db
+      .from("tickets")
+      .update(patch)
+      .eq("id", input.ticketId)
+      .eq("current_holder", input.ownerId)
+      .eq("status", "active")
+      .select("*")
+      .single<TicketRow>();
+    if (upErr || !updated) return err(upErr?.message ?? "set_holder_failed");
+    return ok(toTicket(updated));
   },
 
   async transfer(input): Promise<Result<Ticket>> {
     if (!input.toProfile) return err("recipient_required");
     const db = supabaseAdmin();
-    const { data: existing, error: getErr } = await db
-      .from("tickets")
-      .select(
-        "*, ticket_type:ticket_types!inner(event:events!inner(starts_at, transfers_enabled, transfer_deadline_hours, transfer_max_count))",
-      )
-      .eq("id", input.ticketId)
-      .single();
-    if (getErr || !existing) return err("ticket_not_found");
-
-    type Joined = TicketRow & {
-      ticket_type: {
-        event: {
-          starts_at: string;
-          transfers_enabled: boolean;
-          transfer_deadline_hours: number | null;
-          transfer_max_count: number;
-        };
-      };
-    };
-    const joined = existing as unknown as Joined;
-
-    if (joined.current_holder !== input.fromProfile) return err("not_owner");
-    if (joined.status !== "active") return err("ticket_not_active");
-
-    const ev = joined.ticket_type.event;
-    // Why: el organizador puede deshabilitar transferencias por evento.
-    if (!ev.transfers_enabled) return err("transfers_disabled");
-
-    // Why: cooldown anti-fraude. Cerca del evento, las transferencias son
-    // vector de reventa/laundering. El organizador define la ventana.
-    if (ev.transfer_deadline_hours != null) {
-      const hoursUntilStart = (new Date(ev.starts_at).getTime() - Date.now()) / 3_600_000;
-      if (hoursUntilStart < ev.transfer_deadline_hours) {
-        return err("transfer_window_closed");
-      }
-    }
-
-    if (joined.transfer_count >= ev.transfer_max_count) {
-      return err("transfer_limit_reached");
-    }
+    const loaded = await loadTransferable(db, input.ticketId, input.fromProfile);
+    if (!loaded.ok) return loaded;
 
     const { data: updated, error: upErr } = await db
       .from("tickets")
-      .update({ current_holder: input.toProfile, transfer_count: joined.transfer_count + 1 })
+      .update({ current_holder: input.toProfile, transfer_count: loaded.value.row.transfer_count + 1 })
       .eq("id", input.ticketId)
       .select("*")
       .single<TicketRow>();
@@ -500,6 +678,93 @@ export const supabaseTicketRepository: TicketRepository = {
     return ok(toTicket(updated));
   },
 
+  async createPendingTransfer(input): Promise<Result<{ event: { title: string; startsAt: string } }>> {
+    const db = supabaseAdmin();
+    const loaded = await loadTransferable(db, input.ticketId, input.fromProfile);
+    if (!loaded.ok) return loaded;
+
+    // Reenviar o cambiar de destinatario: cancela el pending anterior antes de
+    // crear el nuevo (el índice único exige a lo sumo uno pendiente por ticket).
+    await db
+      .from("ticket_transfers")
+      .update({ status: "cancelled" })
+      .eq("ticket_id", input.ticketId)
+      .eq("status", "pending");
+
+    const { error: insErr } = await db.from("ticket_transfers").insert({
+      ticket_id: input.ticketId,
+      from_profile: input.fromProfile,
+      to_profile: null,
+      to_contact: input.toContact,
+      pending_token: input.token,
+      expires_at: input.expiresAt,
+      status: "pending",
+    });
+    if (insErr) return err(insErr.message);
+    return ok({ event: { title: loaded.value.event.title, startsAt: loaded.value.event.starts_at } });
+  },
+
+  async claimTransfer(input): Promise<Result<{ ticket: Ticket; eventSlug: string }>> {
+    const db = supabaseAdmin();
+    const { data: pendingRow } = await db
+      .from("ticket_transfers")
+      .select("id, ticket_id, from_profile, expires_at")
+      .eq("pending_token", input.token)
+      .eq("status", "pending")
+      .maybeSingle<{ id: string; ticket_id: string; from_profile: string; expires_at: string | null }>();
+    if (!pendingRow) return err("claim_not_found");
+    if (pendingRow.expires_at && new Date(pendingRow.expires_at) < new Date()) {
+      return err("claim_expired");
+    }
+    // El emisor no puede reclamar su propio envío.
+    if (pendingRow.from_profile === input.toProfile) return err("cannot_claim_own");
+
+    // El ticket debe seguir activo y aún en manos del emisor.
+    const { data: tk } = await db
+      .from("tickets")
+      .select("*, ticket_type:ticket_types!inner(event:events!inner(slug))")
+      .eq("id", pendingRow.ticket_id)
+      .single();
+    if (!tk) return err("ticket_not_found");
+    const joined = tk as unknown as TicketRow & { ticket_type: { event: { slug: string } } };
+    if (joined.status !== "active") return err("ticket_not_active");
+    if (joined.current_holder !== pendingRow.from_profile) return err("claim_no_longer_valid");
+
+    const { data: updated, error: upErr } = await db
+      .from("tickets")
+      .update({ current_holder: input.toProfile, transfer_count: joined.transfer_count + 1 })
+      .eq("id", pendingRow.ticket_id)
+      .select("*")
+      .single<TicketRow>();
+    if (upErr || !updated) return err(upErr?.message ?? "claim_failed");
+
+    await db
+      .from("ticket_transfers")
+      .update({ status: "completed", to_profile: input.toProfile })
+      .eq("id", pendingRow.id);
+
+    return ok({ ticket: toTicket(updated), eventSlug: joined.ticket_type.event.slug });
+  },
+
+  async cancelPendingTransfer(input): Promise<Result<{ ok: true }>> {
+    const db = supabaseAdmin();
+    // Solo el emisor original puede cancelar su envío pendiente.
+    const { data: pendingRow } = await db
+      .from("ticket_transfers")
+      .select("id")
+      .eq("ticket_id", input.ticketId)
+      .eq("from_profile", input.fromProfile)
+      .eq("status", "pending")
+      .maybeSingle<{ id: string }>();
+    if (!pendingRow) return err("no_pending_transfer");
+    const { error } = await db
+      .from("ticket_transfers")
+      .update({ status: "cancelled" })
+      .eq("id", pendingRow.id);
+    if (error) return err(error.message);
+    return ok({ ok: true });
+  },
+
   async markUsedByQr(qrCode, scannerId, usedAt?: Date) {
     const db = supabaseAdmin();
     // Solo QR firmado ECDSA (cert~window~sig). Offline (usedAt presente) omite
@@ -510,6 +775,128 @@ export const supabaseTicketRepository: TicketRepository = {
       return err(resolved.error);
     }
     return markByQrCode(db, resolved.value.qrCode, scannerId, usedAt, qrCode);
+  },
+
+  async getCarouselScope(ticketId, viewerId) {
+    const db = supabaseAdmin();
+
+    // Cargamos el ticket para saber si pertenece a un box y su evento.
+    const { data: tk } = await db
+      .from("tickets")
+      .select("id, box_label, box_host_ticket_id, current_holder, status, created_at, ticket_type:ticket_types!inner(event_id)")
+      .eq("id", ticketId)
+      .eq("current_holder", viewerId)
+      .maybeSingle();
+    if (!tk) return err("not_found");
+
+    type TkRow = {
+      id: string;
+      box_label: string | null;
+      box_host_ticket_id: string | null;
+      current_holder: string;
+      status: string;
+      created_at: string;
+      ticket_type: { event_id: string };
+    };
+    const ticket = tk as unknown as TkRow;
+    const eventId = ticket.ticket_type.event_id;
+    const isBoxTicket = !!ticket.box_label;
+
+    if (isBoxTicket) {
+      // El host del box es el que no tiene box_host_ticket_id (es su propio ticket host).
+      // El hostTicketId puede ser el propio (si es el host) o el referenciado (si es acompañante).
+      const hostTicketId = ticket.box_host_ticket_id ?? ticket.id;
+
+      // Determinamos quién es el dueño del box: el current_holder del ticket host.
+      const { data: hostTk } = await db
+        .from("tickets")
+        .select("current_holder")
+        .eq("id", hostTicketId)
+        .maybeSingle<{ current_holder: string }>();
+      if (!hostTk) return err("box_host_not_found");
+      const ownerId = hostTk.current_holder;
+
+      // QR individuales que el host maneja: el ticket host (siempre) + acompañantes
+      // cuyo current_holder sigue siendo el dueño del box (heldByHost).
+      const { data: peers } = await db
+        .from("tickets")
+        .select("id, box_host_ticket_id, current_holder, created_at")
+        .or(`id.eq.${hostTicketId},box_host_ticket_id.eq.${hostTicketId}`)
+        .eq("current_holder", ownerId)
+        .order("created_at", { ascending: true });
+
+      type PeerRow = { id: string; box_host_ticket_id: string | null; current_holder: string; created_at: string };
+      const ps = ((peers as unknown as PeerRow[] | null) ?? []);
+      // Host primero, luego acompañantes por createdAt (orden estable).
+      const sorted = [
+        ...ps.filter((p) => p.box_host_ticket_id === null),
+        ...ps.filter((p) => p.box_host_ticket_id !== null).sort((a, b) =>
+          a.created_at === b.created_at ? a.id.localeCompare(b.id) : a.created_at.localeCompare(b.created_at),
+        ),
+      ];
+      const ids = sorted.map((p) => p.id);
+      const currentIndex = ids.indexOf(ticketId);
+
+      // eventTicketCount: cuántas entradas del evento posee el viewer (event-scoped,
+      // excluye tickets de box), para el link "Ver todas" (no confundir con el carrusel del box).
+      const { count: eventCount } = await db
+        .from("tickets")
+        .select("id", { count: "exact", head: true })
+        .eq("current_holder", viewerId)
+        .eq("ticket_type.event_id" as never, eventId)
+        .in("status", ["active", "used"])
+        .is("box_label", null);
+      // La query anterior con join implícito puede no funcionar directo; usamos select con join explícito.
+      // Rehacemos con join explícito:
+      const { data: eventTks } = await db
+        .from("tickets")
+        .select("id, ticket_type:ticket_types!inner(event_id)")
+        .eq("current_holder", viewerId)
+        .in("status", ["active", "used"])
+        .is("box_label", null)
+        .eq("ticket_types.event_id" as never, eventId);
+      // Supabase no soporta filtrar por columna del join con .eq("join.col").
+      // Filtramos manualmente el resultado:
+      type EvTk = { id: string; ticket_type: { event_id: string } };
+      const eventTicketCount = ((eventTks as unknown as EvTk[] | null) ?? [])
+        .filter((r) => r.ticket_type.event_id === eventId).length;
+
+      return ok({ ids, currentIndex, eventTicketCount });
+    }
+
+    // No es box: entradas activas del mismo evento que posee el viewer,
+    // EXCLUYENDO tickets de box (box_label != null), más la actual aunque no esté active.
+    const { data: evTks } = await db
+      .from("tickets")
+      .select("id, status, created_at, box_label, ticket_type:ticket_types!inner(event_id)")
+      .eq("current_holder", viewerId)
+      .in("status", ["active", "used"])
+      .is("box_label", null);
+
+    type EvTkRow = { id: string; status: string; created_at: string; box_label: string | null; ticket_type: { event_id: string } };
+    const allOwned = ((evTks as unknown as EvTkRow[] | null) ?? [])
+      .filter((r) => r.ticket_type.event_id === eventId);
+
+    const eventTicketCount = allOwned.length;
+
+    // Scope del carrusel: activos del evento, incluyendo el ticket actual aunque no esté active.
+    const inScope = allOwned
+      .filter((r) => r.status === "active" || r.id === ticketId)
+      .sort((a, b) =>
+        a.created_at === b.created_at ? a.id.localeCompare(b.id) : a.created_at.localeCompare(b.created_at),
+      );
+
+    // Si el ticket actual no estaba en la lista (used/void, no entre activos), lo añadimos.
+    if (!inScope.find((r) => r.id === ticketId)) {
+      inScope.push({ id: ticketId, status: ticket.status, created_at: ticket.created_at, box_label: null, ticket_type: { event_id: eventId } });
+      inScope.sort((a, b) =>
+        a.created_at === b.created_at ? a.id.localeCompare(b.id) : a.created_at.localeCompare(b.created_at),
+      );
+    }
+
+    const ids = inScope.map((r) => r.id);
+    const currentIndex = ids.indexOf(ticketId);
+    return ok({ ids, currentIndex, eventTicketCount });
   },
 
   async markUsedByTicketId(ticketId, scannerId, usedAt?: Date) {

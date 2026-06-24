@@ -11,6 +11,8 @@ import { countPending } from "@/lib/scanning/scanQueue";
 import { syncPending } from "@/lib/scanning/syncWorker";
 import { useEvent } from "@/lib/events/hooks/useEvents";
 import { useEventStats } from "@/lib/events/hooks/useEventStats";
+import { useRealtimeEventStats } from "@/lib/events/hooks/useRealtimeEventStats";
+import { useScanRealtime } from "@/lib/scanning/hooks/useScanRealtime";
 import { api } from "@/lib/_shared/api-client";
 import { useScannerSession } from "@/lib/scanning/hooks/useScannerSession";
 import { ScanOnboarding } from "./_session/ScanOnboarding";
@@ -51,7 +53,9 @@ type DetectorLike = {
 };
 
 // Fallback jsQR para WebViews sin BarcodeDetector (WKWebView / iOS): procesa
-// los frames del video por canvas. Downscale a ~640px de ancho por rendimiento.
+// los frames del video por canvas. ROI al centro (donde está el viewfinder) +
+// downscale a ~512px: solo procesa la zona que importa → mucho más rápido y no
+// capta QRs de fondo por error.
 function makeJsQrDetector(): DetectorLike {
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
@@ -62,12 +66,15 @@ function makeJsQrDetector(): DetectorLike {
       const video = src as HTMLVideoElement;
       const vw = video.videoWidth, vh = video.videoHeight;
       if (!vw || !vh || !ctx || !jsQRmod) return [];
-      const scale = Math.min(1, 640 / vw);
-      const w = Math.round(vw * scale), h = Math.round(vh * scale);
-      canvas.width = w; canvas.height = h;
-      ctx.drawImage(video, 0, 0, w, h);
-      const img = ctx.getImageData(0, 0, w, h);
-      const res = jsQRmod(img.data, w, h, { inversionAttempts: "dontInvert" });
+      // ROI: recorta el cuadrado central (~70% del lado menor) — el QR siempre
+      // está ahí (el viewfinder lo guía). Ignora el resto del frame.
+      const roi = Math.round(Math.min(vw, vh) * 0.7);
+      const sx = Math.round((vw - roi) / 2), sy = Math.round((vh - roi) / 2);
+      const target = Math.min(512, roi);
+      canvas.width = target; canvas.height = target;
+      ctx.drawImage(video, sx, sy, roi, roi, 0, 0, target, target);
+      const img = ctx.getImageData(0, 0, target, target);
+      const res = jsQRmod(img.data, target, target, { inversionAttempts: "dontInvert" });
       return res?.data ? [{ rawValue: res.data }] : [];
     },
   };
@@ -118,6 +125,9 @@ function Inner() {
   const { data: eventData } = useEvent(eventSlug ?? "");
   const { data: statsData } = useEventStats(eventSlug ?? "");
   const ev        = eventData?.event;
+  // Aforo en vivo desde la DB (otras puertas) — reemplaza el polling de stats.
+  useScanRealtime(eventSlug ?? "");
+  useRealtimeEventStats(ev?.id, eventSlug ?? "");
   const validated = statsData?.validated ?? 0;
   const capacity  = statsData?.capacity  ?? 0;
   const aforo     = capacity > 0 ? Math.round((validated / capacity) * 100) : 0;
@@ -136,6 +146,7 @@ function Inner() {
   const streamRef   = useRef<MediaStream | null>(null);
   const rafRef      = useRef<number | null>(null);
   const lastCodeRef = useRef("");
+  const lastDetectRef = useRef(0);
   const clearTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [active,       setActive]       = useState(false);
@@ -265,10 +276,18 @@ function Inner() {
     }
   }, [scan, online, showResult]);
 
+  // Throttle a ~20fps: detectar más seguido no mejora la lectura (el portero
+  // sostiene el QR cientos de ms) pero recalienta el equipo y entrecorta el
+  // preview. 50ms entre detecciones mantiene la cámara fluida y fría.
+  const DETECT_INTERVAL_MS = 50;
   const loop = useCallback(async function scanLoop(detector: DetectorLike) {
     const video = videoRef.current;
     if (!video || video.readyState < 2) { rafRef.current = requestAnimationFrame(() => void scanLoop(detector)); return; }
-    try { const codes = await detector.detect(video); if (codes[0]?.rawValue) await runScan(codes[0].rawValue); } catch {}
+    const now = performance.now();
+    if (now - lastDetectRef.current >= DETECT_INTERVAL_MS) {
+      lastDetectRef.current = now;
+      try { const codes = await detector.detect(video); if (codes[0]?.rawValue) await runScan(codes[0].rawValue); } catch {}
+    }
     rafRef.current = requestAnimationFrame(() => void scanLoop(detector));
   }, [runScan]);
 
@@ -277,8 +296,32 @@ function Inner() {
     const detector = getDetector();
     if (!detector) { setCameraError(true); return; }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+      // 720p + autofocus continuo: resolución suficiente para leer QR a ~30cm
+      // sin sobrecargar el decode, y enfoque que reacciona al acercar el código.
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: "environment",
+          width:  { ideal: 1280 },
+          height: { ideal: 720 },
+          frameRate: { ideal: 30 },
+        },
+      });
       streamRef.current = stream;
+
+      // Aplicar autofocus continuo (no todos los devices lo exponen → best-effort).
+      const track = stream.getVideoTracks()[0];
+      if (track) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const caps = track.getCapabilities?.() as any;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const advanced: any[] = [];
+        if (caps?.focusMode?.includes?.("continuous")) advanced.push({ focusMode: "continuous" });
+        if (advanced.length) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await track.applyConstraints({ advanced } as any).catch(() => {});
+        }
+      }
+
       if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play(); }
       setActive(true);
       rafRef.current = requestAnimationFrame(() => loop(detector));

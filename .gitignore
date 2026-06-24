@@ -60,3 +60,4 @@ pasape-debug.apk
 DerivedData/
 
 bun.lock
+.gstack/

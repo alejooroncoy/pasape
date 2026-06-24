@@ -1,8 +1,8 @@
 {
-  "name": "Pasape Puerta",
+  "name": "Pasape — Tus entradas",
   "short_name": "Pasape",
-  "description": "Escáner de entradas para eventos",
-  "start_url": "/es/scan",
+  "description": "Tus entradas con QR, listas para mostrar en la puerta — incluso sin conexión.",
+  "start_url": "/es/tickets",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",

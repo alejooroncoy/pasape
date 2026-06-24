@@ -1,10 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
+import { createSupabaseBrowserClient } from "@/server/_shared/supabase/client";
 import { OrgShell } from "../org/_shell/OrgShell";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
+import { useUpdateProfile } from "@/lib/identity/hooks/useUpdateProfile";
 import { useSignOut } from "@/lib/identity/hooks/useFirebaseAuth";
+import { UserAvatar } from "@/components/layout/UserAvatar";
 import {
   SettingsCard,
   SettingsRow,
@@ -15,6 +18,8 @@ import {
   SectionNav,
   type Section,
 } from "../org/settings/_components/SectionNav";
+
+const ASSETS_BUCKET = "event-assets";
 
 // Cuenta de USUARIO (no de marca). Vive separado de /org/settings para que la
 // gestión del perfil + notificaciones no se mezcle con los ajustes de la marca.
@@ -32,6 +37,54 @@ export default function AccountPage() {
 
   const [accountName, setAccountName] = useState(user?.fullName ?? "");
   const [accountPhone, setAccountPhone] = useState(user?.phone ?? "");
+
+  const updateProfile = useUpdateProfile();
+  const fileRef = useRef<HTMLInputElement | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(user?.avatarUrl ?? null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+
+  // Sincroniza el preview cuando carga/cambia el usuario (el estado inicial se
+  // fija antes de que la query resuelva).
+  useEffect(() => {
+    setAvatarUrl(user?.avatarUrl ?? null);
+  }, [user?.avatarUrl]);
+
+  const onAvatarPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setAvatarUploading(true);
+    setAvatarError(null);
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const ext = f.name.includes(".") ? f.name.split(".").pop() : "jpg";
+      const path = `avatars/${user?.id ?? "user"}-${crypto.randomUUID()}.${ext}`;
+      const { error } = await supabase.storage
+        .from(ASSETS_BUCKET)
+        .upload(path, f, { cacheControl: "3600", upsert: false, contentType: f.type || undefined });
+      if (error) throw error;
+      const { data } = supabase.storage.from(ASSETS_BUCKET).getPublicUrl(path);
+      setAvatarUrl(data.publicUrl);
+      await updateProfile.mutateAsync({ avatarUrl: data.publicUrl });
+    } catch {
+      setAvatarError("No se pudo subir la foto. Reintenta.");
+    } finally {
+      setAvatarUploading(false);
+    }
+  };
+
+  const onAvatarRemove = async () => {
+    setAvatarUploading(true);
+    setAvatarError(null);
+    try {
+      setAvatarUrl(null);
+      await updateProfile.mutateAsync({ avatarUrl: null });
+    } catch {
+      setAvatarError("No se pudo quitar la foto. Reintenta.");
+    } finally {
+      setAvatarUploading(false);
+    }
+  };
 
   const [notifEmail, setNotifEmail] = useState(true);
   const [notifWhatsapp, setNotifWhatsapp] = useState(false);
@@ -77,6 +130,45 @@ export default function AccountPage() {
             title="Tu cuenta"
             description="Esta información identifica al propietario de la cuenta."
           >
+            <SettingsRow label="Foto" description="Tu imagen de perfil. Por defecto, la de Google.">
+              <div className="flex items-center gap-3 sm:justify-end">
+                <UserAvatar
+                  name={accountName || user?.email}
+                  avatarUrl={avatarUrl}
+                  className="size-12 rounded-2xl text-[16px] shadow-[0_0_0_1px_rgba(255,255,255,0.1)_inset]"
+                  fallbackClassName="bg-gradient-to-br from-[#7C3AED] to-[#b87cff]"
+                />
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => fileRef.current?.click()}
+                    disabled={avatarUploading}
+                    className="rounded-full border border-cart-line bg-cart-bg px-3.5 py-1.5 text-[12.5px] font-semibold text-white transition hover:border-cart-line-strong disabled:opacity-60"
+                  >
+                    {avatarUploading ? "Subiendo…" : "Cambiar"}
+                  </button>
+                  {avatarUrl && !avatarUploading && (
+                    <button
+                      type="button"
+                      onClick={onAvatarRemove}
+                      className="rounded-full px-2.5 py-1.5 text-[12.5px] font-medium text-cart-ink-3 transition hover:text-white"
+                    >
+                      Quitar
+                    </button>
+                  )}
+                </div>
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={onAvatarPick}
+                />
+              </div>
+            </SettingsRow>
+            {avatarError && (
+              <p className="px-1 text-[11.5px] text-red-300">{avatarError}</p>
+            )}
             <SettingsRow label="Nombre" description="Tu nombre completo.">
               <TextInput
                 value={accountName}

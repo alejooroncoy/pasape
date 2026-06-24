@@ -3,6 +3,7 @@
 import { type ReactNode } from "react";
 import { Link } from "@/i18n/navigation";
 import { PromoterUserPill } from "./PromoterUserPill";
+import { Logo } from "@/components/brand/Logo";
 
 export type PromoTab = "home" | "earnings" | "profile";
 
@@ -59,8 +60,7 @@ export function PromoterShell({
         <aside className="sticky top-0 flex h-dvh flex-col border-r border-cart-line bg-cart-bg-elev/50 px-5 py-6">
           <div className="mb-8 flex items-center gap-2.5 text-[15px] font-semibold tracking-[-0.01em]">
             <span className="grid size-8 place-items-center overflow-hidden rounded-lg">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/icons/logo-icon-min.svg" alt="" className="size-full object-contain" />
+              <Logo className="size-full" />
             </span>
             Pasape
             <span className="ml-1 rounded-full bg-cart-accent-soft px-1.5 py-px text-[9.5px] font-bold tracking-[0.12em] text-cart-accent">
@@ -103,6 +103,23 @@ export function PromoterShell({
 
       {/* ============ Mobile ============ */}
       <div className="lg:hidden">
+        {/* Header superior: marca + usuario (antes no existía en móvil). */}
+        <header
+          className="sticky top-0 z-40 flex items-center justify-between border-b border-cart-line bg-cart-bg/95 px-5 py-3 backdrop-blur-md"
+          style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 12px)" }}
+        >
+          <div className="flex items-center gap-2 text-[15px] font-semibold tracking-[-0.01em]">
+            <span className="grid size-7 place-items-center overflow-hidden rounded-lg">
+              <Logo className="size-full" />
+            </span>
+            Pasape
+            <span className="ml-0.5 rounded-full bg-cart-accent-soft px-1.5 py-px text-[9px] font-bold tracking-[0.12em] text-cart-accent">
+              PROMO
+            </span>
+          </div>
+          <PromoterUserPill compact />
+        </header>
+
         <main
           className="mx-auto w-full max-w-[640px] px-5 pt-4"
           style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 92px)" }}

@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { Link, useRouter } from "@/i18n/navigation";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { useSignOut } from "@/lib/identity/hooks/useFirebaseAuth";
+import { UserAvatar } from "@/components/layout/UserAvatar";
 
 export function initialsOf(name?: string | null, email?: string | null) {
   const src = (name || email || "·").trim();
@@ -104,7 +105,7 @@ export function UserPill() {
   if (!user) {
     return (
       <Link
-        href={"/login" as never}
+        href={"/org/login" as never}
         className="flex items-center justify-center gap-2 rounded-2xl border border-cart-line bg-cart-bg-elev px-3 py-2.5 text-[13px] font-medium text-cart-ink-2 transition-colors hover:border-cart-accent hover:text-white"
       >
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
@@ -121,7 +122,6 @@ export function UserPill() {
     );
   }
 
-  const initials = initialsOf(user.fullName, user.email);
   const displayName = user.fullName || user.email?.split("@")[0] || "Tú";
 
   return (
@@ -137,12 +137,12 @@ export function UserPill() {
             : "border-cart-line hover:border-cart-line-strong"
         }`}
       >
-        <span
-          aria-hidden
-          className="grid size-9 flex-shrink-0 place-items-center rounded-xl bg-gradient-to-br from-[#7C3AED] to-[#b87cff] text-[12.5px] font-semibold tracking-wide text-white shadow-[0_0_0_1px_rgba(255,255,255,0.1)_inset]"
-        >
-          {initials}
-        </span>
+        <UserAvatar
+          name={user.fullName ?? user.email}
+          avatarUrl={user.avatarUrl}
+          className="size-9 rounded-xl text-[12.5px] shadow-[0_0_0_1px_rgba(255,255,255,0.1)_inset]"
+          fallbackClassName="bg-gradient-to-br from-[#7C3AED] to-[#b87cff] tracking-wide"
+        />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[13px] font-semibold text-white">{displayName}</span>
           {user.email && (

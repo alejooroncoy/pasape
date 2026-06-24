@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
 
-export const updateSupabaseSession = (request: NextRequest) => {
+export const updateSupabaseSession = async (request: NextRequest) => {
   let response = NextResponse.next({ request: { headers: request.headers } });
 
   const supabase = createServerClient(
@@ -25,7 +25,14 @@ export const updateSupabaseSession = (request: NextRequest) => {
     },
   );
 
-  // Touch session to refresh cookie if needed.
-  void supabase;
+  // CLAVE: getUser() refresca el access token y, vía setAll, rota las cookies de
+  // sesión en el response. Sin esto la cookie caduca y el usuario aparece
+  // deslogueado en el server (aunque el cliente crea tener sesión). Puede lanzar
+  // si el refresh token ya venció — lo tratamos como "sin sesión" sin romper.
+  try {
+    await supabase.auth.getUser();
+  } catch {
+    // refresh token vencido/ausente: el usuario tendrá que reloguear
+  }
   return response;
 };

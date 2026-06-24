@@ -1,21 +1,30 @@
 "use client";
 
-import { Suspense, use, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, use, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import { useSearchParams } from "next/navigation";
+
+// Resetea el scroll ANTES del paint (sin destello). Isomórfico: en SSR cae a
+// useEffect para no disparar el warning de useLayoutEffect en el server.
+const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
 import { useRouter } from "@/i18n/navigation";
+import { UserHeader } from "@/app/[locale]/_home/UserHeader";
 import { useEvent } from "@/lib/events/hooks/useEvents";
 import { useBuyTickets } from "@/lib/tickets/hooks/useTickets";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { useDniLookup } from "@/lib/identity/hooks/useDniLookup";
-import { useProfileLookup } from "@/lib/identity/hooks/useProfileLookup";
-import { formatMoney } from "@/lib/_shared/format";
+import { formatMoney, formatPrice } from "@/lib/_shared/format";
+import { Price } from "@/components/ui/Price";
 import { CardForm } from "@/components/payments/CardForm";
 import { YapeForm } from "@/components/payments/YapeForm";
 import { PresaleCountdown, shouldCountdown } from "@/components/ui/PresaleCountdown";
 import type { TicketType } from "@/server/events/domain/Event";
 import {
+  boxSeats,
   capitalize,
-  groupTicketTypesByZone,
+  groupBoxesByNoun,
+  stockTotal,
+  type TicketGroup,
   ticketStatus,
   ticketSubtitle,
   unitNoun,
@@ -66,12 +75,26 @@ function BuyFlowInner({ params }: Props) {
   const [guestEmail, setGuestEmail] = useState("");
   const [guestDni, setGuestDni] = useState("");
   const [guestPhone, setGuestPhone] = useState("");
-  // assignees[i] = WhatsApp del pata al que se le manda la entrada i+1 (slot 0
-  // siempre es el comprador). String vacío = "yo voy con esta entrada".
-  const [assignees, setAssignees] = useState<string[]>([]);
   const nameTouchedRef = useRef(false);
   const { lookup: dniLookup, pending: dniPending } = useDniLookup();
   const [dniHint, setDniHint] = useState<"idle" | "not_found">("idle");
+
+  // Autorrelleno para logueados: los datos de la cuenta (nombre, DNI, WhatsApp,
+  // email) pre-llenan el formulario pero siguen editables — la primera compra
+  // los pide y los persiste; las siguientes solo se confirman.
+  const prefilledRef = useRef(false);
+  useEffect(() => {
+    const u = me.data?.user;
+    if (!u || prefilledRef.current) return;
+    prefilledRef.current = true;
+    if (u.fullName) {
+      nameTouchedRef.current = true; // que RENIEC no pise el nombre de la cuenta
+      setGuestName((prev) => prev || u.fullName!);
+    }
+    if (u.dni) setGuestDni((prev) => prev || u.dni!);
+    if (u.phone) setGuestPhone((prev) => prev || u.phone!);
+    if (u.email) setGuestEmail((prev) => prev || u.email!);
+  }, [me.data?.user]);
 
   useEffect(() => {
     if (guestDni.length !== 8) {
@@ -135,6 +158,78 @@ function BuyFlowInner({ params }: Props) {
     } catch {}
   }, []);
 
+  // Al entrar a comprar, partir desde el inicio (no heredar el scroll del
+  // detalle). Antes del paint para que sea imperceptible (sin destello).
+  useIsomorphicLayoutEffect(() => {
+    window.scrollTo({ top: 0, left: 0 });
+  }, []);
+
+  // "Hay más abajo": un sentinel marca el FINAL real del contenido (el espacio
+  // de seguridad del CTA va debajo de él, así no cuenta como contenido). Si el
+  // sentinel está por debajo de la zona visible (excluyendo el alto del CTA),
+  // mostramos la pista. Solo aparece cuando de verdad falta ver algo.
+  const [moreBelow, setMoreBelow] = useState(false);
+  const contentEndRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = contentEndRef.current;
+    if (!el) {
+      setMoreBelow(false);
+      return;
+    }
+    const io = new IntersectionObserver(
+      ([entry]) => setMoreBelow(!entry.isIntersecting),
+      // -96px abajo ≈ alto del CTA sticky: el sentinel "cuenta como visible"
+      // solo cuando queda por encima del botón.
+      { root: null, rootMargin: "0px 0px -96px 0px", threshold: 0 },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [phase]);
+
+  // Selección inicial desde el detalle: ?qty=N (+ opcional ?tt=id). Sin esto, la
+  // cantidad elegida en la página del evento se perdía al entrar a /buy.
+  const initSelRef = useRef(false);
+  useEffect(() => {
+    if (initSelRef.current || !data) return;
+    if (search.get("order")) {
+      initSelRef.current = true; // el flujo de restaurar orden ya setea qty
+      return;
+    }
+    // ?sel = selección completa por tipo "id:cantidad,id:cantidad" (cuando se
+    // eligen varias entradas distintas en el detalle). Preserva el desglose.
+    const selParam = search.get("sel");
+    if (selParam) {
+      const next: Record<string, number> = {};
+      for (const part of selParam.split(",")) {
+        const [id, q] = part.split(":");
+        const n = parseInt(q ?? "", 10);
+        if (id && Number.isFinite(n) && n > 0 && data.ticketTypes.some((tt) => tt.id === id)) {
+          next[id] = n;
+        }
+      }
+      initSelRef.current = true;
+      if (Object.keys(next).length) {
+        setQty((prev) => (Object.keys(prev).length ? prev : next));
+      }
+      return;
+    }
+    const qParam = parseInt(search.get("qty") ?? "", 10);
+    if (!Number.isFinite(qParam) || qParam <= 0) {
+      initSelRef.current = true;
+      return;
+    }
+    // ?tt = id exacto del tipo de entrada (una card por entrada en el detalle).
+    // Fallback: la primera entrada del evento.
+    const ttParam = search.get("tt");
+    const target = ttParam
+      ? data.ticketTypes.find((tt) => tt.id === ttParam)
+      : data.ticketTypes[0];
+    if (target) {
+      initSelRef.current = true;
+      setQty((prev) => (Object.keys(prev).length ? prev : { [target.id]: qParam }));
+    }
+  }, [data, search]);
+
   const items = useMemo(
     () =>
       Object.entries(qty)
@@ -156,22 +251,6 @@ function BuyFlowInner({ params }: Props) {
   }, [data, qty]);
   const totalItems = items.reduce((a, b) => a + b.qty, 0);
   const fee = totalItems > 0 ? 300 : 0;
-  const acompCount = Math.max(0, totalItems - 1);
-
-  // Resize assignees al cambiar la cantidad — preserva las entradas ya
-  // ingresadas. Si bajan la cantidad, recortamos.
-  useEffect(() => {
-    setAssignees((prev) => {
-      if (prev.length === acompCount) return prev;
-      const next = [...prev];
-      if (next.length < acompCount) {
-        while (next.length < acompCount) next.push("");
-      } else {
-        next.length = acompCount;
-      }
-      return next;
-    });
-  }, [acompCount]);
 
   // Vence la reserva localmente cuando se cumplen los 30 min (el backend ya la
   // expira en paralelo). Solo corre durante la fase de pago.
@@ -185,38 +264,37 @@ function BuyFlowInner({ params }: Props) {
     return () => clearInterval(id);
   }, [phase, reservedAt, reservationExpired]);
 
-  // Acompañantes válidos: cualquier slot que tenga teléfono debe tener 9
-  // dígitos. Slots vacíos (= "yo voy") son válidos por default.
-  const acompValid = assignees.every((a) => {
-    const digits = a.replace(/\D/g, "");
-    return digits.length === 0 || digits.length === 9;
-  });
-
   const isLogged = !!me.data?.user;
+  // Pedido gratis: hay entradas pero el total es 0 → no hay pago. El flujo es de
+  // 2 pasos (pedido → datos) y se omite todo el lenguaje/paso de checkout.
+  const isFreeOrder = total === 0 && totalItems > 0;
   const emailOk = /.+@.+\..+/.test(guestEmail.trim());
   const phoneOk = guestPhone.replace(/\D/g, "").length === 9;
+  // El portero valida por DNI — es obligatorio también para logueados. La
+  // diferencia es que a ellos les llega pre-llenado desde su cuenta.
   const guestValid =
     guestName.trim().length >= 2 &&
     guestDni.trim().length === 8 &&
     phoneOk;
-  const orderValid = totalItems > 0 && (isLogged || guestValid) && acompValid;
+  const orderValid = totalItems > 0 && guestValid;
 
   if (!data) return <PageLoader />;
 
   const startPayment = async () => {
     try {
+      const attendee = {
+        email: guestEmail.trim() || null,
+        fullName: guestName.trim(),
+        dni: guestDni.trim(),
+        phone: guestPhone.replace(/\D/g, "") || null,
+      };
       const res = await buy.mutateAsync({
         eventId: data.event.id,
         items,
         promoCode,
-        guest: isLogged
-          ? undefined
-          : {
-              email: guestEmail.trim() || null,
-              fullName: guestName.trim(),
-              dni: guestDni.trim(),
-              phone: guestPhone.replace(/\D/g, "") || null,
-            },
+        // Logueado → buyer (persiste en su perfil/kyc); guest → crea/reusa perfil.
+        guest: isLogged ? undefined : attendee,
+        buyer: isLogged ? attendee : undefined,
       });
       setPreferenceId(res.preference.id);
       setOrderId(res.order.id);
@@ -227,7 +305,7 @@ function BuyFlowInner({ params }: Props) {
         const emailQs = !isLogged && guestEmail.trim()
           ? `&email=${encodeURIComponent(guestEmail.trim())}`
           : "";
-        router.push(`/events/${slug}/processing?order=${res.order.id}&total=0${emailQs}`);
+        router.push(`/events/${slug}/processing?order=${res.order.id}&total=0&n=${totalItems}${emailQs}`);
         return;
       }
 
@@ -257,7 +335,7 @@ function BuyFlowInner({ params }: Props) {
   };
 
   const pickValid = totalItems > 0;
-  const dataValid = isLogged || guestValid;
+  const dataValid = guestValid;
 
   const onPrimary = () => {
     if (phase === "pick" && pickValid) {
@@ -289,21 +367,28 @@ function BuyFlowInner({ params }: Props) {
     setPhase("pick");
   };
 
-  const phaseLabel: Record<Phase, string> = {
-    pick: "1 de 3 · Tu pedido",
-    data: "2 de 3 · Tus datos",
-    pay: "3 de 3 · Pago",
-  };
+  // Stepper honesto: gratis = 2 pasos (sin "Pago"); pagado = 3.
+  const phaseLabel: Record<Phase, string> = isFreeOrder
+    ? {
+        pick: "1 de 2 · Tu pedido",
+        data: "2 de 2 · Tus datos",
+        pay: "2 de 2 · Tus datos",
+      }
+    : {
+        pick: "1 de 3 · Tu pedido",
+        data: "2 de 3 · Tus datos",
+        pay: "3 de 3 · Pago",
+      };
 
   const primaryCtaLabel = (compact: boolean): string => {
     if (buy.isPending) return "Preparando…";
     if (phase === "pick") {
       if (!pickValid) return "Elige una entrada";
-      return compact ? `Continuar · ${formatMoney(total)}` : `Continuar · ${formatMoney(total)}`;
+      if (isFreeOrder) return "Continuar · Gratis";
+      return `Continuar · ${formatPrice(total)}`;
     }
     if (phase === "data") {
       if (!dataValid) return "Completa tus datos";
-      if (!acompValid) return "Revisa los acompañantes";
       if (total === 0) return "Confirmar entrada gratuita";
       return `Ir a pagar · ${formatMoney(total)}`;
     }
@@ -318,52 +403,35 @@ function BuyFlowInner({ params }: Props) {
 
   return (
     <div className="min-h-dvh bg-cart-bg text-white">
-      {/* Top bar */}
-      <header className="sticky top-0 z-30 border-b border-cart-line bg-cart-bg/85 backdrop-blur-md">
-        <div className="mx-auto flex max-w-[1120px] items-center justify-between px-5 py-3.5 lg:px-8">
+      {/* Header de usuario reutilizado */}
+      <UserHeader />
+
+      {/* Fila contextual del checkout: volver + paso actual */}
+      <div className="mx-auto w-full max-w-[1120px] px-5 lg:px-8">
+        <div className="flex items-center gap-3 py-3.5">
           <button
             type="button"
             onClick={onBack}
             aria-label="Volver"
-            className="grid size-9 place-items-center rounded-full bg-cart-bg-elev text-cart-ink-2 transition hover:bg-cart-bg-elev-2 hover:text-white"
+            className="grid size-9 shrink-0 place-items-center rounded-full bg-cart-bg-elev text-cart-ink-2 transition hover:bg-cart-bg-elev-2 hover:text-white"
           >
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
               <path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </button>
-          <div className="text-[12.5px] font-medium text-cart-ink-3">
-            {phaseLabel[phase]}
-          </div>
-          <button
-            type="button"
-            onClick={() => router.back()}
-            aria-label="Cerrar"
-            className="grid size-9 place-items-center rounded-full bg-cart-bg-elev text-cart-ink-2 transition hover:bg-cart-bg-elev-2 hover:text-white"
-          >
-            <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
-              <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-            </svg>
-          </button>
+          <span className="text-[12.5px] font-medium text-cart-ink-3">{phaseLabel[phase]}</span>
         </div>
-      </header>
+      </div>
 
-      <div className="mx-auto w-full max-w-[1120px] px-5 lg:flex lg:min-h-[calc(100dvh-72px)] lg:items-start lg:px-8 lg:py-10">
+      <div className="mx-auto w-full max-w-[1120px] px-5 lg:flex lg:items-start lg:px-8 lg:pb-10">
         <div className="grid w-full gap-8 lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-10">
           {/* Main */}
-          <main className="pt-6 pb-44 lg:pb-12">
+          <main className="pt-6 lg:pb-12">
             {phase === "pick" ? (
-              <PickPhase
-                ticketTypes={data.ticketTypes}
-                initialZone={search.get("zone")}
-                qty={qty}
-                setQty={setQty}
-              />
+              <PickPhase ticketTypes={data.ticketTypes} qty={qty} setQty={setQty} />
             ) : phase === "data" ? (
               <DataPhase
-                ticketTypes={data.ticketTypes}
-                qty={qty}
                 isLogged={isLogged}
-                userName={me.data?.user?.fullName ?? null}
                 userIdent={me.data?.user?.email ?? me.data?.user?.phone ?? null}
                 guestDni={guestDni}
                 setGuestDni={(v) => {
@@ -381,9 +449,6 @@ function BuyFlowInner({ params }: Props) {
                 setGuestEmail={setGuestEmail}
                 dniHint={dniHint}
                 dniPending={dniPending}
-                totalItems={totalItems}
-                assignees={assignees}
-                setAssignees={setAssignees}
               />
             ) : (
               <>
@@ -417,11 +482,15 @@ function BuyFlowInner({ params }: Props) {
                   const emailQs = !isLogged && guestEmail.trim()
                     ? `&email=${encodeURIComponent(guestEmail.trim())}`
                     : "";
-                  router.push(`/events/${slug}/processing?order=${orderId}&total=${total}&method=${payMethod}${emailQs}`);
+                  router.push(`/events/${slug}/processing?order=${orderId}&total=${total}&method=${payMethod}&n=${totalItems}${emailQs}`);
                 }}
                 />
               </>
             )}
+            {/* Sentinel = final real del contenido. El espacio para el CTA va
+                debajo, así no infla la detección de "hay más abajo". */}
+            <div ref={contentEndRef} aria-hidden className="h-px w-full" />
+            <div aria-hidden className="h-40 lg:hidden" />
           </main>
 
           {/* Sidebar summary (desktop) */}
@@ -461,6 +530,32 @@ function BuyFlowInner({ params }: Props) {
           className="fixed inset-x-0 bottom-0 z-40 border-t border-cart-line bg-cart-bg/95 backdrop-blur-md lg:hidden"
           style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)" }}
         >
+          {/* Pista "hay más abajo": el contenido se difumina hacia el CTA y un
+              chevron rebota, hasta que se llega al final del scroll. */}
+          <AnimatePresence>
+            {moreBelow && (
+              <motion.div
+                aria-hidden
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="pointer-events-none absolute inset-x-0 -top-14 h-14 bg-gradient-to-t from-cart-bg via-cart-bg/85 to-transparent"
+              >
+                <div className="flex h-full items-end justify-center pb-1.5">
+                  <motion.span
+                    animate={{ y: [0, 4, 0] }}
+                    transition={{ duration: 1.2, repeat: Infinity, ease: "easeInOut" }}
+                    className="grid size-7 place-items-center rounded-full border border-cart-line bg-cart-bg-elev text-cart-accent shadow-[0_4px_14px_rgba(0,0,0,0.5)]"
+                  >
+                    <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+                      <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </motion.span>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           <div className="mx-auto w-full max-w-[640px] px-5 pt-3">
             {buy.error && (
               <p className="mb-2 text-center text-[12px] text-rose-300">
@@ -571,88 +666,41 @@ function ReservationExpiredModal({
 
 function PickPhase({
   ticketTypes,
-  initialZone,
   qty,
   setQty,
 }: {
   ticketTypes: TicketType[];
-  initialZone: string | null;
   qty: Record<string, number>;
   setQty: (next: Record<string, number>) => void;
 }) {
-  const groups = useMemo(() => groupTicketTypesByZone(ticketTypes), [ticketTypes]);
-  // Precio máximo del evento — define qué zona es "la top" (dorada). Usa el
-  // precio base (no preventa) para que el estatus no cambie durante la preventa.
-  const eventMaxPriceCents = useMemo(
-    () => ticketTypes.reduce((mx, t) => Math.max(mx, t.priceCents), 0),
-    [ticketTypes],
-  );
-  // Tab "Todos" siempre primero. initialZone viene desde /events/[slug]
-  // cuando el comprador tappeó una zone card específica.
-  const tabs = useMemo(() => {
-    const list: Array<{ id: string; label: string }> = [
-      { id: "__all", label: "Todos" },
-    ];
-    for (const g of groups) {
-      list.push({ id: g.zone ?? "__ungrouped__", label: g.zone ?? "Otros" });
+  // Entradas normales: cada tipo su card (su nombre las diferencia). Boxes
+  // ("espacios"): agrupados por unit_noun en una grilla. Sin tabs de zona.
+  const groups = useMemo<TicketGroup[]>(() => {
+    const out: TicketGroup[] = [];
+    const boxes: TicketType[] = [];
+    for (const tt of ticketTypes) {
+      if (tt.kind === "box") boxes.push(tt);
+      else out.push({ label: null, items: [tt] });
     }
-    return list;
-  }, [groups]);
-  const initialTab = useMemo(() => {
-    if (!initialZone) return "__all";
-    return tabs.find((t) => t.id === initialZone)?.id ?? "__all";
-  }, [initialZone, tabs]);
-  const [selectedTab, setSelectedTab] = useState(initialTab);
-
-  const visibleGroups = useMemo(() => {
-    if (selectedTab === "__all") return groups;
-    return groups.filter((g) => (g.zone ?? "__ungrouped__") === selectedTab);
-  }, [selectedTab, groups]);
+    for (const g of groupBoxesByNoun(boxes)) out.push(g);
+    return out;
+  }, [ticketTypes]);
 
   return (
     <div className="flex flex-col gap-8">
       <Section title="Entradas">
-        {tabs.length > 2 && (
-          <div className="-mx-5 mb-4 overflow-x-auto px-5 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-            <div className="flex min-w-min gap-1.5">
-              {tabs.map((tab) => {
-                const active = selectedTab === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => setSelectedTab(tab.id)}
-                    className={
-                      "shrink-0 rounded-full px-3.5 py-1.5 text-[12.5px] font-semibold transition " +
-                      (active
-                        ? "bg-cart-accent text-cart-bg"
-                        : "border border-cart-line bg-cart-bg-elev text-cart-ink-2 hover:border-cart-line-strong hover:text-white")
-                    }
-                  >
-                    {tab.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
         <div className="flex flex-col gap-5">
-          {visibleGroups.map((group, gi) => {
+          {groups.map((group, gi) => {
             const allBoxes =
               group.items.length > 0 && group.items.every((i) => i.kind === "box");
-            // Grid de tiles cuando es zona pura de boxes y hay 4+ (evita
-            // mostrar cards idénticas con sólo el número cambiando). Aplica
-            // también en el tab "Todos" — cada grupo se renderiza como grid.
+            // Grilla de tiles para espacios (boxes) con 4+ — evita repetir cards
+            // idénticas que solo cambian de número.
             const useGrid = allBoxes && group.items.length >= 4;
             return (
-              <div key={group.zone ?? `__ungrouped__-${gi}`} className="flex flex-col gap-2.5">
-                {/* La zona vive como chip dorado dentro de cada tarjeta (ZoneBadge),
-                    así que no repetimos un encabezado gris arriba. */}
+              <div key={group.label ?? `tt-${gi}`} className="flex flex-col gap-2.5">
                 {useGrid ? (
                   <BoxGrid
                     items={group.items}
-                    zone={group.zone}
-                    maxPriceCents={eventMaxPriceCents}
                     qty={qty}
                     onChange={(id, v) => setQty({ ...qty, [id]: v })}
                   />
@@ -661,7 +709,6 @@ function PickPhase({
                     <TicketCard
                       key={tt.id}
                       tt={tt}
-                      maxPriceCents={eventMaxPriceCents}
                       value={qty[tt.id] ?? 0}
                       onChange={(v) => setQty({ ...qty, [tt.id]: v })}
                     />
@@ -672,15 +719,130 @@ function PickPhase({
           })}
         </div>
       </Section>
+
+      {/* Preview de reparto: SOLO entradas individuales. Un box no se "reparte"
+          aquí — se invita por link desde su panel después de pagar, así que ni
+          dispara este aviso ni se cuenta en él. */}
+      {(() => {
+        const individualUnits = ticketTypes.reduce(
+          (a, tt) => a + (tt.kind === "box" ? 0 : (qty[tt.id] ?? 0)),
+          0,
+        );
+        return individualUnits >= 2 ? <SeatHandoffPreview units={individualUnits} /> : null;
+      })()}
+    </div>
+  );
+}
+
+/**
+ * Vista previa del reparto en el checkout: muestra "caritas" (tú + una por cada
+ * acompañante) para que el comprador entienda, sin leer, que cada entrada tiene
+ * un dueño. NO es interactivo aquí: la asignación real se hace al terminar de
+ * pagar (checkout liviano). Si tocan algo, un toast lo aclara.
+ */
+function SeatHandoffPreview({ units }: { units: number }) {
+  const [toast, setToast] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const poke = () => {
+    setToast(true);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setToast(false), 2400);
+  };
+
+  // Cap visual para que la fila no explote con cantidades altas.
+  const others = units - 1;
+  const shown = Math.min(others, 6);
+  const overflow = others - shown;
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={poke}
+        className="w-full cursor-default rounded-2xl border border-cart-line bg-cart-bg-elev p-4 text-left"
+      >
+        <div className="flex items-center justify-center gap-2 text-[13.5px] font-semibold">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" className="text-cart-ink-2" aria-hidden>
+            <path d="M3 9a2 2 0 002-2V6h14v1a2 2 0 000 4v1a2 2 0 000 4v1H5v-1a2 2 0 00-2-2 2 2 0 010-4z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M9 6v12" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          Compraste {units} entradas
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-start justify-center gap-x-4 gap-y-3">
+          <Avatar kind="me" label="Tú" />
+          {Array.from({ length: shown }).map((_, i) => (
+            <Avatar key={i} kind="add" label="Persona" />
+          ))}
+          {overflow > 0 && <Avatar kind="more" label="" count={overflow} />}
+        </div>
+
+        <p className="mt-4 border-t border-cart-line pt-3 text-center text-[12px] text-cart-ink-2">
+          A cada una le pones sus datos o se la envías
+          <span className="ml-1.5 inline-flex items-center gap-1 rounded-full bg-cart-accent-soft px-2 py-0.5 text-[11px] font-semibold text-cart-accent">
+            al pagar
+          </span>
+        </p>
+      </button>
+
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 12 }}
+            transition={{ duration: 0.2 }}
+            className="pointer-events-none fixed inset-x-0 bottom-[96px] z-50 flex justify-center px-5"
+          >
+            <span className="rounded-full bg-white/95 px-4 py-2.5 text-[13px] font-medium text-gray-900 shadow-lg backdrop-blur-sm">
+              Lo podrás seleccionar al finalizar el pago
+            </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
+  );
+}
+
+function Avatar({
+  kind,
+  label,
+  count,
+}: {
+  kind: "me" | "add" | "more";
+  label: string;
+  count?: number;
+}) {
+  return (
+    <div className="text-center">
+      {kind === "me" ? (
+        <div
+          className="mx-auto grid size-12 place-items-center rounded-full text-[16px] font-extrabold text-white"
+          style={{ background: "linear-gradient(135deg, #FF4D5E, #7C3AED 60%, #4B1F9A)" }}
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM4 20v-1a6 6 0 016-6h4a6 6 0 016 6v1" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </div>
+      ) : kind === "more" ? (
+        <div className="mx-auto grid size-12 place-items-center rounded-full border-2 border-dashed border-cart-line-strong text-[14px] font-bold text-cart-ink-2">
+          +{count}
+        </div>
+      ) : (
+        <div className="mx-auto grid size-12 place-items-center rounded-full border-2 border-dashed border-cart-line-strong text-cart-ink-3">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </div>
+      )}
+      {label && <div className="mt-1.5 text-[11.5px] text-cart-ink-2">{label}</div>}
     </div>
   );
 }
 
 function DataPhase({
-  ticketTypes,
-  qty,
   isLogged,
-  userName,
   userIdent,
   guestDni,
   setGuestDni,
@@ -692,14 +854,8 @@ function DataPhase({
   setGuestEmail,
   dniHint,
   dniPending,
-  totalItems,
-  assignees,
-  setAssignees,
 }: {
-  ticketTypes: TicketType[];
-  qty: Record<string, number>;
   isLogged: boolean;
-  userName: string | null;
   userIdent: string | null;
   guestDni: string;
   setGuestDni: (v: string) => void;
@@ -711,208 +867,68 @@ function DataPhase({
   setGuestEmail: (v: string) => void;
   dniHint: "idle" | "not_found";
   dniPending: boolean;
-  totalItems: number;
-  assignees: string[];
-  setAssignees: (v: string[]) => void;
 }) {
-  const slotLabels: string[] = [];
-  for (const tt of ticketTypes) {
-    const q = qty[tt.id] ?? 0;
-    for (let i = 0; i < q; i++) slotLabels.push(tt.name);
-  }
-
   return (
     <div className="flex flex-col gap-8">
       <Section
         title={isLogged ? "Tus datos" : "¿Quién va?"}
-        hint={isLogged ? undefined : "Para enviarte el QR por WhatsApp"}
+        hint={
+          isLogged
+            ? "De tu cuenta — edítalos si algo cambió"
+            : "Para enviarte el QR por WhatsApp"
+        }
       >
-        {isLogged ? (
-          <div className="rounded-2xl border border-cart-accent/40 bg-cart-accent-soft px-4 py-4">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-cart-accent">
-              Usas los datos de tu cuenta
-            </div>
-            <div className="mt-1.5 text-[15.5px] font-semibold">{userName ?? "—"}</div>
-            <div className="mt-0.5 text-[12.5px] text-cart-ink-2">{userIdent ?? "—"}</div>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-3">
-            <Field
-              label="DNI"
-              value={guestDni}
-              onChange={setGuestDni}
-              placeholder="71234567"
-              mono
-              hint={
-                dniHint === "not_found"
-                  ? "No te encontramos en RENIEC — escribe tu nombre abajo."
-                  : "Lo buscamos en RENIEC y completamos tu nombre."
-              }
-            />
-            <Field
-              label="Nombre completo"
-              value={guestName}
-              onChange={setGuestName}
-              placeholder={dniPending ? "Buscando en RENIEC…" : "Juan Pérez García"}
-              disabled={dniPending}
-            />
-            <Field
-              label="WhatsApp"
-              value={guestPhone}
-              onChange={setGuestPhone}
-              placeholder="987 654 321"
-              mono
-              hint="Tu QR llega por aquí."
-            />
-            <Field
-              label="Email (opcional)"
-              type="email"
-              value={guestEmail}
-              onChange={setGuestEmail}
-              placeholder="juan@gmail.com"
-              hint="Solo si pagas con tarjeta."
-            />
-          </div>
-        )}
-      </Section>
-
-      {totalItems > 1 && (
-        <Section
-          title={`Tus acompañantes (${totalItems - 1})`}
-          hint="Mándales su QR desde aquí"
-        >
-          <div className="flex flex-col gap-2.5">
-            {slotLabels.slice(1).map((label, i) => (
-              <AcompCard
-                key={i}
-                slotIndex={i + 1}
-                ticketLabel={label}
-                phone={assignees[i] ?? ""}
-                onChange={(v) => {
-                  const next = [...assignees];
-                  next[i] = v;
-                  setAssignees(next);
-                }}
-              />
-            ))}
-          </div>
-        </Section>
-      )}
-    </div>
-  );
-}
-
-/* ===================== AcompCard (Yape-style) ===================== */
-
-function AcompCard({
-  slotIndex,
-  ticketLabel,
-  phone,
-  onChange,
-}: {
-  slotIndex: number;
-  ticketLabel: string;
-  phone: string;
-  onChange: (v: string) => void;
-}) {
-  const mode: "self" | "friend" = phone === "" ? "self" : "friend";
-  const lookup = useProfileLookup(phone);
-  const digits = phone.replace(/\D/g, "");
-  const showRecipientName = mode === "friend" && digits.length === 9 && !lookup.loading && lookup.result?.found;
-
-  return (
-    <div
-      className={
-        "rounded-2xl border bg-cart-bg-elev p-4 transition " +
-        (mode === "friend"
-          ? "border-cart-accent shadow-[0_0_0_3px_var(--color-cart-accent-soft)]"
-          : "border-cart-line")
-      }
-    >
-      <div className="mb-3 flex items-center justify-between">
-        <div>
-          <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-cart-ink-3">
-            Persona {slotIndex + 1}
-          </div>
-          <div className="mt-0.5 text-[14px] font-semibold">{ticketLabel}</div>
-        </div>
-      </div>
-
-      <div className="flex flex-col gap-1.5">
-        <button
-          type="button"
-          onClick={() => onChange("")}
-          className={
-            "flex items-center gap-3 rounded-xl border p-3 text-left transition " +
-            (mode === "self"
-              ? "border-cart-accent bg-cart-accent-soft"
-              : "border-cart-line bg-cart-bg-elev-2 hover:border-cart-line-strong")
-          }
-        >
-          <Radio active={mode === "self"} color="var(--color-cart-accent)" />
-          <span className="text-[13.5px]">
-            <span className="font-semibold">Yo voy con esta entrada</span>
-            <span className="ml-1.5 text-cart-ink-3">· la transfiero después si quiero</span>
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            if (mode === "self") onChange(" "); // placeholder no vacío para abrir el input
-          }}
-          className={
-            "flex items-center gap-3 rounded-xl border p-3 text-left transition " +
-            (mode === "friend"
-              ? "border-cart-accent bg-cart-accent-soft"
-              : "border-cart-line bg-cart-bg-elev-2 hover:border-cart-line-strong")
-          }
-        >
-          <Radio active={mode === "friend"} color="var(--color-cart-accent)" />
-          <span className="text-[13.5px] font-semibold">Mandársela a un acompañante</span>
-        </button>
-      </div>
-
-      {mode === "friend" && (
-        <div className="mt-3 rounded-xl border border-cart-line bg-cart-bg-elev-2 p-3">
-          <label className="block">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-cart-ink-3">
-              WhatsApp del acompañante
-            </span>
-            <input
-              type="tel"
-              inputMode="numeric"
-              value={phone.trim()}
-              onChange={(e) => onChange(e.target.value.replace(/[^\d\s]/g, "").slice(0, 11))}
-              placeholder="987 654 321"
-              autoFocus
-              className="mt-1.5 block w-full rounded-xl border border-cart-line bg-cart-bg px-3.5 py-3 font-mono text-[15px] tracking-[0.04em] text-white outline-none transition focus:border-cart-accent focus:shadow-[0_0_0_3px_var(--color-cart-accent-soft)]"
-            />
-          </label>
-
-          {lookup.loading && digits.length === 9 && (
-            <div className="mt-2 text-[11.5px] text-cart-ink-3">Buscando…</div>
-          )}
-          {showRecipientName && lookup.result?.found && (
-            <div className="mt-2 flex items-center gap-2 text-[12.5px] text-emerald-300">
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                <path d="M3 8l3.5 3.5L13 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        <div className="flex flex-col gap-3">
+          {isLogged && userIdent && (
+            <div className="flex items-center gap-2 rounded-xl bg-cart-accent-soft px-3.5 py-2.5 text-[12px] text-cart-accent ring-1 ring-cart-accent/30">
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" className="shrink-0">
+                <circle cx="8" cy="5.5" r="2.5" stroke="currentColor" strokeWidth="1.5" />
+                <path d="M3 13.5c0-2.5 2.2-4 5-4s5 1.5 5 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
               </svg>
-              Le mandas su entrada a <strong className="text-white">{lookup.result.displayName}</strong>
+              <span className="truncate">
+                Conectado como <span className="font-semibold">{userIdent}</span>
+              </span>
             </div>
           )}
-          {digits.length === 9 && !lookup.loading && lookup.result?.found === false && (
-            <div className="mt-2 text-[11.5px] text-cart-ink-3">
-              Le llegará un enlace por WhatsApp para confirmar su DNI y abrir su QR.
-            </div>
-          )}
-          {digits.length > 0 && digits.length < 9 && (
-            <div className="mt-2 text-[11.5px] text-cart-ink-4">
-              Faltan {9 - digits.length} dígitos
-            </div>
-          )}
+          <Field
+            label="DNI"
+            value={guestDni}
+            onChange={setGuestDni}
+            placeholder="71234567"
+            mono
+            hint={
+              dniHint === "not_found"
+                ? "No te encontramos en RENIEC — escribe tu nombre abajo."
+                : isLogged && guestDni
+                  ? "Lo usa el portero para validar tu entrada."
+                  : "Lo buscamos en RENIEC y completamos tu nombre."
+            }
+          />
+          <Field
+            label="Nombre completo"
+            value={guestName}
+            onChange={setGuestName}
+            placeholder={dniPending ? "Buscando en RENIEC…" : "Juan Pérez García"}
+            disabled={dniPending}
+          />
+          <Field
+            label="WhatsApp"
+            value={guestPhone}
+            onChange={setGuestPhone}
+            placeholder="987 654 321"
+            mono
+            hint="Tu QR llega por aquí."
+          />
+          <Field
+            label="Email (opcional)"
+            type="email"
+            value={guestEmail}
+            onChange={setGuestEmail}
+            placeholder="juan@gmail.com"
+            hint="Solo si pagas con tarjeta."
+          />
         </div>
-      )}
+      </Section>
     </div>
   );
 }
@@ -950,67 +966,8 @@ function TicketBadge({
         Box{boxLabel ? ` · ${boxLabel}` : ""}
       </span>
     );
-  if (kind === "vip")
-    return (
-      <span className="rounded-full bg-yellow-400/15 px-1.5 py-px text-[9.5px] font-bold uppercase tracking-[0.1em] text-yellow-300">
-        VIP
-      </span>
-    );
+  // VIP/General ya no son tipos: el nombre de la entrada los distingue.
   return null;
-}
-
-/**
- * Etiqueta de zona como ESTATUS, no como pin de mapa. Una zona "Platinum" o
- * "VIP" es aspiracional: se trata en dorado para que genere deseo. Solo se
- * muestra si el organizador definió la zona.
- */
-/**
- * Estilos del distintivo de zona según jerarquía de PRECIO (no por nombre):
- * - "top": la(s) zona(s) más cara(s) del evento → dorado con estrella.
- * - "mid": el resto de zonas con nombre → plateado con diamante (visible, no gris
- *   apagado, pero subordinado al dorado). Las entradas sin zona no llevan chip.
- * Decidir por precio es honesto y automático: lo caro brilla más.
- */
-const ZONE_TIER_STYLE = {
-  top: {
-    color: "#f5d98b",
-    background:
-      "linear-gradient(180deg, rgba(245,217,139,0.16), rgba(245,217,139,0.05))",
-    border: "1px solid rgba(245,217,139,0.32)",
-  },
-  mid: {
-    color: "#cfd8ee",
-    background:
-      "linear-gradient(180deg, rgba(207,216,238,0.16), rgba(207,216,238,0.05))",
-    border: "1px solid rgba(207,216,238,0.34)",
-  },
-} as const;
-
-function ZoneBadge({ label, tier = "top" }: { label: string; tier?: "top" | "mid" }) {
-  // Quita el prefijo "Zona " redundante: el chip ya comunica que es zona.
-  const clean = label.replace(/^zona\s+/i, "").trim() || label;
-  return (
-    <span
-      className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-[0.07em]"
-      style={ZONE_TIER_STYLE[tier]}
-    >
-      <svg viewBox="0 0 24 24" className="h-2.5 w-2.5 shrink-0" fill="currentColor" aria-hidden>
-        {tier === "top" ? (
-          /* estrella — máximo estatus */
-          <path d="M12 2l2.4 6.9H21l-5.3 4 2 6.9L12 16l-5.7 3.8 2-6.9L3 8.9h6.6z" />
-        ) : (
-          /* diamante — premium subordinado */
-          <path d="M12 2l7 10-7 10-7-10z" />
-        )}
-      </svg>
-      {clean}
-    </span>
-  );
-}
-
-/** Tier de una zona según su precio vs el máximo del evento. */
-function zoneTier(priceCents: number, eventMaxPriceCents: number): "top" | "mid" {
-  return priceCents >= eventMaxPriceCents ? "top" : "mid";
 }
 
 /** Escasez por umbral porcentual: solo "enciende" cuando queda ≤30% del stock. */
@@ -1051,46 +1008,38 @@ function ScarcityNote({
 
 function BoxGrid({
   items,
-  zone,
-  maxPriceCents,
   qty,
   onChange,
 }: {
   items: TicketType[];
-  zone: string | null;
-  maxPriceCents: number;
   qty: Record<string, number>;
   onChange: (ticketTypeId: string, value: number) => void;
 }) {
   const selectedItems = items.filter((tt) => (qty[tt.id] ?? 0) > 0);
   const totalCents = selectedItems.reduce((acc, tt) => acc + tt.priceCents, 0);
-  const totalPeople = selectedItems.reduce((acc, tt) => acc + tt.capacity, 0);
+  const totalPeople = selectedItems.reduce((acc, tt) => acc + boxSeats(tt), 0);
 
-  // Si todos los boxes de la zona tienen el mismo precio y capacidad, se
-  // muestra una sola vez arriba del grid. Es el caso típico.
+  // Si todos los espacios tienen el mismo precio y capacidad, se muestra una
+  // sola vez arriba del grid. Es el caso típico.
   const uniqPrices = new Set(items.map((i) => i.priceCents));
-  const uniqCaps = new Set(items.map((i) => i.capacity));
+  const uniqCaps = new Set(items.map((i) => boxSeats(i)));
   const samePrice = uniqPrices.size === 1;
   const sameCap = uniqCaps.size === 1;
   const commonPriceCents = samePrice ? items[0].priceCents : null;
-  const commonCap = sameCap ? items[0].capacity : null;
+  const commonCap = sameCap ? boxSeats(items[0]) : null;
   const currency = items[0].currency;
-  // Noun más usado en la zona (los items suelen compartirlo). Default "box".
+  // Noun más usado en el grupo (los items suelen compartirlo). Default "box".
   const noun = unitNoun(items[0]);
-  // Espacios libres de la zona (cada box/mesa es una unidad reservable).
+  // Espacios libres del grupo (cada box/mesa es una unidad reservable).
   const freeCount = items.filter((tt) => ticketStatus(tt).kind !== "soldout").length;
-  // Tier del distintivo según el precio más alto del grupo vs el del evento.
-  const groupPriceCents = items.reduce((mx, i) => Math.max(mx, i.priceCents), 0);
-  const tier = zoneTier(groupPriceCents, maxPriceCents);
 
   return (
     <div className="rounded-2xl border border-cart-line bg-cart-bg-elev p-4">
-      {/* Título de la tarjeta + zona como estatus (dorado) — consistente con las entradas */}
+      {/* Título de la tarjeta de espacios */}
       <div className="mb-2 flex items-center gap-2">
         <span className="text-[15.5px] font-semibold tracking-[-0.01em]">
           {capitalize(unitNounPlural(noun))}
         </span>
-        {zone ? <ZoneBadge label={zone} tier={tier} /> : null}
       </div>
       {/* Header común — info que se repetía en cada card */}
       <div className="flex items-baseline justify-between">
@@ -1101,8 +1050,10 @@ function BoxGrid({
         </p>
         {commonPriceCents !== null && (
           <p className="text-[14px] font-bold tracking-[-0.01em] text-white">
-            {formatMoney(commonPriceCents, currency)}
-            <span className="ml-0.5 text-[10.5px] font-medium text-cart-ink-3">/{noun}</span>
+            <Price cents={commonPriceCents} currency={currency} />
+            {commonPriceCents > 0 && (
+              <span className="ml-0.5 text-[10.5px] font-medium text-cart-ink-3">/{noun}</span>
+            )}
           </p>
         )}
       </div>
@@ -1141,9 +1092,7 @@ function BoxGrid({
                 {tileLabel(tt)}
               </span>
               {showPriceOnTile && !sold && (
-                <span className="mt-0.5 text-[9.5px] font-medium opacity-80">
-                  {formatMoney(tt.priceCents, tt.currency)}
-                </span>
+                <Price cents={tt.priceCents} currency={tt.currency} className="mt-0.5 block text-[9.5px] font-medium opacity-80" />
               )}
               {sold && (
                 <span className="absolute inset-x-2 top-1/2 h-px -translate-y-1/2 -rotate-45 bg-cart-ink-4/60" />
@@ -1183,7 +1132,7 @@ function BoxGrid({
               </p>
               <p className="mt-0.5 text-[11.5px] text-cart-ink-3">
                 {selectedItems.length === 1
-                  ? `${selectedItems[0].capacity} personas`
+                  ? `${boxSeats(selectedItems[0])} personas`
                   : `${selectedItems.length} ${unitNounPlural(noun)} · ${totalPeople} personas`}
               </p>
             </div>
@@ -1217,12 +1166,10 @@ function tileLabel(tt: TicketType): string {
 
 function TicketCard({
   tt,
-  maxPriceCents,
   value,
   onChange,
 }: {
   tt: TicketType;
-  maxPriceCents: number;
   value: number;
   onChange: (v: number) => void;
 }) {
@@ -1234,7 +1181,8 @@ function TicketCard({
   const remaining = status.kind === "available" ? status.remaining : 0;
   const selected = value > 0;
   const ap = activePricing(tt);
-  const stock = lowStock(tt.sold, tt.capacity);
+  // Solo aplica a entradas (no box); stockTotal() resuelve el cupo correcto.
+  const stock = lowStock(tt.sold, stockTotal(tt));
 
   const saleDeadline =
     tt.saleEndsAt && status.kind !== "expired"
@@ -1264,7 +1212,6 @@ function TicketCard({
               {tt.name}
             </span>
             <TicketBadge kind={tt.kind} boxLabel={tt.boxLabel} />
-            {tt.zone ? <ZoneBadge label={tt.zone} tier={zoneTier(tt.priceCents, maxPriceCents)} /> : null}
             {ap.isPresale && (
               <span className="rounded-md bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.06em] text-emerald-300">
                 Preventa
@@ -1295,9 +1242,7 @@ function TicketCard({
               {formatMoney(ap.basePriceCents, tt.currency)}
             </div>
           )}
-          <div className="text-[16px] font-bold tracking-[-0.01em]">
-            {formatMoney(ap.priceCents, tt.currency)}
-          </div>
+          <Price cents={ap.priceCents} currency={tt.currency} className="block text-[16px] font-bold tracking-[-0.01em]" />
         </div>
       </div>
       <div className="mt-4 flex items-center justify-between">
@@ -1557,7 +1502,7 @@ function PayPhase({
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/brand/mercadopago.svg" alt="Mercado Pago" className="size-12 flex-shrink-0 rounded-xl object-cover" />
         <div className="min-w-0 flex-1">
-          <div className="text-[16.5px] font-semibold">Pagar con Mercado Pago</div>
+          <div className="text-[16.5px] font-semibold">Pagar con tarjeta</div>
           <div className="mt-0.5 text-[12px] text-cart-ink-3">Tarjeta de crédito o débito · Visa / Mastercard</div>
         </div>
         <Radio active={payMethod === "mp"} color="var(--color-cart-accent)" />
@@ -1684,7 +1629,7 @@ function OrderSummary({
                 {tt.name} <span className="text-cart-ink-3">× {qty[tt.id]}</span>
               </span>
               <span className="text-[13px] font-semibold tabular-nums">
-                {formatMoney(tt.priceCents * (qty[tt.id] ?? 0), tt.currency)}
+                <Price cents={tt.priceCents * (qty[tt.id] ?? 0)} currency={tt.currency} />
               </span>
             </div>
           ))}
@@ -1706,7 +1651,7 @@ function OrderSummary({
           Total
         </span>
         <span className="text-[22px] font-bold tabular-nums tracking-[-0.02em]">
-          {formatMoney(total + fee)}
+          <Price cents={total + fee} />
         </span>
       </div>
 

@@ -4,6 +4,7 @@ import { setRequestLocale } from "next-intl/server";
 import type { ReactNode } from "react";
 import { routing } from "@/i18n/routing";
 import { QueryProvider } from "@/lib/_shared/query-client";
+import { ServiceWorkerRegister } from "@/components/pwa/ServiceWorkerRegister";
 
 export function generateStaticParams() {
   return routing.locales.map((locale) => ({ locale }));
@@ -22,6 +23,7 @@ export default async function LocaleLayout({ children, params }: Props) {
   return (
     <NextIntlClientProvider locale={locale}>
       <QueryProvider>{children}</QueryProvider>
+      <ServiceWorkerRegister />
     </NextIntlClientProvider>
   );
 }

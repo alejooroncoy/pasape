@@ -24,10 +24,15 @@ export function NextEventHero() {
   const next = pickNext(tickets.data ?? []);
   if (!next) return null;
 
+  // Atajo solo el día del evento (hoy, en la zona del evento). Si es para otro
+  // día, no lo mostramos — el usuario ya lo ve en "Mis entradas".
+  if (!isSameDayInTz(next.event.startsAt, next.event.timezone)) return null;
+
   const when = countdownLabel(next.event.startsAt, next.event.timezone);
 
   return (
-    <section className="mx-auto w-full max-w-[1120px] px-4 pt-4 sm:px-6 lg:px-8">
+    // Atajo pensado para móvil; en desktop la navegación/contenido ya lo cubre.
+    <section className="mx-auto w-full max-w-[1120px] px-4 pt-4 sm:px-6 lg:hidden">
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -103,8 +108,10 @@ function pickNext(tickets: WalletTicket[]): WalletTicket | null {
   return candidates[0] ?? null;
 }
 
-// Etiqueta amigable de cuándo es (display): Hoy / Mañana / En N días / fecha.
-function countdownLabel(startsAt: string, timezone: string): string {
+// ¿El evento es hoy? (mismo día de calendario en la zona del evento). Display:
+// decide solo cuándo mostrar el atajo — el estado del evento lo sigue dando el
+// backend (closed/cancelled se filtran en pickNext).
+function isSameDayInTz(startsAt: string, timezone: string): boolean {
   const dayKey = (d: Date) =>
     new Intl.DateTimeFormat("en-CA", {
       timeZone: timezone,
@@ -112,14 +119,46 @@ function countdownLabel(startsAt: string, timezone: string): string {
       month: "2-digit",
       day: "2-digit",
     }).format(d);
-  const today = dayKey(new Date());
-  const target = dayKey(new Date(startsAt));
+  return dayKey(new Date()) === dayKey(new Date(startsAt));
+}
+
+// Etiqueta amigable de cuándo es (display). Cuando falta poco da precisión por
+// horas/minutos (más útil que "Hoy" a secas); más allá de 24 h razona por días.
+function countdownLabel(startsAt: string, timezone: string): string {
+  const now = new Date();
+  const start = new Date(startsAt);
+  const diffMs = start.getTime() - now.getTime();
+  const MIN = 60_000;
+  const HOUR = 3_600_000;
+
+  // Ya empezó (o está por empezar) pero el backend aún no lo cerró → es hoy.
+  if (diffMs <= 0) return "¡Es hoy!";
+
+  // Dentro de las próximas 24 h: contar horas / minutos.
+  if (diffMs < 24 * HOUR) {
+    if (diffMs < HOUR) {
+      const mins = Math.max(1, Math.round(diffMs / MIN));
+      return `En ${mins} ${mins === 1 ? "minuto" : "minutos"}`;
+    }
+    const hours = Math.round(diffMs / HOUR);
+    return `En ${hours} ${hours === 1 ? "hora" : "horas"}`;
+  }
+
+  // Más de 24 h: razonar por días de calendario (en la zona del evento).
+  const dayKey = (d: Date) =>
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(d);
+  const today = dayKey(now);
+  const target = dayKey(start);
   const diffDays = Math.round(
     (new Date(`${target}T00:00:00Z`).getTime() - new Date(`${today}T00:00:00Z`).getTime()) /
       86400000,
   );
-  if (diffDays <= 0) return "Hoy";
-  if (diffDays === 1) return "Mañana";
+  if (diffDays <= 1) return "Mañana";
   if (diffDays < 7) return `En ${diffDays} días`;
   if (diffDays < 14) return "En una semana";
   return `En ${Math.round(diffDays / 7)} semanas`;

@@ -2,13 +2,14 @@
 
 import { use } from "react";
 import { BackBtn, C, FONT_DISPLAY, Phone } from "@/components/design";
-import { useDecideApplication, usePendingApplications } from "@/lib/promoters/hooks/usePromoter";
+import { useDecideApplication, usePendingApplications, useRealtimePromoterApplications } from "@/lib/promoters/hooks/usePromoter";
 
 type Props = { params: Promise<{ slug: string }> };
 
 export default function OrgPendingRequestsPage({ params }: Props) {
   const { slug } = use(params);
   const pending = usePendingApplications(slug);
+  useRealtimePromoterApplications(slug);
   const decide = useDecideApplication(slug);
   const count = pending.data?.length ?? 0;
 

@@ -7,6 +7,8 @@ export type User = {
   email: string | null;
   phone: string | null;
   fullName: string | null;
+  /** DNI guardado en kyc_documents — autorrellena el checkout. */
+  dni: string | null;
   avatarUrl: string | null;
   initialRole: Role;
   organizerType: OrganizerType | null;

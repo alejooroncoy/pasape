@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { AnimatePresence, motion } from "motion/react";
-import { GoogleBtn, QrSquare } from "@/components/design";
+import { motion } from "motion/react";
+import { QrSquare } from "@/components/design";
 import { useLocalRotatingQr } from "@/lib/tickets/hooks/useLocalRotatingQr";
-import { useGoogleSignIn } from "@/lib/identity/hooks/useFirebaseAuth";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
-import { useBoxForTicket, useCreateBox } from "@/lib/boxes/hooks/useBoxes";
+import { SignInDrawer } from "@/app/[locale]/_home/SignInDrawer";
+import { Logo } from "@/components/brand/Logo";
+import { useBoxForTicket, useCreateBox, useRealtimeBox } from "@/lib/boxes/hooks/useBoxes";
 
 type Props = {
   ticketId: string;
@@ -89,7 +90,6 @@ export const TicketView = ({
   );
 
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const { signIn, pending: signInPending, error: signInError } = useGoogleSignIn();
   const me = useCurrentUser();
   const isLogged = !!me.data?.user;
 
@@ -98,6 +98,7 @@ export const TicketView = ({
   // "activar" nada para invitar a su grupo, debe estar listo al cargar.
   const boxQuery = useBoxForTicket(isBoxHost && status === "active" ? ticketId : "", k);
   const box = boxQuery.data ?? null;
+  useRealtimeBox(box?.inviteToken);
   const createBox = useCreateBox(k);
   useEffect(() => {
     if (!isBoxHost || status !== "active") return;
@@ -134,12 +135,7 @@ export const TicketView = ({
             className="inline-flex items-center gap-2 text-[16px] font-semibold tracking-[-0.01em]"
           >
             <span className="grid size-8 place-items-center">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/icons/logo-icon-min.svg"
-                alt="Pasape"
-                className="size-full object-contain drop-shadow-[0_2px_10px_rgba(184,124,255,0.35)]"
-              />
+              <Logo className="size-full drop-shadow-[0_2px_10px_rgba(184,124,255,0.35)]" />
             </span>
             <span>Pasape</span>
           </Link>
@@ -188,7 +184,7 @@ export const TicketView = ({
         {/* ============== Desktop (lg+) — 2-col side by side ============== */}
         <div className="hidden w-full lg:grid lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)] lg:gap-6 lg:rounded-[28px] lg:border lg:border-cart-line lg:bg-cart-bg-elev/70 lg:p-6 lg:backdrop-blur-xl lg:shadow-[0_40px_120px_-30px_rgba(124,58,237,0.45)]">
           {/* IZQ — contexto del evento (secundario, estático) */}
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col justify-between gap-4">
             <EventHeroPane event={event} subTitle={subTitle} />
             <EventInfoPane event={event} />
             {status === "active" && !isLogged && (
@@ -196,9 +192,9 @@ export const TicketView = ({
             )}
           </div>
           {/* DER — acción del usuario: QR primero, invite segundo */}
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col justify-between gap-4">
             <TicketCard
-              event={null}
+              event={event}
               subTitle={subTitle}
               holderName={holderName}
               status={status}
@@ -227,16 +223,7 @@ export const TicketView = ({
         </div>
       </div>
 
-      <AnimatePresence>
-        {drawerOpen && (
-          <SignInDrawer
-            onClose={() => setDrawerOpen(false)}
-            onGoogle={() => void signIn()}
-            pending={signInPending}
-            error={signInError}
-          />
-        )}
-      </AnimatePresence>
+      <SignInDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
     </div>
   );
 };
@@ -266,67 +253,111 @@ function TicketCard({
   qrSize: number;
   variant?: "mobile" | "desktop";
 }) {
+  const coverUrl = event?.cover_url ?? null;
+
   return (
     <div
       className={
-        "rounded-[28px] p-5 sm:p-6 " +
+        "overflow-hidden rounded-[28px] " +
         (variant === "desktop"
           ? "bg-cart-bg-elev-2"
-          : "bg-gradient-to-b from-[rgba(124,58,237,0.25)] to-[rgba(20,12,40,0.5)] shadow-[0_30px_60px_-20px_rgba(124,58,237,0.55)] ring-1 ring-cart-accent/45")
+          : "shadow-[0_30px_60px_-20px_rgba(124,58,237,0.55)] ring-1 ring-cart-accent/45")
       }
     >
-      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/60">
-        Muestra en puerta
-      </p>
-
-      {event && (
-        <div className="mt-1.5">
-          <h1 className="text-[22px] font-bold leading-tight tracking-[-0.02em] sm:text-[24px]">
-            {event.title}
-          </h1>
-          <p className="mt-1 text-[12.5px] text-cart-ink-3">
-            {formatDate(event.starts_at, event.timezone)}
-            {event.venue ? ` · ${event.venue}` : ""}
-          </p>
+      {/* ── Zona superior: imagen — solo en mobile ── */}
+      {variant === "mobile" && (
+        <div className="relative h-44 sm:h-52">
+          {coverUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={coverUrl}
+              alt=""
+              aria-hidden
+              className="absolute inset-0 size-full object-cover object-top"
+            />
+          ) : (
+            <div
+              className="absolute inset-0"
+              style={{
+                background: "linear-gradient(160deg, #4B1F9A 0%, #7C3AED 50%, #FF4D5E 100%)",
+              }}
+            />
+          )}
+          <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/10 to-black/80" />
+          <div className="absolute left-4 top-4">
+            <span className="rounded-full bg-black/50 px-3 py-1 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-white/80 backdrop-blur-sm ring-1 ring-white/10">
+              Tu entrada
+            </span>
+          </div>
         </div>
       )}
 
-      <div
-        className="relative mt-4 flex items-center justify-center rounded-[22px] bg-white p-5"
-        style={{ minHeight: qrSize + 40 }}
-      >
-        {status === "active" && payload && <QrSquare code={payload} size={qrSize} />}
-        {status === "active" && !payload && loading && (
-          <p className="text-[13px] text-neutral-500">Generando QR…</p>
-        )}
-        {status === "active" && qrError && (
-          <p className="px-3 text-center text-[13px] text-red-600">
-            No pudimos generar el QR. Recarga.
+      {/* ── Zona inferior: info + QR sobre fondo sólido ── */}
+      <div className="bg-[#0D0B14] p-5 sm:p-6">
+        {variant === "desktop" && (
+          <p className="mb-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/45">
+            Tu entrada
           </p>
         )}
-        {status !== "active" && (
-          <p className="text-[14px] font-semibold text-neutral-500">
-            Esta entrada ya no está activa.
-          </p>
+        {event && variant === "mobile" && (
+          <div className="mb-4">
+            <h1 className="text-[20px] font-bold leading-tight tracking-[-0.02em] sm:text-[22px]">
+              {event.title}
+            </h1>
+            <p className="mt-1 text-[12.5px] text-white/55">
+              {formatDate(event.starts_at, event.timezone)}
+              {event.venue ? ` · ${event.venue}` : ""}
+            </p>
+          </div>
         )}
 
-        {status === "active" && payload && <CountdownRing seconds={secondsLeft} />}
-      </div>
+        <div
+          className="relative flex items-center justify-center rounded-[18px] bg-white p-5 shadow-[0_8px_32px_rgba(0,0,0,0.35)]"
+          style={{ minHeight: qrSize + 40 }}
+        >
+          {status === "active" && payload && (
+            <QrSquare
+              code={payload}
+              size={qrSize}
+            />
+          )}
+          {status === "active" && !payload && loading && (
+            <p className="text-[13px] text-neutral-500">Generando QR…</p>
+          )}
+          {status === "active" && qrError && (
+            <p className="px-3 text-center text-[13px] text-red-600">
+              No pudimos generar el QR. Recarga.
+            </p>
+          )}
+          {status !== "active" && (
+            <p className="text-[14px] font-semibold text-neutral-500">
+              Esta entrada ya no está activa.
+            </p>
+          )}
 
-      <div className="mt-4 flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-[11px] uppercase tracking-[0.08em] text-cart-ink-3">
-            {(holderName ?? "TITULAR").toUpperCase()}
-          </p>
-          <p className="mt-0.5 truncate text-[15px] font-semibold tracking-[-0.01em]">
-            {subTitle}
-          </p>
+          {status === "active" && payload && <CountdownRing seconds={secondsLeft} />}
         </div>
-        {status === "used" && (
-          <span className="rounded-full bg-rose-500/18 px-3.5 py-2 text-[11px] font-bold uppercase tracking-[0.08em] text-rose-300">
-            Ya usada
-          </span>
-        )}
+
+        <div className="mt-4 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[11px] uppercase tracking-[0.08em] text-white/45">
+              {holderName ? "Titular" : "Tipo de entrada"}
+            </p>
+            <p className="mt-0.5 truncate text-[15px] font-semibold tracking-[-0.01em]">
+              {holderName ?? subTitle}
+            </p>
+            {holderName && (
+              <p className="mt-0.5 truncate text-[12.5px] text-white/55">
+                {subTitle}
+              </p>
+            )}
+          </div>
+          {status === "used" && (
+            <span className="rounded-full bg-rose-500/18 px-3.5 py-2 text-[11px] font-bold uppercase tracking-[0.08em] text-rose-300">
+              Ya usada
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -341,45 +372,40 @@ function EventHeroPane({
 }) {
   if (!event) return null;
   return (
-    <div className="relative aspect-[4/5] overflow-hidden rounded-[20px] bg-cart-bg-elev-2 ring-1 ring-cart-line">
-      {event.cover_url ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={event.cover_url}
-          alt=""
-          className="absolute inset-0 size-full object-cover"
-        />
-      ) : (
-        <div
-          className="absolute inset-0"
-          style={{
-            background:
-              "linear-gradient(140deg, #4B1F9A 0%, #7C3AED 40%, #FF4D5E 90%)",
-          }}
-        >
+    <div className="overflow-hidden rounded-[20px] bg-cart-bg-elev-2 ring-1 ring-cart-line">
+      {/* Imagen superior */}
+      <div className="relative h-52 w-full overflow-hidden">
+        {event.cover_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={event.cover_url}
+            alt=""
+            className="absolute inset-0 size-full object-cover object-top"
+          />
+        ) : (
           <div
             className="absolute inset-0"
-            style={{
-              backgroundImage:
-                "radial-gradient(60% 50% at 20% 30%, rgba(255,255,255,0.22), transparent 60%), radial-gradient(60% 50% at 80% 80%, rgba(0,0,0,0.55), transparent 60%)",
-            }}
+            style={{ background: "linear-gradient(140deg, #4B1F9A 0%, #7C3AED 40%, #FF4D5E 90%)" }}
           />
+        )}
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/10 to-black/60" />
+        <div className="absolute left-4 top-4">
+          <span className="rounded-full bg-black/50 px-3 py-1 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-white/80 backdrop-blur-sm ring-1 ring-white/10">
+            Tu entrada
+          </span>
         </div>
-      )}
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/85 via-black/15 to-transparent" />
+      </div>
 
-      <div className="absolute inset-x-0 bottom-0 p-5">
-        <p className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-white/70">
-          Tu entrada
-        </p>
-        <h1 className="mt-1.5 text-[24px] font-bold leading-tight tracking-[-0.02em] text-white">
+      {/* Info sobre fondo sólido */}
+      <div className="bg-[#0D0B14] p-5">
+        <h1 className="text-[20px] font-bold leading-tight tracking-[-0.02em] text-white">
           {event.title}
         </h1>
-        <p className="mt-2 text-[12.5px] text-white/80">
+        <p className="mt-1.5 text-[12.5px] text-white/65">
           {formatLongDate(event.starts_at, event.timezone)}
         </p>
         {event.venue && (
-          <p className="mt-0.5 flex items-center gap-1.5 text-[12.5px] text-white/65">
+          <p className="mt-1 flex items-center gap-1.5 text-[12.5px] text-white/50">
             <IconPin />
             <span>{event.venue}</span>
           </p>
@@ -398,55 +424,38 @@ function EventInfoPane({ event }: { event: Props["event"] | null }) {
   if (!event) return null;
   const calendarUrl = buildGoogleCalendarUrl(event);
   return (
-    <div className="rounded-[20px] border border-cart-line bg-cart-bg-elev-2/60 p-5">
-      <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">
-        Detalles del evento
-      </h3>
-      <ul className="mt-3 flex flex-col gap-2.5 text-[13px]">
-        <li className="flex items-start gap-2.5">
-          <span className="mt-[3px] shrink-0 text-cart-accent"><IconCal /></span>
-          <span className="text-white">
-            {formatLongDate(event.starts_at, event.timezone)}
-          </span>
-        </li>
-        {event.venue && (
-          <li className="flex items-start gap-2.5">
-            <span className="mt-[3px] shrink-0 text-cart-accent"><IconPin /></span>
-            <span className="text-white">
-              {event.venue_url ? (
-                <a
-                  href={event.venue_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="underline-offset-2 hover:underline"
-                >
-                  {event.venue}
-                </a>
-              ) : (
-                event.venue
-              )}
-            </span>
-          </li>
-        )}
-        <li className="flex items-start gap-2.5">
-          <span className="mt-[3px] shrink-0 text-cart-accent"><IconTicket /></span>
-          <a
-            href={`/es/events/${event.slug}`}
-            className="text-white underline-offset-2 hover:underline"
-          >
-            Ver página del evento
-          </a>
-        </li>
-      </ul>
+    <div className="flex flex-col gap-2.5">
+      {/* Acciones — la fecha y el lugar ya están en el hero de arriba, aquí
+          solo van las cosas que el asistente puede hacer con su entrada. */}
       <a
         href={calendarUrl}
         target="_blank"
         rel="noreferrer"
-        className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full border border-cart-line bg-cart-bg-elev px-4 py-2.5 text-[13px] font-semibold text-white transition hover:border-cart-line-strong"
+        className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-cart-line bg-cart-bg-elev px-4 py-3 text-[13.5px] font-semibold text-white transition hover:border-cart-line-strong"
       >
         <CalendarPlusIcon />
         Agregar al calendario
       </a>
+      <div className="flex gap-2.5">
+        {event.venue_url && (
+          <a
+            href={event.venue_url}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex flex-1 items-center justify-center gap-2 rounded-full border border-cart-line bg-cart-bg-elev-2/60 px-4 py-2.5 text-[13px] font-semibold text-white transition hover:border-cart-line-strong"
+          >
+            <IconPin />
+            Cómo llegar
+          </a>
+        )}
+        <a
+          href={`/es/events/${event.slug}`}
+          className="inline-flex flex-1 items-center justify-center gap-2 rounded-full border border-cart-line bg-cart-bg-elev-2/60 px-4 py-2.5 text-[13px] font-semibold text-white transition hover:border-cart-line-strong"
+        >
+          <IconTicket />
+          Ver evento
+        </a>
+      </div>
     </div>
   );
 }
@@ -685,86 +694,6 @@ function SignInPromo({
   );
 }
 
-/* ============================== SignInDrawer ============================== */
-
-const SignInDrawer = ({
-  onClose,
-  onGoogle,
-  pending,
-  error,
-}: {
-  onClose: () => void;
-  onGoogle: () => void;
-  pending: boolean;
-  error: string | null;
-}) => (
-  <motion.div
-    initial={{ opacity: 0 }}
-    animate={{ opacity: 1 }}
-    exit={{ opacity: 0 }}
-    transition={{ duration: 0.18 }}
-    onClick={onClose}
-    className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-md lg:items-center"
-  >
-    <motion.div
-      initial={{ y: "100%", opacity: 0.8 }}
-      animate={{ y: 0, opacity: 1 }}
-      exit={{ y: "100%", opacity: 0 }}
-      transition={{ type: "spring", damping: 30, stiffness: 320, mass: 0.8 }}
-      onClick={(e) => e.stopPropagation()}
-      drag="y"
-      dragConstraints={{ top: 0, bottom: 0 }}
-      dragElastic={{ top: 0, bottom: 0.5 }}
-      onDragEnd={(_, info) => {
-        if (info.offset.y > 120 || info.velocity.y > 800) onClose();
-      }}
-      className="w-full max-w-[420px] touch-none rounded-t-[26px] bg-cart-bg-elev-2 p-5 pb-9 ring-1 ring-cart-line lg:rounded-[26px]"
-    >
-      <div className="mb-4 flex justify-center lg:hidden">
-        <div className="h-1 w-9 rounded-full bg-white/15" />
-      </div>
-      <motion.h2
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.08, duration: 0.25 }}
-        className="text-[24px] font-bold leading-tight tracking-[-0.03em]"
-      >
-        Crea tu cuenta
-      </motion.h2>
-      <motion.p
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.14, duration: 0.25 }}
-        className="mb-5 mt-1.5 text-[13px] leading-relaxed text-cart-ink-3"
-      >
-        Un toque y todas tus entradas quedan guardadas.
-      </motion.p>
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2, duration: 0.3 }}
-      >
-        <GoogleBtn onClick={onGoogle} disabled={pending} />
-      </motion.div>
-      <AnimatePresence>
-        {error && (
-          <motion.p
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            className="mt-3 overflow-hidden text-center text-[12px] text-rose-300"
-          >
-            {error}
-          </motion.p>
-        )}
-      </AnimatePresence>
-      <p className="mt-3.5 text-center text-[11px] text-cart-ink-4">
-        Sin contraseña · sin apps
-      </p>
-    </motion.div>
-  </motion.div>
-);
-
 /* ============================== Icons + ring ============================== */
 
 function buildGoogleCalendarUrl(event: NonNullable<Props["event"]>): string {
@@ -782,13 +711,6 @@ function buildGoogleCalendarUrl(event: NonNullable<Props["event"]>): string {
   });
   return `https://calendar.google.com/calendar/render?${params.toString()}`;
 }
-
-const IconCal = () => (
-  <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
-    <rect x="2" y="3" width="12" height="11" rx="2" stroke="currentColor" strokeWidth="1.5" />
-    <path d="M2 6h12M5 1.5v3M11 1.5v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-  </svg>
-);
 
 const IconPin = () => (
   <svg width="12" height="12" viewBox="0 0 16 16" fill="none">

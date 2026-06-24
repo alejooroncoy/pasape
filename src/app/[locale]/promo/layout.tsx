@@ -21,7 +21,7 @@ export default async function PromoLayout({
     // armemos un ?next= que respete sub-rutas (no solo /promo).
     const pathname = (await headers()).get("x-pathname") ?? `/${locale}/promo`;
     const next = encodeURIComponent(pathname);
-    redirect(`/${locale}/login?next=${next}`);
+    redirect(`/${locale}/org/login?next=${next}`);
   }
   return <>{children}</>;
 }

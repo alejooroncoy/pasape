@@ -26,11 +26,10 @@ export type CreateEventInput = {
   transferRequiresKyc?: boolean;
   ticketTypes: Array<{
     name: string;
-    kind?: "general" | "presale" | "vip" | "box";
+    kind?: "general" | "box";
     priceCents: number;
     capacity: number;
     boxLabel?: string | null;
-    zone?: string | null;
     unitNoun?: string | null;
   }>;
 };

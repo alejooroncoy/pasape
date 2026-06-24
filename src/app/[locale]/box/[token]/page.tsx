@@ -4,9 +4,10 @@ import Link from "next/link";
 import { use, useEffect, useRef, useState } from "react";
 import { useRouter } from "@/i18n/navigation";
 import { Btn, C, Field, FONT_DISPLAY, PhoneField } from "@/components/design";
-import { useBoxByToken, useJoinBox } from "@/lib/boxes/hooks/useBoxes";
+import { useBoxByToken, useJoinBox, useRealtimeBox } from "@/lib/boxes/hooks/useBoxes";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { useDniLookup } from "@/lib/identity/hooks/useDniLookup";
+import { Logo } from "@/components/brand/Logo";
 import { formatDate } from "@/lib/_shared/format";
 
 type Props = { params: Promise<{ token: string }> };
@@ -14,6 +15,7 @@ type Props = { params: Promise<{ token: string }> };
 export default function FriendJoinBoxPage({ params }: Props) {
   const { token } = use(params);
   const box = useBoxByToken(token);
+  useRealtimeBox(token);
   const join = useJoinBox();
   const me = useCurrentUser();
   const router = useRouter();
@@ -303,12 +305,7 @@ function BrandHeader() {
           className="inline-flex items-center gap-2 text-[16px] font-semibold tracking-[-0.01em]"
         >
           <span className="grid size-8 place-items-center">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/icons/logo-icon-min.svg"
-              alt="Pasape"
-              className="size-full object-contain drop-shadow-[0_2px_10px_rgba(184,124,255,0.35)]"
-            />
+            <Logo className="size-full drop-shadow-[0_2px_10px_rgba(184,124,255,0.35)]" />
           </span>
           <span>Pasape</span>
         </Link>

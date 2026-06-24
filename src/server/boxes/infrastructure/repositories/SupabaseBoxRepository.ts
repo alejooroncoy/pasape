@@ -33,6 +33,7 @@ type MemberRow = {
   ticket_id: string | null;
   joined_at: string;
   profile: { full_name: string | null };
+  ticket: { current_holder: string | null; status: string } | null;
 };
 
 const slug = () => crypto.randomBytes(6).toString("base64url").toLowerCase().replace(/[_-]/g, "");
@@ -58,15 +59,22 @@ const loadBox = async (id: string): Promise<Box | null> => {
   if (!data) return null;
   const row = data as unknown as BoxRow;
 
+  // Traemos current_holder del ticket de cada miembro: si lo sostiene el dueño
+  // del box (acompañante sin celular), el host lo lleva en su device.
+  const ownerId = row.order.buyer.id;
   const { data: members } = await db
     .from("box_members")
-    .select("profile_id, ticket_id, joined_at, profile:profiles!inner(full_name)")
+    .select(
+      "profile_id, ticket_id, joined_at, profile:profiles!inner(full_name), ticket:tickets(current_holder, status)",
+    )
     .eq("box_id", id)
     .order("joined_at", { ascending: true });
   const mems = ((members as unknown as MemberRow[] | null) ?? []).map((m) => ({
     profileId: m.profile_id,
     name: m.profile.full_name ?? "—",
     ticketId: m.ticket_id,
+    heldByHost: m.ticket?.current_holder === ownerId,
+    used: m.ticket?.status === "used",
     joinedAt: m.joined_at,
   }));
 
@@ -99,7 +107,7 @@ export const supabaseBoxRepository: BoxRepository = {
     const { data: ticket } = await db
       .from("tickets")
       .select(
-        "id, order_id, ticket_type_id, current_holder, ticket_type:ticket_types!inner(kind, event:events!inner(id, starts_at))",
+        "id, order_id, ticket_type_id, current_holder, ticket_type:ticket_types!inner(kind, capacity, event:events!inner(id, starts_at))",
       )
       .eq("id", ticketId)
       .maybeSingle();
@@ -109,10 +117,13 @@ export const supabaseBoxRepository: BoxRepository = {
       order_id: string;
       ticket_type_id: string;
       current_holder: string;
-      ticket_type: { kind: string; event: { id: string; starts_at: string } };
+      ticket_type: { kind: string; capacity: number; event: { id: string; starts_at: string } };
     };
     const t = ticket as unknown as T;
     if (t.current_holder !== ownerId) return err("not_owner");
+    // La capacidad REAL del box la define el ticket_type (asientos del espacio),
+    // no el cliente. El parámetro `capacity` queda como fallback si faltara.
+    const boxCapacity = t.ticket_type.capacity > 0 ? t.ticket_type.capacity : capacity;
 
     const { data: existing } = await db
       .from("boxes")
@@ -149,7 +160,7 @@ export const supabaseBoxRepository: BoxRepository = {
         ticket_type_id: t.ticket_type_id,
         invite_token: token,
         box_number: boxNumber,
-        capacity,
+        capacity: boxCapacity,
         expires_at: t.ticket_type.event.starts_at,
       })
       .select("id")
@@ -256,6 +267,123 @@ export const supabaseBoxRepository: BoxRepository = {
       profile_id: profileId,
       ticket_id: ticket.id,
     });
+
+    const refreshed = await loadBox(box.id);
+    return refreshed ? ok(refreshed) : err("box_load_failed");
+  },
+
+  async addCompanion({ token, ownerId, holderName, holderDni }): Promise<Result<Box>> {
+    const db = supabaseAdmin();
+    const box = await this.getByToken(token);
+    if (!box) return err("invalid_token");
+
+    // Solo el dueño del box agrega acompañantes.
+    const { data: order } = await db
+      .from("orders")
+      .select("buyer_id")
+      .eq("id", box.orderId)
+      .maybeSingle<{ buyer_id: string | null }>();
+    if (!order || order.buyer_id !== ownerId) return err("not_owner");
+    if (box.members.length >= box.capacity) return err("box_full");
+
+    // Anti-duplicación por DNI dentro del box (igual que join).
+    if (holderDni) {
+      const last2 = holderDni.slice(-2);
+      const ticketIds = box.members.map((m) => m.ticketId).filter(Boolean) as string[];
+      if (ticketIds.length) {
+        const { data: dup } = await db
+          .from("tickets")
+          .select("id")
+          .in("id", ticketIds)
+          .eq("holder_dni_last2", last2)
+          .limit(1)
+          .maybeSingle<{ id: string }>();
+        if (dup) return err("dni_already_in_box");
+      }
+    }
+
+    // Acompañante sin celular: necesita un profile para ocupar el asiento, pero
+    // su QR lo lleva el HOST (current_holder = ownerId). Creamos un profile
+    // sintético (sin teléfono) solo para el cupo y el nombre en la lista.
+    const synthEmail = `companion-${crypto.randomUUID()}@pasape.app`;
+    const { data: authUser, error: authErr } = await db.auth.admin.createUser({
+      email: synthEmail,
+      email_confirm: true,
+      user_metadata: { full_name: holderName },
+    });
+    if (authErr || !authUser?.user) return err("profile_create_failed");
+    const seatProfileId = authUser.user.id;
+    await db.from("profiles").update({ full_name: holderName, initial_role: "buyer" }).eq("id", seatProfileId);
+
+    const { data: type } = await db
+      .from("ticket_types")
+      .select("box_label")
+      .eq("id", box.ticketTypeId)
+      .maybeSingle<{ box_label: string | null }>();
+    const hostTicketId = box.members.find((m) => m.ticketId)?.ticketId ?? null;
+
+    const { data: ticket, error: tkErr } = await db
+      .from("tickets")
+      .insert({
+        order_id: box.orderId,
+        ticket_type_id: box.ticketTypeId,
+        price_cents: 0,
+        holder_name: holderName,
+        holder_dni_last2: holderDni ? holderDni.slice(-2) : null,
+        qr_code: generateQr(),
+        // El QR vive con el HOST (lo muestra en la puerta por el acompañante).
+        current_holder: ownerId,
+        box_label: type?.box_label ?? null,
+        box_host_ticket_id: hostTicketId,
+      })
+      .select("id")
+      .single<{ id: string }>();
+    if (tkErr || !ticket) return err(tkErr?.message ?? "ticket_create_failed");
+
+    await db.from("box_members").insert({
+      box_id: box.id,
+      profile_id: seatProfileId,
+      ticket_id: ticket.id,
+    });
+
+    const refreshed = await loadBox(box.id);
+    return refreshed ? ok(refreshed) : err("box_load_failed");
+  },
+
+  async removeMember({ token, ownerId, memberProfileId }): Promise<Result<Box>> {
+    const db = supabaseAdmin();
+    const box = await this.getByToken(token);
+    if (!box) return err("invalid_token");
+
+    // Solo el dueño del box (comprador de la orden) puede quitar gente.
+    const { data: order } = await db
+      .from("orders")
+      .select("buyer_id")
+      .eq("id", box.orderId)
+      .maybeSingle<{ buyer_id: string | null }>();
+    if (!order || order.buyer_id !== ownerId) return err("not_owner");
+
+    // No puede quitarse a sí mismo (el host no se va de su propio box).
+    if (memberProfileId === ownerId) return err("cannot_remove_host");
+
+    const member = box.members.find((m) => m.profileId === memberProfileId);
+    if (!member) return err("member_not_found");
+    // Seguridad extra: nunca quitar al ticket host del box.
+    if (member.ticketId) {
+      const { data: tk } = await db
+        .from("tickets")
+        .select("box_host_ticket_id")
+        .eq("id", member.ticketId)
+        .maybeSingle<{ box_host_ticket_id: string | null }>();
+      if (tk && tk.box_host_ticket_id === null) return err("cannot_remove_host");
+      // Anula su QR: ya no entra. El asiento queda libre.
+      await db.from("tickets").update({ status: "void" }).eq("id", member.ticketId);
+    }
+    await db
+      .from("box_members")
+      .delete()
+      .eq("box_id", box.id)
+      .eq("profile_id", memberProfileId);
 
     const refreshed = await loadBox(box.id);
     return refreshed ? ok(refreshed) : err("box_load_failed");

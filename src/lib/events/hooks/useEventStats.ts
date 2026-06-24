@@ -14,10 +14,13 @@ export type EventStatsPayload = EventStats & {
   dupOffline: number;
 };
 
+// Sin polling: los KPIs se refrescan vía Broadcast desde la DB
+// (useRealtimeEventStats) y postgres_changes de scans (useScanRealtime). Si
+// Realtime no conecta, refetchOnWindowFocus/reconnect cubren el caso. Monta
+// useRealtimeEventStats junto a este hook en cada pantalla que muestre stats.
 export const useEventStats = (slug: string) =>
   useQuery({
     queryKey: ["events", "stats", slug],
     queryFn: () => api.get<EventStatsPayload>(`/api/events/${slug}/stats`),
     enabled: !!slug,
-    refetchInterval: 15_000,
   });

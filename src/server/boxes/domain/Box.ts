@@ -2,6 +2,12 @@ export type BoxMember = {
   profileId: string;
   name: string;
   ticketId: string | null;
+  /** El QR de este miembro lo sostiene el host en su device (acompañante sin
+      celular): current_holder == dueño del box. El host lo muestra en puerta. */
+  heldByHost: boolean;
+  /** El ticket ya fue escaneado en puerta (status "used"). Si entró, ya no se
+      puede quitar del box. */
+  used: boolean;
   joinedAt: string;
 };
 

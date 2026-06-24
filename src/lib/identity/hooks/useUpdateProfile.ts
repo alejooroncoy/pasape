@@ -11,6 +11,7 @@ export type UpdateProfilePayload = {
   phone?: string | null;
   dni?: string | null;
   organizerType?: "production_company" | "venue_owner" | "independent_host" | null;
+  avatarUrl?: string | null;
 };
 
 export const useUpdateProfile = () => {

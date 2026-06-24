@@ -13,7 +13,7 @@ export default async function OrgHomePage({
   const { locale } = await params;
   const auth = await getAuthContext();
   // El layout ya garantiza auth.ok, pero TS necesita el guard.
-  if (!auth.ok) redirect(`/${locale}/login`);
+  if (!auth.ok) redirect(`/${locale}/org/login`);
 
   const orgs = await supabaseOrganizationRepository.listByMember(auth.value.profileId);
   if (orgs.length === 0) {

@@ -42,6 +42,8 @@ import { createSupabaseBrowserClient } from "@/server/_shared/supabase/client";
 // ============================================================
 // Tipos
 // ============================================================
+// Las cortesías ya no son un kind: son tickets reales (is_courtesy) que reparte
+// el promotor desde su app. El composer del organizador solo crea general/box.
 type TicketKind = TicketTypeKind;
 
 type TicketRow = {
@@ -54,8 +56,6 @@ type TicketRow = {
   kind: TicketKind;
   /** Etiqueta humana del box (A, B, VIP-1). Solo aplica si kind === "box". */
   boxLabel: string;
-  /** Zona del venue para agrupar la lista al comprador. Opcional. */
-  zone: string;
   /** Cómo llama el organizador a la unidad reservable: box, mesa, lounge u otro. */
   unitNoun: string;
   /** ISO 8601. Cierre de ventas de este tipo. */
@@ -64,6 +64,10 @@ type TicketRow = {
   description: string;
   /** Tramos de preventa: [{ rowKey, priceSoles, endsAt }] ordenados por fecha */
   presaleTiers: Array<{ rowKey: string; priceSoles: string; endsAt: string }>;
+  /** LISTA DE INVITADOS — el organizador activa la lista sobre esta entrada general. */
+  guestListEnabled: boolean;
+  /** Cupo total de cortesías (string del input). "" = sin tope. Solo kind general. */
+  guestListCap: string;
 };
 
 /**
@@ -138,7 +142,6 @@ const expandSpaceGroup = (g: SpaceGroup) =>
       priceCents: Money.toCents(spaceBoxPriceSoles(g, i)),
       capacity: spaceSeats(g),
       boxLabel: label,
-      zone: null,
       unitNoun: (g.name.trim() || "Box").toLowerCase(),
       saleEndsAt: null,
       description: null,
@@ -157,7 +160,6 @@ const newSpaceGroup = (): SpaceGroup => ({
 
 const TICKET_KIND_META: Record<TicketKind, { label: string; tint: string }> = {
   general: { label: "General", tint: "rgba(184,124,255,0.55)" },
-  vip: { label: "VIP", tint: "rgba(255,206,59,0.55)" },
   box: { label: "Box", tint: "rgba(34,209,127,0.55)" },
 };
 
@@ -270,15 +272,16 @@ export function EventComposer(props: EventComposerProps) {
       url: ev.venueUrl,
       source: (ev.venueSource ?? "manual") as VenueValue["source"],
     };
-    const rows: TicketRow[] = props.initial.ticketTypes.map((tt) => ({
+    const rows: TicketRow[] = props.initial.ticketTypes
+      .map((tt) => ({
       id: tt.id,
       rowKey: tt.id,
       name: tt.name,
-      kind: tt.kind,
+      kind: tt.kind as TicketKind,
       priceSoles: fromCents(tt.priceCents),
-      capacity: String(tt.capacity),
+      // El form usa un solo campo de cupo; el dominio lo separa por kind.
+      capacity: String(tt.kind === "box" ? tt.seats : tt.stock),
       boxLabel: tt.boxLabel ?? "",
-      zone: tt.zone ?? "",
       unitNoun: tt.unitNoun ?? "",
       saleEndsAt: tt.saleEndsAt ?? "",
       description: tt.description ?? "",
@@ -287,6 +290,9 @@ export function EventComposer(props: EventComposerProps) {
         priceSoles: fromCents(t.priceCents),
         endsAt: t.endsAt,
       })),
+      guestListEnabled: tt.kind === "box" ? false : tt.guestListEnabled,
+      guestListCap:
+        tt.kind === "box" || tt.guestListCap == null ? "" : String(tt.guestListCap),
     }));
     const durationHoursFromEdit = ev.endsAt
       ? Math.round((new Date(ev.endsAt).getTime() - new Date(ev.startsAt).getTime()) / 3_600_000)
@@ -312,11 +318,12 @@ export function EventComposer(props: EventComposerProps) {
                 capacity: "200",
                 kind: "general" as TicketKind,
                 boxLabel: "",
-                zone: "",
                 unitNoun: "",
                 saleEndsAt: "",
                 description: "",
                 presaleTiers: [],
+                guestListEnabled: false,
+                guestListCap: "",
               },
             ],
       publishNow: ev.status === "published",
@@ -351,11 +358,12 @@ export function EventComposer(props: EventComposerProps) {
         capacity: "200",
         kind: "general",
         boxLabel: "",
-        zone: "",
         unitNoun: "",
         saleEndsAt: "",
         description: "",
         presaleTiers: [],
+        guestListEnabled: false,
+        guestListCap: "",
       },
     ],
   );
@@ -380,7 +388,7 @@ export function EventComposer(props: EventComposerProps) {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [publishNow, setPublishNow] = useState(seedFromEdit?.publishNow ?? true);
   const [openSheet, setOpenSheet] = useState<
-    null | "tickets" | "promoters" | "description" | "promos"
+    null | "tickets" | "promoters" | "description" | "promos" | "guestlist"
   >(null);
   const [highlight, setHighlight] = useState<
     null | "nombre" | "fecha" | "hora" | "entradas"
@@ -452,12 +460,52 @@ export function EventComposer(props: EventComposerProps) {
 
   const validTickets = tickets.filter(
     (t) =>
-      t.name &&
+      t.name.trim() &&
       Number(t.capacity) > 0 &&
       (t.kind !== "box" || t.boxLabel.trim().length > 0),
   );
 
   const hasValidSpace = spaceGroups.some((g) => spaceCount(g) >= 1);
+
+  // ── Lista de invitados (config a nivel evento) ──────────────────────────
+  // La cortesía se emite sobre UNA entrada general real ("entran como"). El
+  // estado vive en los campos por-ticket (guestListEnabled/Cap) — fuente de
+  // verdad del payload — y esta sección es su único editor. Solo entradas
+  // generales con nombre son elegibles como destino.
+  const guestEligible = tickets.filter((t) => t.kind !== "box" && t.name.trim());
+  const guestEnabledTicket = tickets.find((t) => t.kind !== "box" && t.guestListEnabled) ?? null;
+  const guestListEnabled = !!guestEnabledTicket;
+  const guestListKey = guestEnabledTicket?.rowKey ?? null;
+  const guestListCap = guestEnabledTicket?.guestListCap ?? "";
+
+  // Activa/desactiva la lista. Al activar, apunta a la entrada elegida (o la
+  // primera general). Al desactivar, limpia el flag y el cupo de todas.
+  const setGuestListOnEntry = (targetKey: string | null) => {
+    setTickets((prev) =>
+      prev.map((t) => {
+        const isTarget = t.kind !== "box" && targetKey !== null && t.rowKey === targetKey;
+        return {
+          ...t,
+          guestListEnabled: isTarget,
+          // Conserva el cupo solo en la entrada destino; lo borra en el resto.
+          guestListCap: isTarget ? t.guestListCap : "",
+        };
+      }),
+    );
+  };
+  const toggleGuestList = (on: boolean) =>
+    setGuestListOnEntry(on ? (guestListKey ?? guestEligible[0]?.rowKey ?? null) : null);
+  const setGuestListCap = (cap: string) => {
+    if (!guestListKey) return;
+    const clean = cap.replace(/[^0-9]/g, "");
+    setTickets((prev) =>
+      prev.map((t) => (t.rowKey === guestListKey ? { ...t, guestListCap: clean } : t)),
+    );
+  };
+
+  // Nombres de entrada repetidos (sin distinción de mayúsculas ni espacios):
+  // confunden al comprador (no sabe cuál elegir). Se bloquea publicar.
+  const dupTicketKeys = useMemo(() => duplicateTicketRowKeys(tickets), [tickets]);
 
   const missingFields = useMemo(() => {
     const m: string[] = [];
@@ -468,12 +516,17 @@ export function EventComposer(props: EventComposerProps) {
     return m;
   }, [title, date, time, validTickets.length, hasValidSpace]);
 
-  const ready = missingFields.length === 0;
+  const ready = missingFields.length === 0 && dupTicketKeys.size === 0;
 
   // ---------- focus al campo faltante ----------
   const focusFirstMissing = () => {
     const first = missingFields[0];
-    if (!first) return;
+    // Sin campos faltantes pero con nombres repetidos → abre el editor de
+    // entradas para que vea el error marcado en rojo.
+    if (!first) {
+      if (dupTicketKeys.size > 0) setOpenSheet("tickets");
+      return;
+    }
     const id = first as "nombre" | "fecha" | "hora" | "entradas";
     setHighlight(id);
     if (id === "nombre") {
@@ -524,10 +577,14 @@ export function EventComposer(props: EventComposerProps) {
           priceCents: toCents(t.priceSoles),
           capacity: Number(t.capacity),
           boxLabel: t.kind === "box" ? t.boxLabel.trim() : null,
-          zone: t.zone.trim() || null,
           unitNoun: t.kind === "box" ? t.unitNoun.trim() || null : null,
           saleEndsAt: t.saleEndsAt || null,
           description: t.description.trim() || null,
+          guestListEnabled: t.kind === "box" ? false : t.guestListEnabled,
+          guestListCap:
+            t.kind === "box" || !t.guestListEnabled || t.guestListCap.trim() === ""
+              ? null
+              : Number(t.guestListCap),
           ...presaleTiersPayload(t),
         })),
         // Expandir cada grupo de espacios a N boxes (Box A…F).
@@ -696,10 +753,14 @@ export function EventComposer(props: EventComposerProps) {
           priceCents: toCents(t.priceSoles),
           capacity: Number(t.capacity),
           boxLabel: t.kind === "box" ? t.boxLabel.trim() : null,
-          zone: t.zone.trim() || null,
           unitNoun: t.kind === "box" ? t.unitNoun.trim() || null : null,
           saleEndsAt: t.saleEndsAt || null,
           description: t.description.trim() || null,
+          guestListEnabled: t.kind === "box" ? false : t.guestListEnabled,
+          guestListCap:
+            t.kind === "box" || !t.guestListEnabled || t.guestListCap.trim() === ""
+              ? null
+              : Number(t.guestListCap),
           ...presaleTiersPayload(t),
         });
       }
@@ -721,11 +782,10 @@ export function EventComposer(props: EventComposerProps) {
         const nextPrice = toCents(t.priceSoles);
         if (nextPrice !== orig.priceCents) ttPatch.priceCents = nextPrice;
         const nextCap = Number(t.capacity);
-        if (nextCap !== orig.capacity) ttPatch.capacity = nextCap;
+        const origCap = orig.kind === "box" ? orig.seats : orig.stock;
+        if (nextCap !== origCap) ttPatch.capacity = nextCap;
         const nextLabel = t.kind === "box" ? t.boxLabel.trim() : null;
         if (nextLabel !== orig.boxLabel) ttPatch.boxLabel = nextLabel;
-        const nextZone = t.zone.trim() || null;
-        if (nextZone !== orig.zone) ttPatch.zone = nextZone;
         const nextNoun =
           t.kind === "box" ? t.unitNoun.trim() || null : null;
         if (nextNoun !== orig.unitNoun) ttPatch.unitNoun = nextNoun;
@@ -733,6 +793,14 @@ export function EventComposer(props: EventComposerProps) {
         if (nextSaleEndsAt !== orig.saleEndsAt) ttPatch.saleEndsAt = nextSaleEndsAt;
         const nextDesc = t.description.trim() || null;
         if (nextDesc !== orig.description) ttPatch.description = nextDesc;
+        // Lista de invitados (solo entradas generales).
+        if (t.kind !== "box" && orig.kind !== "box") {
+          const nextGLEnabled = t.guestListEnabled;
+          if (nextGLEnabled !== orig.guestListEnabled) ttPatch.guestListEnabled = nextGLEnabled;
+          const nextGLCap =
+            !t.guestListEnabled || t.guestListCap.trim() === "" ? null : Number(t.guestListCap);
+          if (nextGLCap !== orig.guestListCap) ttPatch.guestListCap = nextGLCap;
+        }
         // Tiers: siempre enviamos para que el backend reemplace
         const newTiers = presaleTiersPayload(t).presaleTiers;
         const origTiersKey = orig.presaleTiers.map(x => `${x.priceCents}:${x.endsAt}`).join("|");
@@ -1062,6 +1130,23 @@ export function EventComposer(props: EventComposerProps) {
             highlight={highlight === "entradas"}
           />
 
+          {/* Lista de invitados — cortesías que reparten los promotores. */}
+          <CardButton
+            icon={<IconGuestList />}
+            label="Lista de invitados"
+            hint={
+              guestListEnabled
+                ? guestListCap.trim()
+                  ? `Activa · hasta ${Number(guestListCap).toLocaleString("es-PE")} cortesías`
+                  : "Activa · sin tope de cortesías"
+                : guestEligible.length
+                  ? "Opcional — deja que tus promotores inviten gratis"
+                  : "Crea una entrada general para habilitarla"
+            }
+            onClick={() => setOpenSheet("guestlist")}
+            active={guestListEnabled}
+          />
+
           {/* Promociones — 2x1 / 3x2. Solo en edit: requiere entradas con id. */}
           {isEdit && (
             <CardButton
@@ -1197,6 +1282,20 @@ export function EventComposer(props: EventComposerProps) {
               setTickets={setTickets}
               spaceGroups={spaceGroups}
               setSpaceGroups={setSpaceGroups}
+            />
+          </Sheet>
+        )}
+        {openSheet === "guestlist" && (
+          <Sheet onClose={() => setOpenSheet(null)} title="Lista de invitados">
+            <GuestListEditor
+              eligible={guestEligible}
+              enabled={guestListEnabled}
+              selectedKey={guestListKey}
+              cap={guestListCap}
+              isEdit={isEdit}
+              onToggle={toggleGuestList}
+              onSelectKey={setGuestListOnEntry}
+              onCapChange={setGuestListCap}
             />
           </Sheet>
         )}
@@ -1647,6 +1746,148 @@ function Sheet({
 }
 
 // ============================================================
+// GuestListEditor — sección propia de la lista de invitados (no pegada a la
+// entrada). El organizador: 1) activa la lista, 2) elige sobre qué entrada
+// general entran las cortesías ("entran como"), 3) le pone un cupo total. El
+// reparto por promotor (cuántas cortesías puede dar cada uno) vive en Equipo.
+// ============================================================
+function GuestListEditor({
+  eligible,
+  enabled,
+  selectedKey,
+  cap,
+  isEdit,
+  onToggle,
+  onSelectKey,
+  onCapChange,
+}: {
+  eligible: TicketRow[];
+  enabled: boolean;
+  selectedKey: string | null;
+  cap: string;
+  isEdit: boolean;
+  onToggle: (on: boolean) => void;
+  onSelectKey: (rowKey: string) => void;
+  onCapChange: (cap: string) => void;
+}) {
+  // Sin entradas generales no hay sobre qué emitir cortesías.
+  if (eligible.length === 0) {
+    return (
+      <div className="rounded-2xl border border-dashed border-cart-line bg-cart-bg-elev px-4 py-6 text-center">
+        <p className="text-[14px] font-medium text-white">Primero crea una entrada general</p>
+        <p className="mt-1 text-[12.5px] text-cart-ink-3">
+          Los invitados entran como una entrada real (gratis). Crea al menos una
+          entrada general y vuelve aquí para activar la lista.
+        </p>
+      </div>
+    );
+  }
+
+  const target = eligible.find((t) => t.rowKey === selectedKey) ?? null;
+  const aforo = Number(target?.capacity || 0);
+  const capNum = Number(cap || 0);
+  const overAforo = enabled && cap.trim() !== "" && capNum > aforo;
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Toggle maestro */}
+      <div className="flex items-center justify-between gap-3 rounded-2xl bg-cart-bg-elev px-4 py-3">
+        <div className="flex flex-col gap-0.5">
+          <span className="text-[14px] font-semibold text-white">Activar lista de invitados</span>
+          <span className="text-[12px] text-cart-ink-3">
+            Tus promotores invitan gratis; cada cortesía cuenta en el aforo.
+          </span>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={enabled}
+          onClick={() => onToggle(!enabled)}
+          className={
+            "relative h-[26px] w-[44px] shrink-0 rounded-full transition-colors " +
+            (enabled ? "bg-cart-accent" : "bg-cart-line-strong")
+          }
+        >
+          <span
+            className={
+              "absolute top-[2px] h-[22px] w-[22px] rounded-full bg-white transition-all " +
+              (enabled ? "left-[20px]" : "left-[2px]")
+            }
+          />
+        </button>
+      </div>
+
+      {enabled && (
+        <>
+          {/* Entran como — sobre qué entrada general se emiten las cortesías */}
+          <div className="flex flex-col gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">
+              Los invitados entran como
+            </span>
+            <div className="flex flex-col gap-1.5">
+              {eligible.map((t) => {
+                const active = t.rowKey === selectedKey;
+                return (
+                  <button
+                    key={t.rowKey}
+                    type="button"
+                    onClick={() => onSelectKey(t.rowKey)}
+                    className={
+                      "flex items-center justify-between rounded-xl border px-3.5 py-2.5 text-left transition " +
+                      (active
+                        ? "border-cart-accent bg-cart-accent-soft"
+                        : "border-cart-line bg-cart-bg-elev hover:border-cart-line-strong")
+                    }
+                  >
+                    <span className="text-[14px] font-medium text-white">{t.name.trim()}</span>
+                    <span
+                      className={
+                        "grid size-[18px] place-items-center rounded-full border " +
+                        (active ? "border-cart-accent" : "border-cart-line-strong")
+                      }
+                    >
+                      {active && <span className="size-[10px] rounded-full bg-cart-accent" />}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Cupo total de cortesías del evento */}
+          <label className="flex flex-col gap-1.5">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">
+              Cupo total de cortesías
+            </span>
+            <div className="flex items-center gap-2.5">
+              <input
+                inputMode="numeric"
+                value={cap}
+                onChange={(e) => onCapChange(e.target.value)}
+                placeholder="Sin tope"
+                className="w-28 rounded-xl bg-cart-bg-elev-2 px-3 py-2 text-[15px] font-semibold text-white outline-none placeholder:text-cart-ink-4"
+              />
+              <span className={"text-[12px] " + (overAforo ? "text-rose-300" : "text-cart-ink-4")}>
+                {cap.trim() === ""
+                  ? `Sin tope · hasta ${aforo.toLocaleString("es-PE")} de aforo`
+                  : `${capNum.toLocaleString("es-PE")} cortesías ≤ ${aforo.toLocaleString("es-PE")} de aforo`}
+              </span>
+            </div>
+          </label>
+
+          {/* Pista del reparto por promotor (solo útil en evento ya creado) */}
+          <p className="rounded-xl bg-cart-bg-elev px-3.5 py-2.5 text-[12px] leading-relaxed text-cart-ink-3">
+            {isEdit
+              ? "Asigna a cada promotor su propio cupo de invitados desde Promotores."
+              : "Tras crear el evento, podrás darle a cada promotor su propio cupo de invitados desde Promotores."}
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
 // PresaleTiersEditor — múltiples tramos de preventa por fecha.
 // Cada tramo: precio + hasta cuándo. El backend elige el activo.
 // ============================================================
@@ -1764,7 +2005,6 @@ function DescriptionField({ value, onChange }: { value: string; onChange: (v: st
 function BoxGroupEditor({
   boxes,
   canDelete,
-  knownZones,
   onUpdateAll,
   onUpdateOne,
   onRemove,
@@ -1774,7 +2014,6 @@ function BoxGroupEditor({
 }: {
   boxes: TicketRow[];
   canDelete: boolean;
-  knownZones: string[];
   onUpdateAll: (patch: Partial<TicketRow>) => void;
   onUpdateOne: (rowKey: string, patch: Partial<TicketRow>) => void;
   onRemove: (rowKey: string) => void;
@@ -1832,30 +2071,12 @@ function BoxGroupEditor({
       <AdvancedToggle
         open={advOpen}
         onToggle={() => setAdvOpen((v) => !v)}
-        hasContent={!!(first.unitNoun || first.zone || first.description || presaleRow.presaleTiers.length > 0)}
+        hasContent={!!(first.unitNoun || first.description || presaleRow.presaleTiers.length > 0)}
       />
       {advOpen && (
-        <>
-          <div className="mt-2">
-            <UnitNounPicker value={first.unitNoun} onChange={(v) => onUpdateAll({ unitNoun: v })} />
-          </div>
-          <label className="mt-2 flex items-center gap-2 rounded-xl bg-cart-bg-elev px-3 py-2">
-            <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">Zona</span>
-            <input
-              value={first.zone}
-              onChange={(e) => onUpdateAll({ zone: e.target.value })}
-              placeholder="Opcional — ej. Platinum, VIP"
-              maxLength={60}
-              list="box-group-zones"
-              className="w-full bg-transparent text-[13.5px] text-white outline-none placeholder:text-cart-ink-4"
-            />
-            <datalist id="box-group-zones">
-              {knownZones.filter((z) => z !== first.zone).map((z) => (
-                <option key={z} value={z} />
-              ))}
-            </datalist>
-          </label>
-        </>
+        <div className="mt-2">
+          <UnitNounPicker value={first.unitNoun} onChange={(v) => onUpdateAll({ unitNoun: v })} />
+        </div>
       )}
 
       {/* Individual labels + precio override */}
@@ -1962,6 +2183,28 @@ function AdvancedToggle({ open, onToggle, hasContent }: { open: boolean; onToggl
   );
 }
 
+// Nombre normalizado para comparar entradas: sin espacios al borde, espacios
+// internos colapsados y en minúscula → "General", "general " y "General  "
+// cuentan como el mismo nombre.
+const normTicketName = (s: string): string => s.trim().replace(/\s+/g, " ").toLowerCase();
+
+// rowKeys de entradas (no-box) cuyo nombre se repite. Los boxes se distinguen
+// por su etiqueta, no aplica.
+function duplicateTicketRowKeys(rows: TicketRow[]): Set<string> {
+  const byName = new Map<string, string[]>();
+  for (const t of rows) {
+    if (t.kind === "box") continue;
+    const norm = normTicketName(t.name);
+    if (!norm) continue;
+    const arr = byName.get(norm) ?? [];
+    arr.push(t.rowKey);
+    byName.set(norm, arr);
+  }
+  const dups = new Set<string>();
+  for (const arr of byName.values()) if (arr.length > 1) arr.forEach((k) => dups.add(k));
+  return dups;
+}
+
 // ============================================================
 function TicketsEditor({
   tickets,
@@ -1999,30 +2242,23 @@ function TicketsEditor({
       {
         rowKey: uid(),
         name: meta.label,
-        priceSoles:
-          kind === "vip" ? "80" : kind === "box" ? "200" : "30",
+        priceSoles: kind === "box" ? "200" : "30",
         capacity: kind === "box" ? "8" : "100",
         kind,
         boxLabel:
           kind === "box"
             ? String.fromCharCode(65 + tickets.filter((t) => t.kind === "box").length)
             : "",
-        zone: "",
         unitNoun: "",
         saleEndsAt: "",
         description: "",
         presaleTiers: [],
+        guestListEnabled: false,
+        guestListCap: "",
       },
     ]);
   };
 
-  const knownZones = useMemo(
-    () =>
-      Array.from(
-        new Set(tickets.map((t) => t.zone.trim()).filter((z) => z.length > 0)),
-      ),
-    [tickets],
-  );
   const [bulkOpen, setBulkOpen] = useState(false);
 
   const nonBoxTickets = tickets.filter((t) => t.kind !== "box");
@@ -2039,13 +2275,17 @@ function TicketsEditor({
     return Array.from(map.values());
   })();
 
+  const dupKeys = duplicateTicketRowKeys(tickets);
+
   return (
     <div className="flex flex-col gap-3 pb-4">
-      {nonBoxTickets.map((t) => (
+      {nonBoxTickets.map((t) => {
+        const isDup = dupKeys.has(t.rowKey);
+        return (
         <div
           key={t.rowKey}
           className="rounded-2xl border border-cart-line bg-cart-bg-elev-2 p-3"
-          style={{ boxShadow: `inset 0 0 0 1px ${TICKET_KIND_META[t.kind].tint}` }}
+          style={{ boxShadow: `inset 0 0 0 1px ${isDup ? "rgba(244,63,94,0.55)" : TICKET_KIND_META[t.kind].tint}` }}
         >
           <div className="flex flex-col gap-0.5">
             <span className="text-[9.5px] font-semibold uppercase tracking-[0.12em] text-cart-ink-4">
@@ -2058,7 +2298,10 @@ function TicketsEditor({
               <input
                 value={t.name}
                 onChange={(e) => update(t.rowKey, { name: e.target.value })}
-                className="flex-1 bg-transparent text-[15px] font-semibold tracking-[-0.01em] text-white outline-none placeholder:text-cart-ink-3 border-b border-white/20 pb-0.5 focus:border-cart-accent transition-colors"
+                className={
+                  "flex-1 bg-transparent text-[15px] font-semibold tracking-[-0.01em] text-white outline-none placeholder:text-cart-ink-3 border-b pb-0.5 transition-colors " +
+                  (isDup ? "border-rose-400/70 focus:border-rose-400" : "border-white/20 focus:border-cart-accent")
+                }
                 placeholder="Nombre — ej. General, VIP, After"
               />
               {tickets.length > 1 && (
@@ -2075,6 +2318,11 @@ function TicketsEditor({
               )}
             </div>
           </div>
+          {isDup && (
+            <p className="mt-1.5 text-[11px] font-medium text-rose-300">
+              Ya tienes una entrada con este nombre. Ponle uno distinto (ej. General, VIP, General VIP).
+            </p>
+          )}
           <div className="mt-3 grid grid-cols-2 gap-2">
             <div className="relative">
               <Stepper
@@ -2098,34 +2346,17 @@ function TicketsEditor({
           <AdvancedToggle
             open={advancedOpen.has(t.rowKey)}
             onToggle={() => toggleAdvanced(t.rowKey)}
-            hasContent={!!(t.zone || t.description || t.presaleTiers.length > 0)}
+            hasContent={!!(t.description || t.presaleTiers.length > 0)}
           />
           {advancedOpen.has(t.rowKey) && (
             <>
-              <label className="mt-2 flex items-center gap-2 rounded-xl bg-cart-bg-elev px-3 py-2">
-                <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">
-                  Zona
-                </span>
-                <input
-                  value={t.zone}
-                  onChange={(e) => update(t.rowKey, { zone: e.target.value })}
-                  placeholder="Ej: Boxes Premium · opcional"
-                  maxLength={60}
-                  list={`zones-${t.rowKey}`}
-                  className="w-full bg-transparent text-[13.5px] text-white outline-none placeholder:text-cart-ink-4"
-                />
-                <datalist id={`zones-${t.rowKey}`}>
-                  {knownZones.filter((z) => z !== t.zone).map((z) => (
-                    <option key={z} value={z} />
-                  ))}
-                </datalist>
-              </label>
               <DescriptionField value={t.description} onChange={(v) => update(t.rowKey, { description: v })} />
               <PresaleTiersEditor tiers={t.presaleTiers} base={t.priceSoles} onChange={(tiers) => update(t.rowKey, { presaleTiers: tiers })} />
             </>
           )}
         </div>
-      ))}
+        );
+      })}
 
       {/* Un grupo por tipo de unidad (Boxes, Mesas, Lounges…), no todo en uno */}
       {boxGroups.map((group) => {
@@ -2136,7 +2367,6 @@ function TicketsEditor({
               key={first.rowKey}
               boxes={group}
               canDelete={tickets.length > 1}
-              knownZones={knownZones}
               onUpdateAll={(patch) => updateAll(group.map((b) => b.rowKey), patch)}
               onUpdateOne={(rowKey, patch) => update(rowKey, patch)}
               onRemove={(rowKey) => remove(rowKey)}
@@ -2156,11 +2386,12 @@ function TicketsEditor({
                     capacity: first.capacity,
                     kind: "box",
                     boxLabel: `${nounCap} ${next}`,
-                    zone: first.zone,
                     unitNoun: first.unitNoun,
                     saleEndsAt: "",
                     description: "",
                     presaleTiers: [],
+                    guestListEnabled: false,
+                    guestListCap: "",
                   },
                 ]);
               }}
@@ -2220,15 +2451,11 @@ function TicketsEditor({
             <AdvancedToggle
               open={advancedOpen.has(t.rowKey)}
               onToggle={() => toggleAdvanced(t.rowKey)}
-              hasContent={!!(t.unitNoun || t.zone || t.description || t.presaleTiers.length > 0)}
+              hasContent={!!(t.unitNoun || t.description || t.presaleTiers.length > 0)}
             />
             {advancedOpen.has(t.rowKey) && (
               <>
                 <UnitNounPicker value={t.unitNoun} onChange={(v) => update(t.rowKey, { unitNoun: v })} />
-                <label className="mt-2 flex items-center gap-2 rounded-xl bg-cart-bg-elev px-3 py-2">
-                  <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">Zona</span>
-                  <input value={t.zone} onChange={(e) => update(t.rowKey, { zone: e.target.value })} placeholder="Opcional — ej. Platinum, VIP" maxLength={60} className="w-full bg-transparent text-[13.5px] text-white outline-none placeholder:text-cart-ink-4" />
-                </label>
                 <DescriptionField value={t.description} onChange={(v) => update(t.rowKey, { description: v })} />
                 {/* Preventa de un box: precio bajo + fecha (un box es 1 unidad) */}
                 <PresaleTiersEditor tiers={t.presaleTiers} base={t.priceSoles} onChange={(tiers) => update(t.rowKey, { presaleTiers: tiers })} />
@@ -2605,6 +2832,15 @@ function IconTicket() {
         strokeWidth="1.4"
       />
       <path d="M7 4v6" stroke="currentColor" strokeWidth="1.4" strokeDasharray="1.5 1.5" />
+    </svg>
+  );
+}
+function IconGuestList() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+      <circle cx="5" cy="4.5" r="2" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M1.5 11.5c0-2.2 1.6-3.4 3.5-3.4 1 0 1.9.3 2.5.9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      <path d="M9 9.5l1.4 1.4L13 8.3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
