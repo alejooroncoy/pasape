@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import { Link, useRouter } from "@/i18n/navigation";
@@ -323,7 +323,17 @@ function TicketSelectScreen({
 }
 
 // ── Página principal ───────────────────────────────────────────────────────
+// useSearchParams() exige un <Suspense> en el árbol para poder prerenderizar
+// la ruta sin query (Next 16). Envolvemos el contenido real.
 export default function WalletPage() {
+  return (
+    <Suspense fallback={null}>
+      <WalletPageInner />
+    </Suspense>
+  );
+}
+
+function WalletPageInner() {
   const tickets = useMyTickets();
   const { data: me, isLoading: meLoading } = useCurrentUser();
   const online = useOnline();
