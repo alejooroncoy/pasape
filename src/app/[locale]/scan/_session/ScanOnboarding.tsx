@@ -8,27 +8,39 @@ import { useJoinByCode } from "@/lib/scanning/hooks/useScannerSession";
 
 // Onboarding del portero: login Google → nombre/DNI → código de evento.
 // Al canjear el código se crea la sesión con binding 24h y el gate deja pasar.
+//
+// `initialCode` llega del link compartido (`/scan?door=CODE`): el portero no
+// teclea nada, solo confirma quién es y entra. Sin él, ingresa el código a mano.
 
-export function ScanOnboarding({ eventSlug }: { eventSlug: string }) {
+export function ScanOnboarding({ initialCode }: { initialCode?: string }) {
   const me = useCurrentUser();
   const isLogged = !!me.data?.user;
   const redirectTo =
     typeof window !== "undefined" ? window.location.href : undefined;
   const { signIn, pending: signInPending } = useGoogleSignIn({ redirectTo });
-  const join = useJoinByCode(eventSlug);
+  const join = useJoinByCode();
 
-  const [code, setCode] = useState("");
+  const fromLink = !!initialCode;
+  const [code, setCode] = useState(initialCode ?? "");
   const [fullName, setFullName] = useState("");
   const [dni, setDni] = useState("");
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!code.trim()) return;
-    join.mutate({
-      code: code.trim(),
-      fullName: fullName.trim() || me.data?.user.fullName || null,
-      dniLast2: dni.trim() ? dni.trim().slice(-2) : null,
-    });
+    join.mutate(
+      {
+        code: code.trim(),
+        fullName: fullName.trim() || me.data?.user.fullName || null,
+        dni: dni.trim() || null,
+      },
+      {
+        // Canjeado el código → modo escaneo del evento que resolvió el código.
+        onSuccess: (res) => {
+          window.location.href = `/scan?event=${encodeURIComponent(res.eventSlug)}`;
+        },
+      },
+    );
   };
 
   return (
@@ -70,15 +82,33 @@ export function ScanOnboarding({ eventSlug }: { eventSlug: string }) {
           </button>
         ) : (
           <form onSubmit={submit} style={{ display: "grid", gap: 12 }}>
-            <Field label="Código del evento">
-              <input
-                value={code}
-                onChange={(e) => setCode(e.target.value.toUpperCase())}
-                placeholder="Ej. PUERTA-A1B2"
-                autoCapitalize="characters"
-                style={{ ...input, fontFamily: FONT_MONO, letterSpacing: 1 }}
-              />
-            </Field>
+            {fromLink ? (
+              <Field label="Código del evento">
+                <div
+                  style={{
+                    ...input,
+                    fontFamily: FONT_MONO,
+                    letterSpacing: 3,
+                    fontWeight: 700,
+                    fontSize: 20,
+                    color: C.purple,
+                    textAlign: "center",
+                  }}
+                >
+                  {code}
+                </div>
+              </Field>
+            ) : (
+              <Field label="Código del evento">
+                <input
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.toUpperCase())}
+                  placeholder="Ej. K7P2QX"
+                  autoCapitalize="characters"
+                  style={{ ...input, fontFamily: FONT_MONO, letterSpacing: 1 }}
+                />
+              </Field>
+            )}
             <Field label="Tu nombre (opcional)">
               <input
                 value={fullName}

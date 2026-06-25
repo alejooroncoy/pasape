@@ -193,7 +193,8 @@ export default function OrgDoorLinkPage({ params }: { params: Params }) {
         >
           <Dot color={C.green} />
           <div style={{ flex: 1, fontSize: 12, color: C.dim }}>
-            El link rota cada hora por seguridad. Generar otro lo invalida.
+            Quien abra el link entra con un toque. El acceso de cada portero dura
+            24 horas en su dispositivo.
           </div>
         </div>
       </div>

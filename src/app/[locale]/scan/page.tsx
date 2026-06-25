@@ -11,22 +11,22 @@ import { countPending } from "@/lib/scanning/scanQueue";
 import { syncPending } from "@/lib/scanning/syncWorker";
 import { useEvent } from "@/lib/events/hooks/useEvents";
 import { useEventStats } from "@/lib/events/hooks/useEventStats";
-import { useRealtimeEventStats } from "@/lib/events/hooks/useRealtimeEventStats";
-import { useScanRealtime } from "@/lib/scanning/hooks/useScanRealtime";
 import { api } from "@/lib/_shared/api-client";
-import { useScannerSession } from "@/lib/scanning/hooks/useScannerSession";
+import { useScannerSession, useDoors, useSetZone } from "@/lib/scanning/hooks/useScannerSession";
 import { ScanOnboarding } from "./_session/ScanOnboarding";
 
-// ─── Haptic ────────────────────────────────────────────────────────────────
-const haptic = (kind: "valid" | "already_used" | "invalid") => {
-  if (typeof navigator === "undefined" || !("vibrate" in navigator)) return;
-  if (kind === "valid")             navigator.vibrate([60]);
-  else if (kind === "already_used") navigator.vibrate([40, 60, 40]);
-  else                              navigator.vibrate([120, 60, 120]);
-};
-
 // ─── Tipos ─────────────────────────────────────────────────────────────────
-type ScanKind = "valid" | "already_used" | "invalid";
+// "wrong_zone": la entrada no es de la puerta del portero (se valida en su
+// puerta). Se trata como advertencia (amarillo), no como ingreso ni error.
+type ScanKind = "valid" | "already_used" | "invalid" | "wrong_zone";
+
+// ─── Haptic ────────────────────────────────────────────────────────────────
+const haptic = (kind: ScanKind) => {
+  if (typeof navigator === "undefined" || !("vibrate" in navigator)) return;
+  if (kind === "valid")                                   navigator.vibrate([60]);
+  else if (kind === "already_used" || kind === "wrong_zone") navigator.vibrate([40, 60, 40]);
+  else                                                    navigator.vibrate([120, 60, 120]);
+};
 
 type ScanResult = {
   kind:        ScanKind;
@@ -93,26 +93,49 @@ function getDetector(): DetectorLike | null {
 function fmtTime(iso: string) {
   return new Date(iso).toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit" });
 }
-function toneFor(kind: ScanKind)     { return kind === "valid" ? C.green  : kind === "already_used" ? C.yellow : C.red; }
-function toneSoftFor(kind: ScanKind) { return kind === "valid" ? C.greenSoft : kind === "already_used" ? C.yellowSoft : C.redSoft; }
+const isWarn = (k: ScanKind) => k === "already_used" || k === "wrong_zone";
+function toneFor(kind: ScanKind)     { return kind === "valid" ? C.green  : isWarn(kind) ? C.yellow : C.red; }
+function toneSoftFor(kind: ScanKind) { return kind === "valid" ? C.greenSoft : isWarn(kind) ? C.yellowSoft : C.redSoft; }
+
+// Texto del resultado, centralizado para los dos render (mobile/desktop).
+function titleFor(r: ScanResult): string {
+  if (r.kind === "valid") return r.holderName ?? "Entrada válida";
+  if (r.kind === "already_used") return `Ya ingresó${r.scannedAt ? ` · ${fmtTime(r.scannedAt)}` : ""}`;
+  if (r.kind === "wrong_zone") return "Entrada de otra puerta";
+  return "QR inválido";
+}
+function subtitleFor(r: ScanResult): string {
+  if (r.kind === "valid")
+    return [r.typeName, r.boxLabel ? `Box ${r.boxLabel}` : null, r.dniLast2 ? `DNI ··${r.dniLast2}` : null].filter(Boolean).join("  ·  ");
+  if (r.kind === "already_used") return r.holderName ?? "";
+  if (r.kind === "wrong_zone") return r.typeName ? `${r.typeName} · valídala en su puerta` : "Esta entrada no es de tu puerta";
+  return r.typeName ?? "QR no pertenece a este evento";
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 export default function ScanPage() {
   return <Suspense fallback={null}><Gate /></Suspense>;
 }
 
-// Gate de acceso: sin evento → deja pasar (Inner maneja el estado). Con evento,
-// exige sesión activa (membership de org o sesión de portero con código).
+// Gate de acceso:
+//  - `?door=CODE` (link del portero) → onboarding con el código precargado.
+//    Tras canjearlo, redirige a `?event=<slug>` ya con sesión activa.
+//  - `?event=<slug>` → exige sesión activa (membership de org o sesión de
+//    portero) antes de dejar escanear.
+//  - sin nada → deja pasar (Inner maneja el estado vacío).
 function Gate() {
-  const eventSlug = useSearchParams().get("event");
+  const params = useSearchParams();
+  const eventSlug = params.get("event");
+  const doorCode = params.get("door");
   const session = useScannerSession(eventSlug ?? "");
 
+  if (doorCode && !eventSlug) return <ScanOnboarding initialCode={doorCode} />;
   if (!eventSlug) return <Inner />;
   if (session.isLoading) {
     return <div style={{ minHeight: "100dvh", background: C.bg }} />;
   }
   if (session.data?.active) return <Inner />;
-  return <ScanOnboarding eventSlug={eventSlug} />;
+  return <ScanOnboarding />;
 }
 
 function Inner() {
@@ -126,8 +149,9 @@ function Inner() {
   const { data: statsData } = useEventStats(eventSlug ?? "");
   const ev        = eventData?.event;
   // Aforo en vivo desde la DB (otras puertas) — reemplaza el polling de stats.
-  useScanRealtime(eventSlug ?? "");
-  useRealtimeEventStats(ev?.id, eventSlug ?? "");
+  // Sin Supabase Realtime: el portero por código no tiene sesión Supabase. Los
+  // stats se refrescan por polling de useEventStats (ver F3). El scan en vivo
+  // ya actualiza la UI localmente.
   const validated = statsData?.validated ?? 0;
   const capacity  = statsData?.capacity  ?? 0;
   const aforo     = capacity > 0 ? Math.round((validated / capacity) * 100) : 0;
@@ -460,11 +484,10 @@ function Inner() {
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 17, fontWeight: 800, letterSpacing: "-0.02em", lineHeight: 1.15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {result.kind === "valid" ? (result.holderName ?? "Entrada válida") : result.kind === "already_used" ? `Ya ingresó${result.scannedAt ? ` · ${fmtTime(result.scannedAt)}` : ""}` : "QR inválido"}
+            {titleFor(result)}
           </div>
           <div style={{ marginTop: 3, fontSize: 13, color: C.dim, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {result.kind === "valid" ? [result.typeName, result.boxLabel ? `Box ${result.boxLabel}` : null, result.dniLast2 ? `DNI ··${result.dniLast2}` : null].filter(Boolean).join("  ·  ")
-              : result.kind === "already_used" ? (result.holderName ?? "") : (result.typeName ?? "QR no pertenece a este evento")}
+            {subtitleFor(result)}
           </div>
         </div>
         <div style={{ fontSize: 11, color: C.dimmer, fontWeight: 500, flexShrink: 0 }}>toca</div>
@@ -627,7 +650,7 @@ function Inner() {
   // ─────────────────────────────────────────────────────────────────────────
   // Semi-transparente: la cámara sigue corriendo detrás — portero puede ya apuntar al siguiente QR
   const resultBg = result
-    ? result.kind === "valid" ? "rgba(4,28,14,0.88)" : result.kind === "already_used" ? "rgba(30,22,2,0.88)" : "rgba(32,5,5,0.88)"
+    ? result.kind === "valid" ? "rgba(4,28,14,0.88)" : isWarn(result.kind) ? "rgba(30,22,2,0.88)" : "rgba(32,5,5,0.88)"
     : "transparent";
 
   return (
@@ -728,6 +751,9 @@ function Inner() {
         </div>
       </div>
 
+      {/* ── Puerta activa del portero (solo si el evento tiene más de una) ── */}
+      {eventSlug && !result && <DoorPicker eventSlug={eventSlug} />}
+
       {/* ── Botón iniciar (cuando cámara no activa) ── */}
       {!active && !cameraError && (
         <div style={{ position: "absolute", bottom: "calc(env(safe-area-inset-bottom, 0px) + 100px)", left: 24, right: 24, zIndex: 10 }}>
@@ -819,6 +845,8 @@ function Inner() {
               ? (result.holderName ?? "Entrada válida")
               : result.kind === "already_used"
               ? "Ya ingresó"
+              : result.kind === "wrong_zone"
+              ? "Otra puerta"
               : "QR inválido"}
           </div>
 
@@ -835,6 +863,8 @@ function Inner() {
               ? [result.typeName, !result.boxLabel && result.dniLast2 ? `DNI ··${result.dniLast2}` : result.dniLast2 ? `DNI ··${result.dniLast2}` : null].filter(Boolean).join("  ·  ")
               : result.kind === "already_used"
               ? [result.holderName, result.scannedAt ? `Entró ${fmtTime(result.scannedAt)}` : null].filter(Boolean).join("  ·  ")
+              : result.kind === "wrong_zone"
+              ? "Esta entrada se valida en su puerta"
               : (result.typeName ?? "QR no pertenece a este evento")}
           </div>
 
@@ -904,6 +934,66 @@ function Inner() {
       )}
 
       <style>{CSS_ANIMATIONS}</style>
+    </div>
+  );
+}
+
+// ─── Selector de puerta del portero ─────────────────────────────────────────
+// Solo aparece si el evento tiene más de una puerta (si solo está la principal,
+// el portero entra directo y valida todo). Por defecto está en la principal;
+// puede cambiar cuando quiera (v1: lo elige él mismo).
+function DoorPicker({ eventSlug }: { eventSlug: string }) {
+  const doors = useDoors(eventSlug);
+  const session = useScannerSession(eventSlug);
+  const setZone = useSetZone(eventSlug);
+  const [open, setOpen] = useState(false);
+
+  const list = doors.data ?? [];
+  if (list.length <= 1) return null; // solo la principal → nada que elegir
+
+  const activeZoneId = session.data?.zoneId ?? null;
+  const activeName = activeZoneId
+    ? list.find((z) => z.id === activeZoneId)?.name ?? "Puerta"
+    : list.find((z) => z.isDefault)?.name ?? "Puerta principal";
+
+  const choose = (zoneId: string | null) =>
+    setZone.mutate(zoneId, { onSuccess: () => setOpen(false) });
+
+  return (
+    <div style={{ position: "absolute", top: "calc(env(safe-area-inset-top, 0px) + 60px)", left: "50%", transform: "translateX(-50%)", zIndex: 11, width: "calc(100% - 36px)", maxWidth: 340 }}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "9px 14px", borderRadius: 13, border: `1px solid ${C.purpleEdge}`, background: "rgba(10,10,18,0.78)", backdropFilter: "blur(10px)", color: "#fff", cursor: "pointer", fontFamily: FONT_DISPLAY, boxShadow: "0 4px 20px rgba(0,0,0,0.4)" }}
+      >
+        <span style={{ fontSize: 15 }}>🚪</span>
+        <span style={{ fontSize: 14, fontWeight: 700, flex: 1, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{activeName}</span>
+        <span style={{ fontSize: 12, color: "#C9B3FF", fontWeight: 600 }}>{open ? "Cerrar" : "Cambiar ›"}</span>
+      </button>
+
+      {open && (
+        <div style={{ marginTop: 8, borderRadius: 13, overflow: "hidden", background: "rgba(10,10,18,0.92)", backdropFilter: "blur(10px)", border: `1px solid ${C.line2}`, boxShadow: "0 12px 32px rgba(0,0,0,0.5)" }}>
+          {list.map((z) => {
+            const id = z.isDefault ? null : z.id;
+            const on = z.isDefault ? !activeZoneId : activeZoneId === z.id;
+            return (
+              <button
+                key={z.id}
+                type="button"
+                onClick={() => choose(id)}
+                disabled={setZone.isPending}
+                style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", border: 0, borderTop: `1px solid ${C.line}`, background: on ? "rgba(124,58,237,0.16)" : "transparent", color: "#fff", cursor: "pointer", fontFamily: FONT_DISPLAY, textAlign: "left" }}
+              >
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600 }}>{z.name}</div>
+                  <div style={{ fontSize: 11, color: C.dim, marginTop: 1 }}>{z.isDefault ? "Valida todas las entradas" : `${z.ticketTypeIds.length} ${z.ticketTypeIds.length === 1 ? "entrada" : "entradas"}`}</div>
+                </div>
+                {on && <span style={{ color: C.purple, fontWeight: 800 }}>✓</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

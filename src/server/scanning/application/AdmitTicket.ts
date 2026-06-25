@@ -1,6 +1,6 @@
 import type { Result } from "@/server/_shared/result";
 import { ok } from "@/server/_shared/result";
-import type { TicketRepository } from "@/server/tickets/ports/TicketRepository";
+import type { ScannerRef, TicketRepository } from "@/server/tickets/ports/TicketRepository";
 import type { ScanResult } from "../domain/ScanResult";
 
 type Deps = { ticketRepo: TicketRepository };
@@ -10,13 +10,11 @@ type Deps = { ticketRepo: TicketRepository };
 // buscó por nombre/DNI, o reconcilia un ingreso ya validado en la puerta.
 export const admitTicket = async (
   { ticketRepo }: Deps,
-  input: { ticketId: string; scannerId: string; usedAt?: Date },
+  input: { ticketId: string; scanner: ScannerRef; usedAt?: Date },
 ): Promise<Result<ScanResult>> => {
-  const result = await ticketRepo.markUsedByTicketId(
-    input.ticketId,
-    input.scannerId,
-    input.usedAt,
-  );
+  const result = await ticketRepo.markUsedByTicketId(input.ticketId, input.scanner, {
+    usedAt: input.usedAt,
+  });
   if (!result.ok) {
     return ok({
       kind: result.error === "already_used" ? "already_used" : "invalid",

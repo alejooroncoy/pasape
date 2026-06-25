@@ -578,18 +578,12 @@ function EventSchemeCard({
         )}
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-3 border-t border-cart-line pt-4">
+      <div className="mt-4 border-t border-cart-line pt-4">
         <SchemeCupo
           label="Cada uno vende"
           value={scheme?.defaultQuota ?? null}
           min={1}
           onChange={(v) => onSave({ defaultQuota: v })}
-        />
-        <SchemeCupo
-          label="Cada uno invita"
-          value={scheme?.defaultGuestListQuota ?? null}
-          min={0}
-          onChange={(v) => onSave({ defaultGuestListQuota: v })}
         />
       </div>
     </div>
@@ -832,12 +826,6 @@ function AssignmentRow({
         ? "hitos"
         : "especie";
   const quotaRef = a.effectiveQuota == null ? "sin tope" : String(a.effectiveQuota);
-  const guestRef =
-    a.effectiveGuestQuota == null
-      ? "sin tope"
-      : a.effectiveGuestQuota === 0
-        ? "no"
-        : String(a.effectiveGuestQuota);
 
   return (
     <div className={"flex items-center gap-2 px-4 py-3 lg:px-5 " + (inactive ? "opacity-60" : "")}>
@@ -870,7 +858,6 @@ function AssignmentRow({
           <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[11px] text-cart-ink-4">
             <RefBit custom={a.commissionCustom}>{commissionRef}</RefBit>
             <RefBit custom={a.quotaCustom}>vende {quotaRef}</RefBit>
-            <RefBit custom={a.guestQuotaCustom}>invita {guestRef}</RefBit>
           </div>
         </div>
       </button>
@@ -915,14 +902,13 @@ function RefBit({ custom, children }: { custom: boolean; children: ReactNode }) 
 }
 
 // Contenido del sheet/drawer de personalización de un promotor. Solo personaliza
-// (comisión / vende / invita + quitar). Cada campo dice "del evento" o el valor
+// (comisión / vende + quitar). Cada campo dice "del evento" o el valor
 // propio; nunca aparece la palabra "override". KPIs/ventas viven en otro lado.
 type PayPatch = {
   commissionPct?: number | null;
   commissionType?: CommissionType | null;
   commissionConfig?: CommissionConfig | null;
   quota?: number | null;
-  guestListQuota?: number | null;
 };
 
 function PersonalizeSheet({
@@ -1019,16 +1005,6 @@ function PersonalizeSheet({
           min={1}
           onSave={(v) => onSet({ quota: v })}
           onReset={() => onSet({ quota: null })}
-        />
-        <InlineField
-          label="Cuántos invita"
-          hint="cortesías gratis"
-          custom={a.guestQuotaCustom}
-          inheritedText={(a.effectiveGuestQuota == null ? "sin tope" : a.effectiveGuestQuota) + " · del evento"}
-          ownValue={a.ownGuestQuota}
-          min={0}
-          onSave={(v) => onSet({ guestListQuota: v })}
-          onReset={() => onSet({ guestListQuota: null })}
         />
       </div>
       <button

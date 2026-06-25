@@ -1,6 +1,10 @@
 import type { Order, Ticket, WalletTicket } from "../domain/Ticket";
 import type { Result } from "@/server/_shared/result";
 
+// Quién escanea: el organizador tiene profile (membership); el portero por
+// código tiene sesión (sin profile). Se registra uno u otro en scan_events.
+export type ScannerRef = { profileId: string | null; sessionId: string | null };
+
 export type GuestBuyer = {
   email?: string | null;
   phone?: string | null;
@@ -18,9 +22,6 @@ export type BuyInput = {
   items: Array<{ ticketTypeId: string; qty: number; holderName?: string | null }>;
   promoCode?: string | null;
   payerEmail?: string | null;
-  /** Cortesía: emite los tickets gratis (is_courtesy) sobre una entrada real.
-      Usado por la lista de invitados del promotor. No agota el stock vendible. */
-  courtesy?: boolean;
 };
 
 export type BuyOutput = {
@@ -68,9 +69,20 @@ export interface TicketRepository {
     ticketId: string;
     fromProfile: string;
   }): Promise<Result<{ ok: true }>>;
-  markUsedByQr(qrCode: string, scannerId: string, usedAt?: Date): Promise<Result<MarkUsedResult>>;
+  // `opts.zoneId` = puerta activa del portero. Si se pasa y la entrada no
+  // pertenece a esa puerta (custom), devuelve err("wrong_zone") SIN marcar.
+  // null/undefined o puerta principal → valida todas. No se aplica en el sync.
+  markUsedByQr(
+    qrCode: string,
+    scanner: ScannerRef,
+    opts?: { usedAt?: Date; zoneId?: string | null },
+  ): Promise<Result<MarkUsedResult>>;
   /** Admisión confiable por ticketId (alta manual o sync de scan ya verificado). */
-  markUsedByTicketId(ticketId: string, scannerId: string, usedAt?: Date): Promise<Result<MarkUsedResult>>;
+  markUsedByTicketId(
+    ticketId: string,
+    scanner: ScannerRef,
+    opts?: { usedAt?: Date },
+  ): Promise<Result<MarkUsedResult>>;
   /**
    * Calcula el alcance del carrusel de entradas para un ticket dado.
    * - Si el ticket pertenece a un box (host o acompañante): devuelve los IDs de

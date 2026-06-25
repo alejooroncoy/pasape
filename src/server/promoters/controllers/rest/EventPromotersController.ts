@@ -106,7 +106,6 @@ export const EventPromotersController = {
           .nullable()
           .optional(),
         quota: z.number().int().min(1).nullable().optional(),
-        guestListQuota: z.number().int().min(0).nullable().optional(),
       })
       .safeParse(input);
     if (!parsed.success) return err(parsed.error.issues[0]?.message ?? "invalid_input");
@@ -134,7 +133,6 @@ export const EventPromotersController = {
           .nullable()
           .optional(),
         defaultQuota: z.number().int().min(1).nullable().optional(),
-        defaultGuestListQuota: z.number().int().min(0).nullable().optional(),
       })
       .safeParse(input);
     if (!parsed.success) return err(parsed.error.issues[0]?.message ?? "invalid_input");

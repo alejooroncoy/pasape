@@ -42,8 +42,9 @@ import { createSupabaseBrowserClient } from "@/server/_shared/supabase/client";
 // ============================================================
 // Tipos
 // ============================================================
-// Las cortesías ya no son un kind: son tickets reales (is_courtesy) que reparte
-// el promotor desde su app. El composer del organizador solo crea general/box.
+// El composer del organizador solo crea entradas general/box. Lo "gratis" no es
+// un kind aparte: es una entrada a precio 0 (se vende self-service por el link
+// del promotor, con el flujo de compra gratis del checkout).
 type TicketKind = TicketTypeKind;
 
 type TicketRow = {
@@ -64,10 +65,6 @@ type TicketRow = {
   description: string;
   /** Tramos de preventa: [{ rowKey, priceSoles, endsAt }] ordenados por fecha */
   presaleTiers: Array<{ rowKey: string; priceSoles: string; endsAt: string }>;
-  /** LISTA DE INVITADOS — el organizador activa la lista sobre esta entrada general. */
-  guestListEnabled: boolean;
-  /** Cupo total de cortesías (string del input). "" = sin tope. Solo kind general. */
-  guestListCap: string;
 };
 
 /**
@@ -290,9 +287,6 @@ export function EventComposer(props: EventComposerProps) {
         priceSoles: fromCents(t.priceCents),
         endsAt: t.endsAt,
       })),
-      guestListEnabled: tt.kind === "box" ? false : tt.guestListEnabled,
-      guestListCap:
-        tt.kind === "box" || tt.guestListCap == null ? "" : String(tt.guestListCap),
     }));
     const durationHoursFromEdit = ev.endsAt
       ? Math.round((new Date(ev.endsAt).getTime() - new Date(ev.startsAt).getTime()) / 3_600_000)
@@ -322,8 +316,6 @@ export function EventComposer(props: EventComposerProps) {
                 saleEndsAt: "",
                 description: "",
                 presaleTiers: [],
-                guestListEnabled: false,
-                guestListCap: "",
               },
             ],
       publishNow: ev.status === "published",
@@ -362,8 +354,6 @@ export function EventComposer(props: EventComposerProps) {
         saleEndsAt: "",
         description: "",
         presaleTiers: [],
-        guestListEnabled: false,
-        guestListCap: "",
       },
     ],
   );
@@ -388,7 +378,7 @@ export function EventComposer(props: EventComposerProps) {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [publishNow, setPublishNow] = useState(seedFromEdit?.publishNow ?? true);
   const [openSheet, setOpenSheet] = useState<
-    null | "tickets" | "promoters" | "description" | "promos" | "guestlist"
+    null | "tickets" | "promoters" | "description" | "promos"
   >(null);
   const [highlight, setHighlight] = useState<
     null | "nombre" | "fecha" | "hora" | "entradas"
@@ -467,42 +457,6 @@ export function EventComposer(props: EventComposerProps) {
 
   const hasValidSpace = spaceGroups.some((g) => spaceCount(g) >= 1);
 
-  // ── Lista de invitados (config a nivel evento) ──────────────────────────
-  // La cortesía se emite sobre UNA entrada general real ("entran como"). El
-  // estado vive en los campos por-ticket (guestListEnabled/Cap) — fuente de
-  // verdad del payload — y esta sección es su único editor. Solo entradas
-  // generales con nombre son elegibles como destino.
-  const guestEligible = tickets.filter((t) => t.kind !== "box" && t.name.trim());
-  const guestEnabledTicket = tickets.find((t) => t.kind !== "box" && t.guestListEnabled) ?? null;
-  const guestListEnabled = !!guestEnabledTicket;
-  const guestListKey = guestEnabledTicket?.rowKey ?? null;
-  const guestListCap = guestEnabledTicket?.guestListCap ?? "";
-
-  // Activa/desactiva la lista. Al activar, apunta a la entrada elegida (o la
-  // primera general). Al desactivar, limpia el flag y el cupo de todas.
-  const setGuestListOnEntry = (targetKey: string | null) => {
-    setTickets((prev) =>
-      prev.map((t) => {
-        const isTarget = t.kind !== "box" && targetKey !== null && t.rowKey === targetKey;
-        return {
-          ...t,
-          guestListEnabled: isTarget,
-          // Conserva el cupo solo en la entrada destino; lo borra en el resto.
-          guestListCap: isTarget ? t.guestListCap : "",
-        };
-      }),
-    );
-  };
-  const toggleGuestList = (on: boolean) =>
-    setGuestListOnEntry(on ? (guestListKey ?? guestEligible[0]?.rowKey ?? null) : null);
-  const setGuestListCap = (cap: string) => {
-    if (!guestListKey) return;
-    const clean = cap.replace(/[^0-9]/g, "");
-    setTickets((prev) =>
-      prev.map((t) => (t.rowKey === guestListKey ? { ...t, guestListCap: clean } : t)),
-    );
-  };
-
   // Nombres de entrada repetidos (sin distinción de mayúsculas ni espacios):
   // confunden al comprador (no sabe cuál elegir). Se bloquea publicar.
   const dupTicketKeys = useMemo(() => duplicateTicketRowKeys(tickets), [tickets]);
@@ -580,11 +534,6 @@ export function EventComposer(props: EventComposerProps) {
           unitNoun: t.kind === "box" ? t.unitNoun.trim() || null : null,
           saleEndsAt: t.saleEndsAt || null,
           description: t.description.trim() || null,
-          guestListEnabled: t.kind === "box" ? false : t.guestListEnabled,
-          guestListCap:
-            t.kind === "box" || !t.guestListEnabled || t.guestListCap.trim() === ""
-              ? null
-              : Number(t.guestListCap),
           ...presaleTiersPayload(t),
         })),
         // Expandir cada grupo de espacios a N boxes (Box A…F).
@@ -756,11 +705,6 @@ export function EventComposer(props: EventComposerProps) {
           unitNoun: t.kind === "box" ? t.unitNoun.trim() || null : null,
           saleEndsAt: t.saleEndsAt || null,
           description: t.description.trim() || null,
-          guestListEnabled: t.kind === "box" ? false : t.guestListEnabled,
-          guestListCap:
-            t.kind === "box" || !t.guestListEnabled || t.guestListCap.trim() === ""
-              ? null
-              : Number(t.guestListCap),
           ...presaleTiersPayload(t),
         });
       }
@@ -793,14 +737,6 @@ export function EventComposer(props: EventComposerProps) {
         if (nextSaleEndsAt !== orig.saleEndsAt) ttPatch.saleEndsAt = nextSaleEndsAt;
         const nextDesc = t.description.trim() || null;
         if (nextDesc !== orig.description) ttPatch.description = nextDesc;
-        // Lista de invitados (solo entradas generales).
-        if (t.kind !== "box" && orig.kind !== "box") {
-          const nextGLEnabled = t.guestListEnabled;
-          if (nextGLEnabled !== orig.guestListEnabled) ttPatch.guestListEnabled = nextGLEnabled;
-          const nextGLCap =
-            !t.guestListEnabled || t.guestListCap.trim() === "" ? null : Number(t.guestListCap);
-          if (nextGLCap !== orig.guestListCap) ttPatch.guestListCap = nextGLCap;
-        }
         // Tiers: siempre enviamos para que el backend reemplace
         const newTiers = presaleTiersPayload(t).presaleTiers;
         const origTiersKey = orig.presaleTiers.map(x => `${x.priceCents}:${x.endsAt}`).join("|");
@@ -1130,23 +1066,6 @@ export function EventComposer(props: EventComposerProps) {
             highlight={highlight === "entradas"}
           />
 
-          {/* Lista de invitados — cortesías que reparten los promotores. */}
-          <CardButton
-            icon={<IconGuestList />}
-            label="Lista de invitados"
-            hint={
-              guestListEnabled
-                ? guestListCap.trim()
-                  ? `Activa · hasta ${Number(guestListCap).toLocaleString("es-PE")} cortesías`
-                  : "Activa · sin tope de cortesías"
-                : guestEligible.length
-                  ? "Opcional — deja que tus promotores inviten gratis"
-                  : "Crea una entrada general para habilitarla"
-            }
-            onClick={() => setOpenSheet("guestlist")}
-            active={guestListEnabled}
-          />
-
           {/* Promociones — 2x1 / 3x2. Solo en edit: requiere entradas con id. */}
           {isEdit && (
             <CardButton
@@ -1282,20 +1201,6 @@ export function EventComposer(props: EventComposerProps) {
               setTickets={setTickets}
               spaceGroups={spaceGroups}
               setSpaceGroups={setSpaceGroups}
-            />
-          </Sheet>
-        )}
-        {openSheet === "guestlist" && (
-          <Sheet onClose={() => setOpenSheet(null)} title="Lista de invitados">
-            <GuestListEditor
-              eligible={guestEligible}
-              enabled={guestListEnabled}
-              selectedKey={guestListKey}
-              cap={guestListCap}
-              isEdit={isEdit}
-              onToggle={toggleGuestList}
-              onSelectKey={setGuestListOnEntry}
-              onCapChange={setGuestListCap}
             />
           </Sheet>
         )}
@@ -1746,148 +1651,6 @@ function Sheet({
 }
 
 // ============================================================
-// GuestListEditor — sección propia de la lista de invitados (no pegada a la
-// entrada). El organizador: 1) activa la lista, 2) elige sobre qué entrada
-// general entran las cortesías ("entran como"), 3) le pone un cupo total. El
-// reparto por promotor (cuántas cortesías puede dar cada uno) vive en Equipo.
-// ============================================================
-function GuestListEditor({
-  eligible,
-  enabled,
-  selectedKey,
-  cap,
-  isEdit,
-  onToggle,
-  onSelectKey,
-  onCapChange,
-}: {
-  eligible: TicketRow[];
-  enabled: boolean;
-  selectedKey: string | null;
-  cap: string;
-  isEdit: boolean;
-  onToggle: (on: boolean) => void;
-  onSelectKey: (rowKey: string) => void;
-  onCapChange: (cap: string) => void;
-}) {
-  // Sin entradas generales no hay sobre qué emitir cortesías.
-  if (eligible.length === 0) {
-    return (
-      <div className="rounded-2xl border border-dashed border-cart-line bg-cart-bg-elev px-4 py-6 text-center">
-        <p className="text-[14px] font-medium text-white">Primero crea una entrada general</p>
-        <p className="mt-1 text-[12.5px] text-cart-ink-3">
-          Los invitados entran como una entrada real (gratis). Crea al menos una
-          entrada general y vuelve aquí para activar la lista.
-        </p>
-      </div>
-    );
-  }
-
-  const target = eligible.find((t) => t.rowKey === selectedKey) ?? null;
-  const aforo = Number(target?.capacity || 0);
-  const capNum = Number(cap || 0);
-  const overAforo = enabled && cap.trim() !== "" && capNum > aforo;
-
-  return (
-    <div className="flex flex-col gap-4">
-      {/* Toggle maestro */}
-      <div className="flex items-center justify-between gap-3 rounded-2xl bg-cart-bg-elev px-4 py-3">
-        <div className="flex flex-col gap-0.5">
-          <span className="text-[14px] font-semibold text-white">Activar lista de invitados</span>
-          <span className="text-[12px] text-cart-ink-3">
-            Tus promotores invitan gratis; cada cortesía cuenta en el aforo.
-          </span>
-        </div>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={enabled}
-          onClick={() => onToggle(!enabled)}
-          className={
-            "relative h-[26px] w-[44px] shrink-0 rounded-full transition-colors " +
-            (enabled ? "bg-cart-accent" : "bg-cart-line-strong")
-          }
-        >
-          <span
-            className={
-              "absolute top-[2px] h-[22px] w-[22px] rounded-full bg-white transition-all " +
-              (enabled ? "left-[20px]" : "left-[2px]")
-            }
-          />
-        </button>
-      </div>
-
-      {enabled && (
-        <>
-          {/* Entran como — sobre qué entrada general se emiten las cortesías */}
-          <div className="flex flex-col gap-2">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">
-              Los invitados entran como
-            </span>
-            <div className="flex flex-col gap-1.5">
-              {eligible.map((t) => {
-                const active = t.rowKey === selectedKey;
-                return (
-                  <button
-                    key={t.rowKey}
-                    type="button"
-                    onClick={() => onSelectKey(t.rowKey)}
-                    className={
-                      "flex items-center justify-between rounded-xl border px-3.5 py-2.5 text-left transition " +
-                      (active
-                        ? "border-cart-accent bg-cart-accent-soft"
-                        : "border-cart-line bg-cart-bg-elev hover:border-cart-line-strong")
-                    }
-                  >
-                    <span className="text-[14px] font-medium text-white">{t.name.trim()}</span>
-                    <span
-                      className={
-                        "grid size-[18px] place-items-center rounded-full border " +
-                        (active ? "border-cart-accent" : "border-cart-line-strong")
-                      }
-                    >
-                      {active && <span className="size-[10px] rounded-full bg-cart-accent" />}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Cupo total de cortesías del evento */}
-          <label className="flex flex-col gap-1.5">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">
-              Cupo total de cortesías
-            </span>
-            <div className="flex items-center gap-2.5">
-              <input
-                inputMode="numeric"
-                value={cap}
-                onChange={(e) => onCapChange(e.target.value)}
-                placeholder="Sin tope"
-                className="w-28 rounded-xl bg-cart-bg-elev-2 px-3 py-2 text-[15px] font-semibold text-white outline-none placeholder:text-cart-ink-4"
-              />
-              <span className={"text-[12px] " + (overAforo ? "text-rose-300" : "text-cart-ink-4")}>
-                {cap.trim() === ""
-                  ? `Sin tope · hasta ${aforo.toLocaleString("es-PE")} de aforo`
-                  : `${capNum.toLocaleString("es-PE")} cortesías ≤ ${aforo.toLocaleString("es-PE")} de aforo`}
-              </span>
-            </div>
-          </label>
-
-          {/* Pista del reparto por promotor (solo útil en evento ya creado) */}
-          <p className="rounded-xl bg-cart-bg-elev px-3.5 py-2.5 text-[12px] leading-relaxed text-cart-ink-3">
-            {isEdit
-              ? "Asigna a cada promotor su propio cupo de invitados desde Promotores."
-              : "Tras crear el evento, podrás darle a cada promotor su propio cupo de invitados desde Promotores."}
-          </p>
-        </>
-      )}
-    </div>
-  );
-}
-
-// ============================================================
 // PresaleTiersEditor — múltiples tramos de preventa por fecha.
 // Cada tramo: precio + hasta cuándo. El backend elige el activo.
 // ============================================================
@@ -2253,8 +2016,6 @@ function TicketsEditor({
         saleEndsAt: "",
         description: "",
         presaleTiers: [],
-        guestListEnabled: false,
-        guestListCap: "",
       },
     ]);
   };
@@ -2390,8 +2151,6 @@ function TicketsEditor({
                     saleEndsAt: "",
                     description: "",
                     presaleTiers: [],
-                    guestListEnabled: false,
-                    guestListCap: "",
                   },
                 ]);
               }}
@@ -2832,15 +2591,6 @@ function IconTicket() {
         strokeWidth="1.4"
       />
       <path d="M7 4v6" stroke="currentColor" strokeWidth="1.4" strokeDasharray="1.5 1.5" />
-    </svg>
-  );
-}
-function IconGuestList() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-      <circle cx="5" cy="4.5" r="2" stroke="currentColor" strokeWidth="1.4" />
-      <path d="M1.5 11.5c0-2.2 1.6-3.4 3.5-3.4 1 0 1.9.3 2.5.9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-      <path d="M9 9.5l1.4 1.4L13 8.3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

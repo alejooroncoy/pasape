@@ -4,41 +4,56 @@ import { getAuthContext } from "@/server/_shared/AuthContext";
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
 import { getEventBySlug } from "@/server/events/application/GetEventBySlug";
 import { supabaseEventRepository as repo } from "@/server/events/infrastructure/repositories/SupabaseEventRepository";
-import { getActiveScannerSession } from "./ScannerSessions";
+import { getSessionByToken } from "./ScannerSessions";
 
 export const SCANNER_DEVICE_HEADER = "x-scanner-device";
+export const SCANNER_TOKEN_HEADER = "x-door-token";
 
 export type ScanAccessContext = {
-  profileId: string;
+  /** profile del organizador (membership). null para el portero por código. */
+  profileId: string | null;
   eventId: string;
   organizationId: string;
-  /** "membership" = admin/org; "session" = portero con código + binding 24h. */
+  /** "membership" = admin/org; "session" = portero por código + token. */
   via: "membership" | "session";
   zoneId: string | null;
   sessionId: string | null;
 };
 
 /**
- * Verifica que el usuario autenticado puede escanear tickets del evento.
- * Acepta DOS caminos:
- *   - Miembro de la org del evento (admins, dashboard) — sin device binding.
- *   - Portero con sesión activa (código + binding 24h en scanner_sessions).
- * El deviceId se lee del header x-scanner-device (o del parámetro).
+ * Verifica que quien llama puede escanear tickets del evento. Dos caminos:
+ *   - Portero por CÓDIGO (app): header x-door-token → sesión por token, sin
+ *     cookies ni cuenta. Es el camino principal del Modo Puerta.
+ *   - Miembro de la org (dashboard web): cookie de sesión + membership.
  *
- * Usado por:
- *   - ScanningController.scan()       → antes de validar el QR
- *   - EventsController.getScanCache() → antes de servir el cache offline
- *   - /api/events/[slug]/attendees    → antes de mostrar la lista
+ * Usado por ScanningController, getScanCache y /attendees.
  */
 export async function verifyScanAccess(
   eventSlug: string,
-  opts: { deviceId?: string } = {},
+  opts: { deviceId?: string; doorToken?: string } = {},
 ): Promise<Result<ScanAccessContext>> {
-  const auth = await getAuthContext();
-  if (!auth.ok) return err("unauthorized");
-
   const detail = await getEventBySlug({ repo }, eventSlug);
   if (!detail) return err("event_not_found");
+
+  // Camino portero por código: token opaco, sin login.
+  const token =
+    opts.doorToken ?? (await headers()).get(SCANNER_TOKEN_HEADER) ?? undefined;
+  if (token) {
+    const session = await getSessionByToken(token);
+    if (!session || session.eventId !== detail.event.id) return err("forbidden");
+    return ok({
+      profileId: null,
+      eventId: detail.event.id,
+      organizationId: detail.event.organizationId,
+      via: "session",
+      zoneId: session.zoneId,
+      sessionId: session.id,
+    });
+  }
+
+  // Camino organizador: cookie + membership de la org del evento.
+  const auth = await getAuthContext();
+  if (!auth.ok) return err("unauthorized");
 
   const db = supabaseAdmin();
   const { data: membership } = await db
@@ -60,22 +75,5 @@ export async function verifyScanAccess(
     });
   }
 
-  // Sin membership: ¿tiene sesión de portero activa?
-  const deviceId =
-    opts.deviceId ?? (await headers()).get(SCANNER_DEVICE_HEADER) ?? undefined;
-  const session = await getActiveScannerSession(
-    detail.event.id,
-    auth.value.profileId,
-    deviceId,
-  );
-  if (!session) return err("forbidden");
-
-  return ok({
-    profileId: auth.value.profileId,
-    eventId: detail.event.id,
-    organizationId: detail.event.organizationId,
-    via: "session",
-    zoneId: session.zoneId,
-    sessionId: session.id,
-  });
+  return err("forbidden");
 }

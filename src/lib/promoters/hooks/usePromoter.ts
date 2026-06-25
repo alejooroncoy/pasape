@@ -7,7 +7,6 @@ import { api } from "@/lib/_shared/api-client";
 import type {
   PromoterApplication,
   PromoterEventEarning,
-  PromoterGuest,
   PromoterHomeData,
   PromoterLink,
 } from "@/server/promoters/domain/Promoter";
@@ -17,25 +16,6 @@ export const useMyPromoterLinks = () =>
     queryKey: ["promoters", "links"],
     queryFn: () => api.get<PromoterLink[]>("/api/promoters/links"),
   });
-
-export const usePromoterGuests = (slug: string) =>
-  useQuery({
-    queryKey: ["promoters", "guests", slug],
-    queryFn: () => api.get<PromoterGuest[]>(`/api/promoters/home/${slug}/guests`),
-    enabled: !!slug,
-  });
-
-export const useAddGuest = (slug: string) => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (input: { name: string; dni: string; email?: string | null; phone?: string | null }) =>
-      api.post<{ ticketId: string }>(`/api/promoters/home/${slug}/guests`, input),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["promoters", "guests", slug] });
-      void qc.invalidateQueries({ queryKey: ["promoters", "home", slug] });
-    },
-  });
-};
 
 export const usePromoterHome = (slug: string) =>
   useQuery({

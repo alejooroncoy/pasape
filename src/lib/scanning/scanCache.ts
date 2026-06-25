@@ -1,4 +1,6 @@
 import { openDB, type IDBPDatabase } from "idb";
+import { resolveUrl } from "@/lib/_shared/api-client";
+import { deviceHeaders } from "@/lib/scanning/deviceId";
 
 const DB_NAME = "pasape-scan";
 const STORE = "tickets";
@@ -50,7 +52,9 @@ async function db(): Promise<IDBPDatabase> {
 }
 
 export async function refreshScanCache(slug: string): Promise<number> {
-  const res = await fetch(`/api/events/${slug}/scan-cache`);
+  const res = await fetch(resolveUrl(`/api/events/${slug}/scan-cache`), {
+    headers: deviceHeaders(),
+  });
   if (!res.ok) throw new Error("scan_cache_fetch_failed");
   const json: ScanCacheResponse = await res.json();
   const d = await db();
@@ -89,7 +93,9 @@ export async function markUsedLocalById(ticketId: string): Promise<void> {
  * Best-effort: si falla, el portero igual valida por lookup estático.
  */
 export async function cacheEventSigningKey(slug: string): Promise<void> {
-  const res = await fetch(`/api/events/${slug}/signing-key`);
+  const res = await fetch(resolveUrl(`/api/events/${slug}/signing-key`), {
+    headers: deviceHeaders(),
+  });
   if (!res.ok) return;
   const json = (await res.json()) as { data?: { publicKey: JsonWebKey } };
   if (!json.data?.publicKey) return;

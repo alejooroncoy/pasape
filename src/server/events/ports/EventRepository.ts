@@ -60,12 +60,12 @@ export type EventStats = {
     promoterLinkId: string;
     code: string;
     name: string;
-    /** Tickets PAGADOS (orden total > 0). No incluye cortesías. */
+    /** Tickets PAGADOS (orden total > 0). No incluye los gratis. */
     ticketsSold: number;
     ticketsValidated: number;
-    /** Cortesías emitidas por su lista de invitados (orden total 0). */
+    /** Entradas GRATIS (orden total 0) atribuidas a su link. */
     guestsInvited: number;
-    /** Cortesías que efectivamente entraron (status 'used'). */
+    /** Entradas gratis que efectivamente entraron (status 'used'). */
     guestsEntered: number;
     revenueCents: number;
     /** Ratio validated/sold en [0,1]; 0 si no hay ventas. */
@@ -126,10 +126,6 @@ export type CreateTicketTypeInput = {
   presaleQty?: number | null;
   presaleEndsAt?: string | null;
   description?: string | null;
-  /** LISTA DE INVITADOS — activar la lista sobre esta entrada (solo kind general). */
-  guestListEnabled?: boolean;
-  /** Tope de cortesías de la lista. null = sin tope. */
-  guestListCap?: number | null;
   /** Tramos de preventa. Si se pasa, reemplaza todos los existentes. */
   presaleTiers?: Array<Pick<PresaleTier, "priceCents" | "endsAt">>;
 };
@@ -145,21 +141,8 @@ export type UpdateTicketTypeInput = {
   presaleQty?: number | null;
   presaleEndsAt?: string | null;
   description?: string | null;
-  /** LISTA DE INVITADOS — activar/desactivar la lista sobre esta entrada (solo kind general). */
-  guestListEnabled?: boolean;
-  /** Tope de cortesías de la lista. null = sin tope. */
-  guestListCap?: number | null;
   /** Tramos de preventa. Si se pasa, reemplaza todos los existentes. */
   presaleTiers?: Array<Pick<PresaleTier, "priceCents" | "endsAt">>;
-};
-
-/** Entrada general destino de las cortesías de la lista, con su cupo y conteo. */
-export type GuestListTicketType = {
-  id: string;
-  /** Tope de cortesías. null = sin tope. */
-  cap: number | null;
-  /** Cortesías (is_courtesy) vigentes ya emitidas sobre esta entrada. */
-  courtesyCount: number;
 };
 
 /**
@@ -173,8 +156,6 @@ export type EventPromoterScheme = {
   commissionConfig: CommissionConfig | null;
   /** Cupo de ventas default por promotor. null = sin tope. */
   defaultQuota: number | null;
-  /** Cupo de invitados (cortesías) default por promotor. null = sin tope. */
-  defaultGuestListQuota: number | null;
 };
 
 /** Una promo por entrada (la última gana). null en kind = sin promo. */
@@ -256,18 +237,6 @@ export interface EventRepository {
   ): Promise<Result<TicketType>>;
   deleteTicketType(ticketTypeId: string, eventId: string): Promise<Result<{ id: string }>>;
   getTicketType(ticketTypeId: string, eventId: string): Promise<TicketType | null>;
-  /**
-   * Entrada general destino para una cortesía: la general activa más barata del
-   * evento (desempata por position). Las cortesías reutilizan esta entrada real
-   * (gratis, marcadas is_courtesy) en vez de un tipo oculto.
-   */
-  getDefaultGeneralTicketType(eventId: string): Promise<Result<{ id: string }>>;
-  /**
-   * Entrada general con la lista de invitados activada (desempata por position),
-   * su cupo de cortesías y el conteo actual. Destino de las cortesías del
-   * promotor. err("guest_list_not_enabled") si ninguna entrada la tiene activa.
-   */
-  getGuestListTicketType(eventId: string): Promise<Result<GuestListTicketType>>;
   /** Esquema de promotores del evento (default para todos). */
   getPromoterScheme(eventId: string): Promise<EventPromoterScheme>;
   /** Actualiza el esquema de promotores del evento (solo los campos dados). */

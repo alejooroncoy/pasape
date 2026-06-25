@@ -65,8 +65,9 @@ export type Event = {
 // - "general": entrada individual (1 persona, 1 QR). El NOMBRE carga la
 //   distinción comercial ("VIP", "General", "After") — por eso "vip" se retiró.
 // - "box": espacio reservable (asientos, invita, stock binario).
-// "presale" también se retiró: la preventa es un atributo, no un tipo. Las
-// cortesías ya no son un kind: son tickets reales marcados tickets.is_courtesy.
+// "presale" también se retiró: la preventa es un atributo, no un tipo. Lo
+// "gratis" tampoco es un kind: es una entrada a precio 0 (el flujo normal de
+// compra la cobra a 0, sin caso especial).
 export type TicketTypeKind = "general" | "box";
 
 /** Promoción aplicada a una entrada. Solo 2x1 / 3x2 por ahora. */
@@ -150,17 +151,6 @@ export type BoxTicketType = TicketTypeBase & {
 export type AdmissionTicketType = TicketTypeBase & {
   kind: Exclude<TicketTypeKind, "box">;
   stock: number;
-  /**
-   * LISTA DE INVITADOS — el organizador activa la lista sobre esta entrada: los
-   * promotores pueden emitir cortesías (gratis, is_courtesy) sobre ella. Solo
-   * aplica a entradas generales (un box no recibe cortesías de lista).
-   */
-  guestListEnabled: boolean;
-  /**
-   * Tope total de cortesías (cuenta tickets is_courtesy de esta entrada).
-   * null = sin tope. El backend valida el cupo en addGuest; la UI lo limita al aforo.
-   */
-  guestListCap: number | null;
 };
 
 /**

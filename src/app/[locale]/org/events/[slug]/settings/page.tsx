@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useEvent } from "@/lib/events/hooks/useEvents";
 import { useUpdateEvent } from "@/lib/events/hooks/useUpdateEvent";
 import { EventShell } from "../_shell/EventShell";
+import { DoorsSection } from "./DoorsSection";
 
 type Params = Promise<{ slug: string; locale: string }>;
 
@@ -60,6 +61,9 @@ export default function OrgEventConfigPage({ params }: { params: Params }) {
             </>
           )}
         </Section>
+
+        {/* Puertas */}
+        <DoorsSection slug={slug} />
 
         {/* Cerrar evento */}
         {ev?.status !== "cancelled" && (

@@ -3,6 +3,7 @@ import { err, ok, type Result } from "@/server/_shared/result";
 import type {
   BuyInput,
   BuyOutput,
+  ScannerRef,
   TicketRepository,
 } from "@/server/tickets/ports/TicketRepository";
 import type { Order, Ticket, WalletTicket } from "@/server/tickets/domain/Ticket";
@@ -159,16 +160,11 @@ export const supabaseTicketRepository: TicketRepository = {
       const tt = tts.find((t) => t.id === item.ticketTypeId);
       if (!tt) return err("ticket_type_missing");
       if (tt.sale_ends_at && new Date(tt.sale_ends_at) < new Date()) return err("ticket_type_sales_closed");
-      // Cortesía y venta compiten por el MISMO aforo de la entrada: una cortesía
-      // ocupa un cupo físico real, así que respeta capacity (no sobrevende el
-      // espacio). Se libera sola al anular el ticket (el trigger recalcula sold).
+      // Respeta el aforo de la entrada (no sobrevende el espacio). Se libera solo
+      // al anular el ticket (el trigger recalcula sold).
       if (tt.sold + item.qty > tt.capacity) return err("sold_out");
-      // Cortesía: ocupa aforo pero es gratis. La separación venta/cortesía para
-      // ingresos vive en orders.total_cents, no aquí.
-      if (input.courtesy) {
-        priceItems.push({ ticketTypeId: tt.id, qty: item.qty, unitPriceCents: 0 });
-        continue;
-      }
+      // El precio sale del ticket-type. Una entrada gratis es simplemente un tipo
+      // a precio 0 → el flujo normal la cobra a 0, sin caso especial.
       const isPresaleActive =
         tt.presale_price_cents != null &&
         (tt.presale_qty == null || tt.sold < tt.presale_qty) &&
@@ -396,7 +392,6 @@ export const supabaseTicketRepository: TicketRepository = {
         current_holder: effectiveBuyerId,
         box_label: tt?.box_label ?? null,
         box_host_ticket_id: null,
-        is_courtesy: input.courtesy ?? false,
       }));
     });
 
@@ -765,7 +760,8 @@ export const supabaseTicketRepository: TicketRepository = {
     return ok({ ok: true });
   },
 
-  async markUsedByQr(qrCode, scannerId, usedAt?: Date) {
+  async markUsedByQr(qrCode, scanner, opts = {}) {
+    const { usedAt, zoneId } = opts;
     const db = supabaseAdmin();
     // Solo QR firmado ECDSA (cert~window~sig). Offline (usedAt presente) omite
     // la frescura del window: ya se verificó en la puerta al escanear.
@@ -774,7 +770,12 @@ export const supabaseTicketRepository: TicketRepository = {
       // No registramos scan_event acá porque no tenemos ticket_id ni event_id.
       return err(resolved.error);
     }
-    return markByQrCode(db, resolved.value.qrCode, scannerId, usedAt, qrCode);
+    // Puerta del portero: si está en una puerta custom y la entrada no le
+    // corresponde, no la marca (la principal valida todas).
+    if (zoneId && !(await isAllowedInZone(db, resolved.value.qrCode, zoneId))) {
+      return err("wrong_zone");
+    }
+    return markByQrCode(db, resolved.value.qrCode, scanner, usedAt, qrCode);
   },
 
   async getCarouselScope(ticketId, viewerId) {
@@ -899,7 +900,7 @@ export const supabaseTicketRepository: TicketRepository = {
     return ok({ ids, currentIndex, eventTicketCount });
   },
 
-  async markUsedByTicketId(ticketId, scannerId, usedAt?: Date) {
+  async markUsedByTicketId(ticketId, scanner, opts = {}) {
     const db = supabaseAdmin();
     // Admisión confiable por ticketId: alta manual desde la lista (el portero
     // admite deliberadamente a alguien que buscó por nombre/DNI) o sync de un
@@ -910,16 +911,58 @@ export const supabaseTicketRepository: TicketRepository = {
       .eq("id", ticketId)
       .maybeSingle<{ qr_code: string }>();
     if (!row) return err("invalid");
-    return markByQrCode(db, row.qr_code, scannerId, usedAt, ticketId);
+    return markByQrCode(db, row.qr_code, scanner, opts.usedAt, ticketId);
   },
 };
+
+// ¿La entrada del QR está permitida en la puerta `zoneId`?
+// Regla por cantidad de puertas (no hay "puerta por defecto" especial):
+//   - Si el evento tiene UNA sola puerta → valida todas las entradas.
+//   - Si tiene varias → cada puerta valida solo los ticket_types que tiene
+//     asignados en zone_ticket_types.
+// Si la zona no existe o el ticket no se encuentra, no bloquea (deja que
+// markByQrCode resuelva el invalid).
+async function isAllowedInZone(
+  db: ReturnType<typeof supabaseAdmin>,
+  effectiveQrCode: string,
+  zoneId: string,
+): Promise<boolean> {
+  const { data: zone } = await db
+    .from("zones")
+    .select("event_id")
+    .eq("id", zoneId)
+    .maybeSingle<{ event_id: string }>();
+  if (!zone) return true;
+
+  // Una sola puerta en el evento → valida todo, sin importar su lista.
+  const { count } = await db
+    .from("zones")
+    .select("*", { count: "exact", head: true })
+    .eq("event_id", zone.event_id);
+  if ((count ?? 0) <= 1) return true;
+
+  const { data: tk } = await db
+    .from("tickets")
+    .select("ticket_type_id")
+    .eq("qr_code", effectiveQrCode)
+    .maybeSingle<{ ticket_type_id: string }>();
+  if (!tk) return true;
+
+  const { data: link } = await db
+    .from("zone_ticket_types")
+    .select("zone_id")
+    .eq("zone_id", zoneId)
+    .eq("ticket_type_id", tk.ticket_type_id)
+    .maybeSingle();
+  return !!link;
+}
 
 // Núcleo de marcado por qr_code estático (interno). Lo comparten markUsedByQr
 // (tras resolver la firma) y markUsedByTicketId (admisión confiable).
 async function markByQrCode(
   db: ReturnType<typeof supabaseAdmin>,
   effectiveQrCode: string,
-  scannerId: string,
+  scanner: ScannerRef,
   usedAt: Date | undefined,
   rawToken: string,
 ) {
@@ -939,7 +982,8 @@ async function markByQrCode(
       await db.from("scan_events").insert({
         ticket_id: joined.id,
         event_id: joined.ticket_type.event_id,
-        scanned_by: scannerId,
+        scanned_by: scanner.profileId,
+        scanner_session_id: scanner.sessionId,
         result: "valid",
         raw_token: rawToken,
       });
@@ -1013,7 +1057,8 @@ async function markByQrCode(
     await db.from("scan_events").insert({
       ticket_id: ex.id,
       event_id: ex.ticket_type.event_id,
-      scanned_by: scannerId,
+      scanned_by: scanner.profileId,
+      scanner_session_id: scanner.sessionId,
       result,
       raw_token: rawToken,
       flag,

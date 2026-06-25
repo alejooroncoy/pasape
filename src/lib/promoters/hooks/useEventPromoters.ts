@@ -22,7 +22,6 @@ const EMPTY_SCHEME: EventPromoterScheme = {
   commissionType: null,
   commissionConfig: null,
   defaultQuota: null,
-  defaultGuestListQuota: null,
 };
 
 export const useUpdateEventPromoterScheme = (slug: string) => {
@@ -76,7 +75,6 @@ type AssignmentEdit = {
   commissionType?: CommissionType | null;
   commissionConfig?: CommissionConfig | null;
   quota?: number | null;
-  guestListQuota?: number | null;
 };
 
 export const useUpdateAssignmentCommission = (slug: string) => {
@@ -88,14 +86,12 @@ export const useUpdateAssignmentCommission = (slug: string) => {
       commissionType,
       commissionConfig,
       quota,
-      guestListQuota,
     }: AssignmentEdit) => {
       const body: Record<string, unknown> = {};
       if (commissionPct !== undefined) body.commissionPct = commissionPct;
       if (commissionType !== undefined) body.commissionType = commissionType;
       if (commissionConfig !== undefined) body.commissionConfig = commissionConfig;
       if (quota !== undefined) body.quota = quota;
-      if (guestListQuota !== undefined) body.guestListQuota = guestListQuota;
       return api.patch<true>(`/api/events/${slug}/promoters/${linkId}`, body);
     },
     // Optimista: actualiza el promotor editado al toque (valor propio + marca de
@@ -128,12 +124,6 @@ export const useUpdateAssignmentCommission = (slug: string) => {
             next.quotaCustom = edit.quota != null;
             // -1 = personalizado a "sin tope" → efectivo null.
             if (edit.quota != null) next.effectiveQuota = edit.quota === -1 ? null : edit.quota;
-          }
-          if (edit.guestListQuota !== undefined) {
-            next.ownGuestQuota = edit.guestListQuota;
-            next.guestQuotaCustom = edit.guestListQuota != null;
-            if (edit.guestListQuota != null)
-              next.effectiveGuestQuota = edit.guestListQuota === -1 ? null : edit.guestListQuota;
           }
           return next;
         }),

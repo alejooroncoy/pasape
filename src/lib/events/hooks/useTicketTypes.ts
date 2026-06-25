@@ -19,8 +19,6 @@ export type CreateTicketTypePayload = {
   unitNoun?: string | null;
   saleEndsAt?: string | null;
   description?: string | null;
-  guestListEnabled?: boolean;
-  guestListCap?: number | null;
   presaleTiers?: Array<{ priceCents: number; endsAt: string }>;
 } & PresalePayload;
 
@@ -32,8 +30,6 @@ export type UpdateTicketTypePayload = {
   unitNoun?: string | null;
   saleEndsAt?: string | null;
   description?: string | null;
-  guestListEnabled?: boolean;
-  guestListCap?: number | null;
   presaleTiers?: Array<{ priceCents: number; endsAt: string }>;
 } & PresalePayload;
 

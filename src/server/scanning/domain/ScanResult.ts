@@ -1,4 +1,13 @@
-export type ScanResultKind = "valid" | "already_used" | "invalid" | "void" | "unknown_event";
+// "wrong_zone": la entrada es válida pero no pertenece a la puerta del portero
+// (la principal valida todas; las custom solo sus entradas). No es ingreso ni
+// rechazo definitivo — el portero la valida en su puerta correcta.
+export type ScanResultKind =
+  | "valid"
+  | "already_used"
+  | "invalid"
+  | "void"
+  | "unknown_event"
+  | "wrong_zone";
 
 export type ScanResult = {
   kind: ScanResultKind;
