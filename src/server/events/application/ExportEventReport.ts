@@ -59,6 +59,7 @@ export const exportEventReport = async (
   wsA.columns = [
     { header: "Ticket ID", key: "ticketId", width: 38 },
     { header: "Nombre del titular", key: "holderName", width: 28 },
+    { header: "DNI", key: "holderDni", width: 14 },
     { header: "Tipo de ticket", key: "ticketTypeName", width: 18 },
     { header: "Estado", key: "status", width: 14 },
     { header: "Usado en", key: "usedAt", width: 22 },
@@ -71,6 +72,7 @@ export const exportEventReport = async (
     wsA.addRow({
       ticketId: a.ticketId,
       holderName: safeCell(a.holderName),
+      holderDni: safeCell(a.holderDni),
       ticketTypeName: safeCell(a.ticketTypeName),
       status: STATUS_LABEL[a.status] ?? a.status,
       usedAt: toLimaDate(a.usedAt) ?? "",

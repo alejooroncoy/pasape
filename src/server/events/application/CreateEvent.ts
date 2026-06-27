@@ -21,6 +21,9 @@ type TicketTypeInput = {
   presalePriceCents?: number | null;
   presaleQty?: number | null;
   presaleEndsAt?: string | null;
+  /** Liberar gratis: toggle + fin opcional (null = mientras esté activa). */
+  isFree?: boolean;
+  freeUntilAt?: string | null;
 };
 
 export const createEvent = async (
@@ -54,6 +57,8 @@ export const createEvent = async (
       presale_price_cents: tt.presalePriceCents ?? null,
       presale_qty: tt.presaleQty ?? null,
       presale_ends_at: tt.presaleEndsAt ?? null,
+      is_free: tt.isFree ?? false,
+      free_until_at: tt.freeUntilAt ?? null,
     })),
   );
   if (error) return err(error.message);

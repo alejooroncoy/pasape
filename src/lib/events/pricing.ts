@@ -7,10 +7,14 @@ import type { Promo, PromoKind, TicketType } from "@/server/events/domain/Event"
  */
 
 export type ActivePricing = {
-  /** Precio a cobrar hoy (preventa si está vigente, si no el normal). */
+  /** Precio a cobrar hoy (gratis si está liberada, preventa si está vigente, si no el normal). */
   priceCents: number;
-  /** Precio normal/regular (para mostrar tachado cuando hay preventa). */
+  /** Precio normal/regular (para mostrar tachado cuando hay preventa o liberación). */
   basePriceCents: number;
+  /** True si la entrada está liberada gratis ahora (override sobre preventa). */
+  isFree: boolean;
+  /** Cuándo deja de ser gratis (ISO) o null = "mientras esté activa". Solo si isFree. */
+  freeUntilAt: string | null;
   /** True si la preventa está vigente ahora. */
   isPresale: boolean;
   /** Cuántas quedan a precio de preventa. null = sin límite por stock. */
@@ -22,19 +26,40 @@ export type ActivePricing = {
 /** Campos mínimos para resolver el precio activo (sirve a TicketType y a rows snake-mapeados). */
 export type PricingInput = Pick<
   TicketType,
-  "priceCents" | "presalePriceCents" | "presaleQty" | "presaleEndsAt" | "sold" | "isPresaleActive"
+  | "priceCents"
+  | "presalePriceCents"
+  | "presaleQty"
+  | "presaleEndsAt"
+  | "sold"
+  | "isPresaleActive"
+  | "isFreeActive"
+  | "freeUntilAt"
 >;
 
 /**
- * Regla única de preventa: vigente si el backend marcó `isPresaleActive = true`.
- * El frontend no compara fechas ni stock; esa lógica vive en el backend.
+ * Regla única: el backend precalcula `isFreeActive` y `isPresaleActive`. El
+ * frontend no compara fechas ni stock. La liberación gratis GANA sobre la
+ * preventa (precio 0 manda).
  */
 export function activePricing(tt: PricingInput): ActivePricing {
   const base = tt.priceCents;
+  if (tt.isFreeActive) {
+    return {
+      priceCents: 0,
+      basePriceCents: base,
+      isFree: true,
+      freeUntilAt: tt.freeUntilAt,
+      isPresale: false,
+      presaleRemaining: null,
+      presaleEndsAt: null,
+    };
+  }
   if (!tt.isPresaleActive || tt.presalePriceCents == null) {
     return {
       priceCents: base,
       basePriceCents: base,
+      isFree: false,
+      freeUntilAt: null,
       isPresale: false,
       presaleRemaining: null,
       presaleEndsAt: null,
@@ -43,6 +68,8 @@ export function activePricing(tt: PricingInput): ActivePricing {
   return {
     priceCents: tt.presalePriceCents,
     basePriceCents: base,
+    isFree: false,
+    freeUntilAt: null,
     isPresale: true,
     presaleRemaining: tt.presaleQty == null ? null : Math.max(0, tt.presaleQty - tt.sold),
     presaleEndsAt: tt.presaleEndsAt,

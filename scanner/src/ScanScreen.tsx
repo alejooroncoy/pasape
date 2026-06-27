@@ -36,7 +36,7 @@ type ScanResult = {
   kind:        ScanKind;
   holderName:  string | null;
   typeName:    string | null;
-  dniLast2:    string | null;
+  dniLast4:    string | null;
   boxLabel:    string | null;
   boxHostName: string | null;
   scannedAt:   string | null;
@@ -47,7 +47,7 @@ type Attendee = {
   qrCode:     string;
   status:     "active" | "used" | "void";
   holderName: string | null;
-  dniLast2:   string | null;
+  dniLast4:   string | null;
   usedAt:     string | null;
   ticketType: string;
 };
@@ -168,7 +168,7 @@ export function ScanScreen({ eventSlug }: { eventSlug: string }) {
             qrCode:     t.qrCode,
             status:     t.status === "refunded" ? "void" : t.status,
             holderName: t.holderName,
-            dniLast2:   t.holderDniLast2,
+            dniLast4:   t.holderDniLast4,
             usedAt:     null, // el cache no guarda usedAt; el estado used/active basta
             ticketType: t.ticketTypeName,
           })));
@@ -255,13 +255,13 @@ export function ScanScreen({ eventSlug }: { eventSlug: string }) {
         kind:        (raw.kind as ScanKind) ?? "invalid",
         holderName:  raw.holderName ?? null,
         typeName:    raw.ticketTypeName ?? null,
-        dniLast2:    raw.holderDniLast2 ?? null,
+        dniLast4:    raw.holderDniLast4 ?? null,
         boxLabel:    raw.boxLabel ?? null,
         boxHostName: raw.boxHostName ?? null,
         scannedAt:   ("scannedAt" in raw ? raw.scannedAt : null) ?? null,
       });
     } catch {
-      showResult({ kind: "invalid", holderName: null, typeName: "QR no reconocido", dniLast2: null, boxLabel: null, boxHostName: null, scannedAt: null });
+      showResult({ kind: "invalid", holderName: null, typeName: "QR no reconocido", dniLast4: null, boxLabel: null, boxHostName: null, scannedAt: null });
     }
   }, [scan, online, showResult]);
 
@@ -330,13 +330,13 @@ export function ScanScreen({ eventSlug }: { eventSlug: string }) {
         kind:        (raw.kind as ScanKind) ?? "invalid",
         holderName:  raw.holderName ?? attendee.holderName ?? null,
         typeName:    raw.ticketTypeName ?? attendee.ticketType ?? null,
-        dniLast2:    raw.holderDniLast2 ?? attendee.dniLast2 ?? null,
+        dniLast4:    raw.holderDniLast4 ?? attendee.dniLast4 ?? null,
         boxLabel:    raw.boxLabel ?? null,
         boxHostName: raw.boxHostName ?? null,
         scannedAt:   ("scannedAt" in raw ? raw.scannedAt : null) ?? null,
       });
     } catch {
-      showResult({ kind: "invalid", holderName: null, typeName: "No se pudo admitir", dniLast2: null, boxLabel: null, boxHostName: null, scannedAt: null });
+      showResult({ kind: "invalid", holderName: null, typeName: "No se pudo admitir", dniLast4: null, boxLabel: null, boxHostName: null, scannedAt: null });
     }
   }, [admit, online, showResult]);
 
@@ -452,7 +452,7 @@ export function ScanScreen({ eventSlug }: { eventSlug: string }) {
             {result.kind === "valid" ? (result.holderName ?? "Entrada válida") : result.kind === "already_used" ? `Ya ingresó${result.scannedAt ? ` · ${fmtTime(result.scannedAt)}` : ""}` : "QR inválido"}
           </div>
           <div style={{ marginTop: 3, fontSize: 13, color: C.dim, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {result.kind === "valid" ? [result.typeName, result.boxLabel ? `Box ${result.boxLabel}` : null, result.dniLast2 ? `DNI ··${result.dniLast2}` : null].filter(Boolean).join("  ·  ")
+            {result.kind === "valid" ? [result.typeName, result.boxLabel ? `Box ${result.boxLabel}` : null, result.dniLast4 ? `DNI ··${result.dniLast4}` : null].filter(Boolean).join("  ·  ")
               : result.kind === "already_used" ? (result.holderName ?? "") : (result.typeName ?? "QR no pertenece a este evento")}
           </div>
         </div>
@@ -492,7 +492,7 @@ export function ScanScreen({ eventSlug }: { eventSlug: string }) {
                 {a.holderName ?? "—"}
               </div>
               <div style={{ fontSize: 11, color: C.dim, marginTop: 1 }}>
-                {a.ticketType}{a.dniLast2 ? ` · ··${a.dniLast2}` : ""}
+                {a.ticketType}{a.dniLast4 ? ` · ··${a.dniLast4}` : ""}
                 {a.status === "used" && a.usedAt ? ` · ${fmtTime(a.usedAt)}` : ""}
               </div>
             </div>
@@ -819,7 +819,7 @@ export function ScanScreen({ eventSlug }: { eventSlug: string }) {
           {/* Info secundaria */}
           <div style={{ fontSize: 15, color: "rgba(255,255,255,0.5)", textAlign: "center", lineHeight: 1.5 }}>
             {result.kind === "valid"
-              ? [result.typeName, !result.boxLabel && result.dniLast2 ? `DNI ··${result.dniLast2}` : result.dniLast2 ? `DNI ··${result.dniLast2}` : null].filter(Boolean).join("  ·  ")
+              ? [result.typeName, result.dniLast4 ? `DNI ··${result.dniLast4}` : null].filter(Boolean).join("  ·  ")
               : result.kind === "already_used"
               ? [result.holderName, result.scannedAt ? `Entró ${fmtTime(result.scannedAt)}` : null].filter(Boolean).join("  ·  ")
               : (result.typeName ?? "QR no pertenece a este evento")}

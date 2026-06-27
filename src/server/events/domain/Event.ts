@@ -133,6 +133,17 @@ type TicketTypeBase = {
   presaleEndsAt: string | null;
   /** Descripción corta visible al comprador: beneficios, restricciones, qué incluye. */
   description: string | null;
+  /**
+   * LIBERAR GRATIS — el organizador suelta una entrada de pago a precio 0. Una
+   * entrada gratis no es un kind: el flujo normal la cobra a 0. Estos campos
+   * solo deciden CUÁNDO el precio efectivo es 0 (override sobre preventa).
+   * `isFree` = toggle crudo del organizador.
+   */
+  isFree: boolean;
+  /** ISO 8601. Fin de la liberación por fecha. null + `isFree` = "mientras esté activa". */
+  freeUntilAt: string | null;
+  /** Backend-computed: si la liberación está vigente ahora (gana sobre preventa). */
+  isFreeActive: boolean;
   /** Backend-computed: estado de venta. El frontend NO lo recalcula desde fechas. */
   saleStatus: "available" | "expired" | "soldout";
   /** Backend-computed: si la preventa está vigente ahora. */

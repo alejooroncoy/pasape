@@ -19,6 +19,9 @@ const tt = (over: Partial<AdmissionTicketType>): TicketType => ({
   presaleQty: null,
   presaleEndsAt: null,
   description: null,
+  isFree: false,
+  freeUntilAt: null,
+  isFreeActive: false,
   saleStatus: "available",
   isPresaleActive: false,
   presaleTiers: [],
@@ -56,6 +59,32 @@ describe("activePricing", () => {
     const r = activePricing(tt({ presalePriceCents: 2000, presaleEndsAt: "2026-05-30T00:00:00.000Z", isPresaleActive: false }));
     expect(r.priceCents).toBe(3000);
     expect(r.isPresale).toBe(false);
+  });
+
+  it("liberada gratis → precio 0", () => {
+    const r = activePricing(tt({ isFreeActive: true }));
+    expect(r.priceCents).toBe(0);
+    expect(r.isFree).toBe(true);
+    expect(r.basePriceCents).toBe(3000);
+  });
+
+  it("liberada gratis con fecha → expone freeUntilAt", () => {
+    const r = activePricing(tt({ isFreeActive: true, freeUntilAt: "2026-07-01T23:59:00.000Z" }));
+    expect(r.priceCents).toBe(0);
+    expect(r.freeUntilAt).toBe("2026-07-01T23:59:00.000Z");
+  });
+
+  it("liberación gana sobre preventa", () => {
+    const r = activePricing(tt({ isFreeActive: true, presalePriceCents: 2000, isPresaleActive: true }));
+    expect(r.priceCents).toBe(0);
+    expect(r.isFree).toBe(true);
+    expect(r.isPresale).toBe(false);
+  });
+
+  it("liberación inactiva (vencida) → precio normal", () => {
+    const r = activePricing(tt({ isFree: true, isFreeActive: false, freeUntilAt: "2026-05-30T00:00:00.000Z" }));
+    expect(r.priceCents).toBe(3000);
+    expect(r.isFree).toBe(false);
   });
 });
 

@@ -28,7 +28,7 @@ export const scanQr = async (
     eventId: result.value.eventId,
     scannedAt: new Date().toISOString(),
     holderName: result.value.holderName,
-    holderDniLast2: result.value.holderDniLast2,
+    holderDniLast4: result.value.holderDniLast4,
     ticketTypeName: result.value.ticketTypeName,
     boxLabel: result.value.boxLabel,
     boxHostName: result.value.boxHostName,

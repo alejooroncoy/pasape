@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
 import { err, ok, type Result } from "@/server/_shared/result";
+import { decryptDni } from "@/server/_shared/crypto/dni";
 import type {
   AttendeeRow,
   CreateEventInput,
@@ -70,6 +71,8 @@ type TicketTypeRow = {
   presale_qty: number | null;
   presale_ends_at: string | null;
   description: string | null;
+  is_free: boolean;
+  free_until_at: string | null;
 };
 
 type PromoRow = {
@@ -169,6 +172,10 @@ const toTicketType = (r: TicketTypeRow, tiers: PresaleTierRow[] = [], now: Date 
     presaleQty: r.presale_qty,
     presaleEndsAt: active?.ends_at ?? null,
     description: r.description,
+    isFree: r.is_free,
+    freeUntilAt: r.free_until_at,
+    isFreeActive:
+      r.is_free && (r.free_until_at == null || new Date(r.free_until_at) > now),
     saleStatus: computeSaleStatus(r, now),
     isPresaleActive: active != null,
     presaleTiers: sorted.map(t => ({
@@ -501,6 +508,8 @@ export const supabaseEventRepository: EventRepository = {
         presale_qty: input.presaleQty ?? null,
         presale_ends_at: input.presaleEndsAt ?? null,
         description: input.description ?? null,
+        is_free: input.isFree ?? false,
+        free_until_at: input.freeUntilAt ?? null,
       })
       .select("*")
       .single<TicketTypeRow>();
@@ -536,6 +545,8 @@ export const supabaseEventRepository: EventRepository = {
     if ("presaleQty" in input) patch.presale_qty = input.presaleQty ?? null;
     if ("presaleEndsAt" in input) patch.presale_ends_at = input.presaleEndsAt ?? null;
     if ("description" in input) patch.description = input.description ?? null;
+    if ("isFree" in input) patch.is_free = input.isFree ?? false;
+    if ("freeUntilAt" in input) patch.free_until_at = input.freeUntilAt ?? null;
     // presaleTiers se gestiona por separado (delete+insert)
     const hasTierUpdate = "presaleTiers" in input;
     if (Object.keys(patch).length === 0 && !hasTierUpdate) return err("nothing_to_update");
@@ -908,7 +919,7 @@ export const supabaseEventRepository: EventRepository = {
       const { data: page } = await db
         .from("tickets")
         .select(
-          `id, holder_name, status, used_at, order_id,
+          `id, holder_name, holder_dni_enc, holder_dni_last4, status, used_at, order_id,
            ticket_type:ticket_types!inner(id, name),
            order:orders!inner(
              id, event_id, promoter_link_id, status,
@@ -929,6 +940,8 @@ export const supabaseEventRepository: EventRepository = {
     type TicketJoinRow = {
       id: string;
       holder_name: string | null;
+      holder_dni_enc: string | null;
+      holder_dni_last4: string | null;
       status: AttendeeRow["status"];
       used_at: string | null;
       order_id: string;
@@ -946,6 +959,11 @@ export const supabaseEventRepository: EventRepository = {
       ((ticketRows as unknown as TicketJoinRow[] | null) ?? []).map((t) => ({
         ticketId: t.id,
         holderName: t.holder_name,
+        // DNI completo descifrado para la hoja del organizador. Si no hay enc
+        // (compras viejas), cae a "··"+last4 como pista, o vacío.
+        holderDni:
+          decryptDni(t.holder_dni_enc) ??
+          (t.holder_dni_last4 ? `··${t.holder_dni_last4}` : null),
         ticketTypeName: t.ticket_type?.name ?? "",
         status: t.status,
         usedAt: t.used_at,

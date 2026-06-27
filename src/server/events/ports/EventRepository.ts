@@ -126,6 +126,9 @@ export type CreateTicketTypeInput = {
   presaleQty?: number | null;
   presaleEndsAt?: string | null;
   description?: string | null;
+  /** Liberar gratis: toggle + fin opcional (null = mientras esté activa). */
+  isFree?: boolean;
+  freeUntilAt?: string | null;
   /** Tramos de preventa. Si se pasa, reemplaza todos los existentes. */
   presaleTiers?: Array<Pick<PresaleTier, "priceCents" | "endsAt">>;
 };
@@ -141,6 +144,9 @@ export type UpdateTicketTypeInput = {
   presaleQty?: number | null;
   presaleEndsAt?: string | null;
   description?: string | null;
+  /** Liberar gratis: toggle + fin opcional (null = mientras esté activa). */
+  isFree?: boolean;
+  freeUntilAt?: string | null;
   /** Tramos de preventa. Si se pasa, reemplaza todos los existentes. */
   presaleTiers?: Array<Pick<PresaleTier, "priceCents" | "endsAt">>;
 };
@@ -189,6 +195,9 @@ export type UpdateEventInput = {
 export type AttendeeRow = {
   ticketId: string;
   holderName: string | null;
+  /** DNI completo del holder, descifrado server-side (solo para lista/Excel del
+      organizador; nunca viaja al celular del portero). Null si no se capturó. */
+  holderDni: string | null;
   ticketTypeName: string;
   status: "active" | "used" | "void" | "refunded";
   usedAt: string | null;

@@ -12,6 +12,7 @@ import { activePricing, applyPromos, type PromoLineInput } from "@/lib/events/pr
 import { createPreference } from "@/server/payments/application/CreatePreference";
 import { dispatchTicketDelivery } from "@/server/notifications/application/DispatchTicketDelivery";
 import { supabaseCommissionTierRepository } from "@/server/promoters/tiers/infrastructure/repositories/SupabaseCommissionTierRepository";
+import { encryptDni, dniLast4, normalizeDni } from "@/server/_shared/crypto/dni";
 import crypto from "node:crypto";
 
 const generateQr = () =>
@@ -34,6 +35,7 @@ type TicketRow = {
   ticket_type_id: string;
   holder_name: string | null;
   holder_dni_last2: string | null;
+  holder_dni_last4: string | null;
   qr_code: string;
   status: Ticket["status"];
   used_at: string | null;
@@ -132,7 +134,7 @@ export const supabaseTicketRepository: TicketRepository = {
     const { data: tts, error: ttErr } = await db
       .from("ticket_types")
       .select(
-        "id, price_cents, capacity, sold, currency, event_id, kind, box_label, sale_ends_at, presale_price_cents, presale_qty, presale_ends_at",
+        "id, price_cents, capacity, sold, currency, event_id, kind, box_label, sale_ends_at, presale_price_cents, presale_qty, presale_ends_at, is_free, free_until_at",
       )
       .in("id", ttIds);
     if (ttErr || !tts) return err(ttErr?.message ?? "ticket_types_lookup_failed");
@@ -169,6 +171,8 @@ export const supabaseTicketRepository: TicketRepository = {
         tt.presale_price_cents != null &&
         (tt.presale_qty == null || tt.sold < tt.presale_qty) &&
         (tt.presale_ends_at == null || now < new Date(tt.presale_ends_at));
+      const isFreeActive =
+        tt.is_free && (tt.free_until_at == null || now < new Date(tt.free_until_at));
       const ap = activePricing({
         priceCents: tt.price_cents,
         presalePriceCents: tt.presale_price_cents,
@@ -176,6 +180,8 @@ export const supabaseTicketRepository: TicketRepository = {
         presaleEndsAt: tt.presale_ends_at,
         sold: tt.sold,
         isPresaleActive,
+        isFreeActive,
+        freeUntilAt: tt.free_until_at,
       });
       priceItems.push({ ticketTypeId: tt.id, qty: item.qty, unitPriceCents: ap.priceCents });
     }
@@ -385,9 +391,13 @@ export const supabaseTicketRepository: TicketRepository = {
         holder_name: item.holderName ?? attendee?.fullName ?? buyerFullName,
         holder_email: attendee?.email ?? null,
         holder_phone: attendee?.phone ?? null,
-        // El portero busca por últimos 2 dígitos del DNI — sin esto las
-        // entradas de compradores logueados eran inubicables por DNI.
+        // El portero busca por últimos dígitos del DNI — sin esto las
+        // entradas de compradores logueados eran inubicables por DNI. last2
+        // (deprecado) se mantiene en sync; last4 viaja al offline y enc cifrado
+        // (completo) sirve a la lista/Excel del organizador.
         holder_dni_last2: attendee?.dni ? attendee.dni.slice(-2) : null,
+        holder_dni_enc: encryptDni(attendee?.dni),
+        holder_dni_last4: dniLast4(attendee?.dni),
         qr_code: generateQr(),
         current_holder: effectiveBuyerId,
         box_label: tt?.box_label ?? null,
@@ -633,10 +643,21 @@ export const supabaseTicketRepository: TicketRepository = {
     // Guarda dueño + estado: solo el dueño actual puede nombrar, y solo si la
     // entrada sigue active (no tiene sentido nombrar una usada/anulada).
     // El DNI solo se toca si vino en el input (undefined = preservar el guardado).
-    const patch: { holder_name: string | null; holder_dni_last2?: string | null } = {
+    // Recibe el DNI completo: se cifra (enc) para la lista/Excel del organizador,
+    // se derivan last4 (offline del portero) y last2 (deprecado, en sync).
+    const patch: {
+      holder_name: string | null;
+      holder_dni_last2?: string | null;
+      holder_dni_last4?: string | null;
+      holder_dni_enc?: string | null;
+    } = {
       holder_name: input.holderName,
     };
-    if (input.dniLast2 !== undefined) patch.holder_dni_last2 = input.dniLast2;
+    if (input.dni !== undefined) {
+      patch.holder_dni_enc = encryptDni(input.dni);
+      patch.holder_dni_last4 = dniLast4(input.dni);
+      patch.holder_dni_last2 = input.dni ? normalizeDni(input.dni).slice(-2) : null;
+    }
     const { data: updated, error: upErr } = await db
       .from("tickets")
       .update(patch)
@@ -725,9 +746,32 @@ export const supabaseTicketRepository: TicketRepository = {
     if (joined.status !== "active") return err("ticket_not_active");
     if (joined.current_holder !== pendingRow.from_profile) return err("claim_no_longer_valid");
 
+    // Al reclamar capturamos la identidad de quien entra (holder real): nombre +
+    // DNI. El DNI completo se cifra (enc) para la lista/Excel; last4 viaja al
+    // offline; last2 (deprecado) se mantiene en sync. Si no vienen, se preservan.
+    const claimPatch: {
+      current_holder: string;
+      transfer_count: number;
+      holder_name?: string | null;
+      holder_dni_enc?: string | null;
+      holder_dni_last4?: string | null;
+      holder_dni_last2?: string | null;
+    } = {
+      current_holder: input.toProfile,
+      transfer_count: joined.transfer_count + 1,
+    };
+    if (input.fullName !== undefined && input.fullName !== null) {
+      claimPatch.holder_name = input.fullName;
+    }
+    if (input.dni !== undefined && input.dni) {
+      claimPatch.holder_dni_enc = encryptDni(input.dni);
+      claimPatch.holder_dni_last4 = dniLast4(input.dni);
+      claimPatch.holder_dni_last2 = normalizeDni(input.dni).slice(-2);
+    }
+
     const { data: updated, error: upErr } = await db
       .from("tickets")
-      .update({ current_holder: input.toProfile, transfer_count: joined.transfer_count + 1 })
+      .update(claimPatch)
       .eq("id", pendingRow.ticket_id)
       .select("*")
       .single<TicketRow>();
@@ -1029,7 +1073,7 @@ async function markByQrCode(
         ticket: toTicket(joined),
         eventId: joined.ticket_type.event_id,
         holderName: joined.holder_name,
-        holderDniLast2: joined.holder_dni_last2,
+        holderDniLast4: joined.holder_dni_last4,
         ticketTypeName: joined.ticket_type.name,
         boxLabel: joined.box_label,
         boxHostName,
@@ -1066,21 +1110,75 @@ async function markByQrCode(
     return err(result);
 }
 
-// Resuelve un QR FIRMADO (cert~window~sig) a su qr_code estático interno.
+// Resuelve un QR FIRMADO a su qr_code estático interno. Soporta DOS formatos:
+//   - Compacto (actual): ticketId|windowIdx|sig (112 chars, sin cert en el QR).
+//     La pública del ticket es `tickets.signing_pub` (autoritativa, server-side);
+//     no viaja cert porque el server ya ligó esa pública al evento al mintearlo.
+//   - Legado (cert~window~sig): el cert porta la pública; se verifica contra la
+//     clave del evento. Compatibilidad durante la transición.
 // No hay fallback a QR estático ni a HMAC: el único input válido de cámara es la
 // firma ECDSA. La admisión manual usa markUsedByTicketId, no este resolver.
-//   - online (offline=false): verifica cert + frescura del window + anti-replay.
-//   - offline (offline=true): verifica solo el cert (el window ya se validó en
-//     la puerta al escanear; al sincronizar estaría vencido).
+//   - online (offline=false): verifica firma + frescura del window + anti-replay.
+//   - offline (offline=true): verifica solo la autenticidad (el window ya se
+//     validó en la puerta al escanear; al sincronizar estaría vencido).
 async function resolveScanInput(
   raw: string,
   opts: { offline?: boolean } = {},
 ): Promise<Result<{ qrCode: string }>> {
-  const { parseSignedQrPayload, verifyCert, verifyWindow } = await import(
-    "@/lib/tickets/signedQr"
-  );
-  const { decodeJwt } = await import("jose");
+  const {
+    isCompactQrPayload,
+    parseCompactQrPayload,
+    parseSignedQrPayload,
+    verifyCert,
+    verifyWindow,
+  } = await import("@/lib/tickets/signedQr");
 
+  const db = supabaseAdmin();
+
+  // ── Formato compacto (actual): el ticketId viaja en claro; la pública es
+  //    signing_pub de la BD. No hay cert que verificar contra el evento. ──
+  if (isCompactQrPayload(raw)) {
+    const parsed = parseCompactQrPayload(raw);
+    if (!parsed) return err("invalid_payload");
+
+    const { data: row } = await db
+      .from("tickets")
+      .select("id, qr_code, last_used_window, signing_pub")
+      .eq("id", parsed.ticketId)
+      .maybeSingle<{
+        id: string;
+        qr_code: string;
+        last_used_window: number | null;
+        signing_pub: import("jose").JWK | null;
+      }>();
+    if (!row) return err("invalid");
+    if (!row.signing_pub) return err("invalid_code");
+
+    if (!opts.offline) {
+      if (
+        row.last_used_window != null &&
+        row.last_used_window === parsed.windowIdx
+      ) {
+        return err("code_replay");
+      }
+      const fresh = await verifyWindow(
+        row.signing_pub,
+        parsed.ticketId,
+        parsed.windowIdx,
+        parsed.sig,
+      );
+      if (!fresh) return err("invalid_code");
+      await db
+        .from("tickets")
+        .update({ last_used_window: parsed.windowIdx })
+        .eq("id", row.id);
+    }
+
+    return ok({ qrCode: row.qr_code });
+  }
+
+  // ── Formato legado (cert~window~sig) ──
+  const { decodeJwt } = await import("jose");
   const parsed = parseSignedQrPayload(raw);
   if (!parsed) return err("invalid_payload");
 
@@ -1092,7 +1190,6 @@ async function resolveScanInput(
   }
   if (!ticketId) return err("invalid_payload");
 
-  const db = supabaseAdmin();
   const { data: row } = await db
     .from("tickets")
     .select("id, qr_code, last_used_window, ticket_types!inner(event_id)")

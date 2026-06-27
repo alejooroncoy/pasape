@@ -35,13 +35,14 @@ export interface TicketRepository {
   listMine(buyerId: string): Promise<WalletTicket[]>;
   getById(ticketId: string, buyerId: string): Promise<WalletTicket | null>;
   /** Asigna/edita el titular de una entrada propia (reparto post-compra). Solo
-      el dueño actual y solo si está active. dniLast2 = últimos 2 dígitos. */
+      el dueño actual y solo si está active. dni = DNI completo (se cifra y se
+      derivan last4/last2 server-side). */
   setHolder(input: {
     ticketId: string;
     ownerId: string;
     holderName: string | null;
-    // undefined = no tocar el DNI guardado; null = limpiarlo; string = setearlo.
-    dniLast2: string | null | undefined;
+    // undefined = no tocar el DNI guardado; null = limpiarlo; string = setearlo (DNI completo).
+    dni: string | null | undefined;
   }): Promise<Result<Ticket>>;
   transfer(input: {
     ticketId: string;
@@ -58,10 +59,13 @@ export interface TicketRepository {
     token: string;
     expiresAt: string;
   }): Promise<Result<{ event: { title: string; startsAt: string } }>>;
-  /** Reclama una transferencia pendiente: el ticket pasa a `toProfile`. */
+  /** Reclama una transferencia pendiente: el ticket pasa a `toProfile`. Captura
+      la identidad del holder real (nombre + DNI completo) en SU ticket. */
   claimTransfer(input: {
     token: string;
     toProfile: string;
+    fullName?: string | null;
+    dni?: string | null;
   }): Promise<Result<{ ticket: Ticket; eventSlug: string }>>;
   /** Cancela el envío pendiente del ticket (el emisor lo recupera al instante).
       El link enviado deja de servir. */
@@ -102,7 +106,7 @@ export type MarkUsedResult = {
   ticket: Ticket;
   eventId: string;
   holderName: string | null;
-  holderDniLast2: string | null;
+  holderDniLast4: string | null;
   ticketTypeName: string | null;
   boxLabel: string | null;
   boxHostName: string | null;

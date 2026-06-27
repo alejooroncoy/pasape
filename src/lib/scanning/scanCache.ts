@@ -12,7 +12,7 @@ export type CachedTicket = {
   ticketId: string;
   qrCode: string;
   holderName: string | null;
-  holderDniLast2: string | null;
+  holderDniLast4: string | null;
   ticketTypeName: string;
   boxLabel: string | null;
   boxHostTicketId: string | null;
@@ -114,7 +114,7 @@ const normalize = (s: string) =>
 
 /**
  * Búsqueda instantánea sobre la lista cacheada localmente — sin red.
- * Numérico → match por últimos dígitos del DNI. Texto → match por nombre.
+ * Numérico → match por últimos 4 dígitos del DNI. Texto → match por nombre.
  * Prioriza: prefijo de nombre > contiene > DNI. Devuelve hasta `limit`.
  */
 export async function searchCachedTickets(query: string, limit = 30): Promise<CachedTicket[]> {
@@ -125,9 +125,9 @@ export async function searchCachedTickets(query: string, limit = 30): Promise<Ca
   const isNumeric = /^\d+$/.test(q);
 
   if (isNumeric) {
-    const last2 = q.slice(-2);
+    const last4 = q.slice(-4);
     return all
-      .filter((t) => t.status !== "void" && t.holderDniLast2 === last2)
+      .filter((t) => t.status !== "void" && t.holderDniLast4 === last4)
       .slice(0, limit);
   }
 

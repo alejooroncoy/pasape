@@ -109,6 +109,8 @@ const createSchema = z.object({
         presalePriceCents: z.number().int().min(0).nullable().optional(),
         presaleQty: z.number().int().min(0).nullable().optional(),
         presaleEndsAt: z.string().datetime().nullable().optional(),
+        isFree: z.boolean().optional(),
+        freeUntilAt: z.string().datetime().nullable().optional(),
       }),
     )
     .min(1),
@@ -281,6 +283,8 @@ export const EventsController = {
       presalePriceCents: parsed.data.presalePriceCents ?? null,
       presaleQty: parsed.data.presaleQty ?? null,
       presaleEndsAt: parsed.data.presaleEndsAt ?? null,
+      isFree: parsed.data.isFree ?? false,
+      freeUntilAt: parsed.data.freeUntilAt ?? null,
     });
   },
 
@@ -357,7 +361,7 @@ export const EventsController = {
       ticketId: string;
       qrCode: string;
       holderName: string | null;
-      holderDniLast2: string | null;
+      holderDniLast4: string | null;
       ticketTypeName: string;
       boxLabel: string | null;
       boxHostTicketId: string | null;
@@ -374,7 +378,7 @@ export const EventsController = {
         id,
         qr_code,
         holder_name,
-        holder_dni_last2,
+        holder_dni_last4,
         status,
         box_label,
         box_host_ticket_id,
@@ -388,7 +392,7 @@ export const EventsController = {
         id: string;
         qr_code: string;
         holder_name: string | null;
-        holder_dni_last2: string | null;
+        holder_dni_last4: string | null;
         status: "active" | "used" | "void" | "refunded";
         box_label: string | null;
         box_host_ticket_id: string | null;
@@ -407,7 +411,7 @@ export const EventsController = {
         ticketId: t.id,
         qrCode: t.qr_code,
         holderName: t.holder_name,
-        holderDniLast2: t.holder_dni_last2,
+        holderDniLast4: t.holder_dni_last4,
         ticketTypeName: t.ticket_types.name,
         boxLabel: t.box_label,
         boxHostTicketId: t.box_host_ticket_id,
@@ -470,6 +474,8 @@ const presaleFields = {
   presalePriceCents: z.number().int().min(0).nullable().optional(),
   presaleQty: z.number().int().min(0).nullable().optional(),
   presaleEndsAt: z.string().datetime().nullable().optional(),
+  isFree: z.boolean().optional(),
+  freeUntilAt: z.string().datetime().nullable().optional(),
 };
 
 const createTicketTypeSchema = z.object({

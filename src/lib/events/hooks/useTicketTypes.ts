@@ -10,6 +10,12 @@ type PresalePayload = {
   presaleEndsAt?: string | null;
 };
 
+/** Liberar gratis: toggle + fin opcional (null = mientras esté activa). */
+type FreePayload = {
+  isFree?: boolean;
+  freeUntilAt?: string | null;
+};
+
 export type CreateTicketTypePayload = {
   name: string;
   kind: TicketTypeKind;
@@ -20,7 +26,7 @@ export type CreateTicketTypePayload = {
   saleEndsAt?: string | null;
   description?: string | null;
   presaleTiers?: Array<{ priceCents: number; endsAt: string }>;
-} & PresalePayload;
+} & PresalePayload & FreePayload;
 
 export type UpdateTicketTypePayload = {
   name?: string;
@@ -31,7 +37,7 @@ export type UpdateTicketTypePayload = {
   saleEndsAt?: string | null;
   description?: string | null;
   presaleTiers?: Array<{ priceCents: number; endsAt: string }>;
-} & PresalePayload;
+} & PresalePayload & FreePayload;
 
 const invalidate = (qc: ReturnType<typeof useQueryClient>, slug: string) => {
   qc.invalidateQueries({ queryKey: ["events", "detail", slug] });

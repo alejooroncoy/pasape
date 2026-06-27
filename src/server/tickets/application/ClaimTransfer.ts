@@ -7,6 +7,8 @@ type Deps = { repo: TicketRepository };
 type Input = {
   token: string;
   toProfile: string;
+  fullName?: string | null;
+  dni?: string | null;
 };
 
 // Reclama una transferencia pendiente. La posesión del token (que llegó por

@@ -52,11 +52,19 @@ const transferSchema = z.object({
 
 const claimSchema = z.object({
   token: z.string().min(10),
+  // Identidad del holder real: se captura al reclamar (autorrellenada desde el
+  // perfil del receptor si ya la tiene). Opcionales para no romper claims viejos.
+  fullName: z.string().trim().min(2).max(120).nullable().optional(),
+  dni: z
+    .string()
+    .regex(/^\d{8}$/)
+    .nullable()
+    .optional(),
 });
 
 // Reparto post-compra: el dueño nombra al titular de su entrada. Nombre opcional
-// (puede limpiarlo) y DNI de 8 dígitos (guardamos solo los últimos 2, como en la
-// compra; el portero valida por ahí).
+// (puede limpiarlo) y DNI de 8 dígitos (el DNI completo se cifra server-side; el
+// portero valida por los últimos dígitos).
 const setHolderSchema = z.object({
   ticketId: z.string().uuid(),
   holderName: z.string().trim().min(1).max(120).nullable(),
@@ -140,9 +148,8 @@ export const TicketsController = {
       ticketId: parsed.data.ticketId,
       ownerId: auth.value.profileId,
       holderName: parsed.data.holderName,
-      // dni omitido (undefined) → no tocar; null → limpiar; 8 dígitos → últimos 2.
-      dniLast2:
-        parsed.data.dni === undefined ? undefined : parsed.data.dni ? parsed.data.dni.slice(-2) : null,
+      // dni omitido (undefined) → no tocar; null → limpiar; 8 dígitos → DNI completo.
+      dni: parsed.data.dni,
     });
   },
 
@@ -153,7 +160,12 @@ export const TicketsController = {
     if (!parsed.success) return err("invalid_input");
     const res = await claimTransfer(
       { repo },
-      { token: parsed.data.token, toProfile: auth.value.profileId },
+      {
+        token: parsed.data.token,
+        toProfile: auth.value.profileId,
+        fullName: parsed.data.fullName,
+        dni: parsed.data.dni,
+      },
     );
     if (!res.ok) return res;
     return { ok: true, value: { ticketId: res.value.ticket.id, eventSlug: res.value.eventSlug } };

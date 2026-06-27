@@ -18,15 +18,16 @@ export const GET = async (
   const isEmpty = q.length === 0;
   // Detectar si la búsqueda es numérica (DNI) o por nombre
   const isNumeric = /^\d+$/.test(q);
-  // Para DNI usamos los últimos 2 dígitos — coincide con lo que almacenamos
-  const dniQuery = isNumeric ? q.slice(-2) : null;
+  // Para DNI usamos los últimos 4 dígitos — coincide con lo que mostramos en
+  // puerta (··2442). 4 dígitos no identifican a nadie pero discriminan bien.
+  const dniQuery = isNumeric ? q.slice(-4) : null;
 
   const db = supabaseAdmin();
 
   let query = db
     .from("tickets")
     .select(
-      "id, qr_code, status, holder_name, holder_dni_last2, used_at, ticket_type:ticket_types!inner(id, name, event_id)",
+      "id, qr_code, status, holder_name, holder_dni_last4, used_at, ticket_type:ticket_types!inner(id, name, event_id)",
     )
     .eq("ticket_type.event_id", access.value.eventId)
     .neq("status", "void")
@@ -35,8 +36,8 @@ export const GET = async (
 
   if (!isEmpty) {
     if (dniQuery) {
-      // Búsqueda exacta por últimos 2 dígitos → usa índice btree tickets_holder_dni_last2_idx
-      query = query.eq("holder_dni_last2", dniQuery);
+      // Búsqueda exacta por últimos 4 dígitos del DNI.
+      query = query.eq("holder_dni_last4", dniQuery);
     } else {
       // Búsqueda por nombre con prefijo → usa índice GIN trigrama tickets_holder_name_trgm
       // ilike con prefijo (q%) es más selectivo que %q% y permite usar el índice
@@ -51,7 +52,7 @@ export const GET = async (
     qrCode:     t.qr_code,
     status:     t.status as "active" | "used" | "void",
     holderName: t.holder_name,
-    dniLast2:   t.holder_dni_last2,
+    dniLast4:   t.holder_dni_last4,
     usedAt:     t.used_at,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ticketType: (t.ticket_type as any)?.name ?? "",

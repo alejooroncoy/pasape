@@ -65,6 +65,10 @@ type TicketRow = {
   description: string;
   /** Tramos de preventa: [{ rowKey, priceSoles, endsAt }] ordenados por fecha */
   presaleTiers: Array<{ rowKey: string; priceSoles: string; endsAt: string }>;
+  /** Liberar gratis: si está activa, la entrada se suelta a precio 0. */
+  isFree: boolean;
+  /** ISO 8601. Fin de la liberación. "" = mientras esté activa (la apaga el organizador). */
+  freeUntilAt: string;
 };
 
 /**
@@ -118,6 +122,12 @@ const presaleTiersPayload = (t: TicketRow) => ({
     .map(tier => ({ priceCents: toCents(tier.priceSoles), endsAt: tier.endsAt })),
 });
 
+/** Liberación gratis al payload. Si no está liberada, la fecha se ignora. */
+const freeReleasePayload = (t: TicketRow) => ({
+  isFree: t.isFree,
+  freeUntilAt: t.isFree && t.freeUntilAt ? t.freeUntilAt : null,
+});
+
 // ── Helpers de grupos de espacios (boxes/mesas) ──────────────────────────────
 const spaceCount = (g: SpaceGroup) => Math.max(0, Math.min(60, Number(g.count) || 0));
 const spaceSeats = (g: SpaceGroup) => Math.max(1, Number(g.seats) || 1);
@@ -143,6 +153,8 @@ const expandSpaceGroup = (g: SpaceGroup) =>
       saleEndsAt: null,
       description: null,
       presaleTiers: [],
+      isFree: false,
+      freeUntilAt: null,
     };
   });
 const newSpaceGroup = (): SpaceGroup => ({
@@ -287,6 +299,8 @@ export function EventComposer(props: EventComposerProps) {
         priceSoles: fromCents(t.priceCents),
         endsAt: t.endsAt,
       })),
+      isFree: tt.isFree,
+      freeUntilAt: tt.freeUntilAt ?? "",
     }));
     const durationHoursFromEdit = ev.endsAt
       ? Math.round((new Date(ev.endsAt).getTime() - new Date(ev.startsAt).getTime()) / 3_600_000)
@@ -316,6 +330,8 @@ export function EventComposer(props: EventComposerProps) {
                 saleEndsAt: "",
                 description: "",
                 presaleTiers: [],
+                isFree: false,
+                freeUntilAt: "",
               },
             ],
       publishNow: ev.status === "published",
@@ -354,6 +370,8 @@ export function EventComposer(props: EventComposerProps) {
         saleEndsAt: "",
         description: "",
         presaleTiers: [],
+        isFree: false,
+        freeUntilAt: "",
       },
     ],
   );
@@ -535,6 +553,7 @@ export function EventComposer(props: EventComposerProps) {
           saleEndsAt: t.saleEndsAt || null,
           description: t.description.trim() || null,
           ...presaleTiersPayload(t),
+          ...freeReleasePayload(t),
         })),
         // Expandir cada grupo de espacios a N boxes (Box A…F).
         ...spaceGroups.flatMap(expandSpaceGroup),
@@ -706,6 +725,7 @@ export function EventComposer(props: EventComposerProps) {
           saleEndsAt: t.saleEndsAt || null,
           description: t.description.trim() || null,
           ...presaleTiersPayload(t),
+          ...freeReleasePayload(t),
         });
       }
 
@@ -742,6 +762,10 @@ export function EventComposer(props: EventComposerProps) {
         const origTiersKey = orig.presaleTiers.map(x => `${x.priceCents}:${x.endsAt}`).join("|");
         const newTiersKey = newTiers.map(x => `${x.priceCents}:${x.endsAt}`).join("|");
         if (newTiersKey !== origTiersKey) ttPatch.presaleTiers = newTiers;
+        // Liberación gratis: toggle y/o fecha de fin.
+        const nextFree = freeReleasePayload(t);
+        if (nextFree.isFree !== orig.isFree) ttPatch.isFree = nextFree.isFree;
+        if (nextFree.freeUntilAt !== (orig.freeUntilAt ?? null)) ttPatch.freeUntilAt = nextFree.freeUntilAt;
         if (Object.keys(ttPatch).length > 0) {
           await updateTT.mutateAsync({ id: t.id!, input: ttPatch });
         }
@@ -1742,6 +1766,74 @@ function PresaleTiersEditor({
   );
 }
 
+// ============================================================
+// FreeReleaseEditor — "Liberar gratis": switch + fin opcional.
+// Sin fecha = gratis mientras esté activa (la apaga el organizador).
+// Con fecha = gratis hasta ese día; luego vuelve a su precio.
+// ============================================================
+function FreeReleaseEditor({
+  isFree,
+  freeUntilAt,
+  base,
+  onChange,
+}: {
+  isFree: boolean;
+  freeUntilAt: string;
+  base: string;
+  onChange: (patch: { isFree?: boolean; freeUntilAt?: string }) => void;
+}) {
+  const dateVal = freeUntilAt ? freeUntilAt.slice(0, 10) : "";
+  return (
+    <div className="mt-2 rounded-xl bg-cart-bg-elev px-3 py-2.5">
+      <div className="flex items-center gap-3">
+        <div className="flex-1">
+          <span className="text-[13px] font-semibold text-white">Liberar gratis</span>
+          <p className="text-[10.5px] leading-tight text-cart-ink-4">
+            Suéltala a S/ 0 sin tocar su precio. Vuelve a cobrarse cuando la cierres.
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={isFree}
+          aria-label="Liberar gratis"
+          onClick={() => onChange({ isFree: !isFree })}
+          className={
+            "relative h-6 w-11 shrink-0 rounded-full transition " +
+            (isFree ? "bg-emerald-500/80" : "bg-cart-bg-elev-2 ring-1 ring-cart-line")
+          }
+        >
+          <span
+            className={
+              "absolute top-0.5 size-5 rounded-full bg-white transition-all " +
+              (isFree ? "left-[22px]" : "left-0.5")
+            }
+          />
+        </button>
+      </div>
+      {isFree && (
+        <div className="mt-2.5 flex flex-col gap-1.5 border-t border-cart-line pt-2.5">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">
+            Vence · opcional
+          </span>
+          <DatePicker
+            value={dateVal}
+            onChange={(d) =>
+              onChange({ freeUntilAt: d ? new Date(`${d}T23:59:00`).toISOString() : "" })
+            }
+            placeholder="Sin fecha = mientras esté activa"
+          />
+          <p className="text-[10.5px] text-cart-ink-4">
+            {dateVal
+              ? `Gratis hasta esa fecha; luego vuelve a S/ ${base || "—"}.`
+              : `Gratis mientras la dejes activa; al cerrarla vuelve a S/ ${base || "—"}.`}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // BoxGroupEditor — edición masiva de boxes
 function DescriptionField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return (
@@ -1834,7 +1926,7 @@ function BoxGroupEditor({
       <AdvancedToggle
         open={advOpen}
         onToggle={() => setAdvOpen((v) => !v)}
-        hasContent={!!(first.unitNoun || first.description || presaleRow.presaleTiers.length > 0)}
+        hasContent={!!(first.unitNoun || first.description || presaleRow.presaleTiers.length > 0 || presaleRow.isFree)}
       />
       {advOpen && (
         <div className="mt-2">
@@ -1919,6 +2011,12 @@ function BoxGroupEditor({
             tiers={presaleRow.presaleTiers}
             base={presaleRow.priceSoles}
             onChange={(tiers) => onPresaleChange({ presaleTiers: tiers })}
+          />
+          <FreeReleaseEditor
+            isFree={presaleRow.isFree}
+            freeUntilAt={presaleRow.freeUntilAt}
+            base={presaleRow.priceSoles}
+            onChange={(patch) => onUpdateAll(patch)}
           />
         </>
       )}
@@ -2016,6 +2114,8 @@ function TicketsEditor({
         saleEndsAt: "",
         description: "",
         presaleTiers: [],
+        isFree: false,
+        freeUntilAt: "",
       },
     ]);
   };
@@ -2107,12 +2207,13 @@ function TicketsEditor({
           <AdvancedToggle
             open={advancedOpen.has(t.rowKey)}
             onToggle={() => toggleAdvanced(t.rowKey)}
-            hasContent={!!(t.description || t.presaleTiers.length > 0)}
+            hasContent={!!(t.description || t.presaleTiers.length > 0 || t.isFree)}
           />
           {advancedOpen.has(t.rowKey) && (
             <>
               <DescriptionField value={t.description} onChange={(v) => update(t.rowKey, { description: v })} />
               <PresaleTiersEditor tiers={t.presaleTiers} base={t.priceSoles} onChange={(tiers) => update(t.rowKey, { presaleTiers: tiers })} />
+              <FreeReleaseEditor isFree={t.isFree} freeUntilAt={t.freeUntilAt} base={t.priceSoles} onChange={(patch) => update(t.rowKey, patch)} />
             </>
           )}
         </div>
@@ -2151,6 +2252,8 @@ function TicketsEditor({
                     saleEndsAt: "",
                     description: "",
                     presaleTiers: [],
+                    isFree: false,
+                    freeUntilAt: "",
                   },
                 ]);
               }}
@@ -2210,7 +2313,7 @@ function TicketsEditor({
             <AdvancedToggle
               open={advancedOpen.has(t.rowKey)}
               onToggle={() => toggleAdvanced(t.rowKey)}
-              hasContent={!!(t.unitNoun || t.description || t.presaleTiers.length > 0)}
+              hasContent={!!(t.unitNoun || t.description || t.presaleTiers.length > 0 || t.isFree)}
             />
             {advancedOpen.has(t.rowKey) && (
               <>
@@ -2218,6 +2321,7 @@ function TicketsEditor({
                 <DescriptionField value={t.description} onChange={(v) => update(t.rowKey, { description: v })} />
                 {/* Preventa de un box: precio bajo + fecha (un box es 1 unidad) */}
                 <PresaleTiersEditor tiers={t.presaleTiers} base={t.priceSoles} onChange={(tiers) => update(t.rowKey, { presaleTiers: tiers })} />
+                <FreeReleaseEditor isFree={t.isFree} freeUntilAt={t.freeUntilAt} base={t.priceSoles} onChange={(patch) => update(t.rowKey, patch)} />
               </>
             )}
           </div>
