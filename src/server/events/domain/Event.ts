@@ -65,8 +65,9 @@ export type Event = {
 // - "general": entrada individual (1 persona, 1 QR). El NOMBRE carga la
 //   distinción comercial ("VIP", "General", "After") — por eso "vip" se retiró.
 // - "box": espacio reservable (asientos, invita, stock binario).
-// "presale" también se retiró: la preventa es un atributo, no un tipo. Las
-// cortesías ya no son un kind: son tickets reales marcados tickets.is_courtesy.
+// "presale" también se retiró: la preventa es un atributo, no un tipo. Lo
+// "gratis" tampoco es un kind: es una entrada a precio 0 (el flujo normal de
+// compra la cobra a 0, sin caso especial).
 export type TicketTypeKind = "general" | "box";
 
 /** Promoción aplicada a una entrada. Solo 2x1 / 3x2 por ahora. */
@@ -132,6 +133,17 @@ type TicketTypeBase = {
   presaleEndsAt: string | null;
   /** Descripción corta visible al comprador: beneficios, restricciones, qué incluye. */
   description: string | null;
+  /**
+   * LIBERAR GRATIS — el organizador suelta una entrada de pago a precio 0. Una
+   * entrada gratis no es un kind: el flujo normal la cobra a 0. Estos campos
+   * solo deciden CUÁNDO el precio efectivo es 0 (override sobre preventa).
+   * `isFree` = toggle crudo del organizador.
+   */
+  isFree: boolean;
+  /** ISO 8601. Fin de la liberación por fecha. null + `isFree` = "mientras esté activa". */
+  freeUntilAt: string | null;
+  /** Backend-computed: si la liberación está vigente ahora (gana sobre preventa). */
+  isFreeActive: boolean;
   /** Backend-computed: estado de venta. El frontend NO lo recalcula desde fechas. */
   saleStatus: "available" | "expired" | "soldout";
   /** Backend-computed: si la preventa está vigente ahora. */
@@ -150,17 +162,6 @@ export type BoxTicketType = TicketTypeBase & {
 export type AdmissionTicketType = TicketTypeBase & {
   kind: Exclude<TicketTypeKind, "box">;
   stock: number;
-  /**
-   * LISTA DE INVITADOS — el organizador activa la lista sobre esta entrada: los
-   * promotores pueden emitir cortesías (gratis, is_courtesy) sobre ella. Solo
-   * aplica a entradas generales (un box no recibe cortesías de lista).
-   */
-  guestListEnabled: boolean;
-  /**
-   * Tope total de cortesías (cuenta tickets is_courtesy de esta entrada).
-   * null = sin tope. El backend valida el cupo en addGuest; la UI lo limita al aforo.
-   */
-  guestListCap: number | null;
 };
 
 /**

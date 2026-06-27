@@ -1,4 +1,6 @@
 import { openDB, type IDBPDatabase } from "idb";
+import { resolveUrl } from "@/lib/_shared/api-client";
+import { deviceHeaders } from "@/lib/scanning/deviceId";
 
 const DB_NAME = "pasape-scan";
 const STORE = "tickets";
@@ -10,7 +12,7 @@ export type CachedTicket = {
   ticketId: string;
   qrCode: string;
   holderName: string | null;
-  holderDniLast2: string | null;
+  holderDniLast4: string | null;
   ticketTypeName: string;
   boxLabel: string | null;
   boxHostTicketId: string | null;
@@ -50,7 +52,9 @@ async function db(): Promise<IDBPDatabase> {
 }
 
 export async function refreshScanCache(slug: string): Promise<number> {
-  const res = await fetch(`/api/events/${slug}/scan-cache`);
+  const res = await fetch(resolveUrl(`/api/events/${slug}/scan-cache`), {
+    headers: deviceHeaders(),
+  });
   if (!res.ok) throw new Error("scan_cache_fetch_failed");
   const json: ScanCacheResponse = await res.json();
   const d = await db();
@@ -89,7 +93,9 @@ export async function markUsedLocalById(ticketId: string): Promise<void> {
  * Best-effort: si falla, el portero igual valida por lookup estático.
  */
 export async function cacheEventSigningKey(slug: string): Promise<void> {
-  const res = await fetch(`/api/events/${slug}/signing-key`);
+  const res = await fetch(resolveUrl(`/api/events/${slug}/signing-key`), {
+    headers: deviceHeaders(),
+  });
   if (!res.ok) return;
   const json = (await res.json()) as { data?: { publicKey: JsonWebKey } };
   if (!json.data?.publicKey) return;
@@ -108,7 +114,7 @@ const normalize = (s: string) =>
 
 /**
  * Búsqueda instantánea sobre la lista cacheada localmente — sin red.
- * Numérico → match por últimos dígitos del DNI. Texto → match por nombre.
+ * Numérico → match por últimos 4 dígitos del DNI. Texto → match por nombre.
  * Prioriza: prefijo de nombre > contiene > DNI. Devuelve hasta `limit`.
  */
 export async function searchCachedTickets(query: string, limit = 30): Promise<CachedTicket[]> {
@@ -119,9 +125,9 @@ export async function searchCachedTickets(query: string, limit = 30): Promise<Ca
   const isNumeric = /^\d+$/.test(q);
 
   if (isNumeric) {
-    const last2 = q.slice(-2);
+    const last4 = q.slice(-4);
     return all
-      .filter((t) => t.status !== "void" && t.holderDniLast2 === last2)
+      .filter((t) => t.status !== "void" && t.holderDniLast4 === last4)
       .slice(0, limit);
   }
 

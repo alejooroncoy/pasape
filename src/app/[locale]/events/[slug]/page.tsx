@@ -532,8 +532,13 @@ function GroupCard({
   const single = group.items.length === 1 ? group.items[0] : null;
   const groupTitle =
     single && single.kind !== "box" ? single.name : group.label ?? "Entradas";
+  const freeItem = group.items.find((i) => activePricing(i).isFree);
   const presaleItem = group.items.find((i) => activePricing(i).isPresale);
-  const ap = presaleItem ? activePricing(presaleItem) : null;
+  const ap = freeItem
+    ? activePricing(freeItem)
+    : presaleItem
+      ? activePricing(presaleItem)
+      : null;
 
   const handleCounterClick = (e: React.MouseEvent, delta: number) => {
     e.stopPropagation();
@@ -566,7 +571,11 @@ function GroupCard({
           }
         >
           {groupTitle}
-          {ap?.isPresale && (
+          {ap?.isFree ? (
+            <span className="rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-[0.06em] text-emerald-300">
+              Gratis
+            </span>
+          ) : ap?.isPresale && (
             <span className="rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-[0.06em] text-emerald-300">
               Preventa
             </span>
@@ -580,18 +589,22 @@ function GroupCard({
             {group.items[0].description}
           </p>
         )}
-        {ap?.presaleEndsAt && shouldCountdown(ap.presaleEndsAt) && (
+        {ap?.freeUntilAt && shouldCountdown(ap.freeUntilAt) ? (
+          <div className="mt-1">
+            <PresaleCountdown endsAt={ap.freeUntilAt} />
+          </div>
+        ) : ap?.presaleEndsAt && shouldCountdown(ap.presaleEndsAt) ? (
           <div className="mt-1">
             <PresaleCountdown endsAt={ap.presaleEndsAt} />
           </div>
-        )}
+        ) : null}
         {summary.isAllBoxes && !summary.isAllSoldOut && (
           <BoxAvailabilityBar items={group.items} className={compact ? "mt-1.5" : "mt-2"} />
         )}
       </div>
       <div className="ml-3 flex flex-col items-end justify-between">
         <div className="flex flex-col items-end">
-          {ap?.isPresale && (
+          {(ap?.isPresale || ap?.isFree) && ap.basePriceCents > 0 && (
             <span className="text-[11px] font-medium text-cart-ink-4 line-through">
               {formatMoney(ap.basePriceCents, summary.currency)}
             </span>

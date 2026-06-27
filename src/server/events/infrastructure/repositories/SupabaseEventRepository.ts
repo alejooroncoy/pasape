@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
 import { err, ok, type Result } from "@/server/_shared/result";
+import { decryptDni } from "@/server/_shared/crypto/dni";
 import type {
   AttendeeRow,
   CreateEventInput,
@@ -7,7 +8,6 @@ import type {
   EventPromoterScheme,
   EventRepository,
   EventStats,
-  GuestListTicketType,
   PromoInput,
   PromoterReportRow,
   ScanFeedItem,
@@ -71,8 +71,8 @@ type TicketTypeRow = {
   presale_qty: number | null;
   presale_ends_at: string | null;
   description: string | null;
-  guest_list_enabled: boolean;
-  guest_list_cap: number | null;
+  is_free: boolean;
+  free_until_at: string | null;
 };
 
 type PromoRow = {
@@ -172,6 +172,10 @@ const toTicketType = (r: TicketTypeRow, tiers: PresaleTierRow[] = [], now: Date 
     presaleQty: r.presale_qty,
     presaleEndsAt: active?.ends_at ?? null,
     description: r.description,
+    isFree: r.is_free,
+    freeUntilAt: r.free_until_at,
+    isFreeActive:
+      r.is_free && (r.free_until_at == null || new Date(r.free_until_at) > now),
     saleStatus: computeSaleStatus(r, now),
     isPresaleActive: active != null,
     presaleTiers: sorted.map(t => ({
@@ -190,8 +194,6 @@ const toTicketType = (r: TicketTypeRow, tiers: PresaleTierRow[] = [], now: Date 
     ...base,
     kind: "general",
     stock: r.capacity,
-    guestListEnabled: r.guest_list_enabled ?? false,
-    guestListCap: r.guest_list_cap ?? null,
   };
 };
 
@@ -412,56 +414,12 @@ export const supabaseEventRepository: EventRepository = {
     return data ? toTicketType(data) : null;
   },
 
-  async getDefaultGeneralTicketType(eventId): Promise<Result<{ id: string }>> {
-    const db = supabaseAdmin();
-    // La general activa más barata (desempata por position). La cortesía se emite
-    // sobre esta entrada real, gratis y marcada is_courtesy.
-    const { data, error } = await db
-      .from("ticket_types")
-      .select("id")
-      .eq("event_id", eventId)
-      .eq("kind", "general")
-      .order("price_cents", { ascending: true })
-      .order("position", { ascending: true })
-      .limit(1)
-      .maybeSingle<{ id: string }>();
-    if (error) return err(error.message);
-    if (!data) return err("no_general_ticket_type");
-    return ok({ id: data.id });
-  },
-
-  async getGuestListTicketType(eventId): Promise<Result<GuestListTicketType>> {
-    const db = supabaseAdmin();
-    // La entrada general con la lista activada (desempata por position). Las
-    // cortesías del promotor se emiten sobre esta entrada real.
-    const { data, error } = await db
-      .from("ticket_types")
-      .select("id, guest_list_cap")
-      .eq("event_id", eventId)
-      .eq("kind", "general")
-      .eq("guest_list_enabled", true)
-      .order("position", { ascending: true })
-      .limit(1)
-      .maybeSingle<{ id: string; guest_list_cap: number | null }>();
-    if (error) return err(error.message);
-    if (!data) return err("guest_list_not_enabled");
-    // Conteo actual de cortesías (is_courtesy) vigentes de esta entrada.
-    const { count, error: countErr } = await db
-      .from("tickets")
-      .select("id", { count: "exact", head: true })
-      .eq("ticket_type_id", data.id)
-      .eq("is_courtesy", true)
-      .in("status", ["active", "used"]);
-    if (countErr) return err(countErr.message);
-    return ok({ id: data.id, cap: data.guest_list_cap, courtesyCount: count ?? 0 });
-  },
-
   async getPromoterScheme(eventId): Promise<EventPromoterScheme> {
     const db = supabaseAdmin();
     const { data } = await db
       .from("events")
       .select(
-        "promoter_commission_pct, promoter_commission_type, promoter_commission_config, promoter_default_quota, promoter_default_guest_list_quota",
+        "promoter_commission_pct, promoter_commission_type, promoter_commission_config, promoter_default_quota",
       )
       .eq("id", eventId)
       .maybeSingle<{
@@ -469,14 +427,12 @@ export const supabaseEventRepository: EventRepository = {
         promoter_commission_type: CommissionType | null;
         promoter_commission_config: CommissionConfig | null;
         promoter_default_quota: number | null;
-        promoter_default_guest_list_quota: number | null;
       }>();
     return {
       commissionPct: data?.promoter_commission_pct ?? null,
       commissionType: data?.promoter_commission_type ?? null,
       commissionConfig: data?.promoter_commission_config ?? null,
       defaultQuota: data?.promoter_default_quota ?? null,
-      defaultGuestListQuota: data?.promoter_default_guest_list_quota ?? null,
     };
   },
 
@@ -487,8 +443,6 @@ export const supabaseEventRepository: EventRepository = {
     if ("commissionType" in patch) row.promoter_commission_type = patch.commissionType;
     if ("commissionConfig" in patch) row.promoter_commission_config = patch.commissionConfig;
     if ("defaultQuota" in patch) row.promoter_default_quota = patch.defaultQuota;
-    if ("defaultGuestListQuota" in patch)
-      row.promoter_default_guest_list_quota = patch.defaultGuestListQuota;
     if (Object.keys(row).length === 0) return ok(true);
     const { error } = await db.from("events").update(row).eq("id", eventId);
     if (error) return err(error.message);
@@ -554,9 +508,8 @@ export const supabaseEventRepository: EventRepository = {
         presale_qty: input.presaleQty ?? null,
         presale_ends_at: input.presaleEndsAt ?? null,
         description: input.description ?? null,
-        // Lista de invitados: solo en entradas generales (un box no la usa).
-        guest_list_enabled: input.kind === "box" ? false : input.guestListEnabled ?? false,
-        guest_list_cap: input.kind === "box" ? null : input.guestListCap ?? null,
+        is_free: input.isFree ?? false,
+        free_until_at: input.freeUntilAt ?? null,
       })
       .select("*")
       .single<TicketTypeRow>();
@@ -592,8 +545,8 @@ export const supabaseEventRepository: EventRepository = {
     if ("presaleQty" in input) patch.presale_qty = input.presaleQty ?? null;
     if ("presaleEndsAt" in input) patch.presale_ends_at = input.presaleEndsAt ?? null;
     if ("description" in input) patch.description = input.description ?? null;
-    if ("guestListEnabled" in input) patch.guest_list_enabled = input.guestListEnabled ?? false;
-    if ("guestListCap" in input) patch.guest_list_cap = input.guestListCap ?? null;
+    if ("isFree" in input) patch.is_free = input.isFree ?? false;
+    if ("freeUntilAt" in input) patch.free_until_at = input.freeUntilAt ?? null;
     // presaleTiers se gestiona por separado (delete+insert)
     const hasTierUpdate = "presaleTiers" in input;
     if (Object.keys(patch).length === 0 && !hasTierUpdate) return err("nothing_to_update");
@@ -806,9 +759,9 @@ export const supabaseEventRepository: EventRepository = {
         name: string;
         ticketsSold: number;
         ticketsValidated: number;
-        // Cortesías de la lista de invitados: tickets gratis (orden total 0)
-        // atribuidos al link. Se cuentan aparte de las ventas porque el
-        // organizador las paga distinto (convocatoria, no comisión).
+        // Entradas gratis (orden total 0) atribuidas al link. Se cuentan aparte
+        // de las ventas porque el organizador las trata distinto (convocatoria,
+        // no comisión).
         guestsInvited: number;
         guestsEntered: number;
         revenueCents: number;
@@ -855,9 +808,9 @@ export const supabaseEventRepository: EventRepository = {
         commissionPct,
         commissionConfig,
       };
-      // Orden con monto > 0 = venta (comisiona). Orden de S/0 = cortesía de la
-      // lista de invitados (convocatoria). Se separan para que el reporte del
-      // promotor no mezcle "vendió 30" con "metió 18 gratis".
+      // Orden con monto > 0 = venta (comisiona). Orden de S/0 = entrada gratis
+      // (convocatoria). Se separan para que el reporte del promotor no mezcle
+      // "vendió 30" con "metió 18 gratis".
       if ((o.total_cents ?? 0) > 0) {
         entry.ticketsSold += counts.sold;
         entry.ticketsValidated += counts.validated;
@@ -966,7 +919,7 @@ export const supabaseEventRepository: EventRepository = {
       const { data: page } = await db
         .from("tickets")
         .select(
-          `id, holder_name, status, used_at, order_id,
+          `id, holder_name, holder_dni_enc, holder_dni_last4, status, used_at, order_id,
            ticket_type:ticket_types!inner(id, name),
            order:orders!inner(
              id, event_id, promoter_link_id, status,
@@ -987,6 +940,8 @@ export const supabaseEventRepository: EventRepository = {
     type TicketJoinRow = {
       id: string;
       holder_name: string | null;
+      holder_dni_enc: string | null;
+      holder_dni_last4: string | null;
       status: AttendeeRow["status"];
       used_at: string | null;
       order_id: string;
@@ -1004,6 +959,11 @@ export const supabaseEventRepository: EventRepository = {
       ((ticketRows as unknown as TicketJoinRow[] | null) ?? []).map((t) => ({
         ticketId: t.id,
         holderName: t.holder_name,
+        // DNI completo descifrado para la hoja del organizador. Si no hay enc
+        // (compras viejas), cae a "··"+last4 como pista, o vacío.
+        holderDni:
+          decryptDni(t.holder_dni_enc) ??
+          (t.holder_dni_last4 ? `··${t.holder_dni_last4}` : null),
         ticketTypeName: t.ticket_type?.name ?? "",
         status: t.status,
         usedAt: t.used_at,

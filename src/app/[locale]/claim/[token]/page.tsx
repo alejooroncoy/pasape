@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useRef, useState } from "react";
+import { use, useEffect, useState } from "react";
 import { motion } from "motion/react";
 import { useRouter } from "@/i18n/navigation";
 import { useClaimTransfer } from "@/lib/tickets/hooks/useTickets";
@@ -14,22 +14,40 @@ export default function ClaimPage(props: Props) {
   const me = useCurrentUser();
   const claim = useClaimTransfer();
   const router = useRouter();
-  const ranRef = useRef(false);
   const [done, setDone] = useState<{ ticketId: string } | null>(null);
 
   const isLogged = !!me.data?.user;
+  const profileName = me.data?.user?.fullName ?? "";
+  const profileDni = me.data?.user?.dni ?? "";
 
-  // Logueado → reclamamos automáticamente una sola vez ("pase automático").
+  // Confirmación de identidad del holder real: si el perfil ya tiene nombre/DNI,
+  // autorrellenamos y el receptor solo confirma; si no, los pide. No hay "pase
+  // automático" — capturamos quién va a entrar antes de reclamar.
+  const [name, setName] = useState("");
+  const [dni, setDni] = useState("");
+  const [touched, setTouched] = useState(false);
+
+  // Hidratar los campos con los datos del perfil una vez carga la sesión.
   useEffect(() => {
-    if (!isLogged || ranRef.current) return;
-    ranRef.current = true;
+    if (!isLogged) return;
+    setName((n) => (n === "" ? profileName : n));
+    setDni((d) => (d === "" ? profileDni : d));
+  }, [isLogged, profileName, profileDni]);
+
+  const nameValid = name.trim().length >= 2;
+  const dniValid = /^\d{8}$/.test(dni);
+  const canSubmit = isLogged && nameValid && dniValid && !claim.isPending;
+
+  const submit = () => {
+    setTouched(true);
+    if (!canSubmit) return;
     claim
-      .mutateAsync({ token })
+      .mutateAsync({ token, fullName: name.trim(), dni })
       .then((res) => setDone({ ticketId: res.ticketId }))
       .catch(() => {
         /* el error se muestra abajo */
       });
-  }, [isLogged, token, claim]);
+  };
 
   return (
     <main className="relative grid min-h-dvh place-items-center overflow-hidden bg-cart-bg px-6 py-12 text-white">
@@ -109,28 +127,59 @@ export default function ClaimPage(props: Props) {
               Ver mi entrada
             </button>
           </>
-        ) : claim.isPending || (!claim.error && !done) ? (
-          /* Reclamando */
-          <p className="text-[14px] text-cart-ink-3">Reclamando tu entrada…</p>
         ) : (
-          /* Error */
+          /* Confirmación de identidad → reclamar */
           <>
-            <div className="mx-auto mb-5 grid size-14 place-items-center rounded-full bg-rose-500/15 text-rose-300">
-              <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
-                <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.6" />
-                <path d="M12 7.5v5M12 16h.01" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-              </svg>
-            </div>
-            <h1 className="text-[22px] font-bold tracking-[-0.02em]">No pudimos darte la entrada</h1>
+            <h1 className="text-[24px] font-bold tracking-[-0.02em]">Confirma tus datos</h1>
             <p className="mx-auto mt-2 max-w-[34ch] text-[13.5px] leading-snug text-cart-ink-3">
-              {claimErrorCopy((claim.error as Error | null)?.message ?? "")}
+              Esta entrada es nominativa. El portero verifica tu DNI en la puerta — confirma con qué nombre y documento vas a entrar.
             </p>
+
+            <div className="mt-6 space-y-3 text-left">
+              <label className="block">
+                <span className="mb-1 block text-[12px] font-medium text-cart-ink-3">Nombre completo</span>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Tu nombre y apellido"
+                  className="w-full rounded-xl border border-white/10 bg-cart-bg-elev px-3.5 py-3 text-[14.5px] text-white placeholder:text-cart-ink-3 focus:border-cart-accent focus:outline-none"
+                />
+                {touched && !nameValid && (
+                  <p className="mt-1 text-[11px] text-red-400">Ingresa tu nombre completo.</p>
+                )}
+              </label>
+
+              <label className="block">
+                <span className="mb-1 block text-[12px] font-medium text-cart-ink-3">DNI</span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={8}
+                  value={dni}
+                  onChange={(e) => setDni(e.target.value.replace(/\D/g, "").slice(0, 8))}
+                  placeholder="8 dígitos"
+                  className="w-full rounded-xl border border-white/10 bg-cart-bg-elev px-3.5 py-3 text-[14.5px] tracking-[0.08em] text-white placeholder:text-cart-ink-3 placeholder:tracking-normal focus:border-cart-accent focus:outline-none"
+                />
+                {touched && !dniValid && (
+                  <p className="mt-1 text-[11px] text-red-400">El DNI debe tener 8 dígitos.</p>
+                )}
+              </label>
+            </div>
+
+            {claim.isError && (
+              <p className="mt-3 text-[12px] text-rose-300">
+                {claimErrorCopy((claim.error as Error | null)?.message ?? "")}
+              </p>
+            )}
+
             <button
               type="button"
-              onClick={() => router.push("/tickets" as never)}
-              className="mt-7 w-full rounded-full bg-cart-bg-elev py-3.5 text-[14px] font-semibold text-white transition hover:bg-cart-bg-elev-2"
+              onClick={submit}
+              disabled={!canSubmit}
+              className="mt-6 w-full rounded-full bg-cart-accent py-3.5 text-[14.5px] font-semibold text-cart-bg shadow-[0_8px_24px_-6px_var(--color-cart-accent-glow)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Ir a mis entradas
+              {claim.isPending ? "Reclamando…" : "Confirmar y reclamar"}
             </button>
           </>
         )}

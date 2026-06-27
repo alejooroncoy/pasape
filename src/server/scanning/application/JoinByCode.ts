@@ -1,10 +1,12 @@
 import { err, ok, type Result } from "@/server/_shared/result";
-import { getAuthContext } from "@/server/_shared/AuthContext";
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
+import { newDoorToken } from "./ScannerSessions";
 
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24h
 
 export type JoinResult = {
+  /** Credencial opaca del portero. La app la guarda y la manda en cada request. */
+  token: string;
   eventSlug: string;
   eventId: string;
   zoneId: string | null;
@@ -12,22 +14,25 @@ export type JoinResult = {
 };
 
 /**
- * Onboarding de portero: canjea un código de evento y crea/extiende su sesión
- * ligada al device (binding 24h). El portero no necesita ser miembro de la org.
- * Idempotente por (evento, profile, device): re-canjear extiende la sesión.
+ * Onboarding de portero por CÓDIGO (sin cuenta): canjea el código del evento +
+ * nombre/DNI y crea/extiende una sesión ligada al device (24h), devolviendo un
+ * token opaco. No requiere login. Idempotente por (evento, device): re-canjear
+ * en el mismo dispositivo reusa la sesión (y su token) y extiende el binding.
  */
 export async function joinByCode(input: {
   code: string;
   deviceId: string;
   fullName?: string | null;
-  dniLast2?: string | null;
+  /** DNI completo del portero (identificación). Se guarda server-side; el
+   *  display usa solo dni_last2. */
+  dni?: string | null;
 }): Promise<Result<JoinResult>> {
-  const auth = await getAuthContext();
-  if (!auth.ok) return err("unauthorized");
-
   const code = input.code.trim();
   const deviceId = input.deviceId.trim();
   if (!code || !deviceId) return err("invalid_input");
+
+  const dni = input.dni?.replace(/\D/g, "") || null;
+  const dniLast2 = dni ? dni.slice(-2) : null;
 
   const db = supabaseAdmin();
   const { data: codeRow } = await db
@@ -45,31 +50,55 @@ export async function joinByCode(input: {
   if (!ev) return err("event_not_found");
 
   const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString();
-  const { error: upErr } = await db.from("scanner_sessions").upsert(
-    {
+  const now = new Date().toISOString();
+
+  // Reusar la sesión código-solo del mismo (evento, device) si ya existe.
+  const { data: existing } = await db
+    .from("scanner_sessions")
+    .select("id, token")
+    .eq("event_id", codeRow.event_id)
+    .eq("device_id", deviceId)
+    .is("profile_id", null)
+    .maybeSingle<{ id: string; token: string | null }>();
+
+  let token = existing?.token ?? null;
+
+  if (existing) {
+    const { error: upErr } = await db
+      .from("scanner_sessions")
+      .update({
+        expires_at: expiresAt,
+        revoked: false,
+        zone_id: codeRow.zone_id,
+        holder_name: input.fullName ?? null,
+        holder_dni: dni,
+        dni_last2: dniLast2,
+        last_sync_at: now,
+      })
+      .eq("id", existing.id);
+    if (upErr) return err("session_create_failed");
+  } else {
+    token = newDoorToken();
+    const { error: insErr } = await db.from("scanner_sessions").insert({
       event_id: codeRow.event_id,
-      profile_id: auth.value.profileId,
+      profile_id: null,
       device_id: deviceId,
       zone_id: codeRow.zone_id,
+      token,
+      holder_name: input.fullName ?? null,
+      holder_dni: dni,
+      dni_last2: dniLast2,
       expires_at: expiresAt,
       revoked: false,
-      last_sync_at: new Date().toISOString(),
-    },
-    { onConflict: "event_id,profile_id,device_id" },
-  );
-  if (upErr) return err("session_create_failed");
-
-  // Capturamos nombre/DNI del portero en su perfil si los proporcionó (capa
-  // humana en puerta: el portero identificado).
-  if (input.fullName || input.dniLast2) {
-    const patch: Record<string, string> = {};
-    if (input.fullName) patch.full_name = input.fullName;
-    if (Object.keys(patch).length > 0) {
-      await db.from("profiles").update(patch).eq("id", auth.value.profileId);
-    }
+      last_sync_at: now,
+    });
+    if (insErr) return err("session_create_failed");
   }
 
+  if (!token) return err("session_create_failed");
+
   return ok({
+    token,
     eventSlug: ev.slug,
     eventId: codeRow.event_id,
     zoneId: codeRow.zone_id,

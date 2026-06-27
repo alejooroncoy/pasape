@@ -3,7 +3,21 @@
 // x-scanner-device en cada scan/sync para que el backend valide el binding.
 
 const KEY = "pasape-scanner-device";
+const TOKEN_KEY = "pasape-door-token";
 export const SCANNER_DEVICE_HEADER = "x-scanner-device";
+export const SCANNER_TOKEN_HEADER = "x-door-token";
+
+// Token de portero (auth por código, sin cuenta). Se guarda al canjear el código
+// y se manda en cada request; el backend resuelve la sesión por este token.
+export function setDoorToken(token: string): void {
+  if (typeof localStorage !== "undefined") localStorage.setItem(TOKEN_KEY, token);
+}
+export function getDoorToken(): string | null {
+  return typeof localStorage !== "undefined" ? localStorage.getItem(TOKEN_KEY) : null;
+}
+export function clearDoorToken(): void {
+  if (typeof localStorage !== "undefined") localStorage.removeItem(TOKEN_KEY);
+}
 
 export function getDeviceId(): string {
   if (typeof localStorage === "undefined") return "";
@@ -18,8 +32,12 @@ export function getDeviceId(): string {
   return id;
 }
 
-/** Headers con el device binding para peticiones de scan/sync. */
+/** Headers de portero: device binding + token de sesión (si ya canjeó código). */
 export function deviceHeaders(): Record<string, string> {
+  const h: Record<string, string> = {};
   const id = getDeviceId();
-  return id ? { [SCANNER_DEVICE_HEADER]: id } : {};
+  if (id) h[SCANNER_DEVICE_HEADER] = id;
+  const token = getDoorToken();
+  if (token) h[SCANNER_TOKEN_HEADER] = token;
+  return h;
 }

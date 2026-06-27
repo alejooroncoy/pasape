@@ -12,6 +12,14 @@ import { getEventStats, type EventStatsResult } from "../../application/GetEvent
 import { listEventAccesos } from "../../application/ListEventAccesos";
 import { updateEvent } from "../../application/UpdateEvent";
 import { generateDoorLink, type DoorLink } from "../../application/GenerateDoorLink";
+import { verifyScanAccess } from "@/server/scanning/application/VerifyScanAccess";
+import {
+  listZones as listZonesSvc,
+  createZone as createZoneSvc,
+  updateZone as updateZoneSvc,
+  deleteZone as deleteZoneSvc,
+} from "../../application/ManageZones";
+import type { Zone } from "../../domain/Zone";
 import { exportEventReport } from "../../application/ExportEventReport";
 import {
   getEventOrgShowcase,
@@ -101,8 +109,8 @@ const createSchema = z.object({
         presalePriceCents: z.number().int().min(0).nullable().optional(),
         presaleQty: z.number().int().min(0).nullable().optional(),
         presaleEndsAt: z.string().datetime().nullable().optional(),
-        guestListEnabled: z.boolean().optional(),
-        guestListCap: z.number().int().min(0).nullable().optional(),
+        isFree: z.boolean().optional(),
+        freeUntilAt: z.string().datetime().nullable().optional(),
       }),
     )
     .min(1),
@@ -190,9 +198,9 @@ export const EventsController = {
   },
 
   async stats(slug: string): Promise<Result<EventStatsResult>> {
-    const guard = await guardEventMember(slug);
+    const guard = await guardScanReader(slug);
     if (!guard.ok) return err(guard.error);
-    return ok(await getEventStats({ repo }, guard.value.event.id));
+    return ok(await getEventStats({ repo }, guard.value.eventId));
   },
 
   async accesos(slug: string): Promise<Result<ScanFeedItem[]>> {
@@ -213,7 +221,44 @@ export const EventsController = {
     const guard = await guardEventMember(slug);
     if (!guard.ok) return err(guard.error);
     const origin = await resolveOriginFromHeaders();
-    return ok(generateDoorLink(guard.value.event, origin));
+    return ok(await generateDoorLink(guard.value.event, origin));
+  },
+
+  // ── Puertas (zonas) ───────────────────────────────────────────────────────
+  async listZones(slug: string): Promise<Result<Zone[]>> {
+    const guard = await guardEventMember(slug);
+    if (!guard.ok) return err(guard.error);
+    return ok(await listZonesSvc(guard.value.event.id));
+  },
+
+  async createZone(slug: string, input: unknown): Promise<Result<Zone>> {
+    const guard = await guardEventMember(slug, ["owner", "admin", "editor"]);
+    if (!guard.ok) return err(guard.error);
+    const parsed = createZoneSchema.safeParse(input);
+    if (!parsed.success) return err(parsed.error.issues[0]?.message ?? "invalid_input");
+    return createZoneSvc(guard.value.event.id, {
+      name: parsed.data.name,
+      ticketTypeIds: parsed.data.ticketTypeIds,
+      isDefault: parsed.data.isDefault,
+    });
+  },
+
+  async updateZone(
+    slug: string,
+    zoneId: string,
+    input: unknown,
+  ): Promise<Result<Zone>> {
+    const guard = await guardEventMember(slug, ["owner", "admin", "editor"]);
+    if (!guard.ok) return err(guard.error);
+    const parsed = updateZoneSchema.safeParse(input);
+    if (!parsed.success) return err(parsed.error.issues[0]?.message ?? "invalid_input");
+    return updateZoneSvc(guard.value.event.id, zoneId, parsed.data);
+  },
+
+  async deleteZone(slug: string, zoneId: string): Promise<Result<{ id: string }>> {
+    const guard = await guardEventMember(slug, ["owner", "admin", "editor"]);
+    if (!guard.ok) return err(guard.error);
+    return deleteZoneSvc(guard.value.event.id, zoneId);
   },
 
   async listByOrgSlug(slug: string): Promise<Result<Event[]>> {
@@ -238,8 +283,8 @@ export const EventsController = {
       presalePriceCents: parsed.data.presalePriceCents ?? null,
       presaleQty: parsed.data.presaleQty ?? null,
       presaleEndsAt: parsed.data.presaleEndsAt ?? null,
-      guestListEnabled: parsed.data.guestListEnabled ?? false,
-      guestListCap: parsed.data.guestListCap ?? null,
+      isFree: parsed.data.isFree ?? false,
+      freeUntilAt: parsed.data.freeUntilAt ?? null,
     });
   },
 
@@ -316,7 +361,7 @@ export const EventsController = {
       ticketId: string;
       qrCode: string;
       holderName: string | null;
-      holderDniLast2: string | null;
+      holderDniLast4: string | null;
       ticketTypeName: string;
       boxLabel: string | null;
       boxHostTicketId: string | null;
@@ -324,7 +369,7 @@ export const EventsController = {
       signingPub: JsonWebKey | null;
     }>;
   }>> {
-    const guard = await guardEventMember(slug);
+    const guard = await guardScanReader(slug);
     if (!guard.ok) return err(guard.error);
     const db = supabaseAdmin();
     const { data, error } = await db
@@ -333,7 +378,7 @@ export const EventsController = {
         id,
         qr_code,
         holder_name,
-        holder_dni_last2,
+        holder_dni_last4,
         status,
         box_label,
         box_host_ticket_id,
@@ -341,13 +386,13 @@ export const EventsController = {
         orders!inner(event_id),
         ticket_types!inner(name)
       `)
-      .eq("orders.event_id", guard.value.event.id)
+      .eq("orders.event_id", guard.value.eventId)
       .in("status", ["active", "used"])
       .returns<Array<{
         id: string;
         qr_code: string;
         holder_name: string | null;
-        holder_dni_last2: string | null;
+        holder_dni_last4: string | null;
         status: "active" | "used" | "void" | "refunded";
         box_label: string | null;
         box_host_ticket_id: string | null;
@@ -360,13 +405,13 @@ export const EventsController = {
     if (!data) return err("database_error");
 
     return ok({
-      eventId: guard.value.event.id,
+      eventId: guard.value.eventId,
       fetchedAt: new Date().toISOString(),
       tickets: data.map((t) => ({
         ticketId: t.id,
         qrCode: t.qr_code,
         holderName: t.holder_name,
-        holderDniLast2: t.holder_dni_last2,
+        holderDniLast4: t.holder_dni_last4,
         ticketTypeName: t.ticket_types.name,
         boxLabel: t.box_label,
         boxHostTicketId: t.box_host_ticket_id,
@@ -381,11 +426,11 @@ export const EventsController = {
   async getEventSigningKey(
     slug: string,
   ): Promise<Result<{ eventId: string; publicKey: unknown }>> {
-    const guard = await guardEventMember(slug);
+    const guard = await guardScanReader(slug);
     if (!guard.ok) return err(guard.error);
     const db = supabaseAdmin();
-    const keys = await getOrCreateEventSigningKeys(db, guard.value.event.id);
-    return ok({ eventId: guard.value.event.id, publicKey: keys.publicJwk });
+    const keys = await getOrCreateEventSigningKeys(db, guard.value.eventId);
+    return ok({ eventId: guard.value.eventId, publicKey: keys.publicJwk });
   },
 
   async listPartners(slug: string): Promise<Result<EventPartner[]>> {
@@ -429,6 +474,8 @@ const presaleFields = {
   presalePriceCents: z.number().int().min(0).nullable().optional(),
   presaleQty: z.number().int().min(0).nullable().optional(),
   presaleEndsAt: z.string().datetime().nullable().optional(),
+  isFree: z.boolean().optional(),
+  freeUntilAt: z.string().datetime().nullable().optional(),
 };
 
 const createTicketTypeSchema = z.object({
@@ -444,8 +491,6 @@ const createTicketTypeSchema = z.object({
     priceCents: z.number().int().min(0),
     endsAt: z.string().datetime(),
   })).max(10).optional(),
-  guestListEnabled: z.boolean().optional(),
-  guestListCap: z.number().int().min(0).nullable().optional(),
   ...presaleFields,
 });
 
@@ -461,8 +506,6 @@ const updateTicketTypeSchema = z.object({
     priceCents: z.number().int().min(0),
     endsAt: z.string().datetime(),
   })).max(10).optional(),
-  guestListEnabled: z.boolean().optional(),
-  guestListCap: z.number().int().min(0).nullable().optional(),
   ...presaleFields,
 });
 
@@ -476,6 +519,18 @@ const setPromosSchema = z.object({
       }),
     )
     .max(100),
+});
+
+const createZoneSchema = z.object({
+  name: z.string().min(1),
+  ticketTypeIds: z.array(z.string().uuid()).max(100).default([]),
+  // true = recrear la puerta principal (valida todas). Solo puede haber una.
+  isDefault: z.boolean().optional(),
+});
+
+const updateZoneSchema = z.object({
+  name: z.string().min(1).optional(),
+  ticketTypeIds: z.array(z.string().uuid()).max(100).optional(),
 });
 
 const updateSchema = z.object({
@@ -520,4 +575,15 @@ async function guardEventMember(
   if (!membership) return err("forbidden");
   if (allowedRoles && !allowedRoles.includes(membership.role)) return err("forbidden");
   return ok(detail);
+}
+
+// Lectura de datos de escaneo (cache, clave pública, stats): la consume tanto el
+// miembro de la org (dashboard) como el portero por código. Delega en
+// verifyScanAccess, que resuelve ambos caminos (membership o x-door-token).
+async function guardScanReader(
+  slug: string,
+): Promise<Result<{ eventId: string }>> {
+  const access = await verifyScanAccess(slug);
+  if (!access.ok) return err(access.error);
+  return ok({ eventId: access.value.eventId });
 }

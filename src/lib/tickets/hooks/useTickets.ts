@@ -105,7 +105,7 @@ export const useCarouselScope = (ticketId: string) =>
 export const useClaimTransfer = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { token: string }) =>
+    mutationFn: (input: { token: string; fullName?: string | null; dni?: string | null }) =>
       api.post<{ ticketId: string; eventSlug: string }>("/api/tickets/claim", input),
     onSuccess: () => qc.invalidateQueries({ queryKey: ticketsRoot }),
   });

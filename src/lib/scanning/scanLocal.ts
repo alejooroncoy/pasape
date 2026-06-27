@@ -6,23 +6,34 @@ import { arbitrateTicket } from "./coordination/registry";
 export type ScanLocalResult = {
   kind: "valid" | "already_used" | "invalid";
   holderName: string | null;
-  holderDniLast2: string | null;
+  holderDniLast4: string | null;
   ticketTypeName: string | null;
   boxLabel: string | null;
   boxHostName: string | null;
   boxFilled: number | null;
   boxCapacity: number | null;
+  /**
+   * Motivo del rechazo cuando `kind === "invalid"` — para diagnóstico en device
+   * (visible en `adb logcat`). No se muestra al portero (la UI solo dice "QR
+   * inválido"), pero permite distinguir cache desactualizado (bad_cert) de clock
+   * skew (bad_window) o formato no firmado (unrecognized/malformed).
+   */
+  reason: "unrecognized" | "malformed" | "bad_cert" | "bad_window" | null;
 };
 
-const empty = (kind: ScanLocalResult["kind"]): ScanLocalResult => ({
+const empty = (
+  kind: ScanLocalResult["kind"],
+  reason: ScanLocalResult["reason"] = null,
+): ScanLocalResult => ({
   kind,
   holderName: null,
-  holderDniLast2: null,
+  holderDniLast4: null,
   ticketTypeName: null,
   boxLabel: null,
   boxHostName: null,
   boxFilled: null,
   boxCapacity: null,
+  reason,
 });
 
 /**
@@ -31,11 +42,19 @@ const empty = (kind: ScanLocalResult["kind"]): ScanLocalResult => ({
  * evento + frescura del window, luego aplica primer-scan-gana local.
  */
 export async function scanLocal(qrCode: string): Promise<ScanLocalResult> {
-  if (!isSignedQr(qrCode)) return empty("invalid");
+  if (!isSignedQr(qrCode)) {
+    console.warn(
+      `[scan] QR no firmado (no reconocido). len=${qrCode.length} preview=${qrCode.slice(0, 24)}…`,
+    );
+    return empty("invalid", "unrecognized");
+  }
   const res = await verifySignedScan(qrCode);
-  if (!res.valid) return empty("invalid");
-  const { ticketId, holderName, dniLast2 } = res.claims;
-  return admitResolved(ticketId, qrCode, "signed", { holderName, dniLast2 });
+  if (!res.valid) {
+    console.warn(`[scan] QR inválido offline: reason=${res.reason}`);
+    return empty("invalid", res.reason);
+  }
+  const { ticketId, holderName } = res.claims;
+  return admitResolved(ticketId, qrCode, "signed", { holderName });
 }
 
 /**
@@ -50,14 +69,14 @@ async function admitResolved(
   ticketId: string,
   token: string,
   kind: "signed" | "manual",
-  override: { holderName?: string | null; dniLast2?: string | null },
+  override: { holderName?: string | null },
 ): Promise<ScanLocalResult> {
   const cached = await lookupTicketById(ticketId);
 
   const usedResult = (): ScanLocalResult => ({
     ...empty("already_used"),
     holderName: override.holderName ?? cached?.holderName ?? null,
-    holderDniLast2: override.dniLast2 ?? cached?.holderDniLast2 ?? null,
+    holderDniLast4: cached?.holderDniLast4 ?? null,
     ticketTypeName: cached?.ticketTypeName ?? null,
     boxLabel: cached?.boxLabel ?? null,
   });
@@ -78,7 +97,7 @@ async function admitResolved(
   return {
     ...empty("valid"),
     holderName: override.holderName ?? cached?.holderName ?? null,
-    holderDniLast2: override.dniLast2 ?? cached?.holderDniLast2 ?? null,
+    holderDniLast4: cached?.holderDniLast4 ?? null,
     ticketTypeName: cached?.ticketTypeName ?? null,
     boxLabel: cached?.boxLabel ?? null,
   };

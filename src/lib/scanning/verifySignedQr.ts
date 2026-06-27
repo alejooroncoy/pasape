@@ -39,7 +39,9 @@ export async function verifySignedScan(
       claims: {
         ticketId: parsed.ticketId,
         holderName: ticket.holderName,
-        dniLast2: ticket.holderDniLast2,
+        // El cache offline solo guarda los últimos 4 del DNI; el claim de display
+        // los transporta (el campo del cert conserva el nombre histórico).
+        dniLast2: ticket.holderDniLast4,
         zoneId: null,
         ticketPub: ticket.signingPub as JWK,
       },

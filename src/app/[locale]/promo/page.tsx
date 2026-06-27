@@ -3,15 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Money } from "@/lib/_shared/money";
 import { motion } from "motion/react";
-import { Link } from "@/i18n/navigation";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
-import { useMyPromoterLinks, usePromoterGuests, usePromoterHome } from "@/lib/promoters/hooks/usePromoter";
+import { useMyPromoterLinks, usePromoterHome } from "@/lib/promoters/hooks/usePromoter";
 import { useRealtimePromoterStats } from "@/lib/events/hooks/useRealtimeEventStats";
 import type { PromoterLink } from "@/server/promoters/domain/Promoter";
 import type { CommissionConfig, CommissionType } from "@/server/promoters/domain/OrgPromoter";
 import { PromoterShell } from "./_shell/PromoterShell";
-import { AddGuestForm } from "./_components/AddGuestForm";
-import { GuestList } from "./_components/GuestList";
 
 const buildShareUrl = (code: string) =>
   typeof window === "undefined"
@@ -229,15 +226,6 @@ function ActiveEventPanel({ link }: { link: PromoterLink }) {
 
       <KpiRow sold={sold} validated={validated} generatedCents={generatedCents} />
 
-      <GuestsSection
-        slug={link.eventSlug}
-        loading={home.isLoading}
-        enabled={home.data?.guestListEnabled ?? false}
-        quota={home.data?.guestListQuota ?? null}
-        used={home.data?.guestListUsed ?? 0}
-        remaining={home.data?.guestListRemaining ?? null}
-      />
-
       <PaySection
         type={home.data?.commissionType ?? "percentage"}
         pct={home.data?.commissionPct ?? 0}
@@ -248,119 +236,6 @@ function ActiveEventPanel({ link }: { link: PromoterLink }) {
 
       <ActivityFeed recent={recent} loading={home.isLoading} />
     </div>
-  );
-}
-
-// ============================================================
-// Lista de invitados del evento activo (resumen + alta inline)
-// ============================================================
-function GuestsSection({
-  slug,
-  loading,
-  enabled,
-  quota,
-  used,
-  remaining,
-}: {
-  slug: string;
-  loading: boolean;
-  enabled: boolean;
-  quota: number | null;
-  used: number;
-  remaining: number | null;
-}) {
-  const guests = usePromoterGuests(slug);
-  const [adding, setAdding] = useState(false);
-  const list = guests.data ?? [];
-  const entered = list.filter((g) => g.status === "used").length;
-
-  // El organizador no activó la lista para este evento: no mostramos la sección
-  // (mientras carga tampoco, para no parpadear algo que puede no aplicar).
-  if (loading || !enabled) return null;
-
-  const noTope = quota == null;
-  const full = remaining != null && remaining <= 0;
-  // Copy del cupo: "sin tope" o "te quedan N de M".
-  const cupoLabel = noTope
-    ? "Invitaciones sin tope"
-    : `Te quedan ${remaining} de ${quota}`;
-
-  return (
-    <section>
-      <div className="mb-2 flex items-center justify-between">
-        <h3 className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">
-          Lista de invitados
-        </h3>
-        {list.length > 0 && (
-          <Link
-            href={`/promo/${slug}/guests` as never}
-            className="text-[12.5px] font-medium text-cart-accent transition hover:brightness-110"
-          >
-            Ver todos
-          </Link>
-        )}
-      </div>
-
-      {/* Cupo del promotor: lo que el organizador le asignó. */}
-      <div className="mb-3 flex items-center justify-between rounded-2xl border border-cart-line bg-cart-bg-elev px-3.5 py-2.5">
-        <span className="text-[12.5px] text-cart-ink-2">
-          {cupoLabel}
-        </span>
-        {!noTope && (
-          <span
-            className={
-              "rounded-full px-2.5 py-0.5 text-[11.5px] font-semibold " +
-              (full
-                ? "bg-rose-500/12 text-rose-300"
-                : "bg-cart-accent-soft text-cart-accent")
-            }
-          >
-            {used}/{quota}
-          </span>
-        )}
-      </div>
-
-      {list.length > 0 ? (
-        <p className="mb-3 text-[12.5px] text-cart-ink-3">
-          <b className="text-white">{list.length}</b> invitados ·{" "}
-          <b className="text-white">{entered}</b> entraron
-        </p>
-      ) : (
-        !full && (
-          <p className="mb-3 text-[12.5px] leading-snug text-cart-ink-3">
-            Invita gratis a tu gente — le llega su entrada por WhatsApp.
-            Basta su número, o agrégalo con nombre y DNI.
-          </p>
-        )
-      )}
-
-      <GuestList guests={list} loading={guests.isLoading} limit={4} />
-
-      {full ? (
-        <div className="mt-3 rounded-2xl border border-dashed border-cart-line bg-transparent px-4 py-3 text-center text-[12.5px] font-medium text-cart-ink-3">
-          Llegaste a tu cupo de invitados ({used}/{quota}).
-        </div>
-      ) : adding ? (
-        <div className="mt-3 rounded-2xl border border-cart-line-strong bg-cart-bg-elev/60 p-4">
-          <AddGuestForm slug={slug} onAdded={() => setAdding(false)} />
-          <button
-            type="button"
-            onClick={() => setAdding(false)}
-            className="mt-3 w-full text-center text-[12.5px] font-medium text-cart-ink-3 transition hover:text-white"
-          >
-            Cancelar
-          </button>
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={() => setAdding(true)}
-          className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-cart-line bg-transparent px-4 py-3 text-[13px] font-semibold text-cart-ink-2 transition hover:border-cart-line-strong hover:text-white"
-        >
-          <span className="text-cart-accent">+</span> Agregar invitado
-        </button>
-      )}
-    </section>
   );
 }
 

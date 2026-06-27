@@ -1212,7 +1212,11 @@ function TicketCard({
               {tt.name}
             </span>
             <TicketBadge kind={tt.kind} boxLabel={tt.boxLabel} />
-            {ap.isPresale && (
+            {ap.isFree ? (
+              <span className="rounded-md bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.06em] text-emerald-300">
+                Gratis
+              </span>
+            ) : ap.isPresale && (
               <span className="rounded-md bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.06em] text-emerald-300">
                 Preventa
               </span>
@@ -1220,11 +1224,15 @@ function TicketCard({
           </div>
           <div className="mt-1 text-[12px] text-cart-ink-3">
             {ticketSubtitle(tt)}
-            {ap.isPresale && (
+            {(ap.isPresale || ap.isFree) && ap.basePriceCents > 0 && (
               <span className="text-cart-ink-4"> · luego {formatMoney(ap.basePriceCents, tt.currency)}</span>
             )}
           </div>
-          {ap.isPresale && ap.presaleEndsAt && shouldCountdown(ap.presaleEndsAt) ? (
+          {ap.isFree && ap.freeUntilAt && shouldCountdown(ap.freeUntilAt) ? (
+            <div className="mt-1">
+              <PresaleCountdown endsAt={ap.freeUntilAt} />
+            </div>
+          ) : ap.isPresale && ap.presaleEndsAt && shouldCountdown(ap.presaleEndsAt) ? (
             <div className="mt-1">
               <PresaleCountdown endsAt={ap.presaleEndsAt} />
             </div>
@@ -1237,7 +1245,7 @@ function TicketCard({
           ) : null}
         </div>
         <div className="text-right">
-          {ap.isPresale && (
+          {(ap.isPresale || ap.isFree) && ap.basePriceCents > 0 && (
             <div className="text-[12px] font-medium text-cart-ink-4 line-through">
               {formatMoney(ap.basePriceCents, tt.currency)}
             </div>

@@ -1,20 +1,26 @@
 import type { Result } from "@/server/_shared/result";
 import { ok } from "@/server/_shared/result";
-import type { TicketRepository } from "@/server/tickets/ports/TicketRepository";
+import type { ScannerRef, TicketRepository } from "@/server/tickets/ports/TicketRepository";
 import type { ScanResult } from "../domain/ScanResult";
 
 type Deps = { ticketRepo: TicketRepository };
 
 export const scanQr = async (
   { ticketRepo }: Deps,
-  input: { qrCode: string; scannerId: string; usedAt?: Date },
+  input: { qrCode: string; scanner: ScannerRef; usedAt?: Date; zoneId?: string | null },
 ): Promise<Result<ScanResult>> => {
-  const result = await ticketRepo.markUsedByQr(input.qrCode, input.scannerId, input.usedAt);
+  const result = await ticketRepo.markUsedByQr(input.qrCode, input.scanner, {
+    usedAt: input.usedAt,
+    zoneId: input.zoneId,
+  });
   if (!result.ok) {
-    return ok({
-      kind: result.error === "already_used" ? "already_used" : "invalid",
-      scannedAt: new Date().toISOString(),
-    });
+    const kind =
+      result.error === "already_used"
+        ? "already_used"
+        : result.error === "wrong_zone"
+          ? "wrong_zone"
+          : "invalid";
+    return ok({ kind, scannedAt: new Date().toISOString() });
   }
   return ok({
     kind: "valid",
@@ -22,7 +28,7 @@ export const scanQr = async (
     eventId: result.value.eventId,
     scannedAt: new Date().toISOString(),
     holderName: result.value.holderName,
-    holderDniLast2: result.value.holderDniLast2,
+    holderDniLast4: result.value.holderDniLast4,
     ticketTypeName: result.value.ticketTypeName,
     boxLabel: result.value.boxLabel,
     boxHostName: result.value.boxHostName,

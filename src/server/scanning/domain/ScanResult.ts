@@ -1,15 +1,24 @@
-export type ScanResultKind = "valid" | "already_used" | "invalid" | "void" | "unknown_event";
+// "wrong_zone": la entrada es válida pero no pertenece a la puerta del portero
+// (la principal valida todas; las custom solo sus entradas). No es ingreso ni
+// rechazo definitivo — el portero la valida en su puerta correcta.
+export type ScanResultKind =
+  | "valid"
+  | "already_used"
+  | "invalid"
+  | "void"
+  | "unknown_event"
+  | "wrong_zone";
 
 export type ScanResult = {
   kind: ScanResultKind;
   ticketId?: string;
   eventId?: string;
   scannedAt: string;
-  // Why: el portero necesita ver el último-2 del DNI y el nombre del holder
+  // Why: el portero necesita ver los últimos 4 del DNI y el nombre del holder
   // para evitar que pase otra persona con un screenshot. Si el ticket fue
-  // comprado sin DNI (guest sin completar), holderDniLast2 viene null.
+  // comprado sin DNI (guest sin completar), holderDniLast4 viene null.
   holderName?: string | null;
-  holderDniLast2?: string | null;
+  holderDniLast4?: string | null;
   ticketTypeName?: string | null;
   /** Si el ticket pertenece a un box, etiqueta humana del box ("A", "VIP-1"). */
   boxLabel?: string | null;

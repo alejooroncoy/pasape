@@ -20,12 +20,9 @@ export type EventPromoterAssignment = {
   effectiveCommissionPct: number;
   /** Cupo de ventas efectivo. null = sin tope. */
   effectiveQuota: number | null;
-  /** Cupo de invitados efectivo. null = sin tope. */
-  effectiveGuestQuota: number | null;
   // ── Marcas de personalización (el promotor tiene valor propio, no hereda) ──
   commissionCustom: boolean;
   quotaCustom: boolean;
-  guestQuotaCustom: boolean;
   // ── Valores propios del link (para el detalle: editar/limpiar a heredar) ──
   /** Tipo de comisión propio del promotor (null = hereda). */
   ownCommissionType: CommissionType | null;
@@ -33,7 +30,6 @@ export type EventPromoterAssignment = {
   /** Config de hitos/especie propia del promotor (override). null = hereda. */
   ownCommissionConfig: CommissionConfig | null;
   ownQuota: number | null;
-  ownGuestQuota: number | null;
 };
 
 const slugCode = (full: string) =>
@@ -46,7 +42,7 @@ const slugCode = (full: string) =>
     .slice(0, 30) || crypto.randomBytes(4).toString("hex");
 
 const LINK_SELECT =
-  "id, code, commission_pct, commission_type, commission_config_override, quota, guest_list_quota, active, org_promoter_id, promoter_id, org_promoter:org_promoters(id, name, whatsapp, default_commission_pct, commission_type, profile_id)";
+  "id, code, commission_pct, commission_type, commission_config_override, quota, active, org_promoter_id, promoter_id, org_promoter:org_promoters(id, name, whatsapp, default_commission_pct, commission_type, profile_id)";
 
 type LinkRow = {
   id: string;
@@ -55,7 +51,6 @@ type LinkRow = {
   commission_type: CommissionType | null;
   commission_config_override: unknown;
   quota: number | null;
-  guest_list_quota: number | null;
   active: boolean;
   org_promoter_id: string;
   promoter_id: string | null;
@@ -73,7 +68,6 @@ type EventScheme = {
   commissionType: CommissionType | null;
   commissionPct: number | null;
   defaultQuota: number | null;
-  defaultGuestQuota: number | null;
 };
 
 const fetchEventScheme = async (
@@ -83,20 +77,18 @@ const fetchEventScheme = async (
   const { data } = await db
     .from("events")
     .select(
-      "promoter_commission_type, promoter_commission_pct, promoter_default_quota, promoter_default_guest_list_quota",
+      "promoter_commission_type, promoter_commission_pct, promoter_default_quota",
     )
     .eq("id", eventId)
     .maybeSingle<{
       promoter_commission_type: CommissionType | null;
       promoter_commission_pct: number | null;
       promoter_default_quota: number | null;
-      promoter_default_guest_list_quota: number | null;
     }>();
   return {
     commissionType: data?.promoter_commission_type ?? null,
     commissionPct: data?.promoter_commission_pct ?? null,
     defaultQuota: data?.promoter_default_quota ?? null,
-    defaultGuestQuota: data?.promoter_default_guest_list_quota ?? null,
   };
 };
 
@@ -122,12 +114,9 @@ const buildAssignment = (
     effectiveCommissionPct: r.commission_pct ?? scheme.commissionPct ?? op.default_commission_pct,
     // -1 = personalizado a "sin tope" (no hereda el default); null = hereda.
     effectiveQuota: r.quota === -1 ? null : r.quota ?? scheme.defaultQuota,
-    effectiveGuestQuota:
-      r.guest_list_quota === -1 ? null : r.guest_list_quota ?? scheme.defaultGuestQuota,
     commissionCustom:
       r.commission_pct != null || r.commission_config_override != null || r.commission_type != null,
     quotaCustom: r.quota != null,
-    guestQuotaCustom: r.guest_list_quota != null,
     ownCommissionType: r.commission_type,
     ownCommissionPct: r.commission_pct,
     ownCommissionConfig: coerceCommissionConfig(
@@ -135,7 +124,6 @@ const buildAssignment = (
       r.commission_config_override,
     ),
     ownQuota: r.quota,
-    ownGuestQuota: r.guest_list_quota,
   };
 };
 
@@ -256,7 +244,6 @@ export const updateAssignmentCommission = async (
     commissionType?: CommissionType | null;
     commissionConfig?: CommissionConfig | null;
     quota?: number | null;
-    guestListQuota?: number | null;
   },
 ): Promise<Result<true>> => {
   const db = supabaseAdmin();
@@ -266,7 +253,6 @@ export const updateAssignmentCommission = async (
   if (fields.commissionConfig !== undefined)
     patch.commission_config_override = fields.commissionConfig;
   if (fields.quota !== undefined) patch.quota = fields.quota;
-  if (fields.guestListQuota !== undefined) patch.guest_list_quota = fields.guestListQuota;
   if (Object.keys(patch).length === 0) return ok(true);
   const { error } = await db
     .from("promoter_links")
