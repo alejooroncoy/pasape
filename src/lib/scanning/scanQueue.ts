@@ -5,7 +5,7 @@ const DB_NAME = "pasape-scan";
 const STORE = "tickets";
 const META = "meta";
 const PENDING = "pending_scans";
-const VERSION = 2;
+const VERSION = 3;
 
 export type PendingScan = {
   id?: number;
@@ -23,11 +23,16 @@ export type PendingScan = {
 
 async function db(): Promise<IDBPDatabase> {
   return openDB(DB_NAME, VERSION, {
-    // Upgrade idéntico al de scanCache.ts — crea los 3 stores si faltan.
-    upgrade(database) {
+    // Upgrade IDÉNTICO al de scanCache.ts (misma DB, misma versión) — si difieren
+    // la versión, el openDB con el número menor lanza VersionError y rompe la cola.
+    upgrade(database, oldVersion) {
       if (!database.objectStoreNames.contains(STORE)) {
-        const s = database.createObjectStore(STORE, { keyPath: "qrCode" });
-        s.createIndex("ticketId", "ticketId", { unique: true });
+        const s = database.createObjectStore(STORE, { keyPath: "ticketId" });
+        s.createIndex("qrCode", "qrCode", { unique: false });
+      } else if (oldVersion < 3) {
+        database.deleteObjectStore(STORE);
+        const s = database.createObjectStore(STORE, { keyPath: "ticketId" });
+        s.createIndex("qrCode", "qrCode", { unique: false });
       }
       if (!database.objectStoreNames.contains(META)) {
         database.createObjectStore(META);

@@ -1,4 +1,4 @@
-import { lookupTicketById, markUsedLocalById } from "./scanCache";
+import { lookupTicketById, markUsedLocalById, getBoxFill } from "./scanCache";
 import { enqueuePendingScan } from "./scanQueue";
 import { isSignedQr, verifySignedScan } from "./verifySignedQr";
 import { arbitrateTicket } from "./coordination/registry";
@@ -94,11 +94,16 @@ async function admitResolved(
     kind,
     scannedAt: new Date().toISOString(),
   });
+  // Aforo del box desde el cache (tras marcar usado, para que el conteo incluya
+  // este ingreso). null si no es box.
+  const box = cached?.boxLabel ? await getBoxFill(ticketId) : null;
   return {
     ...empty("valid"),
     holderName: override.holderName ?? cached?.holderName ?? null,
     holderDniLast4: cached?.holderDniLast4 ?? null,
     ticketTypeName: cached?.ticketTypeName ?? null,
     boxLabel: cached?.boxLabel ?? null,
+    boxFilled: box?.filled ?? null,
+    boxCapacity: box?.capacity ?? null,
   };
 }

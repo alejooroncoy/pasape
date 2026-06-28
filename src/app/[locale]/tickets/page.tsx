@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import { Link, useRouter } from "@/i18n/navigation";
@@ -322,13 +323,40 @@ function TicketSelectScreen({
   );
 }
 
+// ── Skeleton de carga ──────────────────────────────────────────────────────
+function WalletSkeleton() {
+  return (
+    <div className="cart-grain relative min-h-screen bg-cart-bg font-sans text-white">
+      <div className="relative z-[1] mx-auto w-full max-w-[640px] px-4 pb-[96px] pt-[max(16px,env(safe-area-inset-top))] sm:px-6">
+        <div className="py-3">
+          <div className="h-3 w-20 animate-pulse rounded bg-white/[0.06]" />
+          <div className="mt-2 h-7 w-32 animate-pulse rounded bg-white/[0.06]" />
+        </div>
+        <div className="mt-2 h-10 animate-pulse rounded-2xl bg-white/[0.04]" />
+        <div className="flex flex-col gap-3 pt-5">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="h-[88px] animate-pulse rounded-2xl bg-white/[0.04]" />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Página principal ───────────────────────────────────────────────────────
-// useSearchParams() exige un <Suspense> en el árbol para poder prerenderizar
-// la ruta sin query (Next 16). Envolvemos el contenido real.
+// La wallet vive 100% del cache cliente (React Query persistido en localStorage):
+// renderizarla en el server produce un árbol distinto al primer paint del cliente
+// → hydration mismatch. La cargamos CLIENT-ONLY (ssr:false, que usa Suspense por
+// debajo) con un skeleton mientras hidrata. Esto además cubre useSearchParams().
+const WalletClient = dynamic(() => Promise.resolve(WalletPageInner), {
+  ssr: false,
+  loading: () => <WalletSkeleton />,
+});
+
 export default function WalletPage() {
   return (
-    <Suspense fallback={null}>
-      <WalletPageInner />
+    <Suspense fallback={<WalletSkeleton />}>
+      <WalletClient />
     </Suspense>
   );
 }

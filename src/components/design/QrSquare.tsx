@@ -26,9 +26,14 @@ export const QrSquare = ({ code, size = 220, centerImage, errorCorrectionLevel =
       data: code,
       image: centerImage,
       qrOptions: { errorCorrectionLevel: centerImage ? "H" : errorCorrectionLevel },
-      dotsOptions: { type: "extra-rounded", color: "#000000" },
-      cornersSquareOptions: { type: "extra-rounded", color: "#000000" },
-      cornersDotOptions: { type: "dot", color: "#000000" },
+      // Módulos y finder patterns CUADRADOS: máxima legibilidad para el lector.
+      // Los redondeados ("extra-rounded") se ven lindos pero difuminan los bordes
+      // y distorsionan los patrones de esquina (que el detector usa para ubicar y
+      // orientar el QR) → lecturas más lentas/fallidas, sobre todo con algo de
+      // borrosidad. Negro puro sobre blanco = contraste máximo.
+      dotsOptions: { type: "square", color: "#000000" },
+      cornersSquareOptions: { type: "square", color: "#000000" },
+      cornersDotOptions: { type: "square", color: "#000000" },
       backgroundOptions: { color: "#ffffff" },
       imageOptions: {
         crossOrigin: "anonymous",
@@ -54,15 +59,13 @@ export const QrSquare = ({ code, size = 220, centerImage, errorCorrectionLevel =
     }
     const el = ref.current;
     if (!el) return;
-    // Crossfade al rotar: el QR nuevo entra con un fade+scale suave. update() es
-    // síncrono, así que animamos el contenedor para suavizar el cambio visual.
+    // Crossfade al rotar — SIN blur ni scale: el QR debe estar nítido y completo
+    // en todo momento (cada 10s rota; si lo desenfocábamos 420ms, un scan en ese
+    // instante fallaba). Solo un fade de opacidad muy sutil.
     qrRef.current?.update({ data: code });
     el.animate(
-      [
-        { opacity: 0.25, transform: "scale(0.94)", filter: "blur(2px)" },
-        { opacity: 1, transform: "scale(1)", filter: "blur(0px)" },
-      ],
-      { duration: 420, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
+      [{ opacity: 0.6 }, { opacity: 1 }],
+      { duration: 160, easing: "ease-out" },
     );
   }, [code]);
 

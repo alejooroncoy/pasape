@@ -367,6 +367,7 @@ export const EventsController = {
       boxHostTicketId: string | null;
       status: "active" | "used" | "void" | "refunded";
       signingPub: JsonWebKey | null;
+      boxCapacity: number | null;
     }>;
   }>> {
     const guard = await guardScanReader(slug);
@@ -384,7 +385,7 @@ export const EventsController = {
         box_host_ticket_id,
         signing_pub,
         orders!inner(event_id),
-        ticket_types!inner(name)
+        ticket_types!inner(name, capacity)
       `)
       .eq("orders.event_id", guard.value.eventId)
       .in("status", ["active", "used"])
@@ -398,7 +399,7 @@ export const EventsController = {
         box_host_ticket_id: string | null;
         signing_pub: JsonWebKey | null;
         orders: { event_id: string };
-        ticket_types: { name: string };
+        ticket_types: { name: string; capacity: number };
       }>>();
 
     if (error) return err("database_error");
@@ -417,6 +418,8 @@ export const EventsController = {
         boxHostTicketId: t.box_host_ticket_id,
         status: t.status,
         signingPub: t.signing_pub,
+        // Solo relevante para box: aforo (asientos). El portero lo usa para "X/Y".
+        boxCapacity: t.box_label ? t.ticket_types.capacity : null,
       })),
     });
   },
