@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { C, FONT_DISPLAY } from "@/components/design/tokens";
 import { Logo } from "@/components/brand/Logo";
-import { useScanQr, useAdmitTicket } from "@/lib/scanning/hooks/useScanQr";
+import { useScanQr } from "@/lib/scanning/hooks/useScanQr";
 import { refreshScanCache, searchCachedTickets } from "@/lib/scanning/scanCache";
 import { useOnlineStatus } from "@/lib/_shared/hooks/useOnlineStatus";
 import { scanLocal, admitLocal } from "@/lib/scanning/scanLocal";
@@ -39,6 +39,8 @@ type ScanResult = {
   dniLast4:    string | null;
   boxLabel:    string | null;
   boxHostName: string | null;
+  boxFilled:   number | null;
+  boxCapacity: number | null;
   scannedAt:   string | null;
 };
 
@@ -56,25 +58,46 @@ type DetectorLike = {
   detect: (src: CanvasImageSource | ImageBitmapSource) => Promise<{ rawValue: string }[]>;
 };
 
-// Fallback jsQR para WebViews sin BarcodeDetector (WKWebView / iOS): procesa
-// los frames del video por canvas. ROI al centro (donde está el viewfinder) +
-// downscale a ~512px: solo procesa la zona que importa → mucho más rápido y no
-// capta QRs de fondo por error.
-function makeJsQrDetector(): DetectorLike {
+// Decodificador unificado. SIEMPRE recorta el ROI central (~70% del lado menor,
+// donde está el viewfinder) a un canvas chico (~640px) y decodifica ESO, no el
+// frame completo: un frame de 1080p tarda ~50ms en decodificar; el recorte a 640
+// baja a ~10-15ms. Usa BarcodeDetector NATIVO si existe (mucho más robusto con QR
+// borroso/inclinado); si no, jsQR sobre el mismo canvas.
+const ROI_TARGET = 640;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function makeDetector(): DetectorLike | null {
+  if (typeof window === "undefined") return null;
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const Ctor = (window as any).BarcodeDetector;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let native: any = null;
+  if (Ctor) {
+    try { native = new Ctor({ formats: ["qr_code"] }); } catch { /* fallback */ }
+  }
   let jsQRmod: typeof import("jsqr").default | null = null;
-  void import("jsqr").then((m) => { jsQRmod = m.default; });
+  if (!native) {
+    void import("jsqr").then((m) => { jsQRmod = m.default; });
+  }
   return {
     async detect(src) {
       const video = src as HTMLVideoElement;
       const vw = video.videoWidth, vh = video.videoHeight;
-      if (!vw || !vh || !ctx || !jsQRmod) return [];
-      // ROI: recorta el cuadrado central (~70% del lado menor) — el QR siempre
-      // está ahí (el viewfinder lo guía). Ignora el resto del frame.
+      if (!vw || !vh) return [];
+      if (native) {
+        // El nativo está optimizado para el <video> directo (GPU). Pasarle un
+        // canvas 2D lo DUPLICABA el tiempo de decode → se lo damos crudo.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const codes = await native.detect(video);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return codes.map((c: any) => ({ rawValue: c.rawValue as string }));
+      }
+      // Fallback jsQR: SÍ conviene recortar el ROI central a un canvas chico.
+      if (!ctx || !jsQRmod) return [];
       const roi = Math.round(Math.min(vw, vh) * 0.7);
       const sx = Math.round((vw - roi) / 2), sy = Math.round((vh - roi) / 2);
-      const target = Math.min(512, roi);
+      const target = Math.min(ROI_TARGET, roi);
       canvas.width = target; canvas.height = target;
       ctx.drawImage(video, sx, sy, roi, roi, 0, 0, target, target);
       const img = ctx.getImageData(0, 0, target, target);
@@ -82,16 +105,6 @@ function makeJsQrDetector(): DetectorLike {
       return res?.data ? [{ rawValue: res.data }] : [];
     },
   };
-}
-
-function getDetector(): DetectorLike | null {
-  if (typeof window === "undefined") return null;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const Ctor = (window as any).BarcodeDetector;
-  if (Ctor) {
-    try { return new Ctor({ formats: ["qr_code"] }) as DetectorLike; } catch { /* cae al fallback */ }
-  }
-  return makeJsQrDetector();
 }
 
 function fmtTime(iso: string) {
@@ -102,7 +115,6 @@ function toneSoftFor(kind: ScanKind) { return kind === "valid" ? C.greenSoft : k
 
 export function ScanScreen({ eventSlug }: { eventSlug: string }) {
   const scan      = useScanQr(eventSlug);
-  const admit     = useAdmitTicket(eventSlug);
   const online    = useOnlineStatus();
 
   const { data: eventData } = useEvent(eventSlug);
@@ -137,6 +149,10 @@ export function ScanScreen({ eventSlug }: { eventSlug: string }) {
   const lastCodeRef = useRef("");
   const lastDetectRef = useRef(0);
   const clearTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Mientras se muestra un resultado, pausamos la detección: el QR rota cada 10s,
+  // así que sin pausa el resultado en pantalla cambiaría solo. El portero avanza
+  // con el botón "Siguiente".
+  const scanPausedRef = useRef(false);
 
   const [active,       setActive]       = useState(false);
   const [cameraError,  setCameraError]  = useState(false);
@@ -228,14 +244,16 @@ export function ScanScreen({ eventSlug }: { eventSlug: string }) {
     if (clearTimer.current) clearTimeout(clearTimer.current);
     setResult(null);
     lastCodeRef.current = "";
+    scanPausedRef.current = false; // reanudar la detección
   }, []);
 
   const showResult = useCallback((r: ScanResult) => {
     setResult(r);
     haptic(r.kind);
+    // El resultado SE QUEDA hasta que el portero toque "Siguiente": pausamos la
+    // detección para que el QR rotativo no lo reemplace mientras lo lee.
+    scanPausedRef.current = true;
     if (clearTimer.current) clearTimeout(clearTimer.current);
-    // Válido: 1.8s — el portero ya puede apuntar al siguiente. Errores: 2.5s para que lea.
-    clearTimer.current = setTimeout(dismissResult, r.kind === "valid" ? 1800 : 2500);
     // Actualizar lista de asistentes
     if (r.holderName) {
       setAttendees((prev) => prev.map((a) =>
@@ -250,28 +268,55 @@ export function ScanScreen({ eventSlug }: { eventSlug: string }) {
     if (!code || code === lastCodeRef.current) return;
     lastCodeRef.current = code;
     try {
-      const raw = online ? await scan.mutateAsync(code) : await scanLocal(code);
+      // LOCAL-FIRST: validación offline contra el cache firmado, instantánea (sin
+      // round-trip al server, que en la puerta se sentía como ~4s). El envío al
+      // server (fuente de verdad + dedup multi-puerta) va por la cola en segundo
+      // plano. Solo si el ticket NO está en el cache (bad_cert) y hay red caemos
+      // al server, que sí conoce tickets recién comprados.
+      const local = await scanLocal(code);
+      if (local.kind === "invalid" && local.reason === "bad_cert" && online) {
+        const raw = await scan.mutateAsync(code);
+        showResult({
+          kind:        (raw.kind as ScanKind) ?? "invalid",
+          holderName:  raw.holderName ?? null,
+          typeName:    raw.ticketTypeName ?? null,
+          dniLast4:    raw.holderDniLast4 ?? null,
+          boxLabel:    raw.boxLabel ?? null,
+          boxHostName: raw.boxHostName ?? null,
+          boxFilled:   raw.boxFilled ?? null,
+          boxCapacity: raw.boxCapacity ?? null,
+          scannedAt:   ("scannedAt" in raw ? raw.scannedAt : null) ?? null,
+        });
+        return;
+      }
       showResult({
-        kind:        (raw.kind as ScanKind) ?? "invalid",
-        holderName:  raw.holderName ?? null,
-        typeName:    raw.ticketTypeName ?? null,
-        dniLast4:    raw.holderDniLast4 ?? null,
-        boxLabel:    raw.boxLabel ?? null,
-        boxHostName: raw.boxHostName ?? null,
-        scannedAt:   ("scannedAt" in raw ? raw.scannedAt : null) ?? null,
+        kind:        local.kind,
+        holderName:  local.holderName,
+        typeName:    local.ticketTypeName,
+        dniLast4:    local.holderDniLast4,
+        boxLabel:    local.boxLabel,
+        boxHostName: local.boxHostName,
+        boxFilled:   local.boxFilled,
+        boxCapacity: local.boxCapacity,
+        scannedAt:   null,
       });
+      if (online) void syncPending(eventSlug); // empuja la cola sin bloquear
     } catch {
-      showResult({ kind: "invalid", holderName: null, typeName: "QR no reconocido", dniLast4: null, boxLabel: null, boxHostName: null, scannedAt: null });
+      showResult({ kind: "invalid", holderName: null, typeName: "QR no reconocido", dniLast4: null, boxLabel: null, boxHostName: null, boxFilled: null, boxCapacity: null, scannedAt: null });
     }
-  }, [scan, online, showResult]);
+  }, [scan, online, showResult, eventSlug]);
 
-  // Throttle a ~20fps: detectar más seguido no mejora la lectura (el portero
-  // sostiene el QR cientos de ms) pero recalienta el equipo y entrecorta el
-  // preview. 50ms entre detecciones mantiene la cámara fluida y fría.
-  const DETECT_INTERVAL_MS = 50;
+  // Antes 50ms para no recalentar cuando el decode costaba ~50ms. Con el ROI a
+  // 640 el decode baja a ~10-15ms, así que detectamos al ritmo del rAF (~16ms)
+  // para enganchar el QR lo antes posible. La detección se pausa al mostrar
+  // resultado, así que no corre en caliente de forma indefinida.
+  const DETECT_INTERVAL_MS = 0;
   const loop = useCallback(async function scanLoop(detector: DetectorLike) {
     const video = videoRef.current;
     if (!video || video.readyState < 2) { rafRef.current = requestAnimationFrame(() => void scanLoop(detector)); return; }
+    // Pausado mientras se muestra un resultado: no detectar (la cámara sigue viva
+    // de fondo, pero el resultado en pantalla no se reemplaza hasta "Siguiente").
+    if (scanPausedRef.current) { rafRef.current = requestAnimationFrame(() => void scanLoop(detector)); return; }
     const now = performance.now();
     if (now - lastDetectRef.current >= DETECT_INTERVAL_MS) {
       lastDetectRef.current = now;
@@ -282,7 +327,7 @@ export function ScanScreen({ eventSlug }: { eventSlug: string }) {
 
   const startCamera = useCallback(async () => {
     setCameraError(false);
-    const detector = getDetector();
+    const detector = makeDetector();
     if (!detector) { setCameraError(true); return; }
     try {
       // 720p + autofocus continuo: resolución suficiente para leer QR a ~30cm
@@ -290,6 +335,8 @@ export function ScanScreen({ eventSlug }: { eventSlug: string }) {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: "environment",
+          // 720p: el nativo decodifica más rápido en frames chicos. Suficiente
+          // resolución para leer el QR a ~30cm.
           width:  { ideal: 1280 },
           height: { ideal: 720 },
           frameRate: { ideal: 30 },
@@ -323,22 +370,25 @@ export function ScanScreen({ eventSlug }: { eventSlug: string }) {
     if (attendee.ticketId === lastCodeRef.current) return;
     lastCodeRef.current = attendee.ticketId;
     try {
-      const raw = online
-        ? await admit.mutateAsync(attendee.ticketId)
-        : await admitLocal(attendee.ticketId);
+      // El asistente viene del cache (búsqueda local) → admisión local-first
+      // instantánea; el server se reconcilia por la cola en segundo plano.
+      const raw = await admitLocal(attendee.ticketId);
       showResult({
-        kind:        (raw.kind as ScanKind) ?? "invalid",
+        kind:        raw.kind,
         holderName:  raw.holderName ?? attendee.holderName ?? null,
         typeName:    raw.ticketTypeName ?? attendee.ticketType ?? null,
         dniLast4:    raw.holderDniLast4 ?? attendee.dniLast4 ?? null,
         boxLabel:    raw.boxLabel ?? null,
         boxHostName: raw.boxHostName ?? null,
-        scannedAt:   ("scannedAt" in raw ? raw.scannedAt : null) ?? null,
+        boxFilled:   raw.boxFilled ?? null,
+        boxCapacity: raw.boxCapacity ?? null,
+        scannedAt:   null,
       });
+      if (online) void syncPending(eventSlug);
     } catch {
-      showResult({ kind: "invalid", holderName: null, typeName: "No se pudo admitir", dniLast4: null, boxLabel: null, boxHostName: null, scannedAt: null });
+      showResult({ kind: "invalid", holderName: null, typeName: "No se pudo admitir", dniLast4: null, boxLabel: null, boxHostName: null, boxFilled: null, boxCapacity: null, scannedAt: null });
     }
-  }, [admit, online, showResult]);
+  }, [online, showResult, eventSlug]);
 
   const scanFromList = useCallback(async (attendee: Attendee) => {
     if (searchOpen) closeMobileSearch();
@@ -452,11 +502,11 @@ export function ScanScreen({ eventSlug }: { eventSlug: string }) {
             {result.kind === "valid" ? (result.holderName ?? "Entrada válida") : result.kind === "already_used" ? `Ya ingresó${result.scannedAt ? ` · ${fmtTime(result.scannedAt)}` : ""}` : "QR inválido"}
           </div>
           <div style={{ marginTop: 3, fontSize: 13, color: C.dim, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {result.kind === "valid" ? [result.typeName, result.boxLabel ? `Box ${result.boxLabel}` : null, result.dniLast4 ? `DNI ··${result.dniLast4}` : null].filter(Boolean).join("  ·  ")
+            {result.kind === "valid" ? [result.boxLabel ? `Box ${result.boxLabel}` : result.typeName, result.boxLabel && result.boxCapacity ? `${result.boxFilled ?? 0}/${result.boxCapacity}` : null, result.dniLast4 ? `DNI ··${result.dniLast4}` : null].filter(Boolean).join("  ·  ")
               : result.kind === "already_used" ? (result.holderName ?? "") : (result.typeName ?? "QR no pertenece a este evento")}
           </div>
         </div>
-        <div style={{ fontSize: 11, color: C.dimmer, fontWeight: 500, flexShrink: 0 }}>toca</div>
+        <div style={{ fontSize: 11, fontWeight: 600, flexShrink: 0, padding: "6px 12px", borderRadius: 999, border: `1px solid ${tone}55`, color: tone }}>Siguiente ›</div>
       </div>
     </div>
   ) : null;
@@ -644,29 +694,37 @@ export function ScanScreen({ eventSlug }: { eventSlug: string }) {
         {/* Viñeta oscura en bordes para legibilidad del header */}
         <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, transparent 30%, transparent 60%, rgba(0,0,0,0.65) 100%)", pointerEvents: "none" }}/>
 
-        {/* Scan line */}
-        {active && !result && (
-          <div style={{ position: "absolute", left: "12%", right: "12%", height: 2, borderRadius: 999, background: `linear-gradient(90deg, transparent, ${C.green}, transparent)`, boxShadow: `0 0 16px 5px ${C.green}55`, animation: "scanline 2.4s ease-in-out infinite" }}/>
+        {/* Marco CUADRADO centrado — el QR es cuadrado, así que el viewfinder también.
+            Lado = el menor entre 72% del ancho y 58% del alto (cabe en vertical y horizontal). */}
+        {active && (
+          <div style={{
+            position: "absolute", top: "44%", left: "50%", transform: "translate(-50%, -50%)",
+            width: "min(72vw, 58vh)", aspectRatio: "1 / 1",
+            pointerEvents: "none",
+          }}>
+            {/* Scan line — dentro del marco */}
+            {!result && (
+              <div style={{ position: "absolute", left: "6%", right: "6%", height: 2, borderRadius: 999, background: `linear-gradient(90deg, transparent, ${C.green}, transparent)`, boxShadow: `0 0 16px 5px ${C.green}55`, animation: "scanline 2.4s ease-in-out infinite" }}/>
+            )}
+            {/* Esquinas del marco cuadrado */}
+            {(["tl","tr","bl","br"] as const).map((pos) => {
+              const isR = pos.includes("r"), isB = pos.includes("b");
+              return (
+                <div key={pos} style={{
+                  position: "absolute",
+                  top: isB ? undefined : -1, bottom: isB ? -1 : undefined,
+                  left: isR ? undefined : -1, right: isR ? -1 : undefined,
+                  width: 34, height: 34,
+                  borderTop:    !isB ? `3px solid rgba(255,255,255,0.9)` : "none",
+                  borderBottom: isB  ? `3px solid rgba(255,255,255,0.9)` : "none",
+                  borderLeft:   !isR ? `3px solid rgba(255,255,255,0.9)` : "none",
+                  borderRight:  isR  ? `3px solid rgba(255,255,255,0.9)` : "none",
+                  borderRadius: pos === "tl" ? "8px 0 0 0" : pos === "tr" ? "0 8px 0 0" : pos === "bl" ? "0 0 0 8px" : "0 0 8px 0",
+                }}/>
+              );
+            })}
+          </div>
         )}
-
-        {/* Esquinas del viewfinder — centradas en pantalla */}
-        {(["tl","tr","bl","br"] as const).map((pos) => {
-          const isR = pos.includes("r"), isB = pos.includes("b");
-          const offset = "18%";
-          return (
-            <div key={pos} style={{
-              position: "absolute",
-              top: isB ? undefined : offset, bottom: isB ? offset : undefined,
-              left: isR ? undefined : offset, right: isR ? offset : undefined,
-              width: 32, height: 32,
-              borderTop:    !isB ? `3px solid rgba(255,255,255,0.9)` : "none",
-              borderBottom: isB  ? `3px solid rgba(255,255,255,0.9)` : "none",
-              borderLeft:   !isR ? `3px solid rgba(255,255,255,0.9)` : "none",
-              borderRight:  isR  ? `3px solid rgba(255,255,255,0.9)` : "none",
-              borderRadius: pos === "tl" ? "6px 0 0 0" : pos === "tr" ? "0 6px 0 0" : pos === "bl" ? "0 0 0 6px" : "0 0 6px 0",
-            }}/>
-          );
-        })}
 
         {/* Hint central cuando está escaneando */}
         {active && !result && (
@@ -809,52 +867,67 @@ export function ScanScreen({ eventSlug }: { eventSlug: string }) {
               : "QR inválido"}
           </div>
 
-          {/* Box label — si tiene box, MUY prominente porque es lo que el portero necesita para ubicar a la persona */}
-          {result.kind === "valid" && result.boxLabel && (
-            <div style={{ marginBottom: 8, padding: "6px 20px", borderRadius: 999, background: "rgba(255,255,255,0.15)", fontSize: 20, fontWeight: 800, letterSpacing: "0.04em", color: "#fff" }}>
-              Box {result.boxLabel}
+          {/* Tipo de entrada — prominente: Box (para ubicar a la persona) o el nombre
+              de la entrada ("Entrada general", "VIP"…), para que el portero lo vea de un vistazo. */}
+          {result.kind === "valid" && (result.boxLabel || result.typeName) && (
+            <div style={{ marginBottom: 8, padding: "6px 20px", borderRadius: 999, background: "rgba(255,255,255,0.15)", fontSize: 20, fontWeight: 800, letterSpacing: "0.02em", color: "#fff" }}>
+              {result.boxLabel ? `Box ${result.boxLabel}` : result.typeName}
             </div>
           )}
 
-          {/* Info secundaria */}
+          {/* Info secundaria — el pill de arriba ya muestra el tipo/box. Aquí va el
+              aforo del box (cuántos del box ya entraron) y el DNI. */}
           <div style={{ fontSize: 15, color: "rgba(255,255,255,0.5)", textAlign: "center", lineHeight: 1.5 }}>
             {result.kind === "valid"
-              ? [result.typeName, result.dniLast4 ? `DNI ··${result.dniLast4}` : null].filter(Boolean).join("  ·  ")
+              ? [
+                  result.boxLabel && result.boxCapacity ? `${result.boxFilled ?? 0}/${result.boxCapacity} en el box` : null,
+                  result.dniLast4 ? `DNI ··${result.dniLast4}` : null,
+                ].filter(Boolean).join("  ·  ")
               : result.kind === "already_used"
               ? [result.holderName, result.scannedAt ? `Entró ${fmtTime(result.scannedAt)}` : null].filter(Boolean).join("  ·  ")
               : (result.typeName ?? "QR no pertenece a este evento")}
           </div>
 
-          {/* Progress bar auto-dismiss — el portero ve visualmente que el sistema vuelve solo */}
-          <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 3, background: "rgba(255,255,255,0.08)" }}>
-            <div style={{
-              height: "100%", background: tone,
-              animation: `${result.kind === "valid" ? "shrink18" : "shrink25"} ${result.kind === "valid" ? "1.8s" : "2.5s"} linear forwards`,
-            }}/>
+          {/* Acciones — el resultado se queda hasta que el portero toque "Siguiente". */}
+          <div style={{
+            position: "absolute",
+            bottom: "calc(env(safe-area-inset-bottom, 0px) + 24px)",
+            left: 24, right: 24,
+            display: "flex", alignItems: "center", gap: 12,
+          }}>
+            <button
+              type="button"
+              onClick={dismissResult}
+              style={{
+                flex: 1, height: 60, borderRadius: 18, border: 0,
+                background: "#fff", color: "#0a0a12",
+                fontFamily: FONT_DISPLAY, fontSize: 18, fontWeight: 800, letterSpacing: "-0.01em",
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+                cursor: "pointer", boxShadow: "0 8px 28px rgba(0,0,0,0.35)",
+              }}
+            >
+              Siguiente
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 10h11M11 5l5 5-5 5" stroke="#0a0a12" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+            {/* Buscar — toque opcional */}
+            <button
+              type="button"
+              onClick={openMobileSearch}
+              style={{
+                width: 60, height: 60, borderRadius: 18, flexShrink: 0,
+                border: "1px solid rgba(255,255,255,0.18)",
+                background: "rgba(0,0,0,0.3)",
+                color: "rgba(255,255,255,0.7)",
+                cursor: "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}
+            >
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <circle cx="9" cy="9" r="5.5" stroke="currentColor" strokeWidth="1.8"/>
+                <path d="M13.5 13.5L17 17" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+              </svg>
+            </button>
           </div>
-
-          {/* FAB buscar — toque opcional, no interrumpe el flujo principal */}
-          <button
-            type="button"
-            onClick={openMobileSearch}
-            style={{
-              position: "absolute",
-              bottom: "calc(env(safe-area-inset-bottom, 0px) + 20px)",
-              right: 20,
-              width: 50, height: 50,
-              borderRadius: 999,
-              border: "1px solid rgba(255,255,255,0.12)",
-              background: "rgba(0,0,0,0.25)",
-              color: "rgba(255,255,255,0.5)",
-              cursor: "pointer",
-              display: "flex", alignItems: "center", justifyContent: "center",
-            }}
-          >
-            <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
-              <circle cx="9" cy="9" r="5.5" stroke="currentColor" strokeWidth="1.8"/>
-              <path d="M13.5 13.5L17 17" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
-            </svg>
-          </button>
         </div>
       )}
 

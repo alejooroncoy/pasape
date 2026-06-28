@@ -19,6 +19,8 @@ export type CachedTicket = {
   status: "active" | "used" | "void" | "refunded";
   /** Clave pública ECDSA del ticket (para verificar QR compacto offline). */
   signingPub: JsonWebKey | null;
+  /** Aforo del box (asientos). Solo para tickets de box; null si no es box. */
+  boxCapacity: number | null;
 };
 
 type ScanCacheResponse = {
@@ -86,6 +88,31 @@ export async function markUsedLocalById(ticketId: string): Promise<void> {
   const d = await db();
   const t = await d.getFromIndex(STORE, "ticketId", ticketId);
   if (t) await d.put(STORE, { ...t, status: "used" });
+}
+
+/**
+ * Aforo del box al que pertenece `ticketId`, calculado offline desde el cache.
+ * `filled` = cuántos del box ya entraron (status used); `capacity` = asientos.
+ * null si el ticket no es de box o falta capacidad. Llamar DESPUÉS de marcar
+ * usado el ticket actual para que el conteo lo incluya.
+ */
+export async function getBoxFill(
+  ticketId: string,
+): Promise<{ filled: number; capacity: number } | null> {
+  const d = await db();
+  const self = await d.get(STORE, ticketId) as CachedTicket | undefined;
+  if (!self?.boxLabel) return null;
+  const hostId = self.boxHostTicketId ?? ticketId;
+  const all: CachedTicket[] = await d.getAll(STORE);
+  const group = all.filter(
+    (t) => t.ticketId === hostId || t.boxHostTicketId === hostId,
+  );
+  const filled = group.filter((t) => t.status === "used").length;
+  const capacity =
+    self.boxCapacity ??
+    group.find((t) => t.ticketId === hostId)?.boxCapacity ??
+    null;
+  return capacity != null ? { filled, capacity } : null;
 }
 
 /**

@@ -27,6 +27,13 @@ export const useTicket = (id: string, linkToken?: string | null) =>
     },
     enabled: !!id,
     gcTime: PERSIST_GC_TIME,
+    // Mientras la entrada está ACTIVA y el holder la tiene abierta, sondeamos cada
+    // 4s: apenas el portero la valida (que empuja el "usado" al server al instante),
+    // la vista pasa a "Ya usada" casi en tiempo real. Al volverse usada/anulada el
+    // polling se detiene solo (no hay nada más que actualizar). No corre en
+    // background: solo con la pestaña enfocada (justo cuando se muestra el QR).
+    refetchInterval: (query) =>
+      query.state.data?.status === "active" ? 4000 : false,
   });
 
 export type GuestBuyer = {

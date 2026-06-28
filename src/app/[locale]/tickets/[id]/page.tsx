@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, use, useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
@@ -29,11 +30,38 @@ const cardVariants = {
   exit: (dir: number) => ({ x: dir > 0 ? -300 : dir < 0 ? 300 : 0, opacity: 0, scale: 0.96 }),
 };
 
+function TicketSkeleton() {
+  return (
+    <div className="min-h-dvh bg-cart-bg text-white">
+      <header className="sticky top-0 z-30 border-b border-cart-line bg-cart-bg/85 backdrop-blur-md">
+        <div className="mx-auto flex max-w-[640px] items-center justify-between px-5 py-3">
+          <div className="h-5 w-16 animate-pulse rounded bg-white/[0.06]" />
+          <div className="h-5 w-24 animate-pulse rounded bg-white/[0.06]" />
+        </div>
+      </header>
+      <div className="mx-auto max-w-[640px] px-5 pt-6">
+        <div className="aspect-square w-full animate-pulse rounded-3xl bg-white/[0.04]" />
+        <div className="mt-5 h-6 w-1/2 animate-pulse rounded bg-white/[0.06]" />
+        <div className="mt-2 h-4 w-2/3 animate-pulse rounded bg-white/[0.05]" />
+      </div>
+    </div>
+  );
+}
+
+// El detalle del ticket vive del cache cliente (React Query persistido) y genera
+// el QR rotativo con WebCrypto en el device → renderizarlo en el server produce
+// un árbol distinto al primer paint (hydration mismatch). Client-only con
+// skeleton (ssr:false usa Suspense por debajo).
+const TicketDetailClient = dynamic(() => Promise.resolve(TicketDetailInner), {
+  ssr: false,
+  loading: () => <TicketSkeleton />,
+});
+
 export default function TicketDetailPage({ params }: Props) {
   const { id } = use(params);
   return (
-    <Suspense fallback={null}>
-      <TicketDetailInner id={id} />
+    <Suspense fallback={<TicketSkeleton />}>
+      <TicketDetailClient id={id} />
     </Suspense>
   );
 }
@@ -292,7 +320,34 @@ function TicketDetailInner({ id }: { id: string }) {
               </div>
             )}
             <div className="relative mx-auto grid size-[240px] place-items-center">
-              {rotating.payload ? (
+              {data.status === "used" ? (
+                // Ya ingresó: estampa clara y bonita en vez del QR (que ya no sirve).
+                <div className="grid size-[240px] place-items-center gap-3 px-6 text-center">
+                  <div className="grid size-[88px] place-items-center rounded-full bg-emerald-500/10 ring-1 ring-emerald-500/25">
+                    <svg width="44" height="44" viewBox="0 0 24 24" fill="none">
+                      <path d="M4 12.5l5 5 11-12" stroke="#059669" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </div>
+                  <div>
+                    <div className="text-[18px] font-bold tracking-[-0.01em] text-neutral-900">Ya ingresaste</div>
+                    {data.usedAt && (
+                      <div className="mt-0.5 text-[12.5px] text-neutral-500">{formatDate(data.usedAt, data.event.timezone)}</div>
+                    )}
+                  </div>
+                </div>
+              ) : data.status === "void" || data.status === "refunded" ? (
+                <div className="grid size-[240px] place-items-center gap-3 px-6 text-center">
+                  <div className="grid size-[88px] place-items-center rounded-full bg-neutral-100 ring-1 ring-neutral-200">
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none">
+                      <circle cx="12" cy="12" r="9" stroke="#9ca3af" strokeWidth="2" />
+                      <path d="M6 6l12 12" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" />
+                    </svg>
+                  </div>
+                  <div className="text-[18px] font-bold tracking-[-0.01em] text-neutral-900">
+                    {data.status === "refunded" ? "Entrada reembolsada" : "Entrada anulada"}
+                  </div>
+                </div>
+              ) : rotating.payload ? (
                 <QrSquare code={rotating.payload} size={240} />
               ) : (
                 <div className="grid size-[240px] place-items-center px-4 text-center text-[13px] text-cart-ink-3">
