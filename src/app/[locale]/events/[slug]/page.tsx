@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, use, useMemo, useState } from "react";
+import { ButtonHTMLAttributes, Suspense, use, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Link, useRouter } from "@/i18n/navigation";
 import { UserHeader } from "@/app/[locale]/_home/UserHeader";
@@ -109,15 +109,15 @@ function EventDetailInner({ params }: Props) {
       <div className="min-h-dvh bg-cart-bg text-cart-ink-2">
         <UserHeader />
         <div className="grid min-h-[60dvh] place-items-center px-6 text-center">
-        <div>
-          <p className="text-[15px]">No pudimos cargar este evento.</p>
-          <Link
-            href={"/" as never}
-            className="mt-3 inline-block text-[13px] text-cart-accent underline"
-          >
-            Volver al inicio
-          </Link>
-        </div>
+          <div>
+            <p className="text-[15px]">No pudimos cargar este evento.</p>
+            <Link
+              href={"/" as never}
+              className="mt-3 inline-block text-[13px] text-cart-accent underline"
+            >
+              Volver al inicio
+            </Link>
+          </div>
         </div>
       </div>
     );
@@ -129,7 +129,7 @@ function EventDetailInner({ params }: Props) {
   const allSoldOut = availability.total === 0;
 
   return (
-    <div className="min-h-dvh bg-cart-bg text-white">
+    <PageContainer event={event}>
       <UserHeader />
       <div className="mx-auto w-full max-w-[1120px] px-5 lg:px-8">
         <div className="grid gap-8 pt-4 lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-10 lg:pt-8">
@@ -192,6 +192,7 @@ function EventDetailInner({ params }: Props) {
                     setGroupQty((prev) => ({ ...prev, [key]: qty }))
                   }
                   onPickGroup={(group) => router.push(buyHref(group) as never)}
+                  coverUrl={event?.coverUrl}
                 />
               </div>
             )}
@@ -199,9 +200,9 @@ function EventDetailInner({ params }: Props) {
             {event.description && <DescriptionBlock text={event.description} />}
 
             {/* Productora del evento — lleva a su vitrina (estilo Passline/Luma). */}
-            {showcase.data?.org && <OrganizerChip org={showcase.data.org} />}
+            {showcase.data?.org && <OrganizerChip org={showcase.data.org} coverUrl={event.coverUrl} />}
 
-            <FeatureGrid />
+            <FeatureGrid coverUrl={event.coverUrl} />
 
             {partners.data && partners.data.length > 0 && (
               <PartnersStrip partners={partners.data} />
@@ -216,7 +217,7 @@ function EventDetailInner({ params }: Props) {
           <aside className="hidden lg:block">
             {/* top-20 = altura del PublicHeader sticky (~57px) + respiro */}
             <div className="sticky top-20">
-              <div className="rounded-3xl border border-cart-line bg-cart-bg-elev p-5 shadow-[0_20px_60px_-20px_rgba(0,0,0,0.6)]">
+              <AsideContainer event={event}>
                 {isClosed ? (
                   <EndedPanel org={showcase.data?.org} />
                 ) : (
@@ -232,28 +233,28 @@ function EventDetailInner({ params }: Props) {
                           setGroupQty((prev) => ({ ...prev, [key]: qty }))
                         }
                         onPickGroup={(group) => router.push(buyHref(group) as never)}
+                        coverUrl={event?.coverUrl}
                       />
                     </div>
 
-                    <button
-                      type="button"
+                    <BuyButton
                       onClick={() => router.push(buyHrefAll() as never)}
+                      event={event}
                       disabled={allSoldOut}
-                      className="mt-5 w-full rounded-full bg-cart-accent py-3.5 text-[14.5px] font-semibold text-cart-bg shadow-[0_8px_24px_-6px_var(--color-cart-accent-glow)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:bg-cart-bg-elev-2 disabled:text-cart-ink-3 disabled:shadow-none"
                     >
                       {allSoldOut
                         ? "Agotado"
                         : liveUnits > 0
                           ? `${liveUnits} ${liveUnits === 1 ? "entrada" : "entradas"} · ${formatPrice(liveTotalCents, "PEN")}`
                           : "Comprar entradas"}
-                    </button>
+                    </BuyButton>
 
                     <p className="mt-3 text-center text-[11.5px] text-cart-ink-4">
                       Yape, tarjeta o transferencia · QR al instante
                     </p>
                   </>
                 )}
-              </div>
+              </AsideContainer>
 
               {showcase.data && showcase.data.events.length > 0 && (
                 <SidebarMoreFromOrg org={showcase.data.org} events={showcase.data.events} />
@@ -268,11 +269,10 @@ function EventDetailInner({ params }: Props) {
         style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)" }}
       >
         <div className="mx-auto px-5 pt-3">
-          <button
-            type="button"
+          <BuyButton
             onClick={() => router.push(buyHrefAll() as never)}
+            event={event}
             disabled={isClosed || allSoldOut}
-            className="w-full rounded-full bg-cart-accent py-3.5 text-[15px] font-semibold text-cart-bg shadow-[0_8px_24px_-6px_var(--color-cart-accent-glow)] transition active:brightness-110 disabled:cursor-not-allowed disabled:bg-cart-bg-elev-2 disabled:text-cart-ink-3 disabled:shadow-none"
           >
             {isClosed
               ? "Evento terminado"
@@ -281,10 +281,50 @@ function EventDetailInner({ params }: Props) {
                 : liveUnits > 0
                   ? `${liveUnits} ${liveUnits === 1 ? "entrada" : "entradas"} · ${formatMoney(liveTotalCents, "PEN")}`
                   : "Comprar entradas"}
-          </button>
+          </BuyButton>
         </div>
       </div>
+    </PageContainer>
+  );
+}
+
+/** Containers para poder usar el hook useImagePalette y modificar el color de acuerdo a la imagen */
+function PageContainer({ event, children }: { event: { coverUrl: string | null }; } & React.PropsWithChildren) {
+  const palette = useImagePalette(event?.coverUrl);
+  const tint = palette?.dark ?? "#0D0B14";
+
+  return <div className="min-h-dvh bg-cart-bg text-white" style={{ background: `radial-gradient(25% 25% at 20% 25%, ${tint}75 15%, ${tint}b3 100%)`, }}>
+    {children}
+  </div>
+}
+
+function AsideContainer({ event, children }: { event: { coverUrl: string | null } } & React.PropsWithChildren) {
+  const palette = useImagePalette(event?.coverUrl);
+
+  return (
+    <div
+      className="rounded-3xl border border-cart-line bg-cart-bg-elev p-5 shadow-[0_20px_60px_-20px_rgba(0,0,0,0.6)]"
+      style={{
+        background: palette?.dark,
+      }}
+    >
+      {children}
     </div>
+  );
+}
+
+function BuyButton({ children, event , ...props }: ButtonHTMLAttributes<HTMLButtonElement> & React.PropsWithChildren & { event: { coverUrl: string | null } } ) {
+  const palette = useImagePalette(event?.coverUrl);
+
+  return (
+    <button
+      type="button"
+      className="mt-5 w-full rounded-full bg-cart-accent py-3.5 text-[14.5px] font-semibold text-cart-bg shadow-[0_8px_24px_-6px_var(--color-cart-accent-glow)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:bg-cart-bg-elev-2 disabled:text-cart-ink-3 disabled:shadow-none"
+      style={{ background: palette?.accent ?? undefined, boxShadow: palette?.accent ? `0 8px 24px -6px ${palette.accent}80` : undefined, color: palette?.accent ? "white" : undefined }}
+      {...props}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -332,12 +372,27 @@ function EndedPanel({ org }: { org?: ShowcaseOrg }) {
 
 /* ============================== Productora / cross-sell ============================== */
 
-function OrganizerChip({ org }: { org: ShowcaseOrg }) {
+function OrganizerChip({ org, coverUrl }: { org: ShowcaseOrg; coverUrl?: string | null }) {
   const initial = (org.name || "?")[0].toUpperCase();
+  const palette = useImagePalette(coverUrl ?? null);
+  const bgStart = palette?.mid ?? palette?.dark ?? org.brandColor ?? "#7C3AED";
+  const bgEnd = palette?.dark ?? "#1A0A2E";
+  const accent = palette?.accent ?? undefined;
+  const borderColor = palette ? palette.dark ?? "rgba(255,255,255,10)" : "rgba(255,255,255,0.12)";
+
+  const hasPalette = Boolean(palette && (palette.mid || palette.accent || palette.dark));
+  const linkStyle: React.CSSProperties | undefined = hasPalette
+    ? {
+        background: palette?.dark ? `linear-gradient(135deg, ${bgStart}10, ${bgEnd}70)` : undefined,
+        border: `1px solid ${borderColor ?? "rgba(255,255,255,0.12)"}`,
+      }
+    : undefined;
+
   return (
     <Link
       href={`/${org.slug}` as never}
       className="mt-6 flex items-center gap-3 rounded-2xl border border-cart-line bg-cart-bg-elev px-4 py-3 transition hover:border-cart-line-strong"
+      style={linkStyle}
     >
       <div className="size-10 shrink-0 overflow-hidden rounded-xl bg-cart-bg-elev-2">
         {org.logoUrl ? (
@@ -346,7 +401,7 @@ function OrganizerChip({ org }: { org: ShowcaseOrg }) {
         ) : (
           <div
             className="grid size-full place-items-center text-[16px] font-bold text-white"
-            style={{ background: `linear-gradient(135deg, ${org.brandColor ?? "#7C3AED"}, #1A0A2E)` }}
+            style={{ background: `linear-gradient(135deg, ${bgStart}, ${bgEnd})` }}
           >
             {initial}
           </div>
@@ -358,7 +413,9 @@ function OrganizerChip({ org }: { org: ShowcaseOrg }) {
         </div>
         <div className="truncate text-[14.5px] font-semibold">{org.name}</div>
       </div>
-      <span className="text-[12.5px] font-medium text-cart-accent">Ver perfil →</span>
+      <span className="text-[12.5px] font-medium" style={accent ? { color: 'white' } : undefined }>
+        Ver perfil →
+      </span>
     </Link>
   );
 }
@@ -480,12 +537,14 @@ function GroupCardList({
   groupQty,
   onGroupQtyChange,
   onPickGroup,
+  coverUrl
 }: {
   groups: TicketGroup[];
   compact?: boolean;
   groupQty?: Record<string, number>;
   onGroupQtyChange?: (key: string, qty: number) => void;
   onPickGroup: (group: TicketGroup) => void;
+  coverUrl: string | null | undefined;
 }) {
   return (
     <div className={"flex flex-col " + (compact ? "gap-2" : "gap-2.5")}>
@@ -503,6 +562,7 @@ function GroupCardList({
             maxQty={maxQty}
             onQtyChange={onGroupQtyChange ? (q) => onGroupQtyChange(key, q) : undefined}
             onClick={() => onPickGroup(group)}
+            coverUrl={coverUrl}
           />
         );
       })}
@@ -518,6 +578,7 @@ function GroupCard({
   maxQty,
   onQtyChange,
   onClick,
+  coverUrl
 }: {
   group: TicketGroup;
   summary: GroupSummary;
@@ -526,7 +587,10 @@ function GroupCard({
   maxQty: number;
   onQtyChange?: (qty: number) => void;
   onClick: () => void;
+  coverUrl: string | null | undefined;
 }) {
+    const palette = useImagePalette(coverUrl);
+
   // Título de la card: el NOMBRE de la entrada (una card por tipo). Los boxes
   // usan su etiqueta de grupo (unit_noun en plural: "Boxes", "Mesas").
   const single = group.items.length === 1 ? group.items[0] : null;
@@ -562,6 +626,9 @@ function GroupCard({
             : "border-cart-line hover:border-cart-line-strong hover:bg-cart-bg-elev/80 cursor-pointer") +
         (compact ? " px-3.5 py-3" : " px-4 py-4")
       }
+      style={{
+        background: `radial-gradient(25% 25% at 20% 25%, ${palette?.dark ?? "#0D0B14"}75 15%, ${palette?.dark ?? "#0D0B14"}b3 100%)`,
+      }}
     >
       <div className="min-w-0 flex-1">
         <span
@@ -748,7 +815,6 @@ function BoxAvailabilityBar({
 function FlyerCard({
   event,
   eventId,
-  startsAt,
 }: {
   event: { title: string; coverUrl: string | null; timezone: string };
   eventId: string;
@@ -902,7 +968,7 @@ function ShareButton({ title }: { title: string }) {
       await navigator.clipboard?.writeText(window.location.href);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch {}
+    } catch { }
   };
   return (
     <div className="relative">
@@ -1026,13 +1092,20 @@ function DescriptionBlock({ text }: { text: string }) {
   );
 }
 
-function FeatureGrid() {
+function FeatureGrid({ coverUrl }: { coverUrl?: string | null }) {
+  const palette = useImagePalette(coverUrl ?? null);
+  const accent = palette?.accent ?? "#7C3AED";
+  const borderColor = palette ? palette.dark ?? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.12)";
+  const iconColor = accent;
+
   return (
     <div className="mt-7 grid grid-cols-3 gap-2">
       <FeatureChip
         icon={<YapeMini />}
         label="Yape"
         sub="o tarjeta"
+        borderColor={borderColor}
+        iconColor={iconColor}
       />
       <FeatureChip
         icon={
@@ -1045,6 +1118,8 @@ function FeatureGrid() {
         }
         label="QR al instante"
         sub="sin esperas"
+        borderColor={borderColor}
+        iconColor={iconColor}
       />
       <FeatureChip
         icon={
@@ -1059,6 +1134,8 @@ function FeatureGrid() {
         }
         label="Seguro"
         sub="entrada válida"
+        borderColor={borderColor}
+        iconColor={iconColor}
       />
     </div>
   );
@@ -1068,14 +1145,23 @@ function FeatureChip({
   icon,
   label,
   sub,
+  borderColor,
+  iconColor,
 }: {
   icon: React.ReactNode;
   label: string;
   sub: string;
+  borderColor?: string;
+  iconColor?: string;
 }) {
   return (
-    <div className="flex flex-col items-start gap-1.5 rounded-2xl border border-cart-line bg-cart-bg-elev/60 px-3.5 py-3">
-      <span className="text-cart-accent">{icon}</span>
+    <div
+      className="flex flex-col items-start gap-1.5 rounded-2xl bg-cart-bg-elev/60 px-3.5 py-3"
+      style={{ border: `1px solid ${borderColor ?? "rgba(255,255,255,0.12)"}` }}
+    >
+      <span className="text-white" style={{ color: iconColor ?? "#7C3AED" }}>
+        {icon}
+      </span>
       <div>
         <div className="text-[12px] font-semibold text-white">{label}</div>
         <div className="text-[10.5px] text-cart-ink-3">{sub}</div>

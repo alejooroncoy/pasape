@@ -32,9 +32,8 @@ export function AppHeader({ children, below }: { children: ReactNode; below?: Re
 
   return (
     <header
-      className={`sticky top-0 z-50 backdrop-blur-md backdrop-saturate-150 border-b transition-[border-color,background] duration-200 ${
-        scrolled ? "border-cart-line bg-cart-bg/[0.92]" : "border-transparent bg-cart-bg/80"
-      }`}
+      className={`sticky top-0 z-50 backdrop-blur-md backdrop-saturate-150 border-b transition-[border-color,background] duration-200 ${scrolled ? "border-cart-line bg-cart-bg/[0.92]" : "border-transparent bg-cart-bg/80"
+        }`}
     >
       <div className="mx-auto flex h-[68px] max-w-[1320px] items-center gap-[18px] px-[clamp(20px,4vw,56px)] max-[560px]:h-[60px] max-[560px]:gap-2">
         {children}
@@ -302,16 +301,16 @@ export function MobileCategoryStrip({
             style={
               active
                 ? {
-                    borderColor: color,
-                    background: color,
-                    color: "#0a0a0f",
-                    boxShadow: `0 0 12px ${color}80`,
-                  }
+                  borderColor: color,
+                  background: color,
+                  color: "#0a0a0f",
+                  boxShadow: `0 0 12px ${color}80`,
+                }
                 : {
-                    borderColor: "var(--color-cart-line)",
-                    background: "transparent",
-                    color: "var(--color-cart-ink-2)",
-                  }
+                  borderColor: "var(--color-cart-line)",
+                  background: "transparent",
+                  color: "var(--color-cart-ink-2)",
+                }
             }
           >
             {label}
