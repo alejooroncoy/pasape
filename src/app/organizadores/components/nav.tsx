@@ -7,8 +7,8 @@ import { Icon } from "./icons";
 import { Logo } from "./logo";
 
 const LINKS = [
+  { href: "#promos", label: "Funciones" },
   { href: "#como-funciona", label: "Cómo funciona" },
-  { href: "#combos", label: "Combos" },
   { href: "#piloto", label: "Piloto" },
   { href: "#precio", label: "Precio" },
   { href: "#faq", label: "FAQ" },

@@ -9,12 +9,27 @@ const SHELL = VERSION + "-shell"; // navegaciones (HTML/RSC)
 const ASSETS = VERSION + "-assets"; // js/css/fuentes/imágenes same-origin
 const IMAGES = VERSION + "-images"; // imágenes cross-origin (Supabase Storage)
 const SCAN = VERSION + "-scan"; // lista offline del portero
+// Respaldo de la wallet (usuario + entradas) a nivel SW: red primero, cae al
+// último snapshot cacheado si no hay red. La persistencia de React Query en
+// IndexedDB ya cubre esto, pero esta capa cubre el primer render offline antes
+// de que esa persistencia termine de hidratar. Se borra en logout (ver mensaje
+// CLEAR_WALLET_CACHE) para no filtrar entradas de una cuenta a otra en el mismo
+// device.
+const WALLET = VERSION + "-wallet";
 
 // Tope de imágenes cacheadas (flyers/covers/avatares). LRU simple: al pasarse,
 // se borran las más antiguas. ~120 cubre la wallet + el home sin inflar disco.
 const IMAGES_MAX = 120;
 
 self.addEventListener("install", () => self.skipWaiting());
+
+// Logout: borra el snapshot de wallet cacheado para que no quede visible si
+// otra persona inicia sesión después en el mismo device/navegador.
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "CLEAR_WALLET_CACHE") {
+    event.waitUntil(caches.delete(WALLET));
+  }
+});
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
@@ -59,6 +74,18 @@ self.addEventListener("fetch", (event) => {
   // Lista offline del portero: network-first.
   if (/\/api\/events\/[^/]+\/scan-cache/.test(url.pathname)) {
     event.respondWith(networkFirst(req, SCAN, 5000));
+    return;
+  }
+
+  // Wallet (identidad + entradas + carrusel): network-first, cae al último snapshot
+  // cacheado offline. Respaldo de la persistencia de React Query — ver nota
+  // junto a WALLET arriba.
+  if (
+    url.pathname === "/api/identity/me" ||
+    /^\/api\/tickets\/[^/]+$/.test(url.pathname) ||
+    /^\/api\/tickets\/[^/]+\/carousel-scope$/.test(url.pathname)
+  ) {
+    event.respondWith(networkFirst(req, WALLET, 4000));
     return;
   }
 

@@ -24,7 +24,7 @@ export const FAQS = [
   },
   {
     q: "¿Y si no tengo promotores?",
-    a: "Activas el sistema de referidos. Tus asistentes invitan con su propio link y ganan puntos o beneficios. Tú decides la mecánica.",
+    a: "Puedes vender solo con el link de tu evento. Los promotores son opcionales: cuando los sumes, cada uno lleva su código y ves quién vendió qué al cierre.",
   },
   {
     q: "¿Cómo se valida en puerta?",
@@ -42,7 +42,7 @@ export const FAQS = [
 
 export function Faq() {
   return (
-    <section id="faq" className="py-24 md:py-30">
+    <section id="faq" className="border-t border-line bg-bg-elev/15 py-24 md:py-30">
       <div className="mx-auto w-full max-w-[1160px] px-[22px] md:px-8">
         <SectionHeader
           eyebrow="Preguntas frecuentes"
@@ -52,19 +52,19 @@ export function Faq() {
             </>
           }
         />
-        <div className="mt-12 border-t border-line">
+        <div className="mt-12 grid grid-cols-1 gap-0 md:grid-cols-2 md:gap-x-10">
           {FAQS.map((f) => (
             <details
               key={f.q}
-              className="group reveal border-b border-line"
+              className="group reveal border-b border-line md:border-b-0"
             >
-              <summary className="grid cursor-pointer list-none grid-cols-[1fr_24px] items-center gap-4 py-6 font-display text-[clamp(18px,2vw,21px)] font-medium leading-snug tracking-[-0.012em] text-ink transition-colors hover:text-accent marker:content-['']">
+              <summary className="grid cursor-pointer list-none grid-cols-[1fr_24px] items-center gap-4 rounded-xl py-5 font-display text-[clamp(16px,1.8vw,19px)] font-medium leading-snug tracking-[-0.012em] text-ink transition-colors hover:text-accent marker:content-[''] md:px-3 md:hover:bg-white/[0.03]">
                 <span>{f.q}</span>
                 <span className="inline-flex text-ink-3 transition-[transform,color] duration-200 group-open:rotate-90 group-open:text-accent">
                   <Icon name="arrow-right" width={18} height={18} />
                 </span>
               </summary>
-              <p className="m-0 max-w-[64ch] text-pretty pb-6 text-base leading-relaxed text-ink-3">
+              <p className="m-0 max-w-[52ch] text-pretty px-0 pb-5 text-[15px] leading-relaxed text-ink-3 md:px-3 md:pb-6">
                 {f.a}
               </p>
             </details>

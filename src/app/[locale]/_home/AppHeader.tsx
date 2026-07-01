@@ -116,6 +116,9 @@ export function HeaderActions({ user, onOpenMenu }: { user: NavUser | null; onOp
   // Modal de login controlado: lo abren tanto "Ingresar" como "Mis entradas"
   // cuando no hay sesión (en vez de navegar a una página que igual redirige).
   const [signInOpen, setSignInOpen] = useState(false);
+  // "Mis entradas" sin sesión debe volver a /tickets tras loguear (esa era la
+  // intención del click); "Ingresar" en cambio se queda donde estabas.
+  const [signInRedirect, setSignInRedirect] = useState<string | undefined>(undefined);
   const ticketsClass =
     "relative inline-flex h-10 items-center gap-2 rounded-full border border-transparent px-3 text-[13.5px] font-medium text-cart-ink-2 transition-colors hover:border-cart-line hover:bg-cart-bg-elev hover:text-white max-[900px]:hidden";
   const ticketsInner = (
@@ -130,6 +133,8 @@ export function HeaderActions({ user, onOpenMenu }: { user: NavUser | null; onOp
 
   return (
     <div className="flex items-center gap-2.5 max-[560px]:gap-0">
+      {process.env.NODE_ENV !== "production" && <DevSessionButton />}
+
       <Link
         href="/organizadores"
         className="whitespace-nowrap text-[13.5px] text-cart-ink-2 transition-colors hover:text-white max-[1180px]:hidden"
@@ -144,7 +149,14 @@ export function HeaderActions({ user, onOpenMenu }: { user: NavUser | null; onOp
           {ticketsInner}
         </Link>
       ) : (
-        <button type="button" onClick={() => setSignInOpen(true)} className={ticketsClass}>
+        <button
+          type="button"
+          onClick={() => {
+            setSignInRedirect("/tickets");
+            setSignInOpen(true);
+          }}
+          className={ticketsClass}
+        >
           {ticketsInner}
         </button>
       )}
@@ -168,7 +180,10 @@ export function HeaderActions({ user, onOpenMenu }: { user: NavUser | null; onOp
         <>
           <motion.button
             type="button"
-            onClick={() => setSignInOpen(true)}
+            onClick={() => {
+              setSignInRedirect(undefined);
+              setSignInOpen(true);
+            }}
             whileHover={{ y: -1, filter: "brightness(1.1)" }}
             whileTap={{ scale: 0.96 }}
             transition={TAP_SPRING}
@@ -176,7 +191,11 @@ export function HeaderActions({ user, onOpenMenu }: { user: NavUser | null; onOp
           >
             Ingresar
           </motion.button>
-          <SignInDrawer open={signInOpen} onClose={() => setSignInOpen(false)} />
+          <SignInDrawer
+            open={signInOpen}
+            onClose={() => setSignInOpen(false)}
+            redirectTo={signInRedirect}
+          />
         </>
       )}
 
@@ -191,6 +210,36 @@ export function HeaderActions({ user, onOpenMenu }: { user: NavUser | null; onOp
         <span className="block h-px w-4 bg-cart-ink-2 relative before:absolute before:top-[-5px] before:block before:h-px before:w-4 before:bg-cart-ink-2 before:content-[''] after:absolute after:top-[5px] after:block after:h-px after:w-4 after:bg-cart-ink-2 after:content-['']" />
       </motion.button>
     </div>
+  );
+}
+
+// Dev-only: loguea (con cookies reales de Supabase) a un usuario de prueba
+// fijo, para reproducir bugs de sesión/race conditions sin pasar por Google
+// OAuth cada vez. No se renderiza en producción (ver HeaderActions).
+function DevSessionButton() {
+  const [pending, setPending] = useState(false);
+
+  const onClick = async () => {
+    setPending(true);
+    try {
+      const res = await fetch("/api/dev/login-as", { method: "POST" });
+      if (!res.ok) throw new Error(await res.text());
+      window.location.href = "/tickets";
+    } catch {
+      setPending(false);
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={pending}
+      className="whitespace-nowrap rounded-full border border-dashed border-amber-400/50 px-3 py-1.5 text-[12px] font-semibold text-amber-300 transition hover:bg-amber-400/10 disabled:opacity-50"
+      title="Dev only: loguea con un usuario de prueba"
+    >
+      {pending ? "…" : "Sesión"}
+    </button>
   );
 }
 

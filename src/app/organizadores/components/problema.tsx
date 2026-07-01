@@ -6,7 +6,7 @@ const PROBLEMAS: { text: ReactNode }[] = [
     text: (
       <>
         ¿Cuántas veces respondiste <span className="hl">el mismo DM</span>{" "}
-        explicando la promo de grupos?
+        explicando el precio de preventa o cómo funciona el combo?
       </>
     ),
   },

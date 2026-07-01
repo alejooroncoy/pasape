@@ -158,9 +158,10 @@ function IdentityPill({
             <button
               type="button"
               role="menuitem"
-              onClick={() => {
+              onClick={async () => {
                 setOpen(false);
-                void signOut();
+                await signOut();
+                router.replace("/");
               }}
               className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-[13.5px] font-medium text-rose-300 transition-colors hover:bg-rose-500/10"
             >

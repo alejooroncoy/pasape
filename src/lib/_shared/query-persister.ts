@@ -25,6 +25,15 @@ const getDb = () => {
   return dbPromise;
 };
 
+// Standalone (no depende de la instancia de persister del provider): usado en
+// logout para borrar el snapshot guardado y que un siguiente login en el mismo
+// device/navegador no arranque mostrando datos de la cuenta anterior.
+export const clearPersistedQueryCache = async () => {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(STORE, KEY);
+};
+
 export const createIdbPersister = (): Persister => ({
   async persistClient(client: PersistedClient) {
     const db = await getDb();

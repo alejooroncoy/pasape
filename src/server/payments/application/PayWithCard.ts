@@ -3,7 +3,8 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { err, ok, type Result } from "@/server/_shared/result";
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
-import { appBaseUrl } from "../infrastructure/MercadoPagoClient";
+import { appBaseUrl, isPublicBaseUrl } from "../infrastructure/MercadoPagoClient";
+import { reportMpError } from "../infrastructure/reportMpError";
 import { dispatchTicketDelivery } from "@/server/notifications/application/DispatchTicketDelivery";
 
 // Why: cobramos tarjeta con SDK v2 + Secure Fields para mantener UX embebida
@@ -81,10 +82,9 @@ export const payWithCard = async (
   const description = event ? `Pasape: ${event.title}` : "Pasape";
   const base = appBaseUrl();
 
-  // MP rechaza notification_url cuando apunta a localhost. En dev sin túnel
-  // público lo omitimos — el polling de status sigue funcionando vía
-  // /api/tickets/order/[id]/status.
-  const isPublicUrl = !/localhost|127\.0\.0\.1/.test(base);
+  // MP rechaza notification_url no pública. En dev sin túnel la omitimos — el
+  // polling de status cubre la confirmación vía /api/tickets/order/[id]/status.
+  const isPublicUrl = isPublicBaseUrl(base);
   const body: Record<string, unknown> = {
     transaction_amount: Money.toSoles(Math.round(order.total_cents)),
     token: input.token,
@@ -133,9 +133,15 @@ export const payWithCard = async (
   }
 
   if (!mpRes.ok) {
-    return err(
-      `mp_payment_failed: ${data.message ?? data.error ?? `status ${mpRes.status}`}`,
-    );
+    const message = data.message ?? data.error ?? `status ${mpRes.status}`;
+    reportMpError(message, {
+      stage: "payment",
+      method: "card",
+      orderId: order.id,
+      httpStatus: mpRes.status,
+      mpResponse: data,
+    });
+    return err(`mp_payment_failed: ${message}`);
   }
 
   const paymentId = String(data.id ?? "");

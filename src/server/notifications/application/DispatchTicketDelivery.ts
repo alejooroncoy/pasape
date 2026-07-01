@@ -4,7 +4,7 @@ import type { NotificationSender } from "../ports/NotificationSender";
 import { CompositeNotificationSender } from "../infrastructure/CompositeNotificationSender";
 import { ResendEmailSender } from "../infrastructure/ResendEmailSender";
 import { KapsoWhatsAppSender } from "../infrastructure/KapsoWhatsAppSender";
-import { signTicketLink } from "../domain/TicketLinkToken";
+import { signOrderLink } from "../domain/OrderLinkToken";
 
 // Despacha el QR del ticket por email + WhatsApp tras un pago exitoso.
 // Idempotente respecto a la tabla `notifications` in-app (kind `ticket_ready`).
@@ -113,10 +113,12 @@ export const dispatchTicketDelivery = async (
       phone: ticket.holder_phone ?? orderPhone,
     };
     const holderName = ticket.holder_name ?? orderHolderName;
-    const ticketUrl = `${appBaseUrl()}/t/${ticket.id}?k=${signTicketLink(ticket.id)}`;
-    const walletSignupUrl = `${appBaseUrl()}/auth/gate?intent=claim&order=${encodeURIComponent(order.id)}${
-      to.email ? `&email=${encodeURIComponent(to.email)}` : ""
-    }`;
+    // Una sola página: el link lleva a "Entra para ver tus entradas" (unlock),
+    // que reclama la compra a tu cuenta y la deja en tu billetera con QR offline.
+    // (Reemplaza /t/?k= como vista de QR y /auth/gate, que nunca existió.)
+    const unlockUrl = `${appBaseUrl()}/unlock/${order.id}/${signOrderLink(order.id)}`;
+    const ticketUrl = unlockUrl;
+    const walletSignupUrl = unlockUrl;
 
     const res = await sender.sendTicketDelivery({
       to,

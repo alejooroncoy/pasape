@@ -19,13 +19,13 @@ const STEPS = [
   },
   {
     t: "Revisa resultados",
-    d: "Ventas, accesos, combos, referidos y base de asistentes para tu próxima fecha.",
+    d: "Ventas, accesos, combos, promotores y base de asistentes para tu próxima fecha.",
   },
 ];
 
 export function ComoFunciona() {
   return (
-    <section id="como-funciona" className="py-24 md:py-30">
+    <section id="como-funciona" className="border-y border-line bg-bg-elev/20 py-24 md:py-30">
       <div className="mx-auto w-full max-w-[1160px] px-[22px] md:px-8">
         <SectionHeader
           eyebrow="Cómo funciona"
@@ -35,26 +35,31 @@ export function ComoFunciona() {
             </>
           }
         />
-        <div className="mt-12 grid border-t border-line">
+
+        <ol className="relative mt-14 grid list-none gap-0 p-0 md:grid-cols-5 md:gap-5">
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute left-[22px] top-6 bottom-6 hidden w-px bg-gradient-to-b from-accent/50 via-line to-transparent md:left-[calc(10%+22px)] md:block lg:hidden"
+          />
           {STEPS.map((s, i) => (
-            <div
+            <li
               key={s.t}
-              className="reveal group relative grid grid-cols-[56px_1fr] items-start gap-[22px] border-b border-line py-6 transition-[padding-left] duration-200 hover:pl-2"
+              className="reveal group relative grid grid-cols-[56px_1fr] items-start gap-[22px] border-b border-line py-7 last:border-b-0 md:grid-cols-1 md:gap-4 md:rounded-[20px] md:border md:border-line-strong md:bg-[linear-gradient(180deg,rgba(255,255,255,0.03),transparent),var(--color-bg-elev)] md:p-6 md:transition-[transform,border-color,box-shadow] md:hover:-translate-y-1 md:hover:border-accent/35 md:hover:shadow-[0_20px_50px_-24px_rgba(0,0,0,0.65)]"
             >
-              <div className="relative z-10 grid size-11 place-items-center rounded-full border border-line-strong bg-bg-elev font-mono text-[13px] font-semibold tabular-nums text-ink-2 transition-[background-color,color,box-shadow] duration-200 group-hover:border-accent group-hover:bg-accent group-hover:text-white group-hover:shadow-[0_0_0_4px_rgba(184,124,255,0.18),0_0_18px_var(--color-accent-glow)]">
+              <div className="relative z-10 grid size-11 shrink-0 place-items-center rounded-full border border-line-strong bg-bg font-mono text-[13px] font-semibold tabular-nums text-ink-2 transition-[background-color,color,box-shadow,border-color] duration-200 group-hover:border-accent group-hover:bg-accent group-hover:text-white group-hover:shadow-[0_0_0_4px_rgba(184,124,255,0.18),0_0_18px_var(--color-accent-glow)] md:mx-0">
                 {String(i + 1).padStart(2, "0")}
               </div>
-              <div>
-                <h3 className="m-0 mt-2 font-display text-[clamp(18px,2.2vw,22px)] font-semibold leading-snug tracking-[-0.014em] text-ink">
+              <div className="md:pt-1">
+                <h3 className="m-0 font-display text-[clamp(17px,2vw,20px)] font-semibold leading-snug tracking-[-0.014em] text-ink">
                   {s.t}
                 </h3>
-                <p className="m-0 mt-1.5 text-[15px] leading-normal text-ink-3">
+                <p className="m-0 mt-2 text-[14px] leading-normal text-ink-3">
                   {s.d}
                 </p>
               </div>
-            </div>
+            </li>
           ))}
-        </div>
+        </ol>
       </div>
     </section>
   );

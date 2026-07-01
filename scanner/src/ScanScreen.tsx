@@ -15,11 +15,19 @@ import { useScanQr } from "@/lib/scanning/hooks/useScanQr";
 import { refreshScanCache, searchCachedTickets } from "@/lib/scanning/scanCache";
 import { useOnlineStatus } from "@/lib/_shared/hooks/useOnlineStatus";
 import { scanLocal, admitLocal } from "@/lib/scanning/scanLocal";
-import { countPending } from "@/lib/scanning/scanQueue";
+import { countPending, enqueuePendingScan } from "@/lib/scanning/scanQueue";
 import { syncPending } from "@/lib/scanning/syncWorker";
 import { useEvent } from "@/lib/events/hooks/useEvents";
 import { useEventStats } from "@/lib/events/hooks/useEventStats";
 import { api } from "@/lib/_shared/api-client";
+import { Capacitor } from "@capacitor/core";
+import { createStarTransport, type StarTransport, type StarRole } from "@/lib/scanning/coordination/starTransport";
+import { TcpCoord } from "@/lib/scanning/coordination/tcpPlugin";
+import { ClaimCoordinator } from "@/lib/scanning/coordination/ClaimCoordinator";
+import { setActiveCoordinator } from "@/lib/scanning/coordination/registry";
+import { getDeviceId } from "@/lib/scanning/deviceId";
+
+const COORD_PORT = 49737;
 
 // ─── Haptic ────────────────────────────────────────────────────────────────
 const haptic = (kind: "valid" | "already_used" | "invalid") => {
@@ -74,10 +82,11 @@ function makeDetector(): DetectorLike | null {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let native: any = null;
   if (Ctor) {
-    try { native = new Ctor({ formats: ["qr_code"] }); } catch { /* fallback */ }
+    try { native = new Ctor({ formats: ["qr_code"] }); console.warn("[bench] detector = BarcodeDetector NATIVO"); } catch { /* fallback */ }
   }
   let jsQRmod: typeof import("jsqr").default | null = null;
   if (!native) {
+    console.warn("[bench] detector = jsQR (fallback)");
     void import("jsqr").then((m) => { jsQRmod = m.default; });
   }
   return {
@@ -153,6 +162,15 @@ export function ScanScreen({ eventSlug }: { eventSlug: string }) {
   // así que sin pausa el resultado en pantalla cambiaría solo. El portero avanza
   // con el botón "Siguiente".
   const scanPausedRef = useRef(false);
+
+  // ── Benchmark de reconocimiento ──────────────────────────────────────────
+  // resumeAtRef: cuándo empezó a buscar (cámara lista o tras "Siguiente").
+  // Medimos el wall-clock hasta detectar el primer QR + cuántos intentos de
+  // decode y el promedio de decode (para separar "enfoque/posición" de "decode").
+  const resumeAtRef = useRef<number | null>(null);
+  const attemptsRef = useRef(0);
+  const decodeSumRef = useRef(0);
+  const [bench, setBench] = useState<{ ms: number; attempts: number; decodeMs: number } | null>(null);
 
   const [active,       setActive]       = useState(false);
   const [cameraError,  setCameraError]  = useState(false);
@@ -245,6 +263,38 @@ export function ScanScreen({ eventSlug }: { eventSlug: string }) {
     setResult(null);
     lastCodeRef.current = "";
     scanPausedRef.current = false; // reanudar la detección
+    // Reinicia el cronómetro de benchmark: empieza a contar para el próximo QR.
+    resumeAtRef.current = performance.now();
+    attemptsRef.current = 0;
+    decodeSumRef.current = 0;
+    setMeasuring(false);
+  }, []);
+
+  // BENCHMARK manual: el portero toca esto JUSTO cuando ve el QR en cámara → mide
+  // el tiempo real "QR visible → reconocido" (aísla el posicionamiento humano).
+  const [measuring, setMeasuring] = useState(false);
+  const markQrVisible = useCallback(() => {
+    resumeAtRef.current = performance.now();
+    attemptsRef.current = 0;
+    decodeSumRef.current = 0;
+    setBench(null);
+    setMeasuring(true);
+  }, []);
+
+  // DEBUG: captura el frame de cámara actual (lo que ve el decodificador) y lo
+  // sube al sink local (adb reverse :4600) para inspeccionar nitidez/encuadre.
+  const [captured, setCaptured] = useState(0);
+  const captureFrame = useCallback(async () => {
+    const v = videoRef.current;
+    if (!v || !v.videoWidth) return;
+    const c = document.createElement("canvas");
+    c.width = v.videoWidth; c.height = v.videoHeight;
+    c.getContext("2d")?.drawImage(v, 0, 0);
+    const dataUrl = c.toDataURL("image/jpeg", 0.7);
+    try {
+      await fetch("http://localhost:4600/f", { method: "POST", body: dataUrl });
+      setCaptured((n) => n + 1);
+    } catch { /* sink no disponible */ }
   }, []);
 
   const showResult = useCallback((r: ScanResult) => {
@@ -300,17 +350,26 @@ export function ScanScreen({ eventSlug }: { eventSlug: string }) {
         boxCapacity: local.boxCapacity,
         scannedAt:   null,
       });
+      // Auditoría offline: guardar los PROBLEMAS (inválido/ya-usado, con su
+      // reason) en el stack para mandarlos al server cuando vuelva internet.
+      if (local.kind !== "valid") {
+        void enqueuePendingScan({
+          ticketId: "", token: code, kind: "signed",
+          scannedAt: new Date().toISOString(),
+          logOnly: true, result: local.kind, reason: local.reason,
+        }).catch(() => {});
+      }
       if (online) void syncPending(eventSlug); // empuja la cola sin bloquear
     } catch {
       showResult({ kind: "invalid", holderName: null, typeName: "QR no reconocido", dniLast4: null, boxLabel: null, boxHostName: null, boxFilled: null, boxCapacity: null, scannedAt: null });
     }
   }, [scan, online, showResult, eventSlug]);
 
-  // Antes 50ms para no recalentar cuando el decode costaba ~50ms. Con el ROI a
-  // 640 el decode baja a ~10-15ms, así que detectamos al ritmo del rAF (~16ms)
-  // para enganchar el QR lo antes posible. La detección se pausa al mostrar
-  // resultado, así que no corre en caliente de forma indefinida.
-  const DETECT_INTERVAL_MS = 0;
+  // ~8fps de detección (no cada frame): en la puerta el QR se sostiene cientos de
+  // ms, así que 8 intentos/seg son de sobra para engancharlo, y NO recalienta el
+  // equipo (decodificar a 30-60fps sobre 720p frÍe gama baja). Clave para que
+  // corra en celulares modestos sin throttling térmico.
+  const DETECT_INTERVAL_MS = 120;
   const loop = useCallback(async function scanLoop(detector: DetectorLike) {
     const video = videoRef.current;
     if (!video || video.readyState < 2) { rafRef.current = requestAnimationFrame(() => void scanLoop(detector)); return; }
@@ -320,7 +379,26 @@ export function ScanScreen({ eventSlug }: { eventSlug: string }) {
     const now = performance.now();
     if (now - lastDetectRef.current >= DETECT_INTERVAL_MS) {
       lastDetectRef.current = now;
-      try { const codes = await detector.detect(video); if (codes[0]?.rawValue) await runScan(codes[0].rawValue); } catch {}
+      try {
+        if (resumeAtRef.current == null) resumeAtRef.current = now; // primer intento del ciclo
+        const t0 = performance.now();
+        const codes = await detector.detect(video);
+        decodeSumRef.current += performance.now() - t0;
+        attemptsRef.current += 1;
+        if (codes[0]?.rawValue) {
+          // BENCHMARK: wall-clock desde que empezó a buscar hasta detectar el QR.
+          if (resumeAtRef.current != null) {
+            const ms = Math.round(performance.now() - resumeAtRef.current);
+            const attempts = attemptsRef.current;
+            const decodeMs = Math.round(decodeSumRef.current / Math.max(1, attempts));
+            console.warn(`[bench] QR reconocido en ${ms}ms · ${attempts} intentos · decode prom ${decodeMs}ms`);
+            setBench({ ms, attempts, decodeMs });
+            setMeasuring(false);
+            resumeAtRef.current = null; // congela hasta el próximo "Siguiente"
+          }
+          await runScan(codes[0].rawValue);
+        }
+      } catch {}
     }
     rafRef.current = requestAnimationFrame(() => void scanLoop(detector));
   }, [runScan]);
@@ -335,11 +413,12 @@ export function ScanScreen({ eventSlug }: { eventSlug: string }) {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: "environment",
-          // 720p: el nativo decodifica más rápido en frames chicos. Suficiente
-          // resolución para leer el QR a ~30cm.
+          // 720p: suficiente para leer el QR a ~30cm; el nativo decodifica rápido.
           width:  { ideal: 1280 },
           height: { ideal: 720 },
-          frameRate: { ideal: 30 },
+          // 24fps: el preview se ve fluido pero la cámara/ISP consume y calienta
+          // menos que a 30. Suma con el throttle de detección para gama baja.
+          frameRate: { ideal: 24, max: 30 },
         },
       });
       streamRef.current = stream;
@@ -360,6 +439,9 @@ export function ScanScreen({ eventSlug }: { eventSlug: string }) {
 
       if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play(); }
       setActive(true);
+      resumeAtRef.current = performance.now();
+      attemptsRef.current = 0;
+      decodeSumRef.current = 0;
       rafRef.current = requestAnimationFrame(() => loop(detector));
     } catch { setCameraError(true); }
   }, [loop]);
@@ -401,14 +483,82 @@ export function ScanScreen({ eventSlug }: { eventSlug: string }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Sync offline
+  // Sync offline. Primer sync = snapshot completo (necesario para validar sin
+  // red). Luego DELTA cada 5s (solo lo cambiado: transferencias, datos, uso,
+  // altas) — barato y escala a eventos grandes. Full de respaldo cada ~90s por
+  // si se perdió alguna actualización.
   useEffect(() => {
     if (!eventSlug) return;
     let cancel = false;
-    const sync = () => refreshScanCache(eventSlug).catch(() => {});
-    void sync();
-    const id = setInterval(() => { if (!cancel && navigator.onLine) void sync(); }, 60_000);
-    return () => { cancel = true; clearInterval(id); };
+    let ticks = 0;
+    void refreshScanCache(eventSlug, { full: true }).catch(() => {});
+    const id = setInterval(() => {
+      if (cancel || !navigator.onLine) return;
+      ticks += 1;
+      void refreshScanCache(eventSlug, { full: ticks % 18 === 0 }).catch(() => {});
+    }, 5_000);
+    // Reactivación de red: aprovechar ESE instante. En vez de esperar al tick de
+    // 5s, sincronizamos delta apenas vuelve internet (el cursor `since` trae todo
+    // lo acumulado durante el corte) y empujamos los scans encolados.
+    const onOnline = () => {
+      if (cancel) return;
+      void refreshScanCache(eventSlug).catch(() => {});
+      void syncPending(eventSlug).catch(() => {});
+    };
+    window.addEventListener("online", onOnline);
+    return () => { cancel = true; clearInterval(id); window.removeEventListener("online", onOnline); };
+  }, [eventSlug]);
+
+  // Coordinación entre porteros por la LAN del hotspot (SIN internet) en topología
+  // ESTRELLA: el que comparte el hotspot es el HOST (servidor TCP + relay) y los
+  // demás se conectan a su IP de gateway. Cuando uno admite un ticket lo propaga y
+  // los demás lo marcan usado en vivo → evita doble ingreso en la misma puerta.
+  // Sólo en nativo; en web/dev no hay socket TCP y `arbitrateTicket` degrada a
+  // "granted" (el duplicado se detecta al sincronizar con flag dup_offline).
+  useEffect(() => {
+    if (!eventSlug) return;
+    if (!Capacitor.isNativePlatform()) return;
+    let disposed = false;
+    let transport: StarTransport | null = null;
+    let coord: ClaimCoordinator | null = null;
+    void (async () => {
+      try {
+        // Rol: el host es quien comparte el hotspot (siempre Android, corre el
+        // servidor). Heurística por red: si tengo un gateway distinto a mi IP → soy
+        // cliente y me conecto a él; si no (soy el AP/gateway) → soy host. iOS es
+        // SIEMPRE cliente (no levanta servidor).
+        const info = await TcpCoord.getNetworkInfo().catch(
+          () => ({}) as { gatewayIp?: string; myIp?: string },
+        );
+        const gw = info.gatewayIp ?? "";
+        const isIOS = Capacitor.getPlatform() === "ios";
+        const role: StarRole = isIOS ? "client" : !gw || gw === info.myIp ? "host" : "client";
+        const t = await createStarTransport({
+          eventSlug,
+          role,
+          port: COORD_PORT,
+          host: role === "client" ? gw || "192.168.43.1" : undefined,
+        });
+        if (disposed) {
+          void t.dispose();
+          return;
+        }
+        transport = t;
+        // claimTimeoutMs=150: el coordinador concede al VENCER el timeout → latencia
+        // añadida a cada scan válido. En LAN local (RTT <10ms) da ~15x de margen para
+        // oír un DENY y es casi imperceptible (vs. 400ms default).
+        coord = new ClaimCoordinator(getDeviceId(), t, { claimTimeoutMs: 150 });
+        setActiveCoordinator(coord);
+      } catch {
+        // plugin/red falló → sin coordinación; se degrada limpio (detección al sync).
+      }
+    })();
+    return () => {
+      disposed = true;
+      setActiveCoordinator(null);
+      coord?.dispose();
+      void transport?.dispose();
+    };
   }, [eventSlug]);
 
   useEffect(() => {
@@ -807,25 +957,49 @@ export function ScanScreen({ eventSlug }: { eventSlug: string }) {
         </button>
       )}
 
-      {/* ── Indicador de escaneo activo (chip flotante abajo) ── */}
+      {/* ── Botón de BENCHMARK: "Ya se ve el QR" → mide visible→reconocido ── */}
       {active && !result && (
-        <div style={{
-          position: "absolute",
-          bottom: "calc(env(safe-area-inset-bottom, 0px) + 36px)",
-          left: "50%", transform: "translateX(-50%)",
-          zIndex: 10,
-          padding: "8px 18px",
-          borderRadius: 999,
-          background: "rgba(10,10,18,0.75)",
-          backdropFilter: "blur(12px)",
-          border: "1px solid rgba(255,255,255,0.10)",
-          display: "flex", alignItems: "center", gap: 8,
-          boxShadow: "0 4px 20px rgba(0,0,0,0.35)",
-          whiteSpace: "nowrap",
-        }}>
-          <span style={{ width: 8, height: 8, borderRadius: 999, background: C.green, boxShadow: `0 0 8px ${C.green}`, display: "inline-block", animation: "pulse 1.4s ease-in-out infinite" }}/>
-          <span style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.75)" }}>Escaneando…</span>
-        </div>
+        <button
+          type="button"
+          onClick={markQrVisible}
+          style={{
+            position: "absolute",
+            bottom: "calc(env(safe-area-inset-bottom, 0px) + 36px)",
+            left: "50%", transform: "translateX(-50%)",
+            zIndex: 10,
+            padding: "12px 22px",
+            borderRadius: 999,
+            background: measuring ? "rgba(245,197,24,0.92)" : "rgba(255,255,255,0.95)",
+            border: "none",
+            color: "#0a0a12",
+            fontSize: 15, fontWeight: 800, letterSpacing: "-0.01em",
+            display: "flex", alignItems: "center", gap: 8,
+            boxShadow: "0 6px 24px rgba(0,0,0,0.4)",
+            whiteSpace: "nowrap",
+          }}
+        >
+          <span style={{ width: 9, height: 9, borderRadius: 999, background: measuring ? "#0a0a12" : C.green, display: "inline-block", animation: "pulse 1.2s ease-in-out infinite" }}/>
+          {measuring ? "Midiendo… (apunta firme)" : "Ya se ve el QR → medir"}
+        </button>
+      )}
+
+      {/* DEBUG: capturar frame de cámara y subirlo al sink */}
+      {active && !result && (
+        <button
+          type="button"
+          onClick={captureFrame}
+          style={{
+            position: "absolute",
+            bottom: "calc(env(safe-area-inset-bottom, 0px) + 36px)",
+            left: 22, zIndex: 10,
+            width: 52, height: 52, borderRadius: 999,
+            background: "rgba(10,10,18,0.8)", border: "1px solid rgba(255,255,255,0.18)",
+            color: "#fff", fontSize: 20,
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}
+        >
+          📷{captured > 0 ? <span style={{ position: "absolute", top: -4, right: -4, background: C.green, color: "#0a0a12", fontSize: 11, fontWeight: 800, borderRadius: 999, width: 18, height: 18, display: "grid", placeItems: "center" }}>{captured}</span> : null}
+        </button>
       )}
 
       {/* ── OVERLAY de resultado — semi-transparente, auto-dismiss sin taps ── */}
@@ -840,6 +1014,28 @@ export function ScanScreen({ eventSlug }: { eventSlug: string }) {
             animation: "fadeIn 150ms ease-out",
           }}
         >
+          {/* BENCHMARK: tiempo de reconocimiento del QR (arriba, bien visible).
+              <1s verde, 1-2s ámbar, 2-3s naranja, >3s rojo. */}
+          {bench && (
+            <div style={{
+              position: "absolute", top: "calc(env(safe-area-inset-top, 0px) + 16px)",
+              left: "50%", transform: "translateX(-50%)",
+              display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
+              padding: "8px 16px", borderRadius: 14,
+              background: "rgba(0,0,0,0.45)", border: "1px solid rgba(255,255,255,0.12)",
+            }}>
+              <span style={{
+                fontSize: 22, fontWeight: 900, letterSpacing: "-0.02em",
+                color: bench.ms < 1000 ? C.green : bench.ms < 2000 ? "#f5c518" : bench.ms < 3000 ? "#ff9f1c" : C.red,
+              }}>
+                ⚡ {bench.ms} ms
+              </span>
+              <span style={{ fontSize: 11, color: "rgba(255,255,255,0.5)" }}>
+                {bench.attempts} intentos · decode {bench.decodeMs}ms
+              </span>
+            </div>
+          )}
+
           {/* Icono */}
           <div style={{
             width: 88, height: 88, borderRadius: "50%",

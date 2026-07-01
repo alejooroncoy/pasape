@@ -7,6 +7,9 @@ export type BoxRepository = {
     ownerId: string;
     capacity: number;
   }): Promise<Result<Box>>;
+  /** Crea (idempotente) el grupo de cada box-host de una orden pagada. Se llama
+      al confirmarse el pago: el box existe desde que pagas, no al abrir el wallet. */
+  ensureForOrder(orderId: string): Promise<void>;
   getByToken(token: string): Promise<Box | null>;
   getByTicketId(ticketId: string, ownerId: string): Promise<Box | null>;
   join(input: {

@@ -67,6 +67,14 @@ export interface TicketRepository {
     fullName?: string | null;
     dni?: string | null;
   }): Promise<Result<{ ticket: Ticket; eventSlug: string }>>;
+  /** Reclama la PROPIA compra al loguearse tras pagar como invitado: reasigna
+      `current_holder` de las entradas de la orden al `toProfile`. Idempotente;
+      bloquea re-claim por otra cuenta una vez enganchada. No es transferencia
+      entre personas (no consume `transfer_count`). */
+  claimOrder(input: {
+    orderId: string;
+    toProfile: string;
+  }): Promise<Result<{ ticketsClaimed: number; eventSlug: string; firstTicketId: string | null }>>;
   /** Cancela el envío pendiente del ticket (el emisor lo recupera al instante).
       El link enviado deja de servir. */
   cancelPendingTransfer(input: {

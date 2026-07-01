@@ -22,7 +22,7 @@ const SITE_URL = "https://pasa.pe";
 export const metadata: Metadata = {
   title: "Pasape | Entradas digitales para organizadores",
   description:
-    "Vende entradas, promos, combos y grupos sin responder un solo DM. Mide a tus promotores en tiempo real.",
+    "Vende entradas, combos, preventas y boxes sin responder un solo DM. Mide a tus promotores en tiempo real.",
 };
 
 export default function OrganizadoresPage() {
@@ -35,7 +35,7 @@ export default function OrganizadoresPage() {
         url: SITE_URL,
         logo: `${SITE_URL}/icon`,
         description:
-          "Entradas digitales con QR, combos y referidos para fiestas y eventos en Perú.",
+          "Entradas digitales con QR, combos y medición de promotores para fiestas y eventos en Perú.",
         areaServed: "PE",
       },
       {

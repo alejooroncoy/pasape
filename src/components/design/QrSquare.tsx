@@ -26,12 +26,12 @@ export const QrSquare = ({ code, size = 220, centerImage, errorCorrectionLevel =
       data: code,
       image: centerImage,
       qrOptions: { errorCorrectionLevel: centerImage ? "H" : errorCorrectionLevel },
-      // Módulos y finder patterns CUADRADOS: máxima legibilidad para el lector.
-      // Los redondeados ("extra-rounded") se ven lindos pero difuminan los bordes
-      // y distorsionan los patrones de esquina (que el detector usa para ubicar y
-      // orientar el QR) → lecturas más lentas/fallidas, sobre todo con algo de
-      // borrosidad. Negro puro sobre blanco = contraste máximo.
-      dotsOptions: { type: "square", color: "#000000" },
+      // Balance estética/lectura: módulos LEVEMENTE redondeados ("rounded") para
+      // que se vea diseñado, pero los PATRONES DE ESQUINA (finder) CUADRADOS — son
+      // los que el lector usa para ubicar/orientar el QR; redondearlos lo hace
+      // lento/poco fiable. "extra-rounded" difumina demasiado los bordes. Negro
+      // puro sobre blanco = contraste máximo.
+      dotsOptions: { type: "rounded", color: "#000000" },
       cornersSquareOptions: { type: "square", color: "#000000" },
       cornersDotOptions: { type: "square", color: "#000000" },
       backgroundOptions: { color: "#ffffff" },

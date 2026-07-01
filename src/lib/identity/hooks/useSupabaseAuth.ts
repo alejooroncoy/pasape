@@ -4,6 +4,8 @@ import { useCallback, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { createSupabaseBrowserClient } from "@/server/_shared/supabase/client";
 import { api } from "@/lib/_shared/api-client";
+import { clearPersistedQueryCache } from "@/lib/_shared/query-persister";
+import { resetPrefetchWallet } from "@/lib/tickets/prefetchWallet";
 import { currentUserKey } from "./useCurrentUser";
 
 export const useGoogleSignIn = (opts: { redirectTo?: string } = {}) => {
@@ -42,6 +44,13 @@ export const useSignOut = () => {
     await supabase.auth.signOut();
     // Limpia cookie de org activa server-side.
     await api.del<{ ok: true }>("/api/auth/session");
-    await qc.invalidateQueries({ queryKey: currentUserKey });
+    // Vacía la cache en memoria, el snapshot persistido en IndexedDB y la copia
+    // del service worker: sin esto, la wallet (entradas + DNI) de esta cuenta
+    // seguiría visible offline si otra persona entra en el mismo device.
+    qc.clear();
+    await clearPersistedQueryCache();
+    resetPrefetchWallet();
+    navigator.serviceWorker?.controller?.postMessage({ type: "CLEAR_WALLET_CACHE" });
+    void qc.invalidateQueries({ queryKey: currentUserKey });
   }, [qc]);
 };

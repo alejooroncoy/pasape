@@ -1,4 +1,5 @@
 import { z } from "zod";
+import * as Sentry from "@sentry/nextjs";
 import { headers } from "next/headers";
 import { err, ok, type Result } from "@/server/_shared/result";
 import { getAuthContext, resolveActiveOrgSlug } from "@/server/_shared/AuthContext";
@@ -354,9 +355,11 @@ export const EventsController = {
     return removeEventCoOrganizer(guard.value.event.id, profileId);
   },
 
-  async getScanCache(slug: string): Promise<Result<{
+  async getScanCache(slug: string, since?: string | null): Promise<Result<{
     eventId: string;
     fetchedAt: string;
+    /** true = snapshot completo (reemplazar cache); false = delta (merge). */
+    full: boolean;
     tickets: Array<{
       ticketId: string;
       qrCode: string;
@@ -373,7 +376,10 @@ export const EventsController = {
     const guard = await guardScanReader(slug);
     if (!guard.ok) return err(guard.error);
     const db = supabaseAdmin();
-    const { data, error } = await db
+    // Cursor: timestamp ANTES de la query, para que el próximo delta no se pierda
+    // cambios ocurridos durante la consulta.
+    const fetchedAt = new Date().toISOString();
+    let q = db
       .from("tickets")
       .select(`
         id,
@@ -387,8 +393,11 @@ export const EventsController = {
         orders!inner(event_id),
         ticket_types!inner(name, capacity)
       `)
-      .eq("orders.event_id", guard.value.eventId)
-      .in("status", ["active", "used"])
+      .eq("orders.event_id", guard.value.eventId);
+    // Delta: TODO lo cambiado desde `since` (incl. void/refunded, para que el
+    // portero los borre del cache). Full: solo activas/usadas (snapshot inicial).
+    q = since ? q.gt("updated_at", since) : q.in("status", ["active", "used"]);
+    const { data, error } = await q
       .returns<Array<{
         id: string;
         qr_code: string;
@@ -407,7 +416,8 @@ export const EventsController = {
 
     return ok({
       eventId: guard.value.eventId,
-      fetchedAt: new Date().toISOString(),
+      fetchedAt,
+      full: !since,
       tickets: data.map((t) => ({
         ticketId: t.id,
         qrCode: t.qr_code,
@@ -422,6 +432,24 @@ export const EventsController = {
         boxCapacity: t.box_label ? t.ticket_types.capacity : null,
       })),
     });
+  },
+
+  // Diagnóstico offline: el portero sube los PROBLEMAS de scan que ocurrieron sin
+  // red (bad_window/bad_cert/inválido/ya-usado) al reconectar. Son TELEMETRÍA de
+  // sistema → van a Sentry, NO a la DB (no ensuciar datos de negocio). El buffer
+  // durable es la cola en el device; aquí solo lo reportamos.
+  async recordScanEvent(slug: string, input: unknown): Promise<Result<{ ok: true }>> {
+    const guard = await guardScanReader(slug);
+    if (!guard.ok) return err(guard.error);
+    const b = (input ?? {}) as {
+      qrCode?: string; result?: string; reason?: string | null; offlineScannedAt?: string;
+    };
+    Sentry.captureMessage(`[scan-offline] ${b.reason ?? b.result ?? "unknown"}`, {
+      level: "warning",
+      tags: { area: "portero-scan", eventId: guard.value.eventId, result: b.result ?? "unknown", reason: b.reason ?? "none" },
+      extra: { qrPreview: (b.qrCode ?? "").slice(0, 16), offlineScannedAt: b.offlineScannedAt ?? null },
+    });
+    return ok({ ok: true });
   },
 
   // Sirve la pública ECDSA del evento al portero (la cachea para verificar QR

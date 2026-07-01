@@ -5,6 +5,9 @@ import { motion } from "motion/react";
 import { useRouter } from "@/i18n/navigation";
 import { useClaimTransfer } from "@/lib/tickets/hooks/useTickets";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
+import { useGoogleSignIn } from "@/lib/identity/hooks/useFirebaseAuth";
+import { GoogleBtn } from "@/components/design";
+import { setOauthReturn } from "@/components/auth/PostLoginRedirect";
 import { Logo } from "@/components/brand/Logo";
 
 type Props = { params: Promise<{ token: string }> };
@@ -14,6 +17,9 @@ export default function ClaimPage(props: Props) {
   const me = useCurrentUser();
   const claim = useClaimTransfer();
   const router = useRouter();
+  // Google directo (sin /login, que desvía al panel de organizador). El token va
+  // en la ruta, así que vuelve intacto del OAuth.
+  const google = useGoogleSignIn({});
   const [done, setDone] = useState<{ ticketId: string } | null>(null);
 
   const isLogged = !!me.data?.user;
@@ -91,16 +97,19 @@ export default function ClaimPage(props: Props) {
             <p className="mx-auto mt-2 max-w-[32ch] text-[13.5px] leading-snug text-cart-ink-3">
               Entra con tu cuenta para que la entrada quede guardada en tu wallet, con tu propio QR.
             </p>
-            <button
-              type="button"
-              onClick={() => {
-                const next = encodeURIComponent(window.location.pathname);
-                router.push(`/login?next=${next}` as never);
-              }}
-              className="mt-7 w-full rounded-full bg-cart-accent py-3.5 text-[14.5px] font-semibold text-cart-bg shadow-[0_8px_24px_-6px_var(--color-cart-accent-glow)] transition hover:brightness-110"
-            >
-              Entrar para reclamarla
-            </button>
+            <div className="mt-7">
+              <GoogleBtn
+                onClick={() => {
+                  setOauthReturn(window.location.pathname + window.location.search);
+                  google.signIn();
+                }}
+                disabled={google.pending}
+                label={google.pending ? "Abriendo Google…" : "Continuar con Google"}
+              />
+            </div>
+            {google.error && (
+              <p className="mt-3 text-[12px] text-rose-300">No se pudo abrir Google. Reintenta.</p>
+            )}
           </>
         ) : done ? (
           /* Éxito */

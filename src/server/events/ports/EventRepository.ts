@@ -112,6 +112,10 @@ export type DoorHealth = {
   minutesSinceSync: number | null;
   /** True si la puerta lleva demasiado sin sincronizar (umbral del backend). */
   isStale: boolean;
+  /** Nombre que el portero ingresó al canjear el código de acceso. */
+  holderName: string | null;
+  /** Últimos 2 dígitos del DNI del portero (display-only, el completo es server-side). */
+  dniLast2: string | null;
 };
 
 export type CreateTicketTypeInput = {

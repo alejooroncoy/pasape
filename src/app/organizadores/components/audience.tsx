@@ -2,7 +2,7 @@ import { Icon } from "./icons";
 import { SectionHeader } from "./ui/section-header";
 
 const AUDIENCE = [
-  "Discotecas con promos de grupos, boxes y cumpleañeros",
+  "Discotecas con combos, boxes y preventa",
   "Organizadores que manejan promotores y quieren medirlos",
   "Fiestas universitarias y por facultad",
   "Colectivos de eventos en Barranco y Miraflores",
