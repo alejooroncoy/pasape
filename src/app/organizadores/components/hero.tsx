@@ -3,14 +3,6 @@ import { Eyebrow } from "./ui/eyebrow";
 import { Icon } from "./icons";
 import { HeroPreview } from "./hero-preview";
 
-const PILLS = [
-  { icon: "qr" as const, label: "QR único por entrada" },
-  { icon: "bolt" as const, label: "Combos 2x1 y 3x2" },
-  { icon: "chart" as const, label: "Preventa automática" },
-  { icon: "users" as const, label: "Boxes con invitación" },
-  { icon: "link" as const, label: "Promotores medidos" },
-];
-
 export function Hero({ waHref }: { waHref: string }) {
   return (
     <section
@@ -32,18 +24,6 @@ export function Hero({ waHref }: { waHref: string }) {
             Combos, preventas y boxes sin responder un solo DM. Mide a tus
             promotores en tiempo real desde el panel.
           </p>
-
-          <ul className="reveal in mx-auto mt-8 flex max-w-[42ch] flex-wrap justify-center gap-2 md:mx-0 md:justify-start">
-            {PILLS.map((p) => (
-              <li
-                key={p.label}
-                className="inline-flex items-center gap-2 rounded-full border border-line-strong bg-bg-elev/80 px-3 py-1.5 text-[13px] text-ink-2 backdrop-blur-sm"
-              >
-                <Icon name={p.icon} width={14} height={14} className="text-accent" />
-                {p.label}
-              </li>
-            ))}
-          </ul>
 
           <div className="reveal in mt-9 flex flex-wrap items-center justify-center gap-3 md:justify-start">
             <Button
