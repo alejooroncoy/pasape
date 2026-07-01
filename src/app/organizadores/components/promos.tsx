@@ -15,8 +15,8 @@ const FEATURES = [
       <div className="rounded-xl border border-line bg-bg/50 p-3">
         <div className="space-y-2">
           {[
-            ["@diego_pe", "24 ventas", "S/ 1,440"],
-            ["@valeisabela", "18 ventas", "S/ 1,080"],
+            ["Promotor 1", "24 ventas", "S/ 1,440"],
+            ["Promotor 2", "18 ventas", "S/ 1,080"],
           ].map(([code, sales, rev]) => (
             <div
               key={code}
