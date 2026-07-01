@@ -2,15 +2,16 @@ import type { ReactNode } from "react";
 
 /** Marco de navegador minimalista para presentar capturas/demos de producto real. */
 export function BrowserFrame({
-  url = "app.pasape.lat",
+  url = "pasape.lat",
   children,
 }: {
   url?: string;
   children: ReactNode;
 }) {
   return (
-    <div className="overflow-hidden rounded-2xl border border-line-strong bg-bg-elev-2 shadow-[0_30px_60px_-24px_rgba(0,0,0,0.7)]">
-      <div className="flex items-center gap-3 border-b border-line bg-bg-elev/60 px-3.5 py-2.5">
+    <div className="relative overflow-hidden rounded-2xl border border-line-strong bg-bg-elev-2 shadow-[0_30px_60px_-24px_rgba(0,0,0,0.7)]">
+      <div className="browser-frame-grain" aria-hidden="true" />
+      <div className="relative flex items-center gap-3 border-b border-line bg-bg-elev/60 px-3.5 py-2.5">
         <div className="flex shrink-0 gap-1.5" aria-hidden="true">
           <span className="size-2.5 rounded-full bg-white/15" />
           <span className="size-2.5 rounded-full bg-white/15" />
@@ -24,7 +25,7 @@ export function BrowserFrame({
           <span className="truncate">{url}</span>
         </div>
       </div>
-      <div className="bg-bg p-3 lg:p-4">{children}</div>
+      <div className="relative bg-bg p-3 lg:p-4">{children}</div>
     </div>
   );
 }

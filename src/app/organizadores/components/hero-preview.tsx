@@ -6,7 +6,7 @@ export function HeroPreview() {
   return (
     <div className="hero-preview reveal in">
       <div className="hero-preview-in-anim">
-        <BrowserFrame url="app.pasape.lat">
+        <BrowserFrame url="pasape.lat">
           <PanelDemo compact />
         </BrowserFrame>
       </div>

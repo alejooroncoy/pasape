@@ -17,7 +17,7 @@ export function PanelReporte() {
         />
 
         <div className="reveal relative mt-12">
-          <BrowserFrame url="app.pasape.lat/org/eventos/evento-demo">
+          <BrowserFrame url="pasape.lat/org/events/evento-demo">
             <PanelDemo />
           </BrowserFrame>
         </div>
