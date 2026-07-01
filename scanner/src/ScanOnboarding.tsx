@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { C, FONT_DISPLAY, FONT_MONO } from "@/components/design/tokens";
 import { Logo } from "@/components/brand/Logo";
 import { useJoinByCode, useResolveCode } from "@/lib/scanning/hooks/useScannerSession";
+import { getPorteroIdentity, setPorteroIdentity } from "@/lib/scanning/deviceId";
 
 // Onboarding del PORTERO — SPA (Capacitor), solo código (sin Google). Flujo en
 // DOS pasos, con el código validado ANTES de pedir identidad:
@@ -30,10 +31,14 @@ export function ScanOnboarding({
   const resolve = useResolveCode();
   const join = useJoinByCode();
 
+  // Si este device ya se identificó antes (portero recurrente), no se le
+  // vuelve a pedir nombre/DNI — se reusa y se salta directo al join.
+  const knownIdentity = getPorteroIdentity();
+
   const fromLink = !!initialCode;
   const [code, setCode] = useState(clean(initialCode ?? "").slice(0, CODE_LEN));
-  const [fullName, setFullName] = useState("");
-  const [dni, setDni] = useState("");
+  const [fullName, setFullName] = useState(knownIdentity?.fullName ?? "");
+  const [dni, setDni] = useState(knownIdentity?.dni ?? "");
   const [step, setStep] = useState<Step>("code");
   const [eventTitle, setEventTitle] = useState("");
 
@@ -47,24 +52,14 @@ export function ScanOnboarding({
     resolve.error instanceof Error &&
     resolve.error.message === "invalid_code";
 
-  // Paso 1 → valida el código por detrás. Solo si es válido pasamos a identidad.
-  const continueToIdentity = (e?: React.FormEvent) => {
-    e?.preventDefault();
-    if (!ready || resolve.isPending) return;
-    resolve.mutate(code, {
-      onSuccess: (res) => {
-        setEventTitle(res.eventTitle);
-        setStep("identity");
-      },
-    });
-  };
-
-  const submit = () => {
-    if (!canEnter) return;
+  const doJoin = (name: string, doc: string) => {
     join.mutate(
-      { code, fullName: fullName.trim(), dni },
+      { code, fullName: name.trim(), dni: doc },
       {
-        onSuccess: (res) => onJoined(res.eventSlug),
+        onSuccess: (res) => {
+          setPorteroIdentity({ fullName: name.trim(), dni: doc });
+          onJoined(res.eventSlug);
+        },
         // Código revocado entre el paso 1 y 2 → volver a corregirlo.
         onError: (err) => {
           if (err instanceof Error && err.message === "invalid_code") {
@@ -73,6 +68,28 @@ export function ScanOnboarding({
         },
       },
     );
+  };
+
+  // Paso 1 → valida el código por detrás. Si ya conocemos su identidad, entra
+  // directo (sin pedirle nombre/DNI de nuevo); si no, pasa al paso 2.
+  const continueToIdentity = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (!ready || resolve.isPending) return;
+    resolve.mutate(code, {
+      onSuccess: (res) => {
+        setEventTitle(res.eventTitle);
+        if (knownIdentity) {
+          doJoin(knownIdentity.fullName, knownIdentity.dni);
+        } else {
+          setStep("identity");
+        }
+      },
+    });
+  };
+
+  const submit = () => {
+    if (!canEnter) return;
+    doJoin(fullName, dni);
   };
 
   return (
@@ -119,13 +136,18 @@ export function ScanOnboarding({
                 No pudimos verificar el código. Revisa tu conexión e intenta de nuevo.
               </div>
             )}
+            {knownIdentity && join.isError && !badCode && (
+              <div style={{ ...errorBox, marginTop: 18 }}>
+                No pudimos crear tu sesión. Intenta de nuevo.
+              </div>
+            )}
 
             <button
               type="submit"
-              disabled={!ready || resolve.isPending}
+              disabled={!ready || resolve.isPending || join.isPending}
               style={{ ...btnPrimary, marginTop: 26, opacity: ready ? 1 : 0.4 }}
             >
-              {resolve.isPending ? "Verificando…" : "Continuar"}
+              {join.isPending ? "Entrando…" : resolve.isPending ? "Verificando…" : "Continuar"}
             </button>
 
             <div style={offlineNote}>
