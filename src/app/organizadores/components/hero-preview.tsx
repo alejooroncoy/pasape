@@ -5,9 +5,11 @@ import { BrowserFrame } from "./browser-frame";
 export function HeroPreview() {
   return (
     <div className="hero-preview reveal in">
-      <BrowserFrame url="app.pasape.lat">
-        <PanelDemo compact />
-      </BrowserFrame>
+      <div className="hero-preview-in-anim">
+        <BrowserFrame url="app.pasape.lat">
+          <PanelDemo compact />
+        </BrowserFrame>
+      </div>
     </div>
   );
 }

@@ -1,16 +1,68 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+
 /**
  * Réplica estática del panel real de organizador (mismos tokens `cart-*` que
  * /org/events/[slug]), con data de un evento de prueba — no una captura de
- * pantalla. Sin hooks, sin fetch: todo es prop estática para la landing.
+ * pantalla. Sin fetch: todo es prop estática para la landing, con los
+ * números animados (cuentan de 0 al valor real cuando entran en pantalla).
  */
 
 const KPIS = [
-  { label: "Vendidas", value: "19", hint: "Sin aforo definido", tone: "accent" as const, progress: null },
-  { label: "Ingresaron", value: "18", hint: "95% de las vendidas", tone: "green" as const, progress: 95 },
-  { label: "Recaudado", value: "S/ 830", hint: "acumulado en la noche", tone: "neutral" as const, progress: null },
+  { label: "Vendidas", to: 19, format: (n: number) => n.toLocaleString("es-PE"), hint: "Sin aforo definido", tone: "accent" as const, progress: null },
+  { label: "Ingresaron", to: 18, format: (n: number) => n.toLocaleString("es-PE"), hint: "95% de las vendidas", tone: "green" as const, progress: 95 },
+  { label: "Recaudado", to: 830, format: (n: number) => `S/ ${n.toLocaleString("es-PE")}`, hint: "acumulado en la noche", tone: "neutral" as const, progress: null },
 ];
 
 const PROMOTERS = [{ rank: 1, name: "Promotor 1", code: "PROMO-01", sold: 1, validated: 0, revenue: "S/ 30" }];
+
+function useCountUp(to: number, format: (n: number) => string, durationMs = 1100) {
+  const [display, setDisplay] = useState(format(0));
+  const ref = useRef<HTMLSpanElement>(null);
+  const started = useRef(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const run = () => {
+      if (started.current) return;
+      started.current = true;
+      if (reduceMotion) {
+        setDisplay(format(to));
+        return;
+      }
+      const start = performance.now();
+      const tick = (now: number) => {
+        const p = Math.min(1, (now - start) / durationMs);
+        const eased = 1 - (1 - p) ** 3;
+        setDisplay(format(Math.round(to * eased)));
+        if (p < 1) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    };
+
+    const io = new IntersectionObserver(
+      (entries) => entries.forEach((e) => e.isIntersecting && run()),
+      { threshold: 0.4 },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [to, format, durationMs]);
+
+  return { ref, display };
+}
+
+function CountUp({ to, format }: { to: number; format: (n: number) => string }) {
+  const { ref, display } = useCountUp(to, format);
+  return (
+    <span ref={ref} className="tabular-nums">
+      {display}
+    </span>
+  );
+}
 
 const SCANS = [
   "01:10:02 p. m.",
@@ -23,14 +75,16 @@ const SCANS = [
 
 function KpiCard({
   label,
-  value,
+  to,
+  format,
   hint,
   progress,
   tone,
   compact,
 }: {
   label: string;
-  value: string;
+  to: number;
+  format: (n: number) => string;
   hint: string;
   progress: number | null;
   tone: "accent" | "green" | "neutral";
@@ -50,7 +104,7 @@ function KpiCard({
       <div
         className={`mt-2 whitespace-nowrap font-sans font-semibold leading-none tracking-[-0.035em] ${compact ? "text-[26px]" : "text-[36px] lg:text-[44px]"}`}
       >
-        {value}
+        <CountUp to={to} format={format} />
       </div>
       <div className="mt-2 truncate text-[11.5px] text-cart-ink-3">{hint}</div>
       {typeof progress === "number" && (

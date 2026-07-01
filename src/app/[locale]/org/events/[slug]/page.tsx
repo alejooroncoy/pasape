@@ -93,7 +93,7 @@ function LivePanel({
         <KpiCard
           label="Recaudado"
           value={formatMoneyClean(revenue, ev?.currency)}
-          hint="acumulado · S/"
+          hint="acumulado en el evento"
           tone="neutral"
         />
       </section>
