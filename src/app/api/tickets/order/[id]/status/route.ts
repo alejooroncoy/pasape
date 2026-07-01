@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
 import { getAuthContext } from "@/server/_shared/AuthContext";
 import { signTicketLink } from "@/server/notifications/domain/TicketLinkToken";
+import { signOrderLink } from "@/server/notifications/domain/OrderLinkToken";
 
 // Polling endpoint used by /events/[slug]/processing. Returns
 // { status, paidAt, ticketUrl?, ticketsCount }.
@@ -16,7 +17,7 @@ export const GET = async (req: NextRequest, ctx: { params: Promise<{ id: string 
   const db = supabaseAdmin();
   const { data: row, error } = await db
     .from("orders")
-    .select("id, status, paid_at, buyer_id, guest_email")
+    .select("id, status, paid_at, buyer_id, guest_email, claimed_at")
     .eq("id", id)
     .maybeSingle<{
       id: string;
@@ -24,6 +25,7 @@ export const GET = async (req: NextRequest, ctx: { params: Promise<{ id: string 
       paid_at: string | null;
       buyer_id: string;
       guest_email: string | null;
+      claimed_at: string | null;
     }>();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!row) return NextResponse.json({ error: "not_found" }, { status: 404 });
@@ -31,11 +33,16 @@ export const GET = async (req: NextRequest, ctx: { params: Promise<{ id: string 
   const auth = await getAuthContext();
   const isOwner = auth.ok && auth.value.profileId === row.buyer_id;
   const isGuest = email && row.guest_email && row.guest_email.toLowerCase() === email;
-  if (!isOwner && !isGuest) {
+  // Compra de invitado aún no reclamada: el logueado puede obtener el link de
+  // desbloqueo (p. ej. aterrizó en /done tras Google en vez de /unlock).
+  const canClaimGuestOrder =
+    auth.ok && !!row.guest_email && !row.claimed_at && row.status === "paid";
+  if (!isOwner && !isGuest && !canClaimGuestOrder) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
   let ticketUrl: string | null = null;
+  let unlockUrl: string | null = null;
   let ticketsCount = 0;
   if (row.status === "paid") {
     const { data: tickets } = await db
@@ -50,6 +57,11 @@ export const GET = async (req: NextRequest, ctx: { params: Promise<{ id: string 
       const token = signTicketLink(first.id);
       ticketUrl = `/t/${first.id}?k=${token}`;
     }
+    // Invitado (sin sesión): lo mandamos a "Entra para desbloquear tus entradas"
+    // en vez del QR suelto. El logueado ya cae directo a su billetera.
+    if (!isOwner) {
+      unlockUrl = `/unlock/${id}/${signOrderLink(id)}`;
+    }
   }
 
   return NextResponse.json({
@@ -57,6 +69,7 @@ export const GET = async (req: NextRequest, ctx: { params: Promise<{ id: string 
       status: row.status,
       paidAt: row.paid_at,
       ticketUrl,
+      unlockUrl,
       ticketsCount,
     },
   });

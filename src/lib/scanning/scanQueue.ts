@@ -19,6 +19,11 @@ export type PendingScan = {
   synced: 0 | 1;
   lastAttemptAt?: string;
   lastError?: string;
+  // logOnly: NO es una admisión a reenviar, sino el registro de un scan (sobre
+  // todo PROBLEMAS) que se manda al server como auditoría al reconectar.
+  logOnly?: boolean;
+  result?: "valid" | "already_used" | "invalid";
+  reason?: string | null;
 };
 
 async function db(): Promise<IDBPDatabase> {

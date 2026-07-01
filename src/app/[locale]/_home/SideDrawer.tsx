@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Ticket, Heart, Bell, LogOut, ChevronRight } from "lucide-react";
-import { useRouter } from "@/i18n/navigation";
+import { usePathname, useRouter } from "@/i18n/navigation";
 import { useSignOut } from "@/lib/identity/hooks/useSupabaseAuth";
 import { CloseIcon, WaIcon, PinIcon } from "./icons";
 import { Logo } from "@/components/brand/Logo";
@@ -13,6 +13,12 @@ import { CATEGORIES } from "./categories";
 import { useBrowseEvents } from "@/lib/events/hooks/useEvents";
 import type { NavUser } from "./Nav";
 import type { EventCategory } from "@/server/events/domain/Event";
+
+// Rutas del asistente que requieren sesión: al cerrar sesión volvemos al home.
+const BUYER_PROTECTED_PREFIXES = ["/tickets", "/profile", "/favorites", "/account"] as const;
+
+const isBuyerProtectedPath = (pathname: string): boolean =>
+  BUYER_PROTECTED_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 
 export function SideDrawer({ user, open, onClose, onSignIn, onSelectCategory }: {
   user: NavUser | null;
@@ -206,12 +212,15 @@ function AccountHeader({ user, onClose, onSignIn }: {
 // Cerrar sesión — fila danger. Resuelve la falta crítica: poder salir desde móvil.
 function LogoutRow({ onClose }: { onClose: () => void }) {
   const router = useRouter();
+  const pathname = usePathname();
   const signOut = useSignOut();
 
   const handleSignOut = async () => {
     onClose();
     await signOut();
-    router.replace("/");
+    if (isBuyerProtectedPath(pathname)) {
+      router.replace("/");
+    }
   };
 
   return (

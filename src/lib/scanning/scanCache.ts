@@ -26,6 +26,8 @@ export type CachedTicket = {
 type ScanCacheResponse = {
   eventId: string;
   fetchedAt: string;
+  /** true = snapshot completo (reemplaza el cache); false = delta (merge). */
+  full: boolean;
   tickets: CachedTicket[];
 };
 
@@ -53,17 +55,37 @@ async function db(): Promise<IDBPDatabase> {
   });
 }
 
-export async function refreshScanCache(slug: string): Promise<number> {
-  const res = await fetch(resolveUrl(`/api/events/${slug}/scan-cache`), {
-    headers: deviceHeaders(),
-  });
+let syncing = false;
+
+export async function refreshScanCache(
+  slug: string,
+  opts: { full?: boolean } = {},
+): Promise<number> {
+  // Anti-stacking: en red lenta, no encimar syncs (un fetch colgado + ticks cada
+  // 5s apilarían llamadas). Si ya hay uno en curso, este tick se salta.
+  if (syncing) return 0;
+  syncing = true;
+  try {
+  const d = await db();
+  // Delta por defecto: solo lo cambiado desde el último sync (transferencias,
+  // datos, uso, anulación, altas). full=true (o sin lastSync) trae el snapshot.
+  const lastSync = opts.full ? null : ((await d.get(META, "lastSync")) as string | null);
+  // Overlap de 3s: reconsultar el borde evita perder filas con updated_at justo
+  // en el límite del cursor. Reprocesar unas pocas es inocuo (el merge es idempotente).
+  const since = lastSync ? new Date(Date.parse(lastSync) - 3000).toISOString() : null;
+  const url = since
+    ? `/api/events/${slug}/scan-cache?since=${encodeURIComponent(since)}`
+    : `/api/events/${slug}/scan-cache`;
+  const res = await fetch(resolveUrl(url), { headers: deviceHeaders() });
   if (!res.ok) throw new Error("scan_cache_fetch_failed");
   const json: ScanCacheResponse = await res.json();
-  const d = await db();
   const tx = d.transaction([STORE, META], "readwrite");
-  await tx.objectStore(STORE).clear();
+  const store = tx.objectStore(STORE);
+  if (json.full) await store.clear(); // snapshot: reemplaza todo
   for (const t of json.tickets) {
-    await tx.objectStore(STORE).put(t);
+    // active/used → upsert; void/refunded → fuera del cache (delta los trae).
+    if (t.status === "active" || t.status === "used") await store.put(t);
+    else await store.delete(t.ticketId);
   }
   await tx.objectStore(META).put(json.fetchedAt, "lastSync");
   await tx.objectStore(META).put(json.eventId, "eventId");
@@ -75,6 +97,9 @@ export async function refreshScanCache(slug: string): Promise<number> {
     // sin red o evento sin clave aún: best-effort, no bloquea el cache
   }
   return json.tickets.length;
+  } finally {
+    syncing = false;
+  }
 }
 
 export async function lookupTicketById(

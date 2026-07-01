@@ -12,11 +12,14 @@ export async function syncPending(slug: string): Promise<{ ok: number; failed: n
     let failed = 0;
     for (const item of items) {
       try {
-        // "signed" → /scan con el token firmado; "manual" → /admit por ticketId.
+        // logOnly → /events (auditoría: registra el resultado tal como ocurrió
+        // offline, no re-valida). "signed" → /scan; "manual" → /admit.
         const [url, payload] =
-          item.kind === "manual"
-            ? ["/api/scanning/admit", { ticketId: item.ticketId, eventSlug: slug, offlineScannedAt: item.scannedAt }]
-            : ["/api/scanning/scan", { qrCode: item.token, eventSlug: slug, offlineScannedAt: item.scannedAt }];
+          item.logOnly
+            ? ["/api/scanning/events", { eventSlug: slug, qrCode: item.token, result: item.result, reason: item.reason ?? null, offlineScannedAt: item.scannedAt }]
+            : item.kind === "manual"
+              ? ["/api/scanning/admit", { ticketId: item.ticketId, eventSlug: slug, offlineScannedAt: item.scannedAt }]
+              : ["/api/scanning/scan", { qrCode: item.token, eventSlug: slug, offlineScannedAt: item.scannedAt }];
         const res = await fetch(url, {
           method: "POST",
           headers: { "content-type": "application/json", ...deviceHeaders() },

@@ -53,5 +53,7 @@
 	<string>Pasape usa Bluetooth para coordinar las puertas y evitar dobles ingresos sin conexión.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
 	<string>Pasape usa Bluetooth para coordinar las puertas y evitar dobles ingresos sin conexión.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Pasape usa la red local (el hotspot de la puerta) para coordinar a los porteros y evitar que entren dos personas con la misma entrada, sin necesidad de internet.</string>
 </dict>
 </plist>

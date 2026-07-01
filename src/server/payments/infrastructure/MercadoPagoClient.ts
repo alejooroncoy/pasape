@@ -41,3 +41,16 @@ export const appBaseUrl = (): string => {
   if (vercel) return vercel.startsWith("http") ? vercel.replace(/\/$/, "") : `https://${vercel}`;
   return "http://localhost:3000";
 };
+
+// MP rechaza `back_urls`/`notification_url` que no sean públicas (loopback,
+// IPs de LAN, o http sin TLS) cuando `auto_return`/webhook están activos. Solo
+// consideramos "pública" una URL https cuyo host no sea loopback ni una IP
+// privada (192.168 / 10 / 172.16-31). En dev sin túnel → false → omitimos esos
+// campos y el polling de status cubre la confirmación.
+export const isPublicBaseUrl = (base: string = appBaseUrl()): boolean => {
+  const isPrivateHost =
+    /localhost|127\.0\.0\.1|0\.0\.0\.0|::1|\/\/(?:10|192\.168|172\.(?:1[6-9]|2\d|3[01]))\./.test(
+      base,
+    );
+  return base.startsWith("https://") && !isPrivateHost;
+};

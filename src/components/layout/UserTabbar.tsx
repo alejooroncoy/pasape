@@ -48,7 +48,7 @@ export function UserTabbar() {
   return (
     <nav
       aria-label="Navegación principal"
-      className="fixed inset-x-0 bottom-0 z-[70] block border-t border-cart-line bg-cart-bg/90 px-1 pb-[calc(env(safe-area-inset-bottom,0px)+8px)] pt-2 backdrop-blur-xl backdrop-saturate-150 lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-[70] block border-t border-cart-line bg-cart-bg/90 px-1 pb-[calc(env(safe-area-inset-bottom,0px)+6px)] pt-1.5 backdrop-blur-xl backdrop-saturate-150 lg:hidden"
     >
       <div className="mx-auto grid max-w-[540px] grid-cols-4">
         {TABS.map(({ id, label, href, Icon, dot }) => {
@@ -58,7 +58,7 @@ export function UserTabbar() {
               key={id}
               href={href as never}
               aria-current={isOn ? "page" : undefined}
-              className="group relative flex flex-col items-center justify-center gap-1 px-0.5 py-1.5"
+              className="group relative flex flex-col items-center justify-center gap-0.5 px-0.5 py-1"
             >
               {/* Indicador activo que se desliza entre tabs (layoutId) */}
               {isOn && (
@@ -77,7 +77,7 @@ export function UserTabbar() {
                 whileTap={{ scale: 0.86 }}
                 transition={{ type: "spring", stiffness: 500, damping: 26 }}
                 className={
-                  "relative grid size-6 place-items-center transition-colors " +
+                  "relative grid size-[22px] place-items-center transition-colors " +
                   (isOn ? "text-cart-accent" : "text-cart-ink-3 group-hover:text-white")
                 }
               >
@@ -92,7 +92,7 @@ export function UserTabbar() {
 
               <span
                 className={
-                  "text-[10.5px] font-medium leading-none transition-colors " +
+                  "text-[10px] font-medium leading-none transition-colors " +
                   (isOn ? "text-cart-accent" : "text-cart-ink-3")
                 }
               >

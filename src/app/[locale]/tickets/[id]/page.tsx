@@ -9,13 +9,15 @@ import { Plus, Link2, Smartphone, Copy, Check, X, MessageCircle } from "lucide-r
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "@/i18n/navigation";
 import { QrSquare } from "@/components/design";
-import { useTicket, useTransferTicket, useCancelTransfer, useMyTickets, useSetHolder, useCarouselScope } from "@/lib/tickets/hooks/useTickets";
-import { useProfileLookup } from "@/lib/identity/hooks/useProfileLookup";
+import { HolderEditSheet } from "@/components/tickets/HolderEditSheet";
+import { TransferTicketSheet } from "@/components/tickets/TransferTicketSheet";
+import { useTicket, useCancelTransfer, useMyTickets, useCarouselScope, ticketDetailKey } from "@/lib/tickets/hooks/useTickets";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { useOnline } from "@/lib/_shared/useOnline";
 import { useLocalRotatingQr, prewarmTicketCert } from "@/lib/tickets/hooks/useLocalRotatingQr";
-import { useBoxForTicket, useRealtimeBox, useCreateBox, useRemoveBoxMember, useAddBoxCompanion } from "@/lib/boxes/hooks/useBoxes";
+import { useBoxForTicket, useRealtimeBox, useRemoveBoxMember, useAddBoxCompanion } from "@/lib/boxes/hooks/useBoxes";
 import { formatDate } from "@/lib/_shared/format";
+import { maskPhone } from "@/lib/tickets/phoneFormat";
 import { CATEGORY_BY_ID } from "@/app/[locale]/_home/categories";
 import type { WalletTicket } from "@/server/tickets/domain/Ticket";
 import type { Box } from "@/server/boxes/domain/Box";
@@ -75,13 +77,13 @@ function TicketDetailInner({ id }: { id: string }) {
   const [activeId, setActiveId] = useState(id);
   const [direction, setDirection] = useState(0);
   const { data, isLoading, error } = useTicket(activeId);
-  const transfer = useTransferTicket();
   const cancelTransfer = useCancelTransfer();
   const online = useOnline();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
-  const [recipient, setRecipient] = useState("");
+  const holderBtnRef = useRef<HTMLButtonElement>(null);
+  const transferBtnRef = useRef<HTMLButtonElement>(null);
   // QR firmado (ECDSA): clave no-extraíble en el device + cert del evento.
   // Genera el QR rotativo 100% offline tras la primera carga. Si el ticket está
   // used/void, null evita carga.
@@ -133,24 +135,42 @@ function TicketDetailInner({ id }: { id: string }) {
   // Id del ticket host del box, estés en el host o en un acompañante que llevas:
   // así el carrusel del box sigue disponible al saltar entre sus QR.
   const boxHostId = isHost ? activeId : isBoxTicket ? data?.boxHostTicketId ?? null : null;
+  // El box se crea en el backend al confirmarse el pago (un box es una compra), y
+  // como red de seguridad la propia lectura lo crea si faltara. Aquí el wallet solo
+  // LEE — sin POST ni reintentos desde el cliente (eso generaba boxes duplicados).
   const boxQuery = useBoxForTicket(boxHostId ?? "");
-  const createBox = useCreateBox();
-  // Auto-crear el box la primera vez que el host abre su entrada (antes vivía en
-  // la subpágina). La capacidad real la define el server desde el ticket_type.
-  useEffect(() => {
-    if (
-      isHost &&
-      data?.status === "active" &&
-      boxQuery.data === null &&
-      !createBox.isPending &&
-      !createBox.data
-    ) {
-      createBox.mutate({ ticketId: activeId });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isHost, data?.status, boxQuery.data, activeId]);
-  const box = boxQuery.data ?? createBox.data ?? null;
+  const box = boxQuery.data ?? null;
   useRealtimeBox(box?.inviteToken);
+
+  // El nudge flotante "comparte tu box" se oculta apenas el panel entra en
+  // pantalla (ya bajaste, ya lo ves → sobra). IntersectionObserver sobre #box-panel.
+  const [panelInView, setPanelInView] = useState(false);
+  useEffect(() => {
+    const el = document.getElementById("box-panel");
+    if (!el) return;
+    const io = new IntersectionObserver(([entry]) => setPanelInView(entry.isIntersecting), {
+      rootMargin: "0px 0px -25% 0px",
+    });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [box]);
+
+  // El nudge es educativo: la primera vez le enseña al host que abajo está el panel
+  // para invitar. Una vez que llegó al panel (lo vio), ya lo sabe — no se lo
+  // repetimos en futuras compras de box. Lo recordamos local en el dispositivo.
+  const [boxNudgeSeen, setBoxNudgeSeen] = useState(false);
+  useEffect(() => {
+    try {
+      if (localStorage.getItem("pasape:box_nudge_seen")) setBoxNudgeSeen(true);
+    } catch {}
+  }, []);
+  useEffect(() => {
+    if (!panelInView) return;
+    try {
+      localStorage.setItem("pasape:box_nudge_seen", "1");
+    } catch {}
+    setBoxNudgeSeen(true);
+  }, [panelInView]);
 
   // Scope del carrusel (calculado en el backend): IDs ordenados y el índice actual.
   const carouselIds = scopeQuery.data?.ids ?? [];
@@ -168,10 +188,7 @@ function TicketDetailInner({ id }: { id: string }) {
       if (!nid) continue;
       const seed = (myTickets.data ?? []).find((t) => t.id === nid);
       if (seed) {
-        qc.setQueryData(
-          ["tickets", "detail", nid, ""],
-          (prev: WalletTicket | undefined) => prev ?? seed,
-        );
+        qc.setQueryData(ticketDetailKey(nid), (prev: WalletTicket | undefined) => prev ?? seed);
       }
       void prewarmTicketCert(nid);
     }
@@ -190,10 +207,6 @@ function TicketDetailInner({ id }: { id: string }) {
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prevTicketId, nextTicketId]);
-  // Eco de confirmación: al escribir el número, buscamos a quién pertenece para
-  // mostrarlo antes de soltar la entrada (capa anti-typo).
-  const recipientDigits = recipient.replace(/\D/g, "");
-  const recipientLookup = useProfileLookup(recipient);
 
   // Sin sesión, /tickets/[id] falla por RLS (current_holder = auth.uid()). En vez
   // de quedar en "No pudimos cargar tu entrada", mandamos a login con next para
@@ -348,7 +361,7 @@ function TicketDetailInner({ id }: { id: string }) {
                   </div>
                 </div>
               ) : rotating.payload ? (
-                <QrSquare code={rotating.payload} size={240} />
+                <QrSquare code={rotating.payload} size={240} errorCorrectionLevel="L" />
               ) : (
                 <div className="grid size-[240px] place-items-center px-4 text-center text-[13px] text-cart-ink-3">
                   {rotating.error
@@ -401,6 +414,7 @@ function TicketDetailInner({ id }: { id: string }) {
             {data.status === "active" && !data.pendingTransferTo && (
               <div className="mt-3.5 flex gap-2">
                 <button
+                  ref={holderBtnRef}
                   type="button"
                   onClick={() => setEditOpen(true)}
                   disabled={!online}
@@ -410,6 +424,7 @@ function TicketDetailInner({ id }: { id: string }) {
                   Cambiar datos
                 </button>
                 <button
+                  ref={transferBtnRef}
                   type="button"
                   onClick={() => setOpen(true)}
                   disabled={!online}
@@ -541,7 +556,8 @@ function TicketDetailInner({ id }: { id: string }) {
           </div>
         )}
 
-        {/* Panel del box (host) — invitar inline. Si aún se crea, placeholder. */}
+        {/* Panel del box (host) — invitar inline, debajo del QR (columna única
+            centrada, igual en mobile y desktop). Si aún se crea, placeholder. */}
         {isHost && data.status === "active" && (
           box ? (
             <BoxPanel box={box} />
@@ -575,115 +591,51 @@ function TicketDetailInner({ id }: { id: string }) {
         )}
       </main>
 
-      {/* Transfer sheet */}
+      {/* Nudge fijo del box (mobile y desktop): barrita atenuada/glassy que recuerda
+          el siguiente paso — invitar al box — porque el panel está bajo el fold y
+          sin esto no sabrías que existe. En mobile flota sobre el tabbar; en desktop
+          (sin tabbar) más abajo. Se desvanece sola apenas el panel entra en pantalla
+          (ya bajaste → sobra). Solo host, activo y con lugares libres. */}
       <AnimatePresence>
-        {open && (
+        {isHost && box && data.status === "active" && box.members.length < box.capacity && !panelInView && !boxNudgeSeen && (
           <motion.div
-            className="fixed inset-0 z-[80] flex items-end justify-center bg-black/60 backdrop-blur-sm lg:items-center"
-            onClick={() => setOpen(false)}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+            className="pointer-events-none fixed inset-x-0 z-[60] flex justify-center px-4 bottom-[calc(env(safe-area-inset-bottom,0px)+66px)] lg:bottom-8"
           >
-            <motion.div
-              onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-[460px] rounded-t-[24px] border-t border-cart-line-strong bg-cart-bg-elev p-6 lg:rounded-3xl lg:border"
-              style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 28px)" }}
-              initial={{ y: 60, opacity: 0, scale: 0.98 }}
-              animate={{ y: 0, opacity: 1, scale: 1 }}
-              exit={{ y: 60, opacity: 0, scale: 0.98 }}
-              transition={{ type: "spring", stiffness: 380, damping: 32, mass: 0.8 }}
+            <button
+              type="button"
+              onClick={() =>
+                document.getElementById("box-panel")?.scrollIntoView({ behavior: "smooth", block: "center" })
+              }
+              className="pointer-events-auto flex w-full max-w-[460px] items-center gap-2.5 rounded-full border border-emerald-500/25 bg-emerald-100/90 px-3.5 py-2.5 shadow-[0_8px_28px_-12px_rgba(0,0,0,0.5)] backdrop-blur-xl transition active:scale-[0.98]"
             >
-              <div className="mb-4 flex justify-center lg:hidden">
-                <span className="h-1 w-9 rounded-full bg-white/15" />
-              </div>
-              <h2 className="text-[22px] font-bold tracking-[-0.02em]">
-                Enviar entrada
-              </h2>
-              <p className="mt-2 text-[13px] leading-[1.5] text-cart-ink-3">
-                Le llega por WhatsApp. La entrada <span className="font-semibold text-white">sigue siendo tuya</span> hasta
-                que la abra y la reclame.
-              </p>
-
-              <label className="mt-5 block">
-                <span className="text-[11.5px] font-semibold uppercase tracking-[0.12em] text-cart-ink-3">
-                  WhatsApp del receptor
-                </span>
-                <input
-                  type="tel"
-                  inputMode="numeric"
-                  value={recipient}
-                  onChange={(e) => setRecipient(e.target.value.replace(/[^\d\s]/g, "").slice(0, 11))}
-                  placeholder="987 654 321"
-                  autoFocus
-                  className="mt-1.5 block w-full rounded-2xl border border-cart-line bg-cart-bg-elev-2 px-4 py-3.5 font-mono text-[15px] tracking-[0.04em] text-white outline-none transition focus:border-cart-accent focus:shadow-[0_0_0_3px_var(--color-cart-accent-soft)]"
-                />
-              </label>
-
-              {/* Eco de confirmación: a quién le estás mandando, antes de soltar */}
-              <div className="mt-2 min-h-[20px] text-[12.5px]">
-                {recipientDigits.length > 0 && recipientDigits.length < 9 ? (
-                  <span className="text-cart-ink-4">Faltan {9 - recipientDigits.length} dígitos</span>
-                ) : recipientDigits.length === 9 && recipientLookup.loading ? (
-                  <span className="text-cart-ink-3">Buscando…</span>
-                ) : recipientDigits.length === 9 && recipientLookup.result?.found ? (
-                  <span className="inline-flex items-center gap-1.5 text-emerald-300">
-                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 8l3.5 3.5L13 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                    Le envías a <strong className="text-white">{recipientLookup.result.displayName}</strong>
-                  </span>
-                ) : recipientDigits.length === 9 ? (
-                  <span className="text-cart-ink-3">Le llegará al <strong className="text-white">{formatPhone(recipientDigits)}</strong> por WhatsApp.</span>
-                ) : null}
-              </div>
-
-              <motion.button
-                type="button"
-                whileTap={{ scale: 0.97 }}
-                onClick={async () => {
-                  try {
-                    await transfer.mutateAsync({ ticketId: data.id, toPhone: recipientDigits });
-                    setOpen(false);
-                    setRecipient("");
-                  } catch {
-                    /* el error se muestra abajo */
-                  }
-                }}
-                disabled={transfer.isPending || recipientDigits.length !== 9}
-                className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-cart-accent py-3.5 text-[14.5px] font-semibold text-cart-bg shadow-[0_8px_24px_-6px_var(--color-cart-accent-glow)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:bg-cart-bg-elev-2 disabled:text-cart-ink-3 disabled:shadow-none"
-              >
-                {transfer.isPending && (
-                  <motion.span
-                    aria-hidden
-                    className="size-4 rounded-full border-2 border-cart-bg/40 border-t-cart-bg"
-                    animate={{ rotate: 360 }}
-                    transition={{ repeat: Infinity, ease: "linear", duration: 0.7 }}
-                  />
-                )}
-                {transfer.isPending
-                  ? "Enviando…"
-                  : recipientDigits.length === 9
-                    ? `Enviar al ${formatPhone(recipientDigits)}`
-                    : "Enviar entrada"}
-              </motion.button>
-              <AnimatePresence>
-                {transfer.error && (
-                  <motion.p
-                    initial={{ opacity: 0, y: -4 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0 }}
-                    className="mt-3 text-center text-[12px] text-rose-300"
-                  >
-                    {transferErrorCopy((transfer.error as Error).message)}
-                  </motion.p>
-                )}
-              </AnimatePresence>
-            </motion.div>
+              <span className="grid size-6 shrink-0 place-items-center rounded-full bg-emerald-600/15 text-emerald-700">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                  <circle cx="5.5" cy="6" r="2.2" stroke="currentColor" strokeWidth="1.4" />
+                  <circle cx="11" cy="6.5" r="1.8" stroke="currentColor" strokeWidth="1.4" />
+                  <path d="M2 13c0-2 1.6-3.2 3.5-3.2S9 11 9 13M9.5 12.6c0-1.6 1.2-2.6 2.6-2.6S14.5 11 14.5 12.6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                </svg>
+              </span>
+              <span className="min-w-0 flex-1 truncate text-left text-[12.5px] font-semibold text-emerald-950">
+                Comparte tu box con tus compañeros
+              </span>
+              <span className="shrink-0 text-[12px] font-bold text-emerald-700">Invitar ›</span>
+            </button>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Sheet: cambiar datos del titular (nombre + DNI) */}
+      <TransferTicketSheet
+        open={open}
+        ticketId={data.id}
+        online={online}
+        anchorRef={transferBtnRef}
+        onClose={() => setOpen(false)}
+      />
+
       <HolderEditSheet
         open={editOpen}
         ticketId={data.id}
@@ -691,123 +643,10 @@ function TicketDetailInner({ id }: { id: string }) {
         currentDniLast2={data.holderDniLast2}
         ticketTypeName={data.ticketType.name}
         online={online}
+        anchorRef={holderBtnRef}
         onClose={() => setEditOpen(false)}
       />
     </div>
-  );
-}
-
-// Sheet para asignar/editar el titular de la entrada (reparto post-compra).
-function HolderEditSheet({
-  open,
-  ticketId,
-  currentName,
-  currentDniLast2,
-  ticketTypeName,
-  online,
-  onClose,
-}: {
-  open: boolean;
-  ticketId: string;
-  currentName: string | null;
-  currentDniLast2: string | null;
-  ticketTypeName: string;
-  online: boolean;
-  onClose: () => void;
-}) {
-  const setHolder = useSetHolder();
-  const [name, setName] = useState(currentName ?? "");
-  const [dni, setDni] = useState("");
-
-  // Resetea los campos al abrir (o si cambia la entrada activa por swipe).
-  useEffect(() => {
-    if (open) {
-      setName(currentName ?? "");
-      setDni("");
-      setHolder.reset();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, ticketId]);
-
-  const dniValid = dni === "" || /^\d{8}$/.test(dni);
-  const canSave =
-    online && !setHolder.isPending && dniValid && (name.trim() !== (currentName ?? "") || dni !== "");
-
-  const save = () => {
-    if (!canSave) return;
-    setHolder.mutate(
-      { ticketId, holderName: name.trim() || null, dni: dni || undefined },
-      { onSuccess: onClose },
-    );
-  };
-
-  return (
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          onClick={onClose}
-          className="fixed inset-0 z-[80] flex items-end justify-center bg-black/60 backdrop-blur-sm lg:items-center"
-        >
-          <motion.div
-            initial={{ y: "100%" }}
-            animate={{ y: 0 }}
-            exit={{ y: "100%" }}
-            transition={{ type: "spring", stiffness: 320, damping: 34 }}
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-[480px] rounded-t-3xl border border-cart-line bg-cart-bg-elev px-5 pb-[max(20px,env(safe-area-inset-bottom))] pt-3 lg:rounded-3xl"
-          >
-            <div className="flex justify-center lg:hidden">
-              <span className="h-1 w-10 rounded-full bg-white/20" />
-            </div>
-            <p className="mt-3 text-[15px] font-bold text-white">¿Quién usa esta entrada?</p>
-            <p className="text-[12px] text-cart-ink-3">{ticketTypeName} · su nombre aparece en la puerta.</p>
-
-            <div className="mt-4 space-y-3">
-              <div>
-                <label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-cart-ink-3">
-                  Nombre
-                </label>
-                <input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Ej. María García"
-                  className="mt-1 w-full rounded-xl border border-cart-line bg-cart-bg px-3 py-2.5 text-[14px] text-white outline-none focus:border-cart-accent/60"
-                />
-              </div>
-              <div>
-                <label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-cart-ink-3">
-                  DNI <span className="text-white/25">(opcional)</span>
-                </label>
-                <input
-                  value={dni}
-                  onChange={(e) => setDni(e.target.value.replace(/\D/g, "").slice(0, 8))}
-                  inputMode="numeric"
-                  placeholder={currentDniLast2 ? `•••••• ${currentDniLast2}` : "8 dígitos"}
-                  className="mt-1 w-full rounded-xl border border-cart-line bg-cart-bg px-3 py-2.5 text-[14px] text-white outline-none focus:border-cart-accent/60"
-                />
-                {!dniValid && <p className="mt-1 text-[11px] text-red-400">El DNI debe tener 8 dígitos.</p>}
-              </div>
-            </div>
-
-            {setHolder.isError && (
-              <p className="mt-3 text-[12px] text-red-400">No se pudo guardar. Reintenta.</p>
-            )}
-
-            <button
-              type="button"
-              onClick={save}
-              disabled={!canSave}
-              className="mt-4 w-full rounded-full bg-cart-accent px-4 py-3 text-[14px] font-semibold text-white transition hover:opacity-90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {setHolder.isPending ? "Guardando…" : "Guardar"}
-            </button>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
   );
 }
 
@@ -952,41 +791,6 @@ function CountdownRing({ seconds }: { seconds: number }) {
       </span>
     </div>
   );
-}
-
-// 987654321 → "987 654 321"
-function formatPhone(digits: string): string {
-  const d = digits.replace(/\D/g, "");
-  if (d.length !== 9) return d;
-  return `${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6)}`;
-}
-
-// 987654321 → "987•••321" (oculta el medio en el estado pendiente)
-function maskPhone(digits: string): string {
-  const d = digits.replace(/\D/g, "");
-  if (d.length < 6) return d;
-  return `${d.slice(0, 3)}•••${d.slice(-3)}`;
-}
-
-function transferErrorCopy(raw: string): string {
-  switch (raw) {
-    case "transfer_window_closed":
-      return "Ya no se puede enviar — la ventana cerró cerca del evento.";
-    case "transfers_disabled":
-      return "Este evento no permite transferencias.";
-    case "transfer_limit_reached":
-      return "Esta entrada alcanzó el máximo de transferencias.";
-    case "not_owner":
-      return "No eres el dueño actual de esta entrada.";
-    case "ticket_not_active":
-      return "Esta entrada ya no está activa (usada o anulada).";
-    case "invalid_phone":
-      return "Revisa el número — deben ser 9 dígitos.";
-    case "recipient_required":
-      return "Necesitamos a quién enviarla.";
-    default:
-      return raw;
-  }
 }
 
 /* ============================== Box panel (host) ============================== */

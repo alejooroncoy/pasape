@@ -3,11 +3,13 @@ import { err, type Result } from "@/server/_shared/result";
 import { getAuthContext } from "@/server/_shared/AuthContext";
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
 import { verifyTicketLink } from "@/server/notifications/domain/TicketLinkToken";
+import { verifyOrderLink } from "@/server/notifications/domain/OrderLinkToken";
 import { supabaseTicketRepository as repo } from "../../infrastructure/repositories/SupabaseTicketRepository";
 import { buyTickets } from "../../application/BuyTickets";
 import { getMyTicketById, getMyTickets } from "../../application/GetMyTickets";
 import { transferTicket } from "../../application/TransferTicket";
 import { claimTransfer } from "../../application/ClaimTransfer";
+import { claimOrder } from "../../application/ClaimOrder";
 import type { Ticket, TransferOutcome, WalletTicket } from "../../domain/Ticket";
 import type { BuyOutput } from "../../ports/TicketRepository";
 
@@ -60,6 +62,12 @@ const claimSchema = z.object({
     .regex(/^\d{8}$/)
     .nullable()
     .optional(),
+});
+
+// Desbloqueo de la propia compra: orderId + token de orden (HMAC) como llave.
+const claimOrderSchema = z.object({
+  orderId: z.string().uuid(),
+  token: z.string().length(16),
 });
 
 // Reparto post-compra: el dueño nombra al titular de su entrada. Nombre opcional
@@ -169,6 +177,19 @@ export const TicketsController = {
     );
     if (!res.ok) return res;
     return { ok: true, value: { ticketId: res.value.ticket.id, eventSlug: res.value.eventSlug } };
+  },
+
+  async claimOrder(
+    input: unknown,
+  ): Promise<Result<{ ticketsClaimed: number; eventSlug: string; firstTicketId: string | null }>> {
+    const auth = await getAuthContext();
+    if (!auth.ok) return err("unauthenticated"); // el desbloqueo exige sesión
+    const parsed = claimOrderSchema.safeParse(input);
+    if (!parsed.success) return err("invalid_input");
+    // El token (HMAC de la orden) prueba que el cliente posee un link legítimo;
+    // la sesión define a quién se enganchan las entradas (no se confía del body).
+    if (!verifyOrderLink(parsed.data.orderId, parsed.data.token)) return err("invalid_token");
+    return claimOrder({ repo }, { orderId: parsed.data.orderId, toProfile: auth.value.profileId });
   },
 
   async carouselScope(ticketId: string): Promise<Result<{ ids: string[]; currentIndex: number; eventTicketCount: number }>> {

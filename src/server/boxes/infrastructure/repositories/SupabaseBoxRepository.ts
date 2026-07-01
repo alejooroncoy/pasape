@@ -51,7 +51,7 @@ const loadBox = async (id: string): Promise<Box | null> => {
          event:events!inner(id, slug, title, starts_at, venue, timezone)
        ),
        order:orders!inner(
-         buyer:profiles!inner(id, full_name)
+         buyer:profiles!orders_buyer_id_fkey!inner(id, full_name)
        )`,
     )
     .eq("id", id)
@@ -125,11 +125,16 @@ export const supabaseBoxRepository: BoxRepository = {
     // no el cliente. El parámetro `capacity` queda como fallback si faltara.
     const boxCapacity = t.ticket_type.capacity > 0 ? t.ticket_type.capacity : capacity;
 
+    // Idempotencia: si ya existe el box de esta (order, ticket_type) lo devolvemos.
+    // Ordenamos por created_at y tomamos el primero — robusto aunque hubiera más de
+    // uno (el índice único boxes_order_ticket_type_unique ya lo impide a futuro).
     const { data: existing } = await db
       .from("boxes")
       .select("id")
       .eq("order_id", t.order_id)
       .eq("ticket_type_id", t.ticket_type_id)
+      .order("created_at", { ascending: true })
+      .limit(1)
       .maybeSingle<{ id: string }>();
     if (existing) {
       const box = await loadBox(existing.id);
@@ -165,16 +170,54 @@ export const supabaseBoxRepository: BoxRepository = {
       })
       .select("id")
       .single<{ id: string }>();
-    if (error || !created) return err(error?.message ?? "box_create_failed");
+    // Carrera: si dos llamadas concurrentes intentan crear el mismo box, el índice
+    // único boxes_order_ticket_type_unique rechaza la segunda (23505). En vez de
+    // fallar, recuperamos el box que ganó la carrera.
+    if (error || !created) {
+      if (error?.code === "23505") {
+        const { data: winner } = await db
+          .from("boxes")
+          .select("id")
+          .eq("order_id", t.order_id)
+          .eq("ticket_type_id", t.ticket_type_id)
+          .order("created_at", { ascending: true })
+          .limit(1)
+          .maybeSingle<{ id: string }>();
+        if (winner) {
+          const box = await loadBox(winner.id);
+          if (box) return ok(box);
+        }
+      }
+      return err(error?.message ?? "box_create_failed");
+    }
 
-    await db.from("box_members").insert({
-      box_id: created.id,
-      profile_id: ownerId,
-      ticket_id: ticketId,
-    });
+    // Host como primer miembro. onConflict no-op si ya estaba (re-ejecución).
+    await db.from("box_members").upsert(
+      { box_id: created.id, profile_id: ownerId, ticket_id: ticketId },
+      { onConflict: "box_id,profile_id", ignoreDuplicates: true },
+    );
 
     const box = await loadBox(created.id);
     return box ? ok(box) : err("box_load_failed");
+  },
+
+  // Crea (idempotente) el grupo de cada box-host de una orden pagada. Se llama al
+  // confirmarse el pago: el box existe desde que pagas, no al abrir el wallet.
+  async ensureForOrder(orderId): Promise<void> {
+    const db = supabaseAdmin();
+    // Hosts del box = tickets con box_label y SIN box_host_ticket_id (no acompañantes).
+    const { data: hosts } = await db
+      .from("tickets")
+      .select("id, current_holder, box_label, box_host_ticket_id")
+      .eq("order_id", orderId)
+      .not("box_label", "is", null)
+      .is("box_host_ticket_id", null);
+    for (const h of (hosts ?? []) as Array<{ id: string; current_holder: string | null }>) {
+      if (!h.current_holder) continue;
+      // capacity real la define el ticket_type dentro de createForTicket; el 6 es
+      // solo fallback si faltara. Idempotente vía el índice único.
+      await this.createForTicket({ ticketId: h.id, ownerId: h.current_holder, capacity: 6 });
+    }
   },
 
   async getByToken(token) {
@@ -192,18 +235,33 @@ export const supabaseBoxRepository: BoxRepository = {
     const db = supabaseAdmin();
     const { data: ticket } = await db
       .from("tickets")
-      .select("order_id, ticket_type_id, current_holder")
+      .select("order_id, ticket_type_id, current_holder, box_label, box_host_ticket_id")
       .eq("id", ticketId)
-      .maybeSingle<{ order_id: string; ticket_type_id: string; current_holder: string }>();
+      .maybeSingle<{
+        order_id: string;
+        ticket_type_id: string;
+        current_holder: string;
+        box_label: string | null;
+        box_host_ticket_id: string | null;
+      }>();
     if (!ticket || ticket.current_holder !== ownerId) return null;
     const { data: box } = await db
       .from("boxes")
       .select("id")
       .eq("order_id", ticket.order_id)
       .eq("ticket_type_id", ticket.ticket_type_id)
+      .order("created_at", { ascending: true })
+      .limit(1)
       .maybeSingle<{ id: string }>();
-    if (!box) return null;
-    return loadBox(box.id);
+    if (box) return loadBox(box.id);
+    // Backfill: órdenes que pagaron antes de crear el box al pago. Si este ticket
+    // es el host del box (tiene box_label y no es acompañante), lo creamos aquí —
+    // server-side e idempotente, sin reintentos del cliente.
+    if (ticket.box_label && !ticket.box_host_ticket_id) {
+      const created = await this.createForTicket({ ticketId, ownerId, capacity: 6 });
+      return created.ok ? created.value : null;
+    }
+    return null;
   },
 
   async join({ token, profileId, holderName, holderDni, holderPhone }): Promise<Result<Box>> {

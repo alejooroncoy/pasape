@@ -6,7 +6,8 @@ import { useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import { Link, useRouter } from "@/i18n/navigation";
 import { useMyTickets } from "@/lib/tickets/hooks/useTickets";
-import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
+import { usePrefetchWallet } from "@/lib/tickets/prefetchWallet";
+import { useSessionReady } from "@/lib/identity/hooks/useSessionReady";
 import { LoginGate } from "@/components/ui/LoginGate";
 import { useOnline } from "@/lib/_shared/useOnline";
 import { formatDate } from "@/lib/_shared/format";
@@ -66,12 +67,25 @@ function EventCard({
   const today = isToday(event.startsAt, event.timezone);
   // El box no es "una entrada": lo nombramos aparte para no contar "1 entrada"
   // cuando en realidad compraste un box. (listMine ya entrega un box por entrada.)
+  // Si en el mismo evento hay box Y entradas sueltas, el "+" deja claro que son
+  // dos cosas distintas (el box, y además N entradas) — no "N entradas dentro del
+  // box". Normalizamos la etiqueta a "Box A" (no la letra cruda "A", que no se
+  // entiende sola).
   const boxTicket = tickets.find((t) => t.boxLabel);
   const singles = tickets.filter((t) => !t.boxLabel);
-  const countLabel = boxTicket
-    ? singles.length > 0
-      ? `${boxTicket.boxLabel} · ${singles.length} ${singles.length === 1 ? "entrada" : "entradas"}`
-      : (boxTicket.boxLabel as string)
+  const boxName = boxTicket
+    ? /^box\b/i.test((boxTicket.boxLabel ?? "").trim())
+      ? (boxTicket.boxLabel as string)
+      : `Box ${boxTicket.boxLabel}`
+    : null;
+  const singlesLabel =
+    singles.length > 0
+      ? `${singles.length} ${singles.length === 1 ? "entrada" : "entradas"}`
+      : null;
+  const countLabel = boxName
+    ? singlesLabel
+      ? `${boxName} + ${singlesLabel}`
+      : boxName
     : `${tickets.length} ${tickets.length === 1 ? "entrada" : "entradas"}`;
 
   return (
@@ -145,12 +159,16 @@ function TicketSelectScreen({
   highlightId,
   onBack,
   onSelect,
+  onAssignHolder,
+  onSendTicket,
 }: {
   group: EventGroup;
   past: boolean;
   highlightId?: string | null;
   onBack: () => void;
   onSelect: (ticket: WalletTicket) => void;
+  onAssignHolder: (ticket: WalletTicket) => void;
+  onSendTicket: (ticket: WalletTicket) => void;
 }) {
   const { event, tickets } = group;
   const cover = event.coverUrl;
@@ -264,56 +282,81 @@ function TicketSelectScreen({
               const unassigned = !past && t.status === "active" && !t.holderName && !t.pendingTransferTo;
               const isFrom = t.id === highlightId;
               return (
-                <motion.button
+                <div
                   key={t.id}
-                  type="button"
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => onSelect(t)}
                   className={
-                    "flex w-full items-center gap-4 rounded-2xl border px-4 py-4 text-left transition " +
+                    "rounded-2xl border transition " +
                     (isFrom
                       ? "border-cart-accent bg-cart-accent/[0.12] shadow-[0_0_0_1px_var(--color-cart-accent)_inset]"
-                      : "border-cart-line bg-cart-bg-elev hover:border-cart-accent/40 hover:bg-cart-accent/[0.04]")
+                      : unassigned
+                        ? "border-cart-accent/40 bg-cart-bg-elev"
+                        : "border-cart-line bg-cart-bg-elev hover:border-cart-accent/40 hover:bg-cart-accent/[0.04]")
                   }
                 >
-                  <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-white/[0.06] text-[15px] font-black text-white/60">
-                    {i + 1}
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[14.5px] font-semibold">{t.ticketType.name}</p>
-                    <div className="mt-1 flex items-center gap-1.5">
-                      <span
-                        className={
-                          "size-1.5 rounded-full " +
-                          (past ? "bg-white/30" : t.status === "active" ? "bg-emerald-400 shadow-[0_0_5px_rgba(52,211,153,0.7)]" : "bg-amber-400")
-                        }
-                      />
-                      <span className="text-[12px] text-white/40">
-                        {t.pendingTransferTo
-                          ? "Enviada · esperando"
-                          : past
-                            ? t.status === "used"
-                              ? "Usada"
-                              : "Finalizada"
-                            : unassigned
-                              ? "Sin asignar"
-                              : t.holderName ?? (t.status === "active" ? "Válida · 1 persona" : t.status)}
-                      </span>
+                  <motion.button
+                    type="button"
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => onSelect(t)}
+                    className="flex w-full items-center gap-4 px-4 py-4 text-left"
+                  >
+                    <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-white/[0.06] text-[15px] font-black text-white/60">
+                      {i + 1}
                     </div>
-                  </div>
 
-                  {/* QR icon */}
-                  <svg width="18" height="18" viewBox="0 0 20 20" fill="none" className="shrink-0 text-white/20">
-                    <rect x="2" y="2" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="1.4" />
-                    <rect x="11" y="2" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="1.4" />
-                    <rect x="2" y="11" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="1.4" />
-                    <rect x="12" y="12" width="2" height="2" fill="currentColor" />
-                    <rect x="16" y="12" width="2" height="2" fill="currentColor" />
-                    <rect x="12" y="16" width="2" height="2" fill="currentColor" />
-                    <rect x="16" y="16" width="2" height="2" fill="currentColor" />
-                  </svg>
-                </motion.button>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[14.5px] font-semibold">{t.ticketType.name}</p>
+                      <div className="mt-1 flex items-center gap-1.5">
+                        <span
+                          className={
+                            "size-1.5 rounded-full " +
+                            (past ? "bg-white/30" : t.status === "active" ? "bg-emerald-400 shadow-[0_0_5px_rgba(52,211,153,0.7)]" : "bg-amber-400")
+                          }
+                        />
+                        <span className="text-[12px] text-white/40">
+                          {t.pendingTransferTo
+                            ? "Enviada · esperando"
+                            : past
+                              ? t.status === "used"
+                                ? "Usada"
+                                : "Finalizada"
+                              : unassigned
+                                ? "¿Para quién es?"
+                                : t.holderName ?? (t.status === "active" ? "Válida · 1 persona" : t.status)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* QR icon */}
+                    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" className="shrink-0 text-white/20">
+                      <rect x="2" y="2" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="1.4" />
+                      <rect x="11" y="2" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="1.4" />
+                      <rect x="2" y="11" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="1.4" />
+                      <rect x="12" y="12" width="2" height="2" fill="currentColor" />
+                      <rect x="16" y="12" width="2" height="2" fill="currentColor" />
+                      <rect x="12" y="16" width="2" height="2" fill="currentColor" />
+                      <rect x="16" y="16" width="2" height="2" fill="currentColor" />
+                    </svg>
+                  </motion.button>
+
+                  {unassigned && (
+                    <div className="flex gap-2 px-4 pb-4">
+                      <button
+                        type="button"
+                        onClick={() => onAssignHolder(t)}
+                        className="flex-1 rounded-full bg-white/10 px-3.5 py-2 text-[12.5px] font-semibold text-white transition hover:bg-white/15 active:scale-95"
+                      >
+                        Cambiar datos
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onSendTicket(t)}
+                        className="flex-1 rounded-full bg-cart-accent px-3.5 py-2 text-[12.5px] font-semibold text-cart-bg transition active:scale-95"
+                      >
+                        Enviar
+                      </button>
+                    </div>
+                  )}
+                </div>
               );
             })}
           </div>
@@ -363,7 +406,8 @@ export default function WalletPage() {
 
 function WalletPageInner() {
   const tickets = useMyTickets();
-  const { data: me, isLoading: meLoading } = useCurrentUser();
+  const { sessionReady, loggedIn } = useSessionReady();
+  usePrefetchWallet(tickets.data);
   const online = useOnline();
   const router = useRouter();
   const [tab, setTab] = useState<"next" | "past">("next");
@@ -460,7 +504,19 @@ function WalletPageInner() {
     router.push(`/tickets/${ticket.id}` as never);
   };
 
-  if (!meLoading && !me?.user) {
+  const handleAssignHolder = (ticket: WalletTicket) => {
+    router.push(`/tickets/${ticket.id}?action=holder` as never);
+  };
+
+  const handleSendTicket = (ticket: WalletTicket) => {
+    router.push(`/tickets/${ticket.id}?action=transfer` as never);
+  };
+
+  if (!sessionReady) {
+    return <WalletSkeleton />;
+  }
+
+  if (!loggedIn) {
     return (
       <LoginGate
         title="Inicia sesión para ver tus entradas"
@@ -564,6 +620,8 @@ function WalletPageInner() {
                   highlightId={searchParams.get("from")}
                   onBack={handleBack}
                   onSelect={handleSelectTicket}
+                  onAssignHolder={handleAssignHolder}
+                  onSendTicket={handleSendTicket}
                 />
               </motion.div>
             )

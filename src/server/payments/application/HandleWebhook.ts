@@ -5,6 +5,7 @@ import { err, ok, type Result } from "@/server/_shared/result";
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
 import { supabaseCommissionTierRepository } from "@/server/promoters/tiers/infrastructure/repositories/SupabaseCommissionTierRepository";
 import { dispatchTicketDelivery } from "@/server/notifications/application/DispatchTicketDelivery";
+import { supabaseBoxRepository } from "@/server/boxes/infrastructure/repositories/SupabaseBoxRepository";
 import { mpClient, mpWebhookSecret } from "../infrastructure/MercadoPagoClient";
 
 export type WebhookHeaders = {
@@ -169,8 +170,14 @@ export const handleMpWebhook = async (
   // registrados en `notification_dispatches`.
   if (mapped === "paid" && orderRow) {
     void dispatchTicketDelivery({ db }, orderRow.id).catch((e) => {
-       
+
       console.error("[mp-webhook] dispatchTicketDelivery failed:", (e as Error).message);
+    });
+    // Un box es una compra: su grupo nace al confirmarse el pago, no al abrir el
+    // wallet. Idempotente; fire-and-forget para no bloquear el ack del webhook.
+    void supabaseBoxRepository.ensureForOrder(orderRow.id).catch((e) => {
+
+      console.error("[mp-webhook] ensureForOrder failed:", (e as Error).message);
     });
   }
 

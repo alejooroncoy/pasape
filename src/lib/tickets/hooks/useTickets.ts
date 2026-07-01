@@ -2,31 +2,64 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/_shared/api-client";
+import { useSessionReady } from "@/lib/identity/hooks/useSessionReady";
 import type { Order, Ticket, TransferOutcome, WalletTicket } from "@/server/tickets/domain/Ticket";
 
 export const myTicketsKey = ["tickets", "mine"] as const;
+
+export const ticketDetailKey = (id: string, linkToken?: string | null) =>
+  ["tickets", "detail", id, linkToken ?? ""] as const;
+
+export const carouselScopeKey = (ticketId: string) =>
+  ["tickets", "carousel", ticketId] as const;
+
+export type CarouselScope = { ids: string[]; currentIndex: number; eventTicketCount: number };
+
+export const fetchTicketDetail = (id: string, linkToken?: string | null) => {
+  const qs = linkToken ? `?k=${encodeURIComponent(linkToken)}` : "";
+  return api.get<WalletTicket>(`/api/tickets/${id}${qs}`);
+};
+
+export const fetchCarouselScope = (ticketId: string) =>
+  api.get<CarouselScope>(`/api/tickets/${ticketId}/carousel-scope`);
 
 // gcTime largo (7 días): mantiene la wallet en cache para que el persister la
 // conserve → disponible offline y sin parpadeo. Coincide con el maxAge del
 // persister (ver query-client.tsx).
 const PERSIST_GC_TIME = 7 * 24 * 60 * 60 * 1000;
 
-export const useMyTickets = () =>
-  useQuery({
+export const useMyTickets = () => {
+  const { sessionReady, loggedIn } = useSessionReady();
+
+  return useQuery({
     queryKey: myTicketsKey,
     queryFn: () => api.get<WalletTicket[]>("/api/tickets/my"),
+    // Sin sesión confirmada no golpeamos /my (evita 401 en bucle con cache persistido).
+    enabled: sessionReady && loggedIn,
     gcTime: PERSIST_GC_TIME,
+    networkMode: "offlineFirst",
+    // Tope de 3 intentos: sin él, un error persistente que no sea
+    // "unauthenticated" (ej. estar offline) reintenta para siempre y
+    // `isLoading` se queda pegado en true — la wallet no cae nunca al dato
+    // cacheado, se ve congelada en el skeleton en vez de mostrar lo que ya sabe.
+    retry: (count, err) => {
+      if (typeof navigator !== "undefined" && !navigator.onLine) return false;
+      return count < 3 && (err as Error).message !== "unauthenticated";
+    },
   });
+};
 
 export const useTicket = (id: string, linkToken?: string | null) =>
   useQuery({
-    queryKey: ["tickets", "detail", id, linkToken ?? ""],
-    queryFn: () => {
-      const qs = linkToken ? `?k=${encodeURIComponent(linkToken)}` : "";
-      return api.get<WalletTicket>(`/api/tickets/${id}${qs}`);
-    },
+    queryKey: ticketDetailKey(id, linkToken),
+    queryFn: () => fetchTicketDetail(id, linkToken),
     enabled: !!id,
     gcTime: PERSIST_GC_TIME,
+    networkMode: "offlineFirst",
+    retry: (count) => {
+      if (typeof navigator !== "undefined" && !navigator.onLine) return false;
+      return count < 1;
+    },
     // Mientras la entrada está ACTIVA y el holder la tiene abierta, sondeamos cada
     // 4s: apenas el portero la valida (que empuja el "usado" al server al instante),
     // la vista pasa a "Ya usada" casi en tiempo real. Al volverse usada/anulada el
@@ -100,13 +133,17 @@ export const useSetHolder = () => {
   });
 };
 
-export type CarouselScope = { ids: string[]; currentIndex: number; eventTicketCount: number };
-
 export const useCarouselScope = (ticketId: string) =>
   useQuery({
-    queryKey: ["tickets", "carousel", ticketId] as const,
-    queryFn: () => api.get<CarouselScope>(`/api/tickets/${ticketId}/carousel-scope`),
+    queryKey: carouselScopeKey(ticketId),
+    queryFn: () => fetchCarouselScope(ticketId),
     enabled: !!ticketId,
+    gcTime: PERSIST_GC_TIME,
+    networkMode: "offlineFirst",
+    retry: (count) => {
+      if (typeof navigator !== "undefined" && !navigator.onLine) return false;
+      return count < 1;
+    },
   });
 
 export const useClaimTransfer = () => {
@@ -114,6 +151,19 @@ export const useClaimTransfer = () => {
   return useMutation({
     mutationFn: (input: { token: string; fullName?: string | null; dni?: string | null }) =>
       api.post<{ ticketId: string; eventSlug: string }>("/api/tickets/claim", input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ticketsRoot }),
+  });
+};
+
+// Desbloqueo de la PROPIA compra al loguearse tras pagar como invitado.
+export const useClaimOrder = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { orderId: string; token: string }) =>
+      api.post<{ ticketsClaimed: number; eventSlug: string; firstTicketId: string | null }>(
+        "/api/tickets/claim-order",
+        input,
+      ),
     onSuccess: () => qc.invalidateQueries({ queryKey: ticketsRoot }),
   });
 };

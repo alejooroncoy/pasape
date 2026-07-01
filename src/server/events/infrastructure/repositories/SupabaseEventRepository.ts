@@ -1023,7 +1023,7 @@ export const supabaseEventRepository: EventRepository = {
     const [sessionsRes, dupRes] = await Promise.all([
       db
         .from("scanner_sessions")
-        .select("device_id, last_sync_at, expires_at, zones(name)")
+        .select("device_id, last_sync_at, expires_at, holder_name, dni_last2, zones(name)")
         .eq("event_id", eventId)
         .eq("revoked", false)
         .gt("expires_at", nowIso)
@@ -1039,6 +1039,8 @@ export const supabaseEventRepository: EventRepository = {
       device_id: string;
       last_sync_at: string | null;
       expires_at: string;
+      holder_name: string | null;
+      dni_last2: string | null;
       zones: { name: string } | null;
     };
     // Staleness calculado server-side (reloj del server, confiable) en vez del
@@ -1057,6 +1059,8 @@ export const supabaseEventRepository: EventRepository = {
         expiresAt: s.expires_at,
         minutesSinceSync,
         isStale: minutesSinceSync === null || minutesSinceSync >= STALE_MIN,
+        holderName: s.holder_name,
+        dniLast2: s.dni_last2,
       };
     });
 

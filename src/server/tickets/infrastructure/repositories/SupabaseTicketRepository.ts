@@ -12,6 +12,7 @@ import { activePricing, applyPromos, type PromoLineInput } from "@/lib/events/pr
 import { createPreference } from "@/server/payments/application/CreatePreference";
 import { dispatchTicketDelivery } from "@/server/notifications/application/DispatchTicketDelivery";
 import { supabaseCommissionTierRepository } from "@/server/promoters/tiers/infrastructure/repositories/SupabaseCommissionTierRepository";
+import { supabaseBoxRepository } from "@/server/boxes/infrastructure/repositories/SupabaseBoxRepository";
 import { encryptDni, dniLast4, normalizeDni } from "@/server/_shared/crypto/dni";
 import crypto from "node:crypto";
 
@@ -424,6 +425,10 @@ export const supabaseTicketRepository: TicketRepository = {
       void dispatchTicketDelivery({ db }, orderRow.id).catch((e) => {
         console.error("[buy:free] dispatchTicketDelivery failed:", (e as Error).message);
       });
+      // Box gratis (invitación/cortesía): su grupo también nace al "pagar".
+      void supabaseBoxRepository.ensureForOrder(orderRow.id).catch((e) => {
+        console.error("[buy:free] ensureForOrder failed:", (e as Error).message);
+      });
 
       if (promoterLinkId) {
         const { count: paidCount } = await db
@@ -501,12 +506,18 @@ export const supabaseTicketRepository: TicketRepository = {
     // (carrito expirado, pago fallido) o se reembolsaron; no deben aparecer ni
     // contar en la cuenta. El resto de cálculos (sold, revenue, asistentes) ya
     // los excluye en sus views/queries.
+    // Filtro por orden PAGADA: los tickets se insertan `active` aunque la orden
+    // siga `pending` (el check constraint del schema no permite 'pending_payment'),
+    // así que una compra reservada-pero-nunca-pagada dejaría tickets activos. El
+    // wallet solo debe mostrar lo realmente pagado. Las órdenes gratis (total 0) se
+    // marcan `paid` al instante en BuyTickets, así que sí aparecen.
     const { data } = await db
       .from("tickets")
       .select(
-        "*, ticket_type:ticket_types!inner(id,name,kind,event_id,event:events!inner(id,slug,title,starts_at,venue,timezone,status,cover_url,category))",
+        "*, order:orders!inner(status), ticket_type:ticket_types!inner(id,name,kind,event_id,event:events!inner(id,slug,title,starts_at,venue,timezone,status,cover_url,category))",
       )
       .eq("current_holder", buyerId)
+      .eq("order.status", "paid")
       .in("status", ["active", "used"])
       .order("created_at", { ascending: false });
     if (!data) return [];
@@ -581,13 +592,16 @@ export const supabaseTicketRepository: TicketRepository = {
     // ticket (current_holder), puede abrir su detalle/QR aunque sea un QR de
     // acompañante que sostiene dentro de su box. La pertenencia ya la garantiza
     // current_holder = buyerId.
+    // Solo órdenes pagadas: igual que listMine, un ticket de orden `pending`
+    // (reserva nunca pagada) no debe abrirse ni mostrar un QR que ya no escana.
     const { data } = await db
       .from("tickets")
       .select(
-        "*, ticket_type:ticket_types!inner(id,name,kind,event_id,event:events!inner(id,slug,title,starts_at,venue,timezone,status,cover_url,category))",
+        "*, order:orders!inner(status), ticket_type:ticket_types!inner(id,name,kind,event_id,event:events!inner(id,slug,title,starts_at,venue,timezone,status,cover_url,category))",
       )
       .eq("id", ticketId)
       .eq("current_holder", buyerId)
+      .eq("order.status", "paid")
       .maybeSingle();
     if (!data) return null;
     type Joined = TicketRow & {
@@ -783,6 +797,106 @@ export const supabaseTicketRepository: TicketRepository = {
       .eq("id", pendingRow.id);
 
     return ok({ ticket: toTicket(updated), eventSlug: joined.ticket_type.event.slug });
+  },
+
+  async claimOrder(input): Promise<Result<{ ticketsClaimed: number; eventSlug: string; firstTicketId: string | null }>> {
+    const db = supabaseAdmin();
+    const { data: order } = await db
+      .from("orders")
+      .select("id, status, buyer_id, guest_email, paid_at, event_id, claimed_at")
+      .eq("id", input.orderId)
+      .maybeSingle<{
+        id: string;
+        status: string;
+        buyer_id: string | null;
+        guest_email: string | null;
+        paid_at: string | null;
+        event_id: string;
+        claimed_at: string | null;
+      }>();
+    if (!order) return err("order_not_found");
+    if (order.status === "pending") return err("order_not_paid"); // carrera con webhook: la UI reintenta
+    if (order.status !== "paid") return err("order_not_claimable");
+
+    // Slug del evento para el deep-link de éxito.
+    const { data: ev } = await db
+      .from("events")
+      .select("slug")
+      .eq("id", order.event_id)
+      .maybeSingle<{ slug: string }>();
+    const eventSlug = ev?.slug ?? "";
+
+    const guest = order.buyer_id;
+
+    // Idempotencia: la orden ya es tuya (doble pestaña, o Supabase enlazó tu
+    // Google al profile-guest) → no-op exitoso, devolvemos tus entradas activas.
+    if (guest && guest === input.toProfile) {
+      const { data: mine } = await db
+        .from("tickets")
+        .select("id")
+        .eq("order_id", order.id)
+        .eq("current_holder", input.toProfile)
+        .eq("status", "active")
+        .order("created_at", { ascending: true });
+      const ids = (mine ?? []).map((t) => (t as { id: string }).id);
+      return ok({ ticketsClaimed: ids.length, eventSlug, firstTicketId: ids[0] ?? null });
+    }
+
+    // Guard single-use: `claimed_at` es la fuente de verdad de "ya reclamada".
+    // Si otra cuenta ya la desbloqueó (y no eres tú, cubierto arriba) → bloqueado.
+    if (order.claimed_at) return err("order_already_claimed");
+
+    // Solo se reclama una compra de INVITADO (guest_email presente). Evita que el
+    // link desbloquee la compra de alguien que sí compró logueado.
+    if (!order.guest_email || !guest) return err("order_not_claimable");
+
+    // Ventana de 72h post-pago para desbloquear (decisión de producto).
+    const CLAIM_WINDOW_MS = 72 * 60 * 60 * 1000;
+    if (order.paid_at && Date.now() - new Date(order.paid_at).getTime() > CLAIM_WINDOW_MS) {
+      return err("order_claim_expired");
+    }
+
+    // Reasignación atómica: la condición `current_holder = guest` hace que una
+    // segunda ejecución concurrente matchee 0 filas. NO toca transfer_count.
+    const { data: updated, error: upErr } = await db
+      .from("tickets")
+      .update({ current_holder: input.toProfile })
+      .eq("order_id", order.id)
+      .eq("current_holder", guest)
+      .eq("status", "active")
+      .select("id");
+    if (upErr) return err(upErr.message);
+    const updatedIds = (updated ?? []).map((t) => (t as { id: string }).id);
+
+    // Mueve la titularidad de la orden + audita el desbloqueo (quién/cuándo).
+    await db
+      .from("orders")
+      .update({
+        buyer_id: input.toProfile,
+        claimed_at: new Date().toISOString(),
+        claimed_by: input.toProfile,
+      })
+      .eq("id", order.id);
+
+    // Libera el email del guest huérfano (suelta el índice único) y, si la cuenta
+    // real quedó sin email (caso colisión: el trigger lo dejó null), se lo asocia.
+    if (order.guest_email) {
+      await db.from("profiles").update({ email: null }).eq("id", guest).eq("email", order.guest_email);
+      const { data: claimer } = await db
+        .from("profiles")
+        .select("email")
+        .eq("id", input.toProfile)
+        .maybeSingle<{ email: string | null }>();
+      if (claimer && !claimer.email) {
+        await db.from("profiles").update({ email: order.guest_email }).eq("id", input.toProfile);
+      }
+    }
+
+    return ok({
+      ticketsClaimed: updatedIds.length,
+      eventSlug,
+      firstTicketId: updatedIds[0] ?? null,
+    });
   },
 
   async cancelPendingTransfer(input): Promise<Result<{ ok: true }>> {
@@ -1010,6 +1124,19 @@ async function markByQrCode(
   usedAt: Date | undefined,
   rawToken: string,
 ) {
+    // Guard de orden pagada: los tickets se insertan `active` aunque la orden siga
+    // `pending` (el schema no permite 'pending_payment'). Sin esto, una reserva
+    // nunca pagada escanearía como VÁLIDA en la puerta. Las órdenes gratis (total 0)
+    // se marcan `paid` al instante, así que sí entran. Una query indexada por
+    // qr_code antes de admitir — sólo bloquea cuando la orden existe y no es 'paid'.
+    const { data: ordCheck } = await db
+      .from("tickets")
+      .select("order:orders!inner(status)")
+      .eq("qr_code", effectiveQrCode)
+      .maybeSingle();
+    const ordStatus = (ordCheck as { order?: { status?: string } } | null)?.order?.status;
+    if (ordStatus && ordStatus !== "paid") return err("invalid");
+
     const { data: updatedRow, error: upErr } = await db
       .from("tickets")
       .update({ status: "used", used_at: usedAt ? usedAt.toISOString() : new Date().toISOString() })

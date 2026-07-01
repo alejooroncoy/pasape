@@ -26,7 +26,7 @@ function Inner({ params }: Props) {
   const guestEmail = search.get("email");
   const payMethod = search.get("method") ?? "yape";
   const { data: eventData } = useEvent(slug);
-  const tickets = useMyTickets();
+  const { data: ticketData, refetch: refetchTickets } = useMyTickets();
   const [startedAt] = useState(() => Date.now());
   const [paid, setPaid] = useState(false);
 
@@ -40,20 +40,20 @@ function Inner({ params }: Props) {
           status: string;
           paidAt: string | null;
           ticketUrl: string | null;
+          unlockUrl: string | null;
         }>(`/api/tickets/order/${orderId}/status${qs}`);
         if (cancelled) return;
         if (res.status === "paid") {
           setPaid(true);
-          await tickets.refetch();
+          await refetchTickets();
           setTimeout(() => {
-            // Para guests usamos ticketUrl firmado (no requiere sesión).
-            // Para logueados con varias entradas → pantalla de reparto (/done);
-            // con una sola → su wallet (/tickets).
+            // Invitado → "Entra para desbloquear tus entradas" (unlockUrl).
+            // Logueado con varias → pantalla de reparto (/done); con una → wallet.
             const n = parseInt(search.get("n") ?? "1", 10);
-            const dest = res.ticketUrl
-              ? res.ticketUrl
+            const dest = res.unlockUrl
+              ? res.unlockUrl
               : n > 1
-                ? `/events/${slug}/done?order=${orderId}`
+                ? `/events/${slug}/done?order=${orderId}&n=${n}`
                 : "/tickets";
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             router.replace(dest as any);
@@ -72,18 +72,18 @@ function Inner({ params }: Props) {
       cancelled = true;
       clearInterval(id);
     };
-  }, [orderId, guestEmail, router, slug, tickets, paid]);
+  }, [orderId, guestEmail, router, slug, refetchTickets, paid, search]);
 
   useEffect(() => {
     if (orderId) return;
-    const id = setInterval(() => void tickets.refetch(), 1500);
+    const id = setInterval(() => void refetchTickets(), 1500);
     return () => clearInterval(id);
-  }, [orderId, tickets]);
+  }, [orderId, refetchTickets]);
 
   useEffect(() => {
     if (orderId) return;
-    if (!tickets.data) return;
-    const match = tickets.data
+    if (!ticketData) return;
+    const match = ticketData
       .filter((t) => t.event.slug === slug)
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
     if (match && new Date(match.createdAt).getTime() >= startedAt - 60_000) {
@@ -92,7 +92,7 @@ function Inner({ params }: Props) {
         `/tickets` as any,
       );
     }
-  }, [orderId, tickets.data, slug, router, startedAt]);
+  }, [orderId, ticketData, slug, router, startedAt]);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -192,7 +192,15 @@ function Inner({ params }: Props) {
               }}
             />
             <div className="absolute inset-[20px] grid place-items-center rounded-full border border-cart-line bg-cart-bg-elev">
-              {payMethod === "mp" ? (
+              {summary?.price === "Gratis" ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src="/icons/logo-mark.svg"
+                  alt="Pasape"
+                  width={48}
+                  height={48}
+                />
+              ) : payMethod === "mp" ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src="/brand/mercadopago.svg"

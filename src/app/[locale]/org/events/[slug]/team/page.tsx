@@ -4,6 +4,7 @@ import { use, useEffect, useMemo, useRef, useState, type ReactNode } from "react
 import { AnimatePresence, motion } from "motion/react";
 import { Link } from "@/i18n/navigation";
 import { useDoorLink } from "@/lib/events/hooks/useDoorLink";
+import { useEventStats } from "@/lib/events/hooks/useEventStats";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { useOrgInvites } from "@/lib/identity/organizations/hooks/useOrgInvites";
 import {
@@ -1383,6 +1384,8 @@ function PoolPicker({
 // ============================================================
 function DoorSection({ slug }: { slug: string }) {
   const door = useDoorLink(slug);
+  const stats = useEventStats(slug);
+  const porteros = (stats.data?.doors ?? []).filter((d) => d.holderName);
   const [copied, setCopied] = useState(false);
 
   const copy = async () => {
@@ -1407,14 +1410,6 @@ function DoorSection({ slug }: { slug: string }) {
       <SectionHeader
         title="Portero"
         subtitle="Quien escanea QRs en la puerta. Comparte este link y se abre la app de escaneo."
-        action={
-          <Link
-            href={`/org/events/${slug}/door-link` as never}
-            className="hidden rounded-full border border-cart-line bg-cart-bg-elev px-3.5 py-1.5 text-[12px] font-medium text-cart-ink-2 transition hover:text-white sm:inline-flex"
-          >
-            Configurar →
-          </Link>
-        }
       />
       <div className="rounded-2xl border border-cart-line bg-cart-bg-elev p-4 lg:p-5">
         {door.data?.url ? (
@@ -1423,7 +1418,7 @@ function DoorSection({ slug }: { slug: string }) {
               {copied ? "Copiado" : "Link"}
             </div>
             <div className="mt-1 truncate font-mono text-[12px] font-semibold text-white">
-              {door.data.code ?? door.data.url}
+              {door.data.url}
             </div>
           </div>
         ) : (
@@ -1451,7 +1446,50 @@ function DoorSection({ slug }: { slug: string }) {
             </svg>
           </button>
         </div>
+        {door.data?.code && (
+          <div className="mt-2 flex items-center justify-between gap-2 rounded-xl bg-cart-bg-elev-2/60 px-3 py-2">
+            <div className="min-w-0 truncate">
+              <span className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">
+                Código
+              </span>
+              <span className="ml-2 font-mono text-[12px] font-semibold text-white">
+                {door.data.code}
+              </span>
+            </div>
+          </div>
+        )}
       </div>
+
+      {porteros.length > 0 && (
+        <div className="mt-3 flex flex-col gap-2">
+          <p className="text-[10.5px] font-semibold uppercase tracking-[0.1em] text-cart-ink-3">
+            Porteros conectados
+          </p>
+          {porteros.map((p) => (
+            <div
+              key={p.deviceId}
+              className="flex items-center gap-3 rounded-xl border border-cart-line bg-cart-bg-elev px-3.5 py-2.5"
+            >
+              <span
+                className={
+                  "size-1.5 shrink-0 rounded-full " +
+                  (p.isStale ? "bg-amber-400" : "bg-emerald-400 shadow-[0_0_5px_rgba(52,211,153,0.7)]")
+                }
+              />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[13px] font-semibold text-white">{p.holderName}</p>
+                <p className="mt-0.5 text-[11px] text-cart-ink-3">
+                  {p.dniLast2 ? `DNI ··${p.dniLast2}` : "DNI no registrado"}
+                  {p.zoneName ? ` · ${p.zoneName}` : ""}
+                </p>
+              </div>
+              <span className="shrink-0 text-[10.5px] text-cart-ink-3">
+                {p.isStale ? "Sin sincronizar" : "Activo"}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 }

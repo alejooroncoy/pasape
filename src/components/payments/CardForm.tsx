@@ -36,6 +36,29 @@ const detectBrandFromBin = (digits: string): CardBrand => {
   return "unknown";
 };
 
+// Fallback cuando MP sandbox devuelve 500 en payment_methods/search?bins=…
+// (bug intermitente del entorno de prueba). Preferimos el id de MP cuando
+// responde; si no, inferimos por BIN / tarjetas de prueba documentadas PE.
+const paymentMethodIdFromDigits = (digits: string): string | null => {
+  if (digits.length < 6) return null;
+  if (digits.startsWith("50317557")) return "master";
+  if (digits.startsWith("40091753")) return "visa";
+  if (digits.startsWith("371180")) return "amex";
+  if (digits.startsWith("517878")) return "debmaster";
+  switch (detectBrandFromBin(digits)) {
+    case "visa":
+      return "visa";
+    case "master":
+      return "master";
+    case "amex":
+      return "amex";
+    case "diners":
+      return "diners";
+    default:
+      return null;
+  }
+};
+
 const formatCardNumber = (raw: string, brand: CardBrand): string => {
   const d = raw.replace(/\D/g, "").slice(0, brand === "amex" ? 15 : 16);
   if (brand === "amex") {
@@ -76,10 +99,11 @@ export function CardForm({
   const brand = detectBrandFromBin(digits);
   const cvvLen = brand === "amex" ? 4 : 3;
   const minLen = brand === "amex" ? 15 : 16;
+  const fallbackPaymentMethodId = paymentMethodIdFromDigits(digits);
+  const effectivePaymentMethodId = paymentMethodId ?? fallbackPaymentMethodId;
 
-  // BIN lookup → resuelve paymentMethodId real desde MP (sirve para distinguir
-  // crédito vs débito, Visa vs Visa Débito, etc.). Sin esto el backend no
-  // puede crear el pago correctamente.
+  // BIN lookup → resuelve paymentMethodId real desde MP (crédito vs débito).
+  // Si el sandbox de MP falla (500 en search?bins=), usamos fallback local.
   useEffect(() => {
     if (!mp || digits.length < 6) {
       setPaymentMethodId(null);
@@ -91,9 +115,7 @@ export function CardForm({
       .then((res) => {
         if (cancelled) return;
         const first = res?.results?.[0];
-        if (first) {
-          setPaymentMethodId(first.id);
-        }
+        if (first) setPaymentMethodId(first.id);
       })
       .catch(() => {
         if (!cancelled) setPaymentMethodId(null);
@@ -117,11 +139,11 @@ export function CardForm({
     cvv.length === cvvLen &&
     holder.trim().length >= 2 &&
     dni.length >= 8 &&
-    !!paymentMethodId;
+    !!effectivePaymentMethodId;
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canSubmit || !mp || !paymentMethodId) return;
+    if (!canSubmit || !mp || !effectivePaymentMethodId) return;
     setSubmitting(true);
     setError(null);
     try {
@@ -162,7 +184,7 @@ export function CardForm({
         body: JSON.stringify({
           orderId,
           token: tokenResp.id,
-          paymentMethodId,
+          paymentMethodId: effectivePaymentMethodId,
           installments: 1,
           issuerId,
         }),

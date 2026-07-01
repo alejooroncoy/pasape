@@ -7,8 +7,8 @@ import { Icon } from "./icons";
 import { Logo } from "./logo";
 
 const LINKS = [
+  { href: "#promos", label: "Funciones" },
   { href: "#como-funciona", label: "Cómo funciona" },
-  { href: "#combos", label: "Combos" },
   { href: "#piloto", label: "Piloto" },
   { href: "#precio", label: "Precio" },
   { href: "#faq", label: "FAQ" },
@@ -83,14 +83,14 @@ export function Nav(_props: { waHref?: string }) {
       <div className="mx-auto flex h-[68px] w-full max-w-[1160px] items-center justify-between px-[22px] md:px-8">
         <Logo />
         <nav
-          className="hidden items-center gap-7 text-sm font-medium text-ink-3 lg:inline-flex"
+          className="hidden h-full items-stretch gap-7 text-sm font-medium text-ink-3 lg:inline-flex"
           aria-label="Principal"
         >
           {LINKS.map((l) => (
             <a
               key={l.href}
               href={l.href}
-              className="relative py-1 transition-colors hover:text-ink after:absolute after:bottom-0 after:left-0 after:right-0 after:h-px after:origin-left after:scale-x-0 after:bg-accent after:transition-transform after:duration-200 hover:after:scale-x-100"
+              className="relative flex items-center transition-colors hover:text-ink after:absolute after:bottom-[22px] after:left-0 after:right-0 after:h-px after:origin-left after:scale-x-0 after:bg-accent after:transition-transform after:duration-200 hover:after:scale-x-100"
             >
               {l.label}
             </a>

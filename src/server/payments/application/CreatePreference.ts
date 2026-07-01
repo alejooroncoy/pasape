@@ -3,7 +3,12 @@ import "server-only";
 import { Preference } from "mercadopago";
 import { err, ok, type Result } from "@/server/_shared/result";
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
-import { appBaseUrl, mpClient } from "../infrastructure/MercadoPagoClient";
+import {
+  appBaseUrl,
+  isPublicBaseUrl,
+  mpClient,
+} from "../infrastructure/MercadoPagoClient";
+import { reportMpError } from "../infrastructure/reportMpError";
 
 export type CreatePreferenceInput = {
   orderId: string;
@@ -33,11 +38,9 @@ export const createPreference = async (
   const base = appBaseUrl();
   const currency = input.items[0]?.currency ?? "PEN";
 
-  // Why: Mercado Pago rechaza `localhost` en back_urls cuando auto_return está
-  // activo. En dev sin túnel público, omitimos back_urls + auto_return; el
-  // usuario regresa manualmente desde el Brick y el webhook (notification_url)
-  // sigue funcionando porque MP sí acepta localhost ahí en sandbox.
-  const isPublicUrl = !/localhost|127\.0\.0\.1/.test(base);
+  // MP rechaza back_urls/notification_url no públicas cuando auto_return está
+  // activo. En dev sin túnel los omitimos (ver isPublicBaseUrl).
+  const isPublicUrl = isPublicBaseUrl(base);
 
   try {
     const config = mpClient({ sellerAccessToken: input.sellerAccessToken ?? null });
@@ -46,7 +49,12 @@ export const createPreference = async (
     const created = await pref.create({
       body: {
         external_reference: input.orderId,
-        notification_url: `${base}/api/webhook/mp`,
+        // MP también rechaza notification_url no pública (IP de LAN / http).
+        // En dev sin túnel la omitimos para no romper la creación; el webhook
+        // solo aplica con URL pública (prod o túnel https).
+        ...(isPublicUrl
+          ? { notification_url: `${base}/api/webhook/mp` }
+          : {}),
         statement_descriptor: "PASAPE",
         items: input.items.map((it) => ({
           id: it.id,
@@ -84,6 +92,8 @@ export const createPreference = async (
       initPoint: created.init_point ?? created.sandbox_init_point ?? "",
     });
   } catch (e) {
-    return err(`mp_create_preference_failed: ${(e as Error).message}`);
+    const message = (e as Error).message;
+    reportMpError(message, { stage: "preference", orderId: input.orderId });
+    return err(`mp_create_preference_failed: ${message}`);
   }
 };
