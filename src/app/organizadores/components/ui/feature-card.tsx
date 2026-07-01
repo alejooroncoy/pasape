@@ -23,7 +23,7 @@ export function FeatureCard({
 }: Props) {
   return (
     <article
-      className={`feature-card reveal group relative flex min-h-[220px] flex-col overflow-hidden rounded-[20px] border p-6 transition-[transform,border-color,box-shadow] duration-300 hover:-translate-y-1 ${
+      className={`feature-card reveal group relative flex min-h-0 flex-col overflow-hidden rounded-[18px] border p-5 transition-[transform,border-color,box-shadow] duration-300 hover:-translate-y-1 md:min-h-[220px] md:rounded-[20px] md:p-6 ${
         accent
           ? "border-accent/35 bg-[linear-gradient(160deg,rgba(36,8,70,0.9)_0%,rgba(18,18,26,0.98)_55%)] shadow-[0_16px_40px_-18px_var(--color-accent-glow)] hover:border-accent/55 hover:shadow-[0_24px_50px_-16px_var(--color-accent-glow)]"
           : "border-line-strong bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0)),var(--color-bg-elev)] hover:border-accent/40 hover:shadow-[0_20px_50px_-20px_rgba(0,0,0,0.55)]"
@@ -49,7 +49,7 @@ export function FeatureCard({
           </div>
 
           <h3
-            className={`m-0 text-balance font-display font-semibold leading-snug tracking-[-0.018em] text-ink ${wide ? "max-w-[28ch] text-[clamp(22px,2.8vw,30px)]" : "max-w-[22ch] text-[clamp(19px,2.2vw,24px)]"}`}
+            className={`m-0 text-balance font-display font-semibold leading-snug tracking-[-0.018em] text-ink ${wide ? "md:max-w-[28ch] text-[clamp(20px,5vw,30px)]" : "text-[clamp(18px,4.5vw,24px)] md:max-w-[22ch]"}`}
           >
             {title}
           </h3>

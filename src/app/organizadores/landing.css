@@ -259,7 +259,8 @@ input, select, textarea { font: inherit; color: inherit; }
 .hero-preview {
   position: relative;
   width: 100%;
-  max-width: 480px;
+  max-width: 360px;
+  margin-inline: auto;
 }
 .hero-preview::before {
   content: "";
@@ -301,8 +302,7 @@ input, select, textarea { font: inherit; color: inherit; }
 }
 @media (max-width: 767px) {
   .hero-preview {
-    max-width: 400px;
-    margin-inline: auto;
+    max-width: min(340px, 92vw);
   }
 }
 @media (prefers-reduced-motion: reduce) {

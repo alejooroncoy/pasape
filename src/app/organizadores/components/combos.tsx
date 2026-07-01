@@ -13,7 +13,7 @@ export function Combos() {
   return (
     <section
       id="combos"
-      className="relative overflow-hidden border-y border-line bg-bg py-24 md:py-30"
+      className="relative overflow-hidden border-y border-line bg-bg py-16 md:py-30"
     >
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_100%_50%,rgba(184,124,255,0.08),transparent_70%)]" />
       <div className="relative z-[1] mx-auto w-full max-w-[1160px] px-[22px] md:px-8">

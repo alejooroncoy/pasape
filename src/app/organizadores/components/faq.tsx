@@ -42,7 +42,7 @@ export const FAQS = [
 
 export function Faq() {
   return (
-    <section id="faq" className="border-t border-line bg-bg-elev/15 py-24 md:py-30">
+    <section id="faq" className="border-t border-line bg-bg-elev/15 py-16 md:py-30">
       <div className="mx-auto w-full max-w-[1160px] px-[22px] md:px-8">
         <SectionHeader
           eyebrow="Preguntas frecuentes"

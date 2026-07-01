@@ -25,7 +25,7 @@ const STEPS = [
 
 export function ComoFunciona() {
   return (
-    <section id="como-funciona" className="border-y border-line bg-bg-elev/20 py-24 md:py-30">
+    <section id="como-funciona" className="border-y border-line bg-bg-elev/20 py-16 md:py-30">
       <div className="mx-auto w-full max-w-[1160px] px-[22px] md:px-8">
         <SectionHeader
           eyebrow="Cómo funciona"

@@ -32,7 +32,7 @@ const GROUPS = [
 
 export function PilotoInclude() {
   return (
-    <section id="piloto" className="border-y border-line bg-bg-elev/30 py-24 md:py-30">
+    <section id="piloto" className="border-y border-line bg-bg-elev/30 py-16 md:py-30">
       <div className="mx-auto w-full max-w-[1160px] px-[22px] md:px-8">
         <SectionHeader
           eyebrow="Qué incluye el piloto"

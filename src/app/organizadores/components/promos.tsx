@@ -117,7 +117,7 @@ export function Promos() {
   return (
     <section
       id="promos"
-      className="relative overflow-hidden bg-[linear-gradient(180deg,var(--color-bg)_0%,var(--color-bg-purple-deeper)_45%,var(--color-bg)_100%)] py-24 md:py-30"
+      className="relative overflow-hidden bg-[linear-gradient(180deg,var(--color-bg)_0%,var(--color-bg-purple-deeper)_45%,var(--color-bg)_100%)] py-16 md:py-30"
     >
       <div className="pointer-events-none absolute left-1/2 top-[20%] h-[520px] w-[900px] -translate-x-1/2 bg-[radial-gradient(ellipse,rgba(184,124,255,0.14),transparent_70%)] blur-[90px]" />
 

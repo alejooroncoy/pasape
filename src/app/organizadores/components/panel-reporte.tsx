@@ -4,7 +4,7 @@ import { BrowserFrame } from "./browser-frame";
 
 export function PanelReporte() {
   return (
-    <section id="panel" className="py-24 md:py-30">
+    <section id="panel" className="py-16 md:py-30">
       <div className="mx-auto w-full max-w-[1160px] px-[22px] md:px-8">
         <SectionHeader
           eyebrow="Panel en vivo"
@@ -17,9 +17,16 @@ export function PanelReporte() {
         />
 
         <div className="reveal relative mt-12">
-          <BrowserFrame url="pasape.lat/org/events/evento-demo">
-            <PanelDemo />
-          </BrowserFrame>
+          <div className="md:hidden">
+            <BrowserFrame url="pasape.lat/org/events/evento-demo" device="phone">
+              <PanelDemo layout="stacked" />
+            </BrowserFrame>
+          </div>
+          <div className="hidden md:block">
+            <BrowserFrame url="pasape.lat/org/events/evento-demo">
+              <PanelDemo layout="grid" />
+            </BrowserFrame>
+          </div>
         </div>
         <p className="reveal mt-3 text-center font-mono text-[10.5px] uppercase tracking-[0.1em] text-ink-4">
           El panel real de organizador · evento de prueba
