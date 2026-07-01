@@ -117,11 +117,12 @@ export default function ScanPage() {
   return <Suspense fallback={null}><Gate /></Suspense>;
 }
 
-// Gate de acceso:
-//  - `?door=CODE` (link del portero) → onboarding con el código precargado.
-//    Tras canjearlo, redirige a `?event=<slug>` ya con sesión activa.
-//  - `?event=<slug>` → exige sesión activa (membership de org o sesión de
-//    portero) antes de dejar escanear.
+// Gate de acceso — el escaneo por código (portero) es exclusivo de la app
+// nativa; en el navegador solo queda el camino de membership del organizador:
+//  - `?door=CODE` (link del portero) → aviso "instala la app" con el código
+//    a mano. Ya no canjea el código ni deja escanear desde acá.
+//  - `?event=<slug>` → exige sesión de membership del organizador; sin ella,
+//    el mismo aviso "instala la app" (no hay onboarding de portero web).
 //  - sin nada → deja pasar (Inner maneja el estado vacío).
 function Gate() {
   const params = useSearchParams();

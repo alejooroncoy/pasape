@@ -19,6 +19,30 @@ export function clearDoorToken(): void {
   if (typeof localStorage !== "undefined") localStorage.removeItem(TOKEN_KEY);
 }
 
+// Identidad del portero (nombre + DNI) ya confirmada en este device. Una vez
+// que entró una vez, no se le vuelve a pedir — se reusa para el próximo join
+// (otro evento, o sesión vencida a las 24h).
+const IDENTITY_KEY = "pasape-scanner-identity";
+export type PorteroIdentity = { fullName: string; dni: string };
+
+export function getPorteroIdentity(): PorteroIdentity | null {
+  if (typeof localStorage === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(IDENTITY_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<PorteroIdentity>;
+    if (!parsed.fullName || !parsed.dni) return null;
+    return { fullName: parsed.fullName, dni: parsed.dni };
+  } catch {
+    return null;
+  }
+}
+export function setPorteroIdentity(identity: PorteroIdentity): void {
+  if (typeof localStorage !== "undefined") {
+    localStorage.setItem(IDENTITY_KEY, JSON.stringify(identity));
+  }
+}
+
 export function getDeviceId(): string {
   if (typeof localStorage === "undefined") return "";
   let id = localStorage.getItem(KEY);
