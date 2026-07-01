@@ -259,8 +259,17 @@ input, select, textarea { font: inherit; color: inherit; }
 .hero-preview {
   position: relative;
   width: 100%;
-  max-width: 360px;
+  max-width: min(340px, 92vw);
   margin-inline: auto;
+}
+@media (min-width: 768px) {
+  .hero-preview {
+    max-width: 500px;
+  }
+  .hero-preview::before {
+    inset: -12%;
+    opacity: 0.85;
+  }
 }
 .hero-preview::before {
   content: "";
