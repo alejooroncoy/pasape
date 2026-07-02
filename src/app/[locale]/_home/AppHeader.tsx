@@ -8,6 +8,7 @@ import { Logo } from "@/components/brand/Logo";
 import { SignInDrawer } from "./SignInDrawer";
 import { CATEGORIES, CATEGORY_BY_ID } from "./categories";
 import type { EventCategory } from "@/server/events/domain/Event";
+import { pageTintGradient } from "@/lib/_shared/color";
 
 // Spring compartido para micro-interacciones (tap/hover).
 const TAP_SPRING = { type: "spring", stiffness: 500, damping: 30 } as const;
@@ -21,7 +22,19 @@ export type NavUser = {
 // Composition pattern: AppHeader solo aporta el "marco" sticky + la fila flex.
 // Cada página compone su header con las piezas que necesita (Brand, Search,
 // Actions…). La home incluye el buscador; /tickets y /profile no.
-export function AppHeader({ children, below }: { children: ReactNode; below?: ReactNode }) {
+export function AppHeader({
+  children,
+  below,
+  tint,
+}: {
+  children: ReactNode;
+  below?: ReactNode;
+  /** Color dominante de la imagen de la página (ej. paleta del flyer del evento)
+   *  para que el header combine con el resto de la pantalla en vez de quedar
+   *  como una barra negra plana encima. Opcional — sin él, el header usa su
+   *  fondo neutro de siempre (home, tickets, perfil, etc). */
+  tint?: string;
+}) {
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -32,9 +45,17 @@ export function AppHeader({ children, below }: { children: ReactNode; below?: Re
 
   return (
     <header
-      className={`sticky top-0 z-50 backdrop-blur-md backdrop-saturate-150 border-b transition-[border-color,background] duration-200 ${
-        scrolled ? "border-cart-line bg-cart-bg/[0.92]" : "border-transparent bg-cart-bg/80"
-      }`}
+      className={`sticky top-0 z-50 backdrop-blur-md backdrop-saturate-150 border-b transition-[border-color,background] duration-200 ${scrolled ? "border-cart-line bg-cart-bg/[0.92]" : "border-transparent bg-cart-bg/80"
+        }`}
+      // Mismo gradiente que PageContainer, con `background-attachment: fixed`
+      // en los dos — así el % del gradiente se resuelve contra el viewport y
+      // el header pinta exactamente el mismo recorte que se ve "detrás" de
+      // él, sin costura, a cualquier scroll (ver `pageTintGradient`).
+      style={
+        tint
+          ? { backgroundImage: pageTintGradient(tint), backgroundAttachment: "fixed" }
+          : undefined
+      }
     >
       <div className="mx-auto flex h-[68px] max-w-[1320px] items-center gap-[18px] px-[clamp(20px,4vw,56px)] max-[560px]:h-[60px] max-[560px]:gap-2">
         {children}
@@ -351,16 +372,16 @@ export function MobileCategoryStrip({
             style={
               active
                 ? {
-                    borderColor: color,
-                    background: color,
-                    color: "#0a0a0f",
-                    boxShadow: `0 0 12px ${color}80`,
-                  }
+                  borderColor: color,
+                  background: color,
+                  color: "#0a0a0f",
+                  boxShadow: `0 0 12px ${color}80`,
+                }
                 : {
-                    borderColor: "var(--color-cart-line)",
-                    background: "transparent",
-                    color: "var(--color-cart-ink-2)",
-                  }
+                  borderColor: "var(--color-cart-line)",
+                  background: "transparent",
+                  color: "var(--color-cart-ink-2)",
+                }
             }
           >
             {label}

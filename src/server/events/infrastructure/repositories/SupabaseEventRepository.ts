@@ -38,6 +38,9 @@ type EventRow = {
   venue_source: "manual" | "google" | "apple" | null;
   venue_layout_url: string | null;
   cover_url: string | null;
+  palette_dark: string | null;
+  palette_mid: string | null;
+  palette_accent: string | null;
   starts_at: string;
   ends_at: string | null;
   timezone: string;
@@ -129,6 +132,9 @@ const toEvent = (r: EventRow): Event => ({
   venueSource: r.venue_source,
   venueLayoutUrl: r.venue_layout_url,
   coverUrl: r.cover_url,
+  paletteDark: r.palette_dark,
+  paletteMid: r.palette_mid,
+  paletteAccent: r.palette_accent,
   startsAt: r.starts_at,
   endsAt: r.ends_at,
   timezone: r.timezone,
@@ -303,6 +309,10 @@ export const supabaseEventRepository: EventRepository = {
         venue_url: input.venueUrl,
         venue_source: input.venueSource,
         venue_layout_url: input.venueLayoutUrl,
+        cover_url: input.coverUrl ?? null,
+        palette_dark: input.paletteDark ?? null,
+        palette_mid: input.paletteMid ?? null,
+        palette_accent: input.paletteAccent ?? null,
         starts_at: input.startsAt,
         ends_at: input.endsAt,
         timezone: input.timezone,
@@ -380,6 +390,9 @@ export const supabaseEventRepository: EventRepository = {
     if (input.venueSource !== undefined) patch.venue_source = input.venueSource;
     if (input.venueLayoutUrl !== undefined) patch.venue_layout_url = input.venueLayoutUrl;
     if (input.coverUrl !== undefined) patch.cover_url = input.coverUrl;
+    if (input.paletteDark !== undefined) patch.palette_dark = input.paletteDark;
+    if (input.paletteMid !== undefined) patch.palette_mid = input.paletteMid;
+    if (input.paletteAccent !== undefined) patch.palette_accent = input.paletteAccent;
     if (input.startsAt !== undefined) patch.starts_at = input.startsAt;
     if ("endsAt" in input) patch.ends_at = input.endsAt ?? null;
     if (input.category !== undefined) patch.category = input.category;
