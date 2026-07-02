@@ -1,6 +1,4 @@
 import type { Metadata } from "next";
-import { Audience } from "./components/audience";
-import { Combos } from "./components/combos";
 import { ComoFunciona } from "./components/como-funciona";
 import { Faq, FAQS } from "./components/faq";
 import { SiteFooter } from "./components/footer";
@@ -8,7 +6,6 @@ import { FormSection } from "./components/form-section";
 import { Hero } from "./components/hero";
 import { Nav } from "./components/nav";
 import { PanelReporte } from "./components/panel-reporte";
-import { PilotoInclude } from "./components/piloto-include";
 import { Price } from "./components/price";
 import { Problema } from "./components/problema";
 import { Promos } from "./components/promos";
@@ -66,12 +63,9 @@ export default function OrganizadoresPage() {
         <Hero waHref={WA_HREF} />
         <Problema />
         <Promos />
-        <Combos />
         <PanelReporte />
         <ComoFunciona />
-        <PilotoInclude />
         <Price waHref={WA_HREF} />
-        <Audience />
         <Faq />
         <FormSection waHref={WA_HREF} />
       </main>

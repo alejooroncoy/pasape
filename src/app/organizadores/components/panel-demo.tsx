@@ -95,32 +95,29 @@ function KpiCard({
   const barColor =
     tone === "accent" ? "var(--color-cart-accent)" : tone === "green" ? "#22D17F" : "rgba(255,255,255,0.5)";
 
-  const sizeCls =
-    layout === "hero"
-      ? "text-[22px]"
-      : layout === "stacked"
-        ? "text-[40px]"
-        : "text-[26px] lg:text-[30px]";
-
-  const padCls = layout === "hero" ? "rounded-xl p-3" : "rounded-2xl p-4";
+  const compact = layout === "hero" || layout === "stacked";
+  const sizeCls = compact ? "text-[17px]" : "text-[26px] lg:text-[30px]";
+  const padCls = compact ? "rounded-lg p-2" : "rounded-2xl p-4";
 
   return (
     <div className={`border border-cart-line bg-cart-bg-elev ${padCls}`}>
-      <div className="flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3 lg:text-[10px] lg:tracking-[0.16em]">
-        <span
-          className="size-1.5 shrink-0 rounded-full"
-          style={{ background: barColor, boxShadow: tone === "green" ? "0 0 6px rgba(34,209,127,0.6)" : "none" }}
-        />
-        {label}
+      <div className={`flex items-center gap-1 font-semibold uppercase text-cart-ink-3 ${compact ? "text-[7px] tracking-normal" : "gap-1.5 text-[9px] tracking-[0.14em] lg:text-[10px] lg:tracking-[0.16em]"}`}>
+        {!compact && (
+          <span
+            className="size-1.5 shrink-0 rounded-full"
+            style={{ background: barColor, boxShadow: tone === "green" ? "0 0 6px rgba(34,209,127,0.6)" : "none" }}
+          />
+        )}
+        <span className="truncate">{label}</span>
       </div>
-      <div className={`mt-1.5 font-sans font-semibold leading-none tracking-[-0.035em] text-white lg:mt-2 ${sizeCls}`}>
+      <div className={`mt-1.5 whitespace-nowrap font-sans font-semibold leading-none tracking-[-0.035em] text-white lg:mt-2 ${sizeCls}`}>
         <CountUp to={to} format={format} />
       </div>
-      {layout !== "hero" ? (
+      {!compact ? (
         <div className="mt-1.5 text-[11px] leading-snug text-cart-ink-3 lg:mt-2 lg:text-[12px]">{hint}</div>
       ) : null}
       {typeof progress === "number" && (
-        <div className={`overflow-hidden rounded-full bg-white/5 ${layout === "hero" ? "mt-2 h-0.5" : "mt-2.5 h-1 lg:mt-3"}`}>
+        <div className={`overflow-hidden rounded-full bg-white/5 ${compact ? "mt-2 h-0.5" : "mt-2.5 h-1 lg:mt-3"}`}>
           <div className="h-full rounded-full" style={{ width: `${progress}%`, background: barColor }} />
         </div>
       )}
@@ -131,7 +128,7 @@ function KpiCard({
 export function PanelDemo({ layout = "grid" }: { layout?: Layout }) {
   const stacked = layout === "stacked";
   const hero = layout === "hero";
-  const scans = stacked ? SCANS.slice(0, 4) : SCANS.slice(0, hero ? 3 : SCANS.length);
+  const scans = stacked ? SCANS.slice(0, 3) : SCANS.slice(0, hero ? 3 : SCANS.length);
   const showDetails = !hero;
 
   return (
@@ -178,15 +175,54 @@ export function PanelDemo({ layout = "grid" }: { layout?: Layout }) {
         </div>
       </div>
 
-      <div
-        className={`mt-3 grid gap-2 lg:mt-4 lg:gap-3 ${
-          stacked ? "grid-cols-1" : "grid-cols-3"
-        }`}
-      >
+      <div className={`mt-3 grid grid-cols-3 lg:mt-4 lg:gap-3 ${stacked ? "gap-1.5" : "gap-2"}`}>
         {KPIS.map((k) => (
           <KpiCard key={k.label} {...k} layout={layout} />
         ))}
       </div>
+
+      {hero ? (
+        <div className="mt-2 flex items-center gap-2.5 px-0.5">
+          <span className="w-6 shrink-0" aria-hidden="true" />
+          <span className="flex-1 text-[9px] font-semibold uppercase tracking-[0.1em] text-cart-ink-4">
+            Promotores
+          </span>
+          <div className="flex items-baseline gap-2 text-right">
+            <span className="w-6 text-[7.5px] uppercase tracking-[0.04em] text-cart-ink-4">Vend.</span>
+            <span className="w-6 text-[7.5px] uppercase tracking-[0.04em] text-cart-ink-4">Val.</span>
+            <span className="w-9 text-[7.5px] uppercase tracking-[0.04em] text-cart-ink-4">Ingreso</span>
+          </div>
+        </div>
+      ) : null}
+      {hero
+        ? PROMOTERS.map((p) => (
+            <div
+              key={p.code}
+              className="mt-1 flex items-center gap-2.5 rounded-lg border border-cart-line bg-cart-bg-elev p-2"
+            >
+              <div className="grid size-6 shrink-0 place-items-center rounded-full bg-cart-bg-elev-2 text-[10px] font-semibold text-cart-ink-2">
+                {p.rank}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="truncate text-[11px] font-semibold tracking-[-0.01em] text-white">
+                    {p.name}
+                  </span>
+                  <span
+                    className="size-1.5 shrink-0 rounded-full"
+                    style={{ background: "#22D17F", boxShadow: "0 0 6px #22D17F88" }}
+                  />
+                </div>
+                <div className="truncate font-mono text-[9px] text-cart-ink-3">{p.code}</div>
+              </div>
+              <div className="flex items-baseline gap-2 text-right">
+                <span className="w-6 font-mono text-[10px] font-semibold text-white">{p.sold}</span>
+                <span className="w-6 font-mono text-[10px] font-semibold text-[#22D17F]">{p.validated}</span>
+                <span className="w-9 font-mono text-[9.5px] text-cart-ink-3">{p.revenue}</span>
+              </div>
+            </div>
+          ))
+        : null}
 
       {showDetails ? (
         <div className={`mt-3 grid gap-3 ${stacked ? "grid-cols-1" : "grid-cols-1 lg:grid-cols-2"}`}>
@@ -200,7 +236,10 @@ export function PanelDemo({ layout = "grid" }: { layout?: Layout }) {
             </header>
             <div className="divide-y divide-cart-line">
               {PROMOTERS.map((p) => (
-                <div key={p.code} className="grid grid-cols-[auto_1fr_auto] items-center gap-3 px-4 py-2.5 lg:py-3">
+                <div
+                  key={p.code}
+                  className={`grid grid-cols-[auto_1fr_auto] items-center gap-3 py-2.5 lg:py-3 ${stacked ? "px-3" : "px-4"}`}
+                >
                   <div className="grid size-7 shrink-0 place-items-center rounded-full bg-cart-bg-elev-2 text-[11px] font-semibold text-cart-ink-2">
                     {p.rank}
                   </div>
@@ -214,8 +253,8 @@ export function PanelDemo({ layout = "grid" }: { layout?: Layout }) {
                         style={{ background: "#22D17F", boxShadow: "0 0 6px #22D17F88" }}
                       />
                     </div>
-                    <div className="mt-0.5 font-mono text-[10px] text-cart-ink-3 lg:text-[10.5px]">
-                      {p.code} · 0% asistencia
+                    <div className="mt-0.5 truncate font-mono text-[10px] text-cart-ink-3 lg:text-[10.5px]">
+                      {stacked ? p.code : `${p.code} · 0% asistencia`}
                     </div>
                   </div>
                   <div className="flex items-baseline gap-2 text-right lg:gap-2.5">

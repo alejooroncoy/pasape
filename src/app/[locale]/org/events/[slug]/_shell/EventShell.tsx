@@ -71,10 +71,16 @@ export function EventShell({
   slug,
   active,
   children,
+  backOverride,
+  hideTabs = false,
 }: {
   slug: string;
   active: EventTab;
   children: ReactNode;
+  /** Fuerza el destino del botón "atrás", en vez del origen recordado (home vs lista de eventos). */
+  backOverride?: EventBackTarget;
+  /** Oculta el subnav de tabs y la barra inferior — para pantallas de detalle (drill-down) que no son una sección propia. */
+  hideTabs?: boolean;
 }) {
   const event = useEvent(slug);
   const ev = event.data?.event;
@@ -83,8 +89,10 @@ export function EventShell({
   const [shareOpen, setShareOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   // Origen real (home vs eventos). Default en SSR; se ajusta al montar.
-  const [back, setBack] = useState<EventBackTarget>({ href: "/org/events", label: "Eventos" });
-  useEffect(() => setBack(getEventBackTarget()), []);
+  const [back, setBack] = useState<EventBackTarget>(
+    backOverride ?? { href: "/org/events", label: "Eventos" },
+  );
+  useEffect(() => setBack(backOverride ?? getEventBackTarget()), [backOverride]);
 
   const dateLabel = ev
     ? new Intl.DateTimeFormat("es-PE", {
@@ -105,7 +113,7 @@ export function EventShell({
 
   return (
     <OrgShell>
-      <div className="mx-auto w-full max-w-[1180px] pb-32 lg:pb-12">
+      <div className={`mx-auto w-full max-w-[1180px] ${hideTabs ? "pb-12" : "pb-32 lg:pb-12"}`}>
         {/* ============ Top: breadcrumb + acciones (desktop) ============ */}
         <div className="mb-4 flex items-center justify-between lg:mb-6">
           <div className="flex items-center gap-2 text-[12.5px]">
@@ -228,56 +236,60 @@ export function EventShell({
         </header>
 
         {/* ============ Sub-nav (desktop horizontal) ============ */}
-        <nav className="mb-7 hidden gap-1 border-b border-cart-line lg:flex">
-          {TABS.filter((t) => !isOver || t.key !== "settings").map((t) => {
-            const on = t.key === active;
-            return (
-              <Link
-                key={t.key}
-                href={t.href(slug) as never}
-                className={
-                  "relative inline-flex items-center gap-2 px-4 py-3 text-[13.5px] font-medium transition " +
-                  (on ? "text-white" : "text-cart-ink-3 hover:text-white")
-                }
-              >
-                <span className={on ? "text-cart-accent" : "text-cart-ink-3"}>{t.icon}</span>
-                {t.label}
-                {on && (
-                  <span className="absolute inset-x-3 -bottom-px h-[2px] rounded-full bg-cart-accent shadow-[0_0_10px_var(--color-cart-accent-glow)]" />
-                )}
-              </Link>
-            );
-          })}
-        </nav>
+        {!hideTabs && (
+          <nav className="mb-7 hidden gap-1 border-b border-cart-line lg:flex">
+            {TABS.filter((t) => !isOver || t.key !== "settings").map((t) => {
+              const on = t.key === active;
+              return (
+                <Link
+                  key={t.key}
+                  href={t.href(slug) as never}
+                  className={
+                    "relative inline-flex items-center gap-2 px-4 py-3 text-[13.5px] font-medium transition " +
+                    (on ? "text-white" : "text-cart-ink-3 hover:text-white")
+                  }
+                >
+                  <span className={on ? "text-cart-accent" : "text-cart-ink-3"}>{t.icon}</span>
+                  {t.label}
+                  {on && (
+                    <span className="absolute inset-x-3 -bottom-px h-[2px] rounded-full bg-cart-accent shadow-[0_0_10px_var(--color-cart-accent-glow)]" />
+                  )}
+                </Link>
+              );
+            })}
+          </nav>
+        )}
 
         {/* ============ Contenido ============ */}
         <main>{children}</main>
       </div>
 
       {/* ============ Bottom tab bar (mobile iOS) ============ */}
-      <div
-        className="fixed inset-x-0 bottom-0 z-40 border-t border-cart-line bg-cart-bg/95 backdrop-blur-md lg:hidden"
-        style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 6px)" }}
-      >
-        <div className="mx-auto flex max-w-[640px] items-stretch justify-around px-3 pt-2">
-          {TABS.filter((t) => !isOver || t.key !== "settings").map((t) => {
-            const on = t.key === active;
-            return (
-              <Link
-                key={t.key}
-                href={t.href(slug) as never}
-                className={
-                  "flex flex-1 flex-col items-center gap-1 rounded-xl px-2 py-1.5 transition " +
-                  (on ? "text-cart-accent" : "text-cart-ink-3")
-                }
-              >
-                <span>{t.icon}</span>
-                <span className="text-[10.5px] font-semibold tracking-[0.02em]">{t.label}</span>
-              </Link>
-            );
-          })}
+      {!hideTabs && (
+        <div
+          className="fixed inset-x-0 bottom-0 z-40 border-t border-cart-line bg-cart-bg/95 backdrop-blur-md lg:hidden"
+          style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 6px)" }}
+        >
+          <div className="mx-auto flex max-w-[640px] items-stretch justify-around px-3 pt-2">
+            {TABS.filter((t) => !isOver || t.key !== "settings").map((t) => {
+              const on = t.key === active;
+              return (
+                <Link
+                  key={t.key}
+                  href={t.href(slug) as never}
+                  className={
+                    "flex flex-1 flex-col items-center gap-1 rounded-xl px-2 py-1.5 transition " +
+                    (on ? "text-cart-accent" : "text-cart-ink-3")
+                  }
+                >
+                  <span>{t.icon}</span>
+                  <span className="text-[10.5px] font-semibold tracking-[0.02em]">{t.label}</span>
+                </Link>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* FAB de compartir en mobile cuando está publicado */}
       {ev?.status === "published" && (

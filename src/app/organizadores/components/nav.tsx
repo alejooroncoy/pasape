@@ -8,8 +8,8 @@ import { Logo } from "./logo";
 
 const LINKS = [
   { href: "#promos", label: "Funciones" },
+  { href: "#panel", label: "Panel en vivo" },
   { href: "#como-funciona", label: "Cómo funciona" },
-  { href: "#piloto", label: "Piloto" },
   { href: "#precio", label: "Precio" },
   { href: "#faq", label: "FAQ" },
 ];

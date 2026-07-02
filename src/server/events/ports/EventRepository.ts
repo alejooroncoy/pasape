@@ -52,8 +52,14 @@ export type EventStats = {
     capacity: number;
     /** Vendidas (pagadas) de este tipo — NO incluye reservas. */
     sold: number;
+    /** Validadas (status 'used') de este tipo. En un box: personas que ya entraron. */
+    validated: number;
     /** Recaudado real de este tipo (suma de price_cents con promos), en céntimos. */
     revenueCents: number;
+    /** Etiqueta humana del box (A, B, VIP-1). Solo aplica cuando kind === "box". */
+    boxLabel: string | null;
+    /** Sustantivo custom del organizador ("mesa", "lounge"). Solo aplica a boxes. */
+    unitNoun: string | null;
   }>;
   byPromoter: Array<{
     promoterId: string;
@@ -100,6 +106,13 @@ export type ScanFeedItem = {
   scannedAt: string;
   ticketId: string | null;
   scannedBy: string;
+  /** Tipo de la entrada escaneada — null si el ticket no se pudo resolver. */
+  ticketTypeKind: TicketType["kind"] | null;
+  ticketTypeName: string | null;
+  /** Etiqueta del box (A, B, VIP-1) cuando ticketTypeKind === "box". */
+  boxLabel: string | null;
+  /** Sustantivo del organizador ("box", "mesa"). Solo aplica cuando ticketTypeKind === "box". */
+  unitNoun: string | null;
 };
 
 // Salud de las puertas (porteros) para el banner de honestidad del dashboard.

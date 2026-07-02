@@ -7,7 +7,7 @@ export function Hero({ waHref }: { waHref: string }) {
   return (
     <section
       id="top"
-      className="hero relative isolate overflow-visible pt-28 pb-16 md:min-h-dvh md:py-24"
+      className="hero relative isolate overflow-visible pt-28 pb-16 md:flex md:min-h-dvh md:items-center md:py-24"
     >
       <div className="hero-bleed" aria-hidden="true" />
       <div className="hero-noise-spill" aria-hidden="true" />

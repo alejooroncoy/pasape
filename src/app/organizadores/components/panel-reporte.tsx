@@ -4,7 +4,7 @@ import { BrowserFrame } from "./browser-frame";
 
 export function PanelReporte() {
   return (
-    <section id="panel" className="py-16 md:py-30">
+    <section id="panel" className="py-14 md:py-20">
       <div className="mx-auto w-full max-w-[1160px] px-[22px] md:px-8">
         <SectionHeader
           eyebrow="Panel en vivo"
@@ -16,7 +16,7 @@ export function PanelReporte() {
           lede="Ventas, accesos, combos y promotores corriendo en vivo. Al cierre tienes un reporte — no capturas sueltas ni un Excel a las 4 a.m."
         />
 
-        <div className="reveal relative mt-12">
+        <div className="reveal relative mt-10">
           <div className="md:hidden">
             <BrowserFrame url="pasape.lat/org/events/evento-demo" device="phone">
               <PanelDemo layout="stacked" />

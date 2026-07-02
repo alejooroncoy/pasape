@@ -6,7 +6,7 @@ export function FormSection({ waHref }: { waHref: string }) {
   return (
     <section
       id="form"
-      className="relative overflow-hidden border-t border-line bg-[radial-gradient(ellipse_at_50%_0%,rgba(184,124,255,0.18),transparent_60%),linear-gradient(180deg,var(--color-bg-purple-deeper)_0%,var(--color-bg)_100%)] py-16 pb-24 md:py-30 md:pb-28 before:pointer-events-none before:absolute before:bottom-[-200px] before:left-1/2 before:h-[400px] before:w-[800px] before:-translate-x-1/2 before:bg-[radial-gradient(ellipse,rgba(184,124,255,0.25),transparent_70%)] before:blur-[80px] before:content-['']"
+      className="relative overflow-hidden border-t border-line bg-[radial-gradient(ellipse_at_50%_0%,rgba(184,124,255,0.18),transparent_60%),linear-gradient(180deg,var(--color-bg-purple-deeper)_0%,var(--color-bg)_100%)] py-14 pb-20 md:py-20 md:pb-24 before:pointer-events-none before:absolute before:bottom-[-200px] before:left-1/2 before:h-[400px] before:w-[800px] before:-translate-x-1/2 before:bg-[radial-gradient(ellipse,rgba(184,124,255,0.25),transparent_70%)] before:blur-[80px] before:content-['']"
     >
       <div className="relative z-[1] mx-auto w-full max-w-[760px] px-[22px] text-center md:px-8">
         <SectionHeader

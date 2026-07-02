@@ -32,31 +32,10 @@ const FEATURES = [
     ),
   },
   {
-    tag: "Combo 2x1",
-    title: "Dos entran, pagan uno. Dos QR listos.",
-    payoff: "Sin cobrar mitad y mitad en puerta",
+    tag: "Combos 2x1 · 3x2",
+    title: "Una compra, varias entradas. Cada una con su QR.",
+    payoff: "Sin reenviar capturas ni cobrar mitades en puerta",
     icon: <Icon name="qr" width={18} height={18} />,
-    visual: (
-      <div className="flex gap-2">
-        {[1, 2].map((n) => (
-          <div
-            key={n}
-            className="flex flex-1 items-center gap-2 rounded-lg border border-line bg-bg/40 px-2 py-2"
-          >
-            <div className="grid size-8 place-items-center rounded bg-white p-0.5">
-              <QrSquare seedOffset={n} />
-            </div>
-            <span className="font-mono text-[10px] text-ink-3">QR {n}</span>
-          </div>
-        ))}
-      </div>
-    ),
-  },
-  {
-    tag: "Combo 3x2",
-    title: "Una compra, tres entradas, tres QR distintos.",
-    payoff: "Sin reenviar capturas",
-    icon: <Icon name="share" width={18} height={18} />,
     visual: (
       <div className="flex gap-1.5">
         {[1, 2, 3].map((n) => (
@@ -117,7 +96,7 @@ export function Promos() {
   return (
     <section
       id="promos"
-      className="relative overflow-hidden bg-[linear-gradient(180deg,var(--color-bg)_0%,var(--color-bg-purple-deeper)_45%,var(--color-bg)_100%)] py-16 md:py-30"
+      className="relative overflow-hidden bg-[linear-gradient(180deg,var(--color-bg)_0%,var(--color-bg-purple-deeper)_45%,var(--color-bg)_100%)] py-14 md:py-20"
     >
       <div className="pointer-events-none absolute left-1/2 top-[20%] h-[520px] w-[900px] -translate-x-1/2 bg-[radial-gradient(ellipse,rgba(184,124,255,0.14),transparent_70%)] blur-[90px]" />
 
@@ -132,7 +111,7 @@ export function Promos() {
           lede="Combos, preventas, boxes y promotores — configurado una vez, corre solo. Sin capturas, sin Excel, sin el mismo DM diez veces."
         />
 
-        <div className="mt-14 grid grid-cols-1 gap-4 md:grid-cols-6 md:gap-5">
+        <div className="mt-10 grid grid-cols-1 gap-4 md:grid-cols-6 md:gap-5">
           <FeatureCard
             tag={hero.tag}
             title={hero.title}
@@ -144,7 +123,7 @@ export function Promos() {
             className="md:col-span-6"
           />
 
-          {rest.map((f, i) => (
+          {rest.map((f) => (
             <FeatureCard
               key={f.tag}
               tag={f.tag}
@@ -152,7 +131,7 @@ export function Promos() {
               payoff={f.payoff}
               icon={f.icon}
               visual={f.visual}
-              className={`md:col-span-2 ${i >= 3 ? "md:col-span-3" : ""}`}
+              className="md:col-span-3"
             />
           ))}
         </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useRef, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import { Link } from "@/i18n/navigation";
 import { useEvent } from "@/lib/events/hooks/useEvents";
 import { useEventStats } from "@/lib/events/hooks/useEventStats";
@@ -9,10 +10,20 @@ import { useEventPartners, useAddEventPartner, useRemoveEventPartner } from "@/l
 import { formatMoney } from "@/lib/_shared/format";
 import { Money } from "@/lib/_shared/money";
 import { EventShell } from "./_shell/EventShell";
+import { Sheet } from "./_shell/Sheet";
 import { SpotlightTour } from "@/components/ui/SpotlightTour";
 import { createSupabaseBrowserClient } from "@/server/_shared/supabase/client";
+import {
+  useEventPromoters,
+  useRemoveAssignment,
+  useUpdateAssignmentCommission,
+} from "@/lib/promoters/hooks/useEventPromoters";
+import { PersonalizeSheet, type PayPatch } from "./team/page";
 import type { EventStatsPayload } from "@/lib/events/hooks/useEventStats";
 import type { EventPartner } from "@/server/events/application/EventPartners";
+import type { EventPromoterAssignment } from "@/server/promoters/application/EventPromoterAssignment";
+
+type PromoterStat = EventStatsPayload["byPromoter"][number];
 
 type Params = Promise<{ slug: string; locale: string }>;
 
@@ -65,10 +76,23 @@ function LivePanel({
     ? `${soldPct}% del aforo (${capacity.toLocaleString("es-PE")})`
     : "Sin aforo definido";
 
+  // Promotor abierto en el sheet de detalle — derivado del cache para reflejar
+  // actualizaciones en vivo (Realtime) mientras está abierto.
+  const [openPromoterId, setOpenPromoterId] = useState<string | null>(null);
+  const openPromoter = stats?.byPromoter?.find((p) => p.promoterLinkId === openPromoterId) ?? null;
+  const assignments = useEventPromoters(slug);
+  const updateCommission = useUpdateAssignmentCommission(slug);
+  const removeAssignment = useRemoveAssignment(slug);
+  const openAssignment =
+    assignments.data?.find((a) => a.promoterLinkId === openPromoterId) ?? null;
+  const closePromoterSheet = () => setOpenPromoterId(null);
+
   return (
     <>
-      {/* Banner de honestidad: duplicados offline + puertas sin sincronizar */}
-      <DoorHealthBanner doors={stats?.doors ?? []} dupOffline={stats?.dupOffline ?? 0} />
+      {/* Banner de honestidad (duplicados offline + puertas sin sincronizar) —
+          desactivado por ahora: de momento no sumaba suficiente para el
+          espacio que ocupaba. DoorHealthBanner queda definido por si se
+          retoma más adelante. */}
 
       {/* KPIs */}
       <section data-tour="kpis" className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:gap-4">
@@ -98,73 +122,8 @@ function LivePanel({
         />
       </section>
 
-      {/* Body: 2 columnas en desktop, stack en mobile */}
-      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr] lg:gap-7">
-        {/* Ranking de promotores */}
-        <section data-tour="promoters" className="rounded-2xl border border-cart-line bg-cart-bg-elev">
-          <header className="flex items-center justify-between border-b border-cart-line px-4 py-3 lg:px-5">
-            <div>
-              <h2 className="text-[15px] font-semibold tracking-[-0.01em]">Promotores</h2>
-              <p className="text-[11.5px] text-cart-ink-3">vendido · validado · ingreso</p>
-            </div>
-            <Link
-              href={`/org/events/${slug}/team` as never}
-              className="rounded-full px-2.5 py-1 text-[11.5px] font-medium text-cart-ink-2 transition hover:bg-white/5 hover:text-white"
-            >
-              Ver links →
-            </Link>
-          </header>
-
-          {stats?.byPromoter?.length ? (
-            <div className="divide-y divide-cart-line">
-              {stats.byPromoter.map((p, i) => (
-                <PromoterRow key={p.promoterLinkId} rank={i + 1} promoter={p} slug={slug} />
-              ))}
-            </div>
-          ) : (
-            <EmptyRow label="Sin ventas por promotor todavía." />
-          )}
-        </section>
-
-        {/* Live feed */}
-        <section data-tour="live-scans" className="rounded-2xl border border-cart-line bg-cart-bg-elev">
-          <header className="flex items-center justify-between border-b border-cart-line px-4 py-3 lg:px-5">
-            <div className="flex items-center gap-2">
-              <span className="relative grid size-5 place-items-center">
-                <span className="absolute size-3 animate-ping rounded-full bg-cart-accent/40" />
-                <span className="size-1.5 rounded-full bg-cart-accent shadow-[0_0_8px_var(--color-cart-accent-glow-strong)]" />
-              </span>
-              <h2 className="text-[15px] font-semibold tracking-[-0.01em]">Accesos en vivo</h2>
-            </div>
-            <span className="text-[11.5px] text-cart-ink-4">últimos 10</span>
-          </header>
-
-          {stats?.scansRecent.length ? (
-            <ul className="divide-y divide-cart-line">
-              {stats.scansRecent.slice(0, 10).map((s) => (
-                <ScanRow key={s.id} when={s.scannedAt} result={s.result} />
-              ))}
-            </ul>
-          ) : (
-            <EmptyRow label="Aún no hay accesos registrados." />
-          )}
-
-          <div className="border-t border-cart-line p-3 lg:p-4">
-            <Link
-              href={`/org/events/${slug}/team` as never}
-              className="block rounded-xl border border-dashed border-cart-line-strong px-3.5 py-2.5 text-center text-[12.5px] font-medium text-cart-ink-2 transition hover:border-white/40 hover:text-white"
-            >
-              Ver historial completo
-            </Link>
-          </div>
-        </section>
-      </div>
-
-      {/* Partners */}
-      <PartnersSection slug={slug} />
-
-      {/* Quick actions (mobile) */}
-      <section className="mt-6 grid grid-cols-2 gap-2.5 lg:hidden">
+      {/* Quick actions (mobile) — cerca de arriba, no al fondo del scroll */}
+      <section className="mt-3 grid grid-cols-2 gap-2.5 lg:hidden">
         <Link
           href={`/org/events/${slug}/door-link` as never}
           className="flex items-center gap-2 rounded-2xl border border-cart-line bg-cart-bg-elev px-3.5 py-3 text-[13px] font-medium"
@@ -192,6 +151,93 @@ function LivePanel({
         </button>
       </section>
 
+      {/* Body: 2 columnas en desktop, stack en mobile */}
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr] lg:gap-7">
+        {/* Ranking de promotores */}
+        <section data-tour="promoters" className="rounded-2xl border border-cart-line bg-cart-bg-elev">
+          <header className="border-b border-cart-line">
+            <div className="flex items-center justify-between px-4 pt-3 pb-3 lg:px-5">
+              <h2 className="text-[15px] font-semibold tracking-[-0.01em]">Promotores</h2>
+              <Link
+                href={`/org/events/${slug}/team` as never}
+                className="rounded-full px-2.5 py-1 text-[11.5px] font-medium text-cart-ink-2 transition hover:bg-white/5 hover:text-white"
+              >
+                Ver links →
+              </Link>
+            </div>
+            <div className="grid grid-cols-[32px_1fr_36px_36px_56px] border-t border-cart-line items-center gap-3 px-4 py-1.5 lg:px-5">
+              <span aria-hidden="true" />
+              <span aria-hidden="true" />
+              <span className="text-right text-[10px] uppercase tracking-[0.04em] text-cart-ink-4">Vend.</span>
+              <span className="text-right text-[10px] uppercase tracking-[0.04em] text-cart-ink-4">Val.</span>
+              <span className="text-right text-[10px] uppercase tracking-[0.04em] text-cart-ink-4">Ingreso</span>
+            </div>
+          </header>
+
+          {stats?.byPromoter?.length ? (
+            <div className="divide-y divide-cart-line">
+              {stats.byPromoter.map((p, i) => (
+                <PromoterRow
+                  key={p.promoterLinkId}
+                  rank={i + 1}
+                  promoter={p}
+                  onOpen={() => setOpenPromoterId(p.promoterLinkId)}
+                />
+              ))}
+            </div>
+          ) : (
+            <EmptyRow label="Sin ventas por promotor todavía." />
+          )}
+        </section>
+
+        {/* Live feed */}
+        <section data-tour="live-scans" className="rounded-2xl border border-cart-line bg-cart-bg-elev">
+          <header className="flex items-center justify-between border-b border-cart-line px-4 py-3 lg:px-5">
+            <div className="flex items-center gap-2">
+              <span className="relative grid size-5 place-items-center">
+                <span className="absolute size-3 animate-ping rounded-full bg-cart-accent/40" />
+                <span className="size-1.5 rounded-full bg-cart-accent shadow-[0_0_8px_var(--color-cart-accent-glow-strong)]" />
+              </span>
+              <h2 className="text-[15px] font-semibold tracking-[-0.01em]">Accesos en vivo</h2>
+            </div>
+            <span className="text-[11.5px] text-cart-ink-4">últimos 10</span>
+          </header>
+
+          {stats?.scansRecent.length ? (
+            <ul className="divide-y divide-cart-line">
+              {stats.scansRecent.slice(0, 10).map((s) => (
+                <ScanRow
+                  key={s.id}
+                  when={s.scannedAt}
+                  result={s.result}
+                  ticketTypeKind={s.ticketTypeKind}
+                  ticketTypeName={s.ticketTypeName}
+                  boxLabel={s.boxLabel}
+                  unitNoun={s.unitNoun}
+                />
+              ))}
+            </ul>
+          ) : (
+            <EmptyRow label="Aún no hay accesos registrados." />
+          )}
+
+          <div className="border-t border-cart-line p-3 lg:p-4">
+            <Link
+              href={`/org/events/${slug}/scans` as never}
+              className="block rounded-xl border border-dashed border-cart-line-strong px-3.5 py-2.5 text-center text-[12.5px] font-medium text-cart-ink-2 transition hover:border-white/40 hover:text-white"
+            >
+              Ver historial completo
+            </Link>
+          </div>
+        </section>
+      </div>
+
+      {/* Boxes — cómo se van llenando en vivo */}
+      <BoxesSection ticketTypes={stats?.ticketTypes ?? []} />
+
+      {/* Partners */}
+      <PartnersSection slug={slug} />
+
       <SpotlightTour
         tourId="event_panel"
         steps={[
@@ -201,6 +247,32 @@ function LivePanel({
           { selector: "[data-tour='download']", title: "Cuando quieras", body: "Bajá el Excel a cualquier hora." },
         ]}
       />
+
+      <AnimatePresence>
+        {openPromoter && (
+          <Sheet title={openPromoter.name} onClose={closePromoterSheet}>
+            <PromoterDetail
+              promoter={openPromoter}
+              slug={slug}
+              currency={ev?.currency}
+              assignment={openAssignment}
+              commissionSaving={updateCommission.isPending}
+              onSetCommission={(patch) =>
+                openAssignment &&
+                updateCommission.mutate({ linkId: openAssignment.promoterLinkId, ...patch })
+              }
+              onRemoveAssignment={() => {
+                if (!openAssignment) return;
+                if (confirm(`¿Quitar a ${openAssignment.name} de este evento?`)) {
+                  removeAssignment.mutate(openAssignment.promoterLinkId, {
+                    onSuccess: closePromoterSheet,
+                  });
+                }
+              }}
+            />
+          </Sheet>
+        )}
+      </AnimatePresence>
     </>
   );
 }
@@ -224,6 +296,15 @@ function FinalReport({
   const capacity = ev?.capacity.totalCapacity ?? 0;
   const soldPct = capacity ? Math.min(100, Math.round((sold / capacity) * 100)) : 0;
   const attendancePct = sold ? Math.round((validated / sold) * 100) : 0;
+
+  const [openPromoterId, setOpenPromoterId] = useState<string | null>(null);
+  const openPromoter = stats?.byPromoter?.find((p) => p.promoterLinkId === openPromoterId) ?? null;
+  const assignments = useEventPromoters(slug);
+  const updateCommission = useUpdateAssignmentCommission(slug);
+  const removeAssignment = useRemoveAssignment(slug);
+  const openAssignment =
+    assignments.data?.find((a) => a.promoterLinkId === openPromoterId) ?? null;
+  const closePromoterSheet = () => setOpenPromoterId(null);
 
   return (
     <div className="flex flex-col gap-6">
@@ -339,7 +420,12 @@ function FinalReport({
           {stats?.byPromoter?.length ? (
             <div className="divide-y divide-cart-line">
               {stats.byPromoter.map((p, i) => (
-                <PromoterRow key={p.promoterLinkId} rank={i + 1} promoter={p} slug={slug} />
+                <PromoterRow
+                  key={p.promoterLinkId}
+                  rank={i + 1}
+                  promoter={p}
+                  onOpen={() => setOpenPromoterId(p.promoterLinkId)}
+                />
               ))}
             </div>
           ) : (
@@ -436,7 +522,97 @@ function FinalReport({
           Descargar Excel completo
         </button>
       </div>
+
+      <AnimatePresence>
+        {openPromoter && (
+          <Sheet title={openPromoter.name} onClose={closePromoterSheet}>
+            <PromoterDetail
+              promoter={openPromoter}
+              slug={slug}
+              currency={ev?.currency}
+              assignment={openAssignment}
+              commissionSaving={updateCommission.isPending}
+              onSetCommission={(patch) =>
+                openAssignment &&
+                updateCommission.mutate({ linkId: openAssignment.promoterLinkId, ...patch })
+              }
+              onRemoveAssignment={() => {
+                if (!openAssignment) return;
+                if (confirm(`¿Quitar a ${openAssignment.name} de este evento?`)) {
+                  removeAssignment.mutate(openAssignment.promoterLinkId, {
+                    onSuccess: closePromoterSheet,
+                  });
+                }
+              }}
+            />
+          </Sheet>
+        )}
+      </AnimatePresence>
     </div>
+  );
+}
+
+/**
+ * `boxLabel` normalmente ya es el nombre completo de la instancia (ej. "Box
+ * Platinum A"). Pero si el organizador renombra un box individual con
+ * "Editar c/u" en el composer, boxLabel/name quedan en solo lo que escribió
+ * (ej. "A"), perdiendo el nombre del grupo. `unitNoun` no se toca al
+ * personalizar, así que sirve de red de seguridad para no perder la
+ * categoría (Normal/Platinum) en pantalla.
+ */
+function boxDisplayLabel(b: { name: string; boxLabel: string | null; unitNoun: string | null }): string {
+  const raw = b.boxLabel ?? b.name;
+  if (!b.unitNoun) return raw;
+  const noun = b.unitNoun.charAt(0).toUpperCase() + b.unitNoun.slice(1);
+  return raw.toLowerCase().startsWith(b.unitNoun.toLowerCase()) ? raw : `${noun} ${raw}`;
+}
+
+// ============================================================
+// Boxes — cuántas personas ya entraron por box, en vivo
+// ============================================================
+function BoxesSection({ ticketTypes }: { ticketTypes: EventStatsPayload["ticketTypes"] }) {
+  // Ordena agrupando naturalmente por categoría (ej. "Box Normal" vs "Box
+  // Platinum") y dentro de cada una por letra/número.
+  const boxes = [...ticketTypes]
+    .filter((t) => t.kind === "box")
+    .sort((a, b) => boxDisplayLabel(a).localeCompare(boxDisplayLabel(b), "es", { numeric: true }));
+  if (!boxes.length) return null;
+
+  return (
+    <section className="mt-6 rounded-2xl border border-cart-line bg-cart-bg-elev">
+      <header className="border-b border-cart-line px-4 py-3 lg:px-5">
+        <h2 className="text-[15px] font-semibold tracking-[-0.01em]">Boxes</h2>
+        <p className="text-[11.5px] text-cart-ink-3">personas que ya entraron por box</p>
+      </header>
+      <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3 lg:p-5">
+        {boxes.map((b) => {
+          const label = boxDisplayLabel(b);
+          const pct = b.capacity > 0 ? Math.min(100, Math.round((b.validated / b.capacity) * 100)) : 0;
+          const full = b.capacity > 0 && b.validated >= b.capacity;
+          return (
+            <div key={b.id} className="rounded-xl border border-cart-line bg-cart-bg-elev-2 p-3.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="truncate text-[13.5px] font-semibold">{label}</span>
+                {full && (
+                  <span className="shrink-0 rounded-full bg-cart-accent-soft px-2 py-0.5 text-[10px] font-semibold text-cart-accent">
+                    Lleno
+                  </span>
+                )}
+              </div>
+              <div className="mt-1.5 font-mono text-[13px] text-cart-ink-3">
+                <span className="font-semibold text-white">{b.validated}</span> / {b.capacity} personas
+              </div>
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/8">
+                <div
+                  className="h-full rounded-full bg-cart-accent transition-[width] duration-500"
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -489,20 +665,11 @@ function KpiCard({
 function PromoterRow({
   rank,
   promoter,
-  slug,
+  onOpen,
 }: {
   rank: number;
-  promoter: {
-    promoterLinkId: string;
-    name: string;
-    code: string;
-    ticketsSold: number;
-    ticketsValidated: number;
-    revenueCents: number;
-    flag?: string;
-    attendanceRate?: number;
-  };
-  slug: string;
+  promoter: PromoterStat;
+  onOpen: () => void;
 }) {
   const flagColor =
     promoter.flag === "suspect" ? "#FF4D5E" : promoter.flag === "watch" ? "#FFCE3B" : "#22D17F";
@@ -515,14 +682,15 @@ function PromoterRow({
   const pct = Math.round((promoter.attendanceRate ?? 0) * 100);
 
   return (
-    <Link
-      href={`/org/events/${slug}/team` as never}
-      className="grid grid-cols-[auto_1fr_auto] items-center gap-3 px-4 py-3 transition hover:bg-white/[0.02] lg:px-5"
+    <button
+      type="button"
+      onClick={onOpen}
+      className="grid w-full grid-cols-[32px_1fr_36px_36px_56px] items-baseline gap-3 px-4 py-3 text-left transition hover:bg-white/[0.02] lg:px-5"
     >
-      <div className="grid size-8 shrink-0 place-items-center rounded-full bg-cart-bg-elev-2 text-[12px] font-semibold text-cart-ink-2">
+      <div className="grid size-8 shrink-0 place-items-center self-center rounded-full bg-cart-bg-elev-2 text-[12px] font-semibold text-cart-ink-2">
         {rank}
       </div>
-      <div className="min-w-0">
+      <div className="min-w-0 self-center">
         <div className="flex items-center gap-1.5">
           <span className="truncate text-[14px] font-semibold tracking-[-0.01em]">{promoter.name}</span>
           <span
@@ -536,26 +704,244 @@ function PromoterRow({
           {promoter.code} · {pct}% asistencia
         </div>
       </div>
-      <div className="flex items-baseline gap-3 text-right">
-        <span className="font-mono text-[13px] font-semibold">{promoter.ticketsSold}</span>
-        <span className="font-mono text-[12.5px] font-semibold text-[#22D17F]">{promoter.ticketsValidated}</span>
-        <span className="font-mono text-[12.5px] text-cart-ink-3">
-          {formatMoneyClean(promoter.revenueCents)}
-        </span>
+      <span className="text-right font-mono text-[13px] font-semibold">{promoter.ticketsSold}</span>
+      <span className="text-right font-mono text-[12.5px] font-semibold text-[#22D17F]">
+        {promoter.ticketsValidated}
+      </span>
+      <span className="text-right font-mono text-[12.5px] text-cart-ink-3">
+        {formatMoneyClean(promoter.revenueCents)}
+      </span>
+    </button>
+  );
+}
+
+// ============================================================
+// Promoter detail (sheet — se abre al tocar una fila del ranking)
+// ============================================================
+function PromoterDetail({
+  promoter,
+  slug,
+  currency,
+  assignment,
+  commissionSaving,
+  onSetCommission,
+  onRemoveAssignment,
+}: {
+  promoter: PromoterStat;
+  slug: string;
+  currency?: string;
+  assignment: EventPromoterAssignment | null;
+  commissionSaving: boolean;
+  onSetCommission: (patch: PayPatch) => void;
+  onRemoveAssignment: () => void;
+}) {
+  const [personalizeOpen, setPersonalizeOpen] = useState(false);
+  const pct = Math.round((promoter.attendanceRate ?? 0) * 100);
+  const flagCfg =
+    promoter.flag === "suspect"
+      ? {
+          color: "#FF4D5E",
+          tint: "rgba(255,77,94,0.1)",
+          label: "Revisar — posible autoventa",
+          hint: "Menos del 30% de lo vendido por su link entró al evento.",
+        }
+      : promoter.flag === "watch"
+        ? {
+            color: "#FFCE3B",
+            tint: "rgba(255,206,59,0.1)",
+            label: "Asistencia baja",
+            hint: "Entre 30% y 70% de lo vendido por su link entró al evento.",
+          }
+        : {
+            color: "#22D17F",
+            tint: "rgba(34,209,127,0.1)",
+            label: "Asistencia OK",
+            hint: "70% o más de lo vendido por su link entró (o aún hay pocas ventas para medir).",
+          };
+
+  const commissionLabel =
+    promoter.commissionType === "percentage"
+      ? `${promoter.commissionPct}% por venta`
+      : promoter.commissionType === "tiered"
+        ? "Por niveles"
+        : "En especie";
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <span className="font-mono text-[12px] text-cart-ink-3">{promoter.code}</span>
+          <span
+            title={flagCfg.hint}
+            className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium"
+            style={{ background: flagCfg.tint, color: flagCfg.color }}
+          >
+            <span className="size-1.5 rounded-full" style={{ background: flagCfg.color }} />
+            {flagCfg.label}
+          </span>
+        </div>
+        <div className="flex items-start justify-between gap-3 text-[11px] text-cart-ink-4">
+          <span>Código de su link para vender este evento</span>
+          <span className="text-right">{flagCfg.hint}</span>
+        </div>
       </div>
-    </Link>
+
+      {/* Stats */}
+      <div className="grid grid-cols-3 gap-2.5">
+        <div className="rounded-xl border border-cart-line bg-cart-bg-elev-2 p-3">
+          <div className="text-[10px] uppercase tracking-[0.08em] text-cart-ink-4">Vendidas</div>
+          <div className="mt-1 font-mono text-[18px] font-semibold">{promoter.ticketsSold}</div>
+        </div>
+        <div className="rounded-xl border border-cart-line bg-cart-bg-elev-2 p-3">
+          <div className="text-[10px] uppercase tracking-[0.08em] text-cart-ink-4">Validadas</div>
+          <div className="mt-1 font-mono text-[18px] font-semibold text-[#22D17F]">
+            {promoter.ticketsValidated}
+          </div>
+        </div>
+        <div className="rounded-xl border border-cart-line bg-cart-bg-elev-2 p-3">
+          <div className="text-[10px] uppercase tracking-[0.08em] text-cart-ink-4">Recaudado</div>
+          <div className="mt-1 font-mono text-[18px] font-semibold">
+            {formatMoneyClean(promoter.revenueCents, currency)}
+          </div>
+        </div>
+      </div>
+
+      {/* Asistencia */}
+      <div>
+        <div className="flex items-center justify-between text-[12px] text-cart-ink-3">
+          <span>Asistencia</span>
+          <span className="font-semibold text-white">{pct}%</span>
+        </div>
+        <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/8">
+          <div
+            className="h-full rounded-full transition-[width] duration-500"
+            style={{ width: `${pct}%`, background: flagCfg.color }}
+          />
+        </div>
+      </div>
+
+      {/* Invitados gratis */}
+      {promoter.guestsInvited > 0 && (
+        <div className="flex items-center justify-between rounded-xl border border-cart-line bg-cart-bg-elev-2 px-3.5 py-3">
+          <div>
+            <div className="text-[13px] font-medium">Invitados gratis</div>
+            <div className="mt-0.5 text-[11.5px] text-cart-ink-3">Entradas de cortesía por su link</div>
+          </div>
+          <div className="text-right font-mono text-[13px]">
+            {promoter.guestsEntered}
+            <span className="text-cart-ink-3"> / {promoter.guestsInvited}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Comisión */}
+      <div className="rounded-xl border border-cart-line bg-cart-bg-elev-2 px-3.5 py-3">
+        <div className="flex items-center justify-between">
+          <div className="text-[13px] font-medium">Comisión</div>
+          <div className="text-[12.5px] text-cart-ink-3">{commissionLabel}</div>
+        </div>
+        <div className="mt-1.5 font-mono text-[20px] font-semibold">
+          {formatMoneyClean(promoter.payoutCents, currency)}
+        </div>
+        {promoter.unlockedRewards.length > 0 && (
+          <div className="mt-2.5 flex flex-wrap gap-1.5">
+            {promoter.unlockedRewards.map((r) => (
+              <span
+                key={r.label}
+                className="inline-flex items-center gap-1 rounded-full bg-cart-accent-soft px-2.5 py-1 text-[11px] font-medium text-cart-accent"
+              >
+                {r.icon} {r.label}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Acciones */}
+      <div className="flex flex-col gap-2">
+        {assignment ? (
+          <div className="rounded-xl border border-cart-line">
+            <button
+              type="button"
+              onClick={() => setPersonalizeOpen((v) => !v)}
+              aria-expanded={personalizeOpen}
+              className="flex w-full items-center justify-between gap-3 px-3.5 py-2.5 text-left text-[12.5px] font-medium text-cart-ink-2 transition hover:text-white"
+            >
+              Personalizar comisión
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 14 14"
+                fill="none"
+                className={
+                  "shrink-0 transition-transform duration-200 " +
+                  (personalizeOpen ? "rotate-90" : "")
+                }
+                aria-hidden
+              >
+                <path d="M5 2l5 5-5 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+            <AnimatePresence initial={false}>
+              {personalizeOpen && (
+                <motion.div
+                  key="personalize-body"
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2, ease: "easeOut" }}
+                  className="overflow-hidden border-t border-cart-line"
+                >
+                  <div className="px-3.5 pb-3.5 pt-3">
+                    <PersonalizeSheet
+                      assignment={assignment}
+                      saving={commissionSaving}
+                      onSet={onSetCommission}
+                      onRemove={onRemoveAssignment}
+                    />
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        ) : (
+          <Link
+            href={`/org/events/${slug}/team` as never}
+            className="block rounded-xl border border-cart-line px-3.5 py-2.5 text-center text-[12.5px] font-medium text-cart-ink-2 transition hover:border-cart-line-strong hover:text-white"
+          >
+            Personalizar comisión →
+          </Link>
+        )}
+        {promoter.commissionType === "tiered" && (
+          <Link
+            href={`/org/events/${slug}/promoters/${promoter.promoterLinkId}/tiers` as never}
+            className="block rounded-xl border border-cart-line px-3.5 py-2.5 text-center text-[12.5px] font-medium text-cart-ink-2 transition hover:border-cart-line-strong hover:text-white"
+          >
+            Ver niveles →
+          </Link>
+        )}
+      </div>
+    </div>
   );
 }
 
 // ============================================================
 // Scan row
 // ============================================================
-function ScanRow({
+export function ScanRow({
   when,
   result,
+  ticketTypeKind,
+  ticketTypeName,
+  boxLabel,
+  unitNoun,
 }: {
   when: string;
   result: "valid" | "already_used" | "invalid" | "void" | "unknown_event";
+  ticketTypeKind?: "general" | "box" | null;
+  ticketTypeName?: string | null;
+  boxLabel?: string | null;
+  unitNoun?: string | null;
 }) {
   const meta = {
     valid: { color: "#22D17F", label: "Válido" },
@@ -564,12 +950,19 @@ function ScanRow({
     void: { color: "#FF4D5E", label: "Anulado" },
     unknown_event: { color: "rgba(255,255,255,0.45)", label: "Otro evento" },
   }[result];
+  const typeLabel =
+    ticketTypeKind === "box"
+      ? boxDisplayLabel({ name: ticketTypeName ?? "Box", boxLabel: boxLabel ?? null, unitNoun: unitNoun ?? null })
+      : ticketTypeKind === "general"
+        ? "General"
+        : null;
 
   return (
     <li className="flex items-center justify-between gap-3 px-4 py-2.5 lg:px-5">
       <div className="flex items-center gap-2.5">
         <span className="size-1.5 rounded-full" style={{ background: meta.color, boxShadow: `0 0 6px ${meta.color}88` }} />
         <span className="text-[13px] font-medium">{meta.label}</span>
+        {typeLabel && <span className="text-[11.5px] text-cart-ink-4">· {typeLabel}</span>}
       </div>
       <span className="font-mono text-[11.5px] text-cart-ink-3">
         {new Date(when).toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
@@ -578,7 +971,7 @@ function ScanRow({
   );
 }
 
-function EmptyRow({ label }: { label: string }) {
+export function EmptyRow({ label }: { label: string }) {
   return <div className="px-4 py-8 text-center text-[13px] text-cart-ink-3 lg:px-5">{label}</div>;
 }
 

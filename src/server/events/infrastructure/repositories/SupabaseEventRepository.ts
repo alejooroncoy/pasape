@@ -611,7 +611,7 @@ export const supabaseEventRepository: EventRepository = {
 
     const { data: tts } = await db
       .from("ticket_types")
-      .select("id, name, kind, price_cents, capacity")
+      .select("id, name, kind, price_cents, capacity, box_label, unit_noun")
       .eq("event_id", eventId)
       .order("position", { ascending: true });
     const ticketTypeRows =
@@ -621,6 +621,8 @@ export const supabaseEventRepository: EventRepository = {
         kind: TicketType["kind"];
         price_cents: number;
         capacity: number;
+        box_label: string | null;
+        unit_noun: string | null;
       }> | null) ?? [];
 
     // KPIs escalares desde el view de rollup (una sola query): vendidas (pagado),
@@ -646,21 +648,24 @@ export const supabaseEventRepository: EventRepository = {
     // Vendidas por tipo (pagadas, activas/usadas) para el desglose del reporte —
     // NO usamos `ticket_types.sold` porque incluye reservas pendientes.
     const PAGE = 1000;
-    const paidTickets: Array<{ ticket_type_id: string; price_cents: number | null }> = [];
+    const paidTickets: Array<{ ticket_type_id: string; price_cents: number | null; status: string }> = [];
     for (let from = 0; ; from += PAGE) {
       const { data: page } = await db
         .from("tickets")
-        .select("ticket_type_id, price_cents, order:orders!inner(event_id, status)")
+        .select("ticket_type_id, price_cents, status, order:orders!inner(event_id, status)")
         .eq("order.event_id", eventId)
         .eq("order.status", "paid")
         .in("status", ["active", "used"])
         .order("id", { ascending: true })
         .range(from, from + PAGE - 1);
-      const rows = (page as Array<{ ticket_type_id: string; price_cents: number | null }> | null) ?? [];
+      const rows =
+        (page as Array<{ ticket_type_id: string; price_cents: number | null; status: string }> | null) ?? [];
       paidTickets.push(...rows);
       if (rows.length < PAGE) break;
     }
     const soldByType = new Map<string, number>();
+    // Validadas por tipo (status 'used') — en un box, personas que ya entraron.
+    const validatedByType = new Map<string, number>();
     // Recaudado real por tipo = suma de price_cents de los tickets pagados
     // (con promos ya aplicadas al momento de la compra). Cuadra con el total
     // del rollup; nunca se recalcula precio×vendidos en el frontend.
@@ -668,11 +673,21 @@ export const supabaseEventRepository: EventRepository = {
     for (const t of paidTickets) {
       soldByType.set(t.ticket_type_id, (soldByType.get(t.ticket_type_id) ?? 0) + 1);
       revenueByType.set(t.ticket_type_id, (revenueByType.get(t.ticket_type_id) ?? 0) + (t.price_cents ?? 0));
+      if (t.status === "used") {
+        validatedByType.set(t.ticket_type_id, (validatedByType.get(t.ticket_type_id) ?? 0) + 1);
+      }
     }
     const ticketTypes = ticketTypeRows.map((t) => ({
-      ...t,
+      id: t.id,
+      name: t.name,
+      kind: t.kind,
+      price_cents: t.price_cents,
+      capacity: t.capacity,
       sold: soldByType.get(t.id) ?? 0,
+      validated: validatedByType.get(t.id) ?? 0,
       revenueCents: revenueByType.get(t.id) ?? 0,
+      boxLabel: t.box_label,
+      unitNoun: t.unit_noun,
     }));
 
     // Esquema de comisión a nivel evento (default para todos los promotores).
@@ -899,7 +914,10 @@ export const supabaseEventRepository: EventRepository = {
         priceCents: t.price_cents,
         capacity: t.capacity,
         sold: t.sold,
+        validated: t.validated,
         revenueCents: t.revenueCents,
+        boxLabel: t.boxLabel,
+        unitNoun: t.unitNoun,
       })),
       byPromoter,
     };
@@ -995,7 +1013,9 @@ export const supabaseEventRepository: EventRepository = {
     const db = supabaseAdmin();
     const { data } = await db
       .from("scan_events")
-      .select("id, result, scanned_at, ticket_id, scanned_by")
+      .select(
+        "id, result, scanned_at, ticket_id, scanned_by, ticket:tickets(ticket_type:ticket_types(kind, name, box_label, unit_noun))",
+      )
       .eq("event_id", eventId)
       .order("scanned_at", { ascending: false })
       .limit(limit);
@@ -1005,6 +1025,9 @@ export const supabaseEventRepository: EventRepository = {
       scanned_at: string;
       ticket_id: string | null;
       scanned_by: string;
+      ticket: {
+        ticket_type: { kind: TicketType["kind"]; name: string; box_label: string | null; unit_noun: string | null } | null;
+      } | null;
     };
     return (
       (data as Row[] | null)?.map((r) => ({
@@ -1013,6 +1036,10 @@ export const supabaseEventRepository: EventRepository = {
         scannedAt: r.scanned_at,
         ticketId: r.ticket_id,
         scannedBy: r.scanned_by,
+        ticketTypeKind: r.ticket?.ticket_type?.kind ?? null,
+        ticketTypeName: r.ticket?.ticket_type?.name ?? null,
+        boxLabel: r.ticket?.ticket_type?.box_label ?? null,
+        unitNoun: r.ticket?.ticket_type?.unit_noun ?? null,
       })) ?? []
     );
   },

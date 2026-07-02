@@ -42,7 +42,7 @@ export function Problema() {
   return (
     <section
       id="problema"
-      className="relative bg-bg pt-16 pb-24 md:pt-20 md:pb-30"
+      className="relative bg-bg pt-14 pb-16 md:pt-16 md:pb-20"
     >
       <div className="relative z-[2] mx-auto w-full max-w-[1160px] px-[22px] md:px-8">
         <SectionHeader
@@ -54,7 +54,7 @@ export function Problema() {
           }
           lede="Entre WhatsApp, capturas, listas, combos y puerta — vender entradas en Lima se vuelve un trabajo aparte. Y cuando llega la noche, la mitad se cae por la grieta."
         />
-        <div className="mt-14 grid grid-cols-1 gap-3.5 md:grid-cols-2 md:gap-[18px]">
+        <div className="mt-10 grid grid-cols-1 gap-3.5 md:grid-cols-2 md:gap-[18px]">
           {PROBLEMAS.map((p, i) => (
             <div
               key={i}

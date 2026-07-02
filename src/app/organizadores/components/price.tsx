@@ -4,7 +4,7 @@ import { SectionHeader } from "./ui/section-header";
 
 export function Price({ waHref }: { waHref: string }) {
   return (
-    <section id="precio" className="py-16 md:py-30">
+    <section id="precio" className="py-14 md:py-20">
       <div className="mx-auto w-full max-w-[1160px] px-[22px] md:px-8">
         <SectionHeader
           eyebrow="Precio"
