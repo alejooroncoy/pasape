@@ -12,7 +12,8 @@ import type { ShowcaseEvent, ShowcaseOrg } from "@/server/events/application/Get
 import type { EventPartner } from "@/server/events/application/EventPartners";
 import { formatMoney, formatPrice } from "@/lib/_shared/format";
 import { Price } from "@/components/ui/Price";
-import { useImagePalette } from "@/lib/_shared/useImagePalette";
+import { useImagePalette, type Palette } from "@/lib/_shared/useImagePalette";
+import { readableTextColor, ensureContrast, themedMutedText, mixColors } from "@/lib/_shared/color";
 import type { TicketType } from "@/server/events/domain/Event";
 import { VenueLayoutModal } from "@/components/ui/VenueLayoutModal";
 import { PresaleCountdown, shouldCountdown } from "@/components/ui/PresaleCountdown";
@@ -40,6 +41,9 @@ export default function EventDetailPage(props: Props) {
 function EventDetailInner({ params }: Props) {
   const { slug } = use(params);
   const { data, isLoading, error } = useEvent(slug);
+  // Un solo cálculo de paleta para toda la página — se pasa como prop a los
+  // demás bloques en vez de que cada uno vuelva a decodificar la misma imagen.
+  const palette = useImagePalette(data?.event.coverUrl ?? null);
   const showcase = useEventShowcase(slug);
   const partners = useEventPartners(slug);
   const search = useSearchParams();
@@ -129,15 +133,15 @@ function EventDetailInner({ params }: Props) {
   const allSoldOut = availability.total === 0;
 
   return (
-    <PageContainer event={event}>
-      <UserHeader />
+    <PageContainer palette={palette}>
+      <UserHeader tint={palette?.dark} />
       <div className="mx-auto w-full max-w-[1120px] px-5 lg:px-8">
         <div className="grid gap-8 pt-4 lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-10 lg:pt-8">
           <div className="pb-32 lg:pb-12">
             {/* Flyer contenido (estilo Joinnus): el afiche vertical se ve
                 completo — nunca recortado — y un gradiente con los colores
                 del propio flyer rellena el marco. */}
-            <FlyerCard event={event} eventId={event.id} startsAt={startsAt} />
+            <FlyerCard event={event} eventId={event.id} palette={palette} />
 
             <div className="pt-5 lg:hidden">
               <h1 className="text-[30px] font-bold leading-[1.05] tracking-[-0.02em] sm:text-[34px]">
@@ -192,7 +196,7 @@ function EventDetailInner({ params }: Props) {
                     setGroupQty((prev) => ({ ...prev, [key]: qty }))
                   }
                   onPickGroup={(group) => router.push(buyHref(group) as never)}
-                  coverUrl={event?.coverUrl}
+                  palette={palette}
                 />
               </div>
             )}
@@ -200,9 +204,9 @@ function EventDetailInner({ params }: Props) {
             {event.description && <DescriptionBlock text={event.description} />}
 
             {/* Productora del evento — lleva a su vitrina (estilo Passline/Luma). */}
-            {showcase.data?.org && <OrganizerChip org={showcase.data.org} coverUrl={event.coverUrl} />}
+            {showcase.data?.org && <OrganizerChip org={showcase.data.org} palette={palette} />}
 
-            <FeatureGrid coverUrl={event.coverUrl} />
+            <FeatureGrid palette={palette} />
 
             {partners.data && partners.data.length > 0 && (
               <PartnersStrip partners={partners.data} />
@@ -217,7 +221,7 @@ function EventDetailInner({ params }: Props) {
           <aside className="hidden lg:block">
             {/* top-20 = altura del PublicHeader sticky (~57px) + respiro */}
             <div className="sticky top-20">
-              <AsideContainer event={event}>
+              <AsideContainer palette={palette}>
                 {isClosed ? (
                   <EndedPanel org={showcase.data?.org} />
                 ) : (
@@ -233,13 +237,13 @@ function EventDetailInner({ params }: Props) {
                           setGroupQty((prev) => ({ ...prev, [key]: qty }))
                         }
                         onPickGroup={(group) => router.push(buyHref(group) as never)}
-                        coverUrl={event?.coverUrl}
+                        palette={palette}
                       />
                     </div>
 
                     <BuyButton
                       onClick={() => router.push(buyHrefAll() as never)}
-                      event={event}
+                      palette={palette}
                       disabled={allSoldOut}
                     >
                       {allSoldOut
@@ -271,7 +275,7 @@ function EventDetailInner({ params }: Props) {
         <div className="mx-auto px-5 pt-3">
           <BuyButton
             onClick={() => router.push(buyHrefAll() as never)}
-            event={event}
+            palette={palette}
             disabled={isClosed || allSoldOut}
           >
             {isClosed
@@ -288,19 +292,36 @@ function EventDetailInner({ params }: Props) {
   );
 }
 
-/** Containers para poder usar el hook useImagePalette y modificar el color de acuerdo a la imagen */
-function PageContainer({ event, children }: { event: { coverUrl: string | null }; } & React.PropsWithChildren) {
-  const palette = useImagePalette(event?.coverUrl);
+/** Containers que reciben la paleta ya calculada (una sola vez) desde EventDetailInner. */
+function PageContainer({ palette, children }: { palette: Palette | null } & React.PropsWithChildren) {
   const tint = palette?.dark ?? "#0D0B14";
 
-  return <div className="min-h-dvh bg-cart-bg text-white" style={{ background: `radial-gradient(25% 25% at 20% 25%, ${tint}75 15%, ${tint}b3 100%)`, }}>
-    {children}
-  </div>
+  // cart-ink-3/4 son gris frío fijo — pensados para el fondo neutro cart-bg,
+  // no para un tinte cálido dinámico. Tailwind v4 genera `text-cart-ink-3`
+  // como `color: var(--color-cart-ink-3)`, así que sobreescribir la variable
+  // acá arriba corrige el contraste/armonía en TODO el árbol de una vez, sin
+  // tocar cada uso suelto (disponibilidad, hints, meta del evento, etc).
+  const themedVars = palette
+    ? ({
+        "--color-cart-ink-3": themedMutedText("#8e8ea1", tint, tint, 4.5),
+        "--color-cart-ink-4": themedMutedText("#5e5e70", tint, tint, 3),
+      } as React.CSSProperties)
+    : undefined;
+
+  return (
+    <div
+      className="min-h-dvh bg-cart-bg text-white"
+      style={{
+        background: `radial-gradient(25% 25% at 20% 25%, ${tint}75 15%, ${tint}b3 100%)`,
+        ...themedVars,
+      }}
+    >
+      {children}
+    </div>
+  );
 }
 
-function AsideContainer({ event, children }: { event: { coverUrl: string | null } } & React.PropsWithChildren) {
-  const palette = useImagePalette(event?.coverUrl);
-
+function AsideContainer({ palette, children }: { palette: Palette | null } & React.PropsWithChildren) {
   return (
     <div
       className="rounded-3xl border border-cart-line bg-cart-bg-elev p-5 shadow-[0_20px_60px_-20px_rgba(0,0,0,0.6)]"
@@ -313,14 +334,30 @@ function AsideContainer({ event, children }: { event: { coverUrl: string | null 
   );
 }
 
-function BuyButton({ children, event , ...props }: ButtonHTMLAttributes<HTMLButtonElement> & React.PropsWithChildren & { event: { coverUrl: string | null } } ) {
-  const palette = useImagePalette(event?.coverUrl);
+function BuyButton({
+  children,
+  palette,
+  disabled,
+  ...props
+}: ButtonHTMLAttributes<HTMLButtonElement> & React.PropsWithChildren & { palette: Palette | null }) {
+  // El tinte de marca solo aplica si el botón está activo — si no, las clases
+  // `disabled:` (gris, sin sombra) quedarían tapadas por el color inline.
+  const tinted = !disabled && palette?.accent;
+  // El acento extraído puede salir claro u oscuro según el flyer — el texto
+  // se elige por contraste real, no se asume blanco (bug del PR original:
+  // un acento claro con texto blanco fijo queda casi ilegible).
+  const textColor = tinted ? readableTextColor(palette.accent) : undefined;
 
   return (
     <button
       type="button"
+      disabled={disabled}
       className="mt-5 w-full rounded-full bg-cart-accent py-3.5 text-[14.5px] font-semibold text-cart-bg shadow-[0_8px_24px_-6px_var(--color-cart-accent-glow)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:bg-cart-bg-elev-2 disabled:text-cart-ink-3 disabled:shadow-none"
-      style={{ background: palette?.accent ?? undefined, boxShadow: palette?.accent ? `0 8px 24px -6px ${palette.accent}80` : undefined, color: palette?.accent ? "white" : undefined }}
+      style={
+        tinted
+          ? { background: palette.accent, boxShadow: `0 8px 24px -6px ${palette.accent}80`, color: textColor }
+          : undefined
+      }
       {...props}
     >
       {children}
@@ -372,12 +409,10 @@ function EndedPanel({ org }: { org?: ShowcaseOrg }) {
 
 /* ============================== Productora / cross-sell ============================== */
 
-function OrganizerChip({ org, coverUrl }: { org: ShowcaseOrg; coverUrl?: string | null }) {
+function OrganizerChip({ org, palette }: { org: ShowcaseOrg; palette: Palette | null }) {
   const initial = (org.name || "?")[0].toUpperCase();
-  const palette = useImagePalette(coverUrl ?? null);
   const bgStart = palette?.mid ?? palette?.dark ?? org.brandColor ?? "#7C3AED";
   const bgEnd = palette?.dark ?? "#1A0A2E";
-  const accent = palette?.accent ?? undefined;
   const borderColor = palette ? palette.dark ?? "rgba(255,255,255,10)" : "rgba(255,255,255,0.12)";
 
   const hasPalette = Boolean(palette && (palette.mid || palette.accent || palette.dark));
@@ -386,6 +421,11 @@ function OrganizerChip({ org, coverUrl }: { org: ShowcaseOrg; coverUrl?: string 
         background: palette?.dark ? `linear-gradient(135deg, ${bgStart}10, ${bgEnd}70)` : undefined,
         border: `1px solid ${borderColor ?? "rgba(255,255,255,0.12)"}`,
       }
+    : undefined;
+  // "Ver perfil" adopta el acento del flyer (combina con el resto de la
+  // página) solo si contrasta contra el fondo del chip — si no, blanco.
+  const chipLinkColor = palette?.accent
+    ? ensureContrast(palette.accent, bgEnd, "#ffffff", 3)
     : undefined;
 
   return (
@@ -400,8 +440,11 @@ function OrganizerChip({ org, coverUrl }: { org: ShowcaseOrg; coverUrl?: string 
           <img src={org.logoUrl} alt={org.name} className="size-full object-cover" />
         ) : (
           <div
-            className="grid size-full place-items-center text-[16px] font-bold text-white"
-            style={{ background: `linear-gradient(135deg, ${bgStart}, ${bgEnd})` }}
+            className="grid size-full place-items-center text-[16px] font-bold"
+            style={{
+              background: `linear-gradient(135deg, ${bgStart}, ${bgEnd})`,
+              color: readableTextColor(bgStart),
+            }}
           >
             {initial}
           </div>
@@ -413,7 +456,10 @@ function OrganizerChip({ org, coverUrl }: { org: ShowcaseOrg; coverUrl?: string 
         </div>
         <div className="truncate text-[14.5px] font-semibold">{org.name}</div>
       </div>
-      <span className="text-[12.5px] font-medium" style={accent ? { color: 'white' } : undefined }>
+      <span
+        className={chipLinkColor ? "text-[12.5px] font-medium" : "text-[12.5px] font-medium text-cart-accent"}
+        style={chipLinkColor ? { color: chipLinkColor } : undefined}
+      >
         Ver perfil →
       </span>
     </Link>
@@ -537,14 +583,14 @@ function GroupCardList({
   groupQty,
   onGroupQtyChange,
   onPickGroup,
-  coverUrl
+  palette,
 }: {
   groups: TicketGroup[];
   compact?: boolean;
   groupQty?: Record<string, number>;
   onGroupQtyChange?: (key: string, qty: number) => void;
   onPickGroup: (group: TicketGroup) => void;
-  coverUrl: string | null | undefined;
+  palette: Palette | null;
 }) {
   return (
     <div className={"flex flex-col " + (compact ? "gap-2" : "gap-2.5")}>
@@ -562,7 +608,7 @@ function GroupCardList({
             maxQty={maxQty}
             onQtyChange={onGroupQtyChange ? (q) => onGroupQtyChange(key, q) : undefined}
             onClick={() => onPickGroup(group)}
-            coverUrl={coverUrl}
+            palette={palette}
           />
         );
       })}
@@ -578,7 +624,7 @@ function GroupCard({
   maxQty,
   onQtyChange,
   onClick,
-  coverUrl
+  palette,
 }: {
   group: TicketGroup;
   summary: GroupSummary;
@@ -587,10 +633,8 @@ function GroupCard({
   maxQty: number;
   onQtyChange?: (qty: number) => void;
   onClick: () => void;
-  coverUrl: string | null | undefined;
+  palette: Palette | null;
 }) {
-    const palette = useImagePalette(coverUrl);
-
   // Título de la card: el NOMBRE de la entrada (una card por tipo). Los boxes
   // usan su etiqueta de grupo (unit_noun en plural: "Boxes", "Mesas").
   const single = group.items.length === 1 ? group.items[0] : null;
@@ -610,6 +654,14 @@ function GroupCard({
     onQtyChange?.(next);
   };
 
+  // Acento de la card: el del flyer si contrasta contra su propio fondo
+  // (radial-gradient con palette.dark) — si no, el morado de marca de
+  // siempre. Reemplaza el cart-accent fijo del botón "+ Elegir"/stepper/
+  // borde seleccionado, que quedaba peleado con paletas cálidas.
+  const cardBg = palette?.dark ?? "#0D0B14";
+  const cardAccent = palette?.accent ? ensureContrast(palette.accent, cardBg, "#B87CFF", 2.5) : "#B87CFF";
+  const stepperTextColor = readableTextColor(cardAccent);
+
   return (
     <div
       role="button"
@@ -622,12 +674,13 @@ function GroupCard({
         (summary.isAllSoldOut
           ? "border-cart-line opacity-55 cursor-not-allowed"
           : qty > 0
-            ? "border-cart-accent/60 shadow-[0_0_16px_-6px_var(--color-cart-accent-glow)] cursor-pointer"
+            ? "shadow-[0_0_16px_-6px_var(--color-cart-accent-glow)] cursor-pointer"
             : "border-cart-line hover:border-cart-line-strong hover:bg-cart-bg-elev/80 cursor-pointer") +
         (compact ? " px-3.5 py-3" : " px-4 py-4")
       }
       style={{
-        background: `radial-gradient(25% 25% at 20% 25%, ${palette?.dark ?? "#0D0B14"}75 15%, ${palette?.dark ?? "#0D0B14"}b3 100%)`,
+        background: `radial-gradient(25% 25% at 20% 25%, ${cardBg}75 15%, ${cardBg}b3 100%)`,
+        borderColor: !summary.isAllSoldOut && qty > 0 ? `${cardAccent}99` : undefined,
       }}
     >
       <div className="min-w-0 flex-1">
@@ -713,7 +766,8 @@ function GroupCard({
                   type="button"
                   onClick={(e) => handleCounterClick(e, +1)}
                   disabled={qty >= maxQty}
-                  className="grid size-7 place-items-center rounded-full bg-cart-accent text-cart-bg transition hover:brightness-110 disabled:opacity-40"
+                  className="grid size-7 place-items-center rounded-full transition hover:brightness-110 disabled:opacity-40"
+                  style={{ background: cardAccent, color: stepperTextColor }}
                   aria-label="Agregar una entrada"
                 >
                   <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
@@ -726,10 +780,11 @@ function GroupCard({
                 type="button"
                 onClick={(e) => handleCounterClick(e, +1)}
                 className={
-                  "rounded-full border border-cart-accent/50 px-3 py-1 text-cart-accent transition hover:bg-cart-accent/10 " +
+                  "rounded-full border px-3 py-1 transition hover:brightness-125 " +
                   (compact ? "text-[11px]" : "text-[12px]") +
                   " font-semibold"
                 }
+                style={{ borderColor: `${cardAccent}80`, color: cardAccent }}
                 aria-label="Seleccionar esta zona"
               >
                 + Elegir
@@ -742,8 +797,9 @@ function GroupCard({
             <span
               className={
                 "mt-2 inline-flex items-center gap-1 text-[11px] font-semibold lg:hidden " +
-                (summary.isAllSoldOut ? "text-cart-ink-3" : "text-cart-accent")
+                (summary.isAllSoldOut ? "text-cart-ink-3" : "")
               }
+              style={summary.isAllSoldOut ? undefined : { color: cardAccent }}
             >
               {summary.isAllSoldOut ? "Agotado" : (
                 <>
@@ -815,12 +871,12 @@ function BoxAvailabilityBar({
 function FlyerCard({
   event,
   eventId,
+  palette,
 }: {
   event: { title: string; coverUrl: string | null; timezone: string };
   eventId: string;
-  startsAt: Date;
+  palette: Palette | null;
 }) {
-  const palette = useImagePalette(event.coverUrl);
   // Tinte oscuro del propio flyer para el overlay del blur-fill. Mientras
   // carga o si falla CORS → base de marca.
   const tint = palette?.dark ?? "#0D0B14";
@@ -1092,11 +1148,18 @@ function DescriptionBlock({ text }: { text: string }) {
   );
 }
 
-function FeatureGrid({ coverUrl }: { coverUrl?: string | null }) {
-  const palette = useImagePalette(coverUrl ?? null);
-  const accent = palette?.accent ?? "#7C3AED";
+function FeatureGrid({ palette }: { palette: Palette | null }) {
   const borderColor = palette ? palette.dark ?? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.12)";
-  const iconColor = accent;
+  // El icono va sobre el fondo de la card — si el acento extraído resulta
+  // demasiado oscuro para ese fondo, cae al morado de marca en vez de
+  // quedar invisible.
+  const iconColor = palette?.accent
+    ? ensureContrast(palette.accent, "#12121a", "#7C3AED", 2.5)
+    : "#7C3AED";
+  // Antes las 3 cards quedaban negras planas (bg-cart-bg-elev fijo) mientras
+  // el resto de la página ya estaba tenida — se veían "pegadas" encima.
+  // Mezclamos el tinte con el elev oscuro de siempre para que combinen.
+  const chipBg = palette?.dark ? mixColors(palette.dark, "#12121a", 0.55) : undefined;
 
   return (
     <div className="mt-7 grid grid-cols-3 gap-2">
@@ -1106,6 +1169,7 @@ function FeatureGrid({ coverUrl }: { coverUrl?: string | null }) {
         sub="o tarjeta"
         borderColor={borderColor}
         iconColor={iconColor}
+        bg={chipBg}
       />
       <FeatureChip
         icon={
@@ -1120,6 +1184,7 @@ function FeatureGrid({ coverUrl }: { coverUrl?: string | null }) {
         sub="sin esperas"
         borderColor={borderColor}
         iconColor={iconColor}
+        bg={chipBg}
       />
       <FeatureChip
         icon={
@@ -1136,6 +1201,7 @@ function FeatureGrid({ coverUrl }: { coverUrl?: string | null }) {
         sub="entrada válida"
         borderColor={borderColor}
         iconColor={iconColor}
+        bg={chipBg}
       />
     </div>
   );
@@ -1147,17 +1213,19 @@ function FeatureChip({
   sub,
   borderColor,
   iconColor,
+  bg,
 }: {
   icon: React.ReactNode;
   label: string;
   sub: string;
   borderColor?: string;
   iconColor?: string;
+  bg?: string;
 }) {
   return (
     <div
-      className="flex flex-col items-start gap-1.5 rounded-2xl bg-cart-bg-elev/60 px-3.5 py-3"
-      style={{ border: `1px solid ${borderColor ?? "rgba(255,255,255,0.12)"}` }}
+      className={"flex flex-col items-start gap-1.5 rounded-2xl px-3.5 py-3" + (bg ? "" : " bg-cart-bg-elev/60")}
+      style={{ border: `1px solid ${borderColor ?? "rgba(255,255,255,0.12)"}`, background: bg }}
     >
       <span className="text-white" style={{ color: iconColor ?? "#7C3AED" }}>
         {icon}

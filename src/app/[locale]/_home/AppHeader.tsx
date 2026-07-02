@@ -21,7 +21,19 @@ export type NavUser = {
 // Composition pattern: AppHeader solo aporta el "marco" sticky + la fila flex.
 // Cada página compone su header con las piezas que necesita (Brand, Search,
 // Actions…). La home incluye el buscador; /tickets y /profile no.
-export function AppHeader({ children, below }: { children: ReactNode; below?: ReactNode }) {
+export function AppHeader({
+  children,
+  below,
+  tint,
+}: {
+  children: ReactNode;
+  below?: ReactNode;
+  /** Color dominante de la imagen de la página (ej. paleta del flyer del evento)
+   *  para que el header combine con el resto de la pantalla en vez de quedar
+   *  como una barra negra plana encima. Opcional — sin él, el header usa su
+   *  fondo neutro de siempre (home, tickets, perfil, etc). */
+  tint?: string;
+}) {
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -34,6 +46,10 @@ export function AppHeader({ children, below }: { children: ReactNode; below?: Re
     <header
       className={`sticky top-0 z-50 backdrop-blur-md backdrop-saturate-150 border-b transition-[border-color,background] duration-200 ${scrolled ? "border-cart-line bg-cart-bg/[0.92]" : "border-transparent bg-cart-bg/80"
         }`}
+      // Mismo tono siempre (no varía con el scroll como el header neutro) —
+      // así no hay una costura visible contra el fondo de la página, que usa
+      // este mismo `tint` de base.
+      style={tint ? { background: `${tint}f0` } : undefined}
     >
       <div className="mx-auto flex h-[68px] max-w-[1320px] items-center gap-[18px] px-[clamp(20px,4vw,56px)] max-[560px]:h-[60px] max-[560px]:gap-2">
         {children}

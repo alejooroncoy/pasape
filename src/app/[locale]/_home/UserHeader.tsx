@@ -16,7 +16,7 @@ import { SignInDrawer } from "./SignInDrawer";
 // Header de las páginas de usuario (tickets, perfil). Misma composición que la
 // home pero SIN buscador ni strip de categorías — solo marca, ciudad y cuenta.
 // Trae su propio SideDrawer + SignInDrawer para que el menú/cuenta funcionen.
-export function UserHeader() {
+export function UserHeader({ tint }: { tint?: string } = {}) {
   const me = useCurrentUser();
   const router = useRouter();
   const user = me.data?.user
@@ -28,7 +28,7 @@ export function UserHeader() {
 
   return (
     <>
-      <AppHeader>
+      <AppHeader tint={tint}>
         <HeaderBrand mobileLabel />
         <HeaderCity />
         <HeaderSpacer />

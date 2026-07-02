@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ensureDarkBackground } from "./color";
 
 // Extrae colores dominantes de una imagen (client-side, sin deps).
 // Dibuja la imagen en un canvas chico y separa los píxeles en buckets de
@@ -68,7 +69,11 @@ function extractPalette(img: HTMLImageElement): Palette | null {
   const [mr, mg, mb] = avg(mid, [dr * 1.6, dg * 1.6, db * 1.6]);
 
   return {
-    dark: toHex(dr, dg, db),
+    // El bucket "oscuro" promedia píxeles con lum<80 — en flyers muy claros
+    // (pasteles) ese promedio puede quedar menos oscuro de lo que su nombre
+    // promete. `ensureDarkBackground` lo fuerza a servir como fondo grande
+    // detrás de texto blanco fijo (header, gradiente de página, aside).
+    dark: ensureDarkBackground(toHex(dr, dg, db)),
     mid: toHex(mr, mg, mb),
     accent: toHex(accR, accG, accB),
   };
