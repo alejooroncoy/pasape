@@ -20,11 +20,7 @@ export const FAQS = [
   },
   {
     q: "¿Cómo mido a mis promotores?",
-    a: "Cada promotor tiene su link único y su código. Toda venta que entre por ahí queda atribuida a él. Al cierre ves cuánto vendió cada uno, sin discutir.",
-  },
-  {
-    q: "¿Y si no tengo promotores?",
-    a: "Puedes vender solo con el link de tu evento. Los promotores son opcionales: cuando los sumes, cada uno lleva su código y ves quién vendió qué al cierre.",
+    a: "Cada promotor tiene su link único y su código. Toda venta que entre por ahí queda atribuida a él, sin discutir. Y si no tienes promotores, vendes solo con el link de tu evento.",
   },
   {
     q: "¿Cómo se valida en puerta?",
@@ -34,15 +30,11 @@ export const FAQS = [
     q: "¿Cualquiera puede publicar un evento?",
     a: "Puedes crear tu evento rápido, pero las ventas se activan después de una revisión simple de Pasape. Esto ayuda a evitar eventos falsos y proteger a compradores y organizadores.",
   },
-  {
-    q: "¿Pasape reemplaza a Joinnus?",
-    a: "Pasape está hecho para fiestas que necesitan combos, promotores medidos y orden en puerta. No es solo publicar entradas.",
-  },
 ];
 
 export function Faq() {
   return (
-    <section id="faq" className="border-t border-line bg-bg-elev/15 py-16 md:py-30">
+    <section id="faq" className="border-t border-line bg-bg-elev/15 py-14 md:py-20">
       <div className="mx-auto w-full max-w-[1160px] px-[22px] md:px-8">
         <SectionHeader
           eyebrow="Preguntas frecuentes"
@@ -52,7 +44,7 @@ export function Faq() {
             </>
           }
         />
-        <div className="mt-12 grid grid-cols-1 gap-0 md:grid-cols-2 md:gap-x-10">
+        <div className="mt-10 grid grid-cols-1 gap-0 md:grid-cols-2 md:gap-x-10">
           {FAQS.map((f) => (
             <details
               key={f.q}

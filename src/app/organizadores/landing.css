@@ -109,8 +109,8 @@ input, select, textarea { font: inherit; color: inherit; }
 /* ============ Reveal on scroll ============ */
 @utility reveal {
   opacity: 0;
-  transform: translateY(14px);
-  transition: opacity 0.8s var(--ease-reveal), transform 0.8s var(--ease-reveal);
+  transform: translateY(10px);
+  transition: opacity 0.6s var(--ease-reveal), transform 0.6s var(--ease-reveal);
 }
 .reveal.in {
   opacity: 1;
@@ -196,70 +196,11 @@ input, select, textarea { font: inherit; color: inherit; }
 }
 .prob-card:hover::before { opacity: 1; }
 
-/* ============ COMBOS stack (positioning + hover rotations) ============ */
-@utility combo-stack {
-  position: relative;
-  width: 100%;
-  max-width: 440px;
-  margin: 0 auto;
-  aspect-ratio: 5 / 4;
-}
-.combo-stack .mini-ticket {
-  position: absolute;
-  width: 78%;
-  background: var(--color-bg-elev);
-  border: 1px solid var(--color-line-strong);
-  border-radius: 14px;
-  padding: 14px 16px;
-  box-shadow: 0 20px 40px -16px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(184, 124, 255, 0.06);
-  display: grid;
-  grid-template-columns: 56px 1fr;
-  gap: 12px;
-  align-items: center;
-  transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-.combo-stack .mini-ticket .qr-mini {
-  width: 56px;
-  height: 56px;
-  background: #fff;
-  border-radius: 8px;
-  padding: 5px;
-  display: grid;
-  place-items: center;
-}
-.combo-stack .mini-ticket .qr-mini svg { width: 100%; height: 100%; }
-.combo-stack .mini-ticket .mt-label {
-  font-family: var(--font-mono);
-  font-size: 9px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--color-ink-3);
-  font-weight: 500;
-}
-.combo-stack .mini-ticket .mt-name {
-  font-family: var(--font-display);
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  margin-top: 3px;
-  color: var(--color-ink);
-}
-.combo-stack .mini-ticket .mt-code {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--color-accent);
-  margin-top: 2px;
-}
-.combo-stack .mini-ticket.t1 { top: 0%;   left: 0%;  transform: rotate(-4deg); z-index: 3; }
-.combo-stack .mini-ticket.t2 { top: 28%;  left: 14%; transform: rotate(1.5deg); z-index: 2; }
-.combo-stack .mini-ticket.t3 { top: 56%;  left: 4%;  transform: rotate(-2.5deg); z-index: 1; }
-.combo-stack:hover .mini-ticket.t1 { transform: rotate(-6deg) translate(-6px, -4px); }
-.combo-stack:hover .mini-ticket.t3 { transform: rotate(-4deg) translate(-2px, 4px); }
 /* ============ Hero product preview ============ */
 .hero-preview {
   position: relative;
   width: 100%;
-  max-width: min(340px, 92vw);
+  max-width: min(290px, 82vw);
   margin-inline: auto;
 }
 @media (min-width: 768px) {
@@ -311,7 +252,7 @@ input, select, textarea { font: inherit; color: inherit; }
 }
 @media (max-width: 767px) {
   .hero-preview {
-    max-width: min(340px, 92vw);
+    max-width: min(290px, 82vw);
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -330,26 +271,6 @@ input, select, textarea { font: inherit; color: inherit; }
   opacity: 0.05;
   mix-blend-mode: overlay;
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='bfn'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 1 0'/></filter><rect width='220' height='220' filter='url(%23bfn)'/></svg>");
-}
-
-@utility combo-pill {
-  position: absolute;
-  bottom: -4px;
-  right: 4%;
-  background: var(--color-accent);
-  color: #fff;
-  border-radius: 999px;
-  padding: 9px 14px;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18) inset, 0 14px 30px -8px var(--color-accent-glow);
-  z-index: 4;
 }
 
 /* ============ Nav scroll-driven darken ============ */

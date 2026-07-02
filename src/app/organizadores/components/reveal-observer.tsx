@@ -18,7 +18,9 @@ export function RevealObserver() {
           }
         });
       },
-      { rootMargin: "0px 0px -8% 0px", threshold: 0.05 },
+      // Margen positivo: revela justo antes de entrar al viewport, para que
+      // nunca se perciban secciones vacías al scrollear.
+      { rootMargin: "0px 0px 15% 0px", threshold: 0 },
     );
     els.forEach((el) => io.observe(el));
     return () => io.disconnect();

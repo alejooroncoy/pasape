@@ -2,30 +2,22 @@ import { SectionHeader } from "./ui/section-header";
 
 const STEPS = [
   {
-    t: "Crea tu evento",
-    d: "Nombre, fecha, lugar, tipos de entrada y stock. Obtienes un link público.",
+    t: "Crea tu evento y comparte el link",
+    d: "Nombre, fecha, entradas, combos y preventa. Obtienes un link público para WhatsApp, Instagram o bio.",
   },
   {
-    t: "Comparte el link",
-    d: "Por WhatsApp, Instagram, bio o donde tus asistentes te encuentren.",
+    t: "Vende sin responder DMs",
+    d: "Cada entrada lleva su QR único. Los combos se reparten solos y cada promotor vende con su propio link.",
   },
   {
-    t: "Vende entradas y combos",
-    d: "Cada entrada lleva su QR único. Los combos se reparten automáticamente.",
-  },
-  {
-    t: "Valida en puerta",
-    d: "Escanea desde la web. Si alguien no encuentra su QR, búscalo por DNI, nombre o teléfono.",
-  },
-  {
-    t: "Revisa resultados",
-    d: "Ventas, accesos, combos, promotores y base de asistentes para tu próxima fecha.",
+    t: "Valida en puerta y mira todo en vivo",
+    d: "Escanea desde la web. Ventas, accesos y promotores corren en tu panel en tiempo real.",
   },
 ];
 
 export function ComoFunciona() {
   return (
-    <section id="como-funciona" className="border-y border-line bg-bg-elev/20 py-16 md:py-30">
+    <section id="como-funciona" className="border-y border-line bg-bg-elev/20 py-14 md:py-20">
       <div className="mx-auto w-full max-w-[1160px] px-[22px] md:px-8">
         <SectionHeader
           eyebrow="Cómo funciona"
@@ -36,7 +28,7 @@ export function ComoFunciona() {
           }
         />
 
-        <ol className="relative mt-14 grid list-none gap-0 p-0 md:grid-cols-5 md:gap-5">
+        <ol className="relative mt-10 grid list-none gap-0 p-0 md:grid-cols-3 md:gap-5">
           <div
             aria-hidden="true"
             className="pointer-events-none absolute left-[22px] top-6 bottom-6 hidden w-px bg-gradient-to-b from-accent/50 via-line to-transparent md:left-[calc(10%+22px)] md:block lg:hidden"
