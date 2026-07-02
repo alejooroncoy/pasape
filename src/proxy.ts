@@ -23,13 +23,13 @@ export default async function proxy(req: NextRequest) {
 }
 
 export const config = {
-  // Excluimos `organizadores` del intl middleware porque es landing B2B
-  // independiente del routing de locale.
+  // `organizadores` (landing B2B) ya vive bajo [locale] — pasa por el intl
+  // middleware como cualquier otra ruta, preparado para más idiomas.
   // Excluimos `auth/callback` para que reciba el `code` sin redirects de i18n.
   // Excluimos `monitoring` (tunnelRoute de Sentry) para que no lo locale-routee.
   // Excluimos las rutas de metadatos de imagen (opengraph-image/twitter-image),
   // que viven en la raíz y no deben recibir prefijo de locale.
   matcher: [
-    "/((?!api|_next|_vercel|monitoring|organizadores|auth/callback|opengraph-image|twitter-image|.*\\..*).*)",
+    "/((?!api|_next|_vercel|monitoring|auth/callback|opengraph-image|twitter-image|.*\\..*).*)",
   ],
 };

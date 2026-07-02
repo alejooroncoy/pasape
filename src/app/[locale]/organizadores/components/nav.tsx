@@ -1,6 +1,7 @@
 "use client";
 
-import Link from "next/link";
+import { useLocale } from "next-intl";
+import { Link } from "@/i18n/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "./ui/button";
 import { Icon } from "./icons";
@@ -15,6 +16,8 @@ const LINKS = [
 ];
 
 export function Nav(_props: { waHref?: string }) {
+  const locale = useLocale();
+  const orgHref = `/${locale}/org`;
   const [menuOpen, setMenuOpen] = useState(false);
   const headerRef = useRef<HTMLElement>(null);
   const burgerRef = useRef<HTMLButtonElement>(null);
@@ -112,7 +115,7 @@ export function Nav(_props: { waHref?: string }) {
           </Link>
           {/* Ingresar al panel — CTA primario para organizadores */}
           <Button
-            href="/es/org"
+            href={orgHref}
             aria-label="Ingresar al panel de organizador"
             className="px-[18px] py-2.5 text-sm"
           >
@@ -179,7 +182,7 @@ export function Nav(_props: { waHref?: string }) {
         </nav>
         <div className="nav-drawer-foot flex flex-col gap-2.5">
           <Button
-            href="/es/org"
+            href={orgHref}
             onClick={() => setMenuOpen(false)}
             className="w-full justify-center px-[18px] py-3.5 text-[15px]"
           >
