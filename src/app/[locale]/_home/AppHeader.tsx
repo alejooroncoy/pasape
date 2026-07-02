@@ -46,10 +46,12 @@ export function AppHeader({
     <header
       className={`sticky top-0 z-50 backdrop-blur-md backdrop-saturate-150 border-b transition-[border-color,background] duration-200 ${scrolled ? "border-cart-line bg-cart-bg/[0.92]" : "border-transparent bg-cart-bg/80"
         }`}
-      // Mismo tono siempre (no varía con el scroll como el header neutro) —
-      // así no hay una costura visible contra el fondo de la página, que usa
-      // este mismo `tint` de base.
-      style={tint ? { background: `${tint}f0` } : undefined}
+      // Mismo tono siempre (no varía con el scroll como el header neutro).
+      // Alfa `b3` para que coincida con el stop exterior del radial-gradient
+      // de PageContainer — es el tono que domina la página lejos de la
+      // esquina superior izquierda (donde está el flyer), que es contra lo
+      // que el header hace borde en la mayor parte de su ancho.
+      style={tint ? { background: `${tint}b3` } : undefined}
     >
       <div className="mx-auto flex h-[68px] max-w-[1320px] items-center gap-[18px] px-[clamp(20px,4vw,56px)] max-[560px]:h-[60px] max-[560px]:gap-2">
         {children}
