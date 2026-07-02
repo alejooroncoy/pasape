@@ -38,6 +38,29 @@ import type {
 } from "@/server/events/domain/Event";
 import { CATEGORIES } from "../../../_home/categories";
 import { createSupabaseBrowserClient } from "@/server/_shared/supabase/client";
+import { extractFlyerPaletteFromUrl } from "@/lib/_shared/extractFlyerPalette";
+import { derivePalette, readableTextColor, type Palette } from "@/lib/_shared/color";
+
+// Morado de marca — default cuando el organizador no elige/sube nada.
+const BRAND_ACCENT = "#b87cff";
+const BRAND_PALETTE: Palette = derivePalette(BRAND_ACCENT);
+
+// Gradiente de respaldo del flyer (antes de subir foto) — se colorea con la
+// paleta elegida, para que cambiarla se vea EN VIVO en la propia página en
+// vez de en una maqueta aparte.
+function paletteGradient(p: Palette): string {
+  return `linear-gradient(135deg, ${p.dark} 0%, ${p.accent} 60%, ${p.mid} 100%)`;
+}
+
+// El organizador nunca tocó nada → misma paleta derivada del morado de
+// marca con la que arrancó el composer.
+function isBrandPalette(p: Palette): boolean {
+  return (
+    p.dark === BRAND_PALETTE.dark &&
+    p.mid === BRAND_PALETTE.mid &&
+    p.accent === BRAND_PALETTE.accent
+  );
+}
 
 // ============================================================
 // Tipos
@@ -314,6 +337,10 @@ export function EventComposer(props: EventComposerProps) {
       durationHours: durationHoursFromEdit > 0 ? String(durationHoursFromEdit) : "",
       venue: venueValue,
       coverUrl: ev.coverUrl,
+      palette:
+        ev.paletteDark && ev.paletteMid && ev.paletteAccent
+          ? { dark: ev.paletteDark, mid: ev.paletteMid, accent: ev.paletteAccent }
+          : null,
       layoutUrl: ev.venueLayoutUrl,
       tickets:
         rows.length > 0
@@ -388,6 +415,14 @@ export function EventComposer(props: EventComposerProps) {
   const [coverPreview, setCoverPreview] = useState<string | null>(
     seedFromEdit?.coverUrl ?? null,
   );
+  // Paleta del evento (fondo/medio/acento): se extrae del flyer al subirlo
+  // (los 3 combinan porque salen de la imagen real, no se derivan
+  // matemáticamente uno de otro) y cada tono es editable por separado.
+  // Default = derivado del morado de marca hasta que suba un flyer.
+  const [palette, setPalette] = useState<Palette>(
+    seedFromEdit?.palette ?? BRAND_PALETTE,
+  );
+  const [extractingPalette, setExtractingPalette] = useState(false);
   const [layoutFile, setLayoutFile] = useState<File | null>(null);
   const [layoutPreview, setLayoutPreview] = useState<string | null>(
     seedFromEdit?.layoutUrl ?? null,
@@ -598,6 +633,12 @@ export function EventComposer(props: EventComposerProps) {
         venueSource: venue.source,
         venueLayoutUrl,
         coverUrl,
+        // BRAND_PALETTE sin tocar = "no personalizó nada" → null en los 3,
+        // para que la página del evento no aplique ningún tinte (se ve como
+        // el Pasape normal en vez de un wash de fondo).
+        ...(isBrandPalette(palette)
+          ? { paletteDark: null, paletteMid: null, paletteAccent: null }
+          : { paletteDark: palette.dark, paletteMid: palette.mid, paletteAccent: palette.accent }),
         startsAt,
         endsAt,
         timezone: "America/Lima",
@@ -694,6 +735,12 @@ export function EventComposer(props: EventComposerProps) {
           : null;
       if (nextEndsAt !== ev.endsAt) patch.endsAt = nextEndsAt;
       if (nextCoverUrl !== undefined) patch.coverUrl = nextCoverUrl;
+      const nextDark = isBrandPalette(palette) ? null : palette.dark;
+      const nextMid = isBrandPalette(palette) ? null : palette.mid;
+      const nextAccent = isBrandPalette(palette) ? null : palette.accent;
+      if (nextDark !== ev.paletteDark) patch.paletteDark = nextDark;
+      if (nextMid !== ev.paletteMid) patch.paletteMid = nextMid;
+      if (nextAccent !== ev.paletteAccent) patch.paletteAccent = nextAccent;
       if (nextLayoutUrl !== undefined) patch.venueLayoutUrl = nextLayoutUrl;
 
       const desiredStatus: EventDomain["status"] = publishNow
@@ -792,11 +839,36 @@ export function EventComposer(props: EventComposerProps) {
 
   const handlePublish = isEdit ? handleEdit : handleCreate;
 
-  const onPickCover = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // Reutilizable: dispara tanto desde el <input> (click) como desde el drop
+  // — la imagen se queda local (preview) hasta crear/actualizar. La paleta
+  // ya NO se extrae sola: el organizador decide con el botón "Color de la
+  // portada" (evita que un flyer con colores raros arruine el tono elegido).
+  const handleCoverFile = (file: File) => {
     setCoverFile(file);
     setCoverPreview(URL.createObjectURL(file));
+  };
+
+  const extractPaletteFromCover = () => {
+    // Funciona con la portada recién elegida (blob: URL) y con la que ya
+    // estaba guardada al entrar a editar (URL del storage) — ambas viven en
+    // `coverPreview`, no hace falta haber tocado el <input> en esta sesión.
+    if (!coverPreview) return;
+    setExtractingPalette(true);
+    extractFlyerPaletteFromUrl(coverPreview)
+      .then((extracted) => {
+        if (extracted) setPalette(extracted);
+      })
+      .finally(() => setExtractingPalette(false));
+  };
+
+  const resetPaletteToDefault = () => setPalette(BRAND_PALETTE);
+
+  const onRemoveCover = () => {
+    setCoverFile(null);
+    setCoverPreview(null);
+    // La paleta es independiente de la portada — quitar la foto no debe
+    // tocar los colores que el organizador ya eligió (con "Volver a
+    // original" puede resetearla a mano si quiere).
   };
 
   const onPickLayout = (e: ChangeEvent<HTMLInputElement>) => {
@@ -880,7 +952,17 @@ export function EventComposer(props: EventComposerProps) {
               time={time}
               venueName={venue.name}
               coverPreview={coverPreview}
-              onPickCover={onPickCover}
+              palette={palette}
+              onCoverFile={handleCoverFile}
+              onRemoveCover={onRemoveCover}
+            />
+            <PaletteEditor
+              palette={palette}
+              loading={extractingPalette}
+              onChange={setPalette}
+              canExtractFromCover={!!coverPreview}
+              onExtractFromCover={extractPaletteFromCover}
+              onResetToDefault={resetPaletteToDefault}
             />
             <div className="mt-3 hidden flex-col gap-2 text-[12px] text-cart-ink-3 lg:flex">
               <div className="flex items-center justify-between rounded-2xl border border-cart-line bg-cart-bg-elev px-3.5 py-2.5">
@@ -920,7 +1002,19 @@ export function EventComposer(props: EventComposerProps) {
           {isEdit && (
             <CoverEditor
               coverPreview={coverPreview}
-              onPickCover={onPickCover}
+              palette={palette}
+              onCoverFile={handleCoverFile}
+              onRemoveCover={onRemoveCover}
+            />
+          )}
+          {isEdit && (
+            <PaletteEditor
+              palette={palette}
+              loading={extractingPalette}
+              onChange={setPalette}
+              canExtractFromCover={!!coverPreview}
+              onExtractFromCover={extractPaletteFromCover}
+              onResetToDefault={resetPaletteToDefault}
             />
           )}
 
@@ -1177,6 +1271,7 @@ export function EventComposer(props: EventComposerProps) {
                 publishNow={publishNow}
                 onClick={handlePublish}
                 isPending={submitting}
+                accent={palette.accent}
               />
             </div>
           )}
@@ -1190,6 +1285,7 @@ export function EventComposer(props: EventComposerProps) {
                 publishNow={publishNow}
                 onClick={handlePublish}
                 isPending={submitting}
+                accent={palette.accent}
                 full
               />
             </div>
@@ -1210,6 +1306,7 @@ export function EventComposer(props: EventComposerProps) {
               publishNow={publishNow}
               onClick={handlePublish}
               isPending={submitting}
+                accent={palette.accent}
               full
             />
           </div>
@@ -1267,37 +1364,181 @@ export function EventComposer(props: EventComposerProps) {
 }
 
 // ============================================================
+// Editor de paleta del evento — 3 tonos que COMBINAN entre sí (fondo, medio,
+// acento), extraídos directamente del flyer al subirlo. Cada uno es
+// independientemente editable (toca el círculo → su propio color picker) en
+// vez de solo "agregar" un color aparte — el organizador puede ajustar
+// cualquiera de los 3 sin perder los otros dos.
+//
+// No hay un mini-preview aparte: la paleta se aplica EN VIVO al flyer de
+// respaldo y al botón principal del composer (ver `paletteGradient` y
+// `SmartCta`) — el organizador ve la página real cambiar de color.
+// ============================================================
+function PaletteEditor({
+  palette,
+  loading,
+  canExtractFromCover,
+  onChange,
+  onExtractFromCover,
+  onResetToDefault,
+}: {
+  palette: Palette;
+  loading: boolean;
+  canExtractFromCover: boolean;
+  onChange: (p: Palette) => void;
+  onExtractFromCover: () => void;
+  onResetToDefault: () => void;
+}) {
+  const roles: Array<{ key: keyof Palette; label: string }> = [
+    { key: "dark", label: "Fondo" },
+    { key: "mid", label: "Medio" },
+    { key: "accent", label: "Acento" },
+  ];
+
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-2.5 rounded-2xl border border-cart-line bg-cart-bg-elev px-3.5 py-2.5">
+      <span className="shrink-0 text-[12px] font-medium text-cart-ink-2">
+        Color del evento
+      </span>
+      <div className="flex items-center gap-3 overflow-x-auto">
+        {roles.map(({ key, label }) => (
+          <PaletteRoleSwatch
+            key={key}
+            label={label}
+            hex={palette[key]}
+            onChange={(hex) => onChange({ ...palette, [key]: hex })}
+          />
+        ))}
+        {loading && (
+          <span className="size-7 shrink-0 animate-pulse rounded-full bg-cart-bg-elev-2" />
+        )}
+      </div>
+      <div className="ml-auto flex shrink-0 items-center gap-2">
+        <button
+          type="button"
+          onClick={onResetToDefault}
+          disabled={loading}
+          className="rounded-full border border-cart-line px-3 py-1.5 text-[11.5px] font-medium text-cart-ink-2 transition hover:border-cart-line-strong hover:text-white disabled:pointer-events-none disabled:opacity-40"
+        >
+          Volver a original
+        </button>
+        <button
+          type="button"
+          onClick={onExtractFromCover}
+          disabled={!canExtractFromCover || loading}
+          title={canExtractFromCover ? undefined : "Sube una portada primero"}
+          className="rounded-full border border-cart-line px-3 py-1.5 text-[11.5px] font-medium text-cart-ink-2 transition hover:border-cart-line-strong hover:text-white disabled:pointer-events-none disabled:opacity-40"
+        >
+          Color de la portada
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function PaletteRoleSwatch({
+  label,
+  hex,
+  onChange,
+}: {
+  label: string;
+  hex: string;
+  onChange: (hex: string) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  return (
+    <div className="flex shrink-0 flex-col items-center gap-1">
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        aria-label={`Editar color de ${label.toLowerCase()}`}
+        className="grid size-7 place-items-center rounded-full transition"
+        style={{ background: hex, boxShadow: "0 0 0 1px rgba(255,255,255,0.15)" }}
+      >
+        <svg width="11" height="11" viewBox="0 0 14 14" fill="none">
+          <path d="M3 4h2l1-1.5h2L9 4h2v6H3V4z" stroke={readableTextColor(hex)} strokeWidth="1.3" />
+          <circle cx="7" cy="7" r="1.6" stroke={readableTextColor(hex)} strokeWidth="1.3" />
+        </svg>
+      </button>
+      <span className="text-[9px] font-medium uppercase tracking-wide text-cart-ink-4">
+        {label}
+      </span>
+      <input
+        ref={inputRef}
+        type="color"
+        value={hex}
+        onChange={(e) => onChange(e.target.value)}
+        className="sr-only"
+      />
+    </div>
+  );
+}
+
+// ============================================================
 // Cover editor (solo en edit, inline arriba)
 // ============================================================
 function CoverEditor({
   coverPreview,
-  onPickCover,
+  palette,
+  onCoverFile,
+  onRemoveCover,
 }: {
   coverPreview: string | null;
-  onPickCover: (e: ChangeEvent<HTMLInputElement>) => void;
+  palette: Palette;
+  onCoverFile: (file: File) => void;
+  onRemoveCover: () => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
   return (
-    <div className="relative aspect-[16/9] w-full overflow-hidden rounded-2xl border border-cart-line bg-cart-bg-elev">
+    <div
+      onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+      onDragLeave={() => setIsDragging(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setIsDragging(false);
+        const file = e.dataTransfer.files?.[0];
+        if (file && file.type.startsWith("image/")) onCoverFile(file);
+      }}
+      className={`relative aspect-[16/9] w-full overflow-hidden rounded-2xl border bg-cart-bg-elev transition-colors ${
+        isDragging ? "border-2 border-dashed border-white/70" : "border-cart-line"
+      }`}
+    >
       {coverPreview ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={coverPreview} alt="" className="absolute inset-0 size-full object-cover" />
       ) : (
-        <div
-          className="absolute inset-0"
-          style={{
-            background: "linear-gradient(135deg, #4B1F9A 0%, #7C3AED 35%, #FF4D5E 100%)",
-          }}
-        />
+        <div className="absolute inset-0" style={{ background: paletteGradient(palette) }} />
       )}
       <div className="absolute inset-0 bg-linear-to-t from-black/60 via-black/10 to-transparent" />
+      {isDragging && (
+        <div className="absolute inset-0 grid place-items-center bg-black/50 text-[13px] font-medium text-white">
+          Suelta la imagen aquí
+        </div>
+      )}
       <input
         ref={inputRef}
         type="file"
         accept="image/*"
-        onChange={onPickCover}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) onCoverFile(file);
+          e.target.value = "";
+        }}
         className="sr-only"
       />
+      {coverPreview && (
+        <button
+          type="button"
+          onClick={onRemoveCover}
+          aria-label="Quitar portada"
+          className="absolute left-3 top-3 grid size-8 place-items-center rounded-full border border-white/20 bg-black/45 text-white backdrop-blur transition hover:bg-black/70"
+        >
+          <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
+            <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          </svg>
+        </button>
+      )}
       <button
         type="button"
         onClick={() => inputRef.current?.click()}
@@ -1322,31 +1563,48 @@ function FlyerCard({
   time,
   venueName,
   coverPreview,
-  onPickCover,
+  palette,
+  onCoverFile,
+  onRemoveCover,
 }: {
   title: string;
   dateLong: string | null;
   time: string;
   venueName: string;
   coverPreview: string | null;
-  onPickCover: (e: ChangeEvent<HTMLInputElement>) => void;
+  palette: Palette;
+  onCoverFile: (file: File) => void;
+  onRemoveCover: () => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   return (
-    <div className="relative aspect-4/5 w-full overflow-hidden rounded-[28px] border border-cart-line-strong bg-cart-bg-elev">
+    <div
+      onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+      onDragLeave={() => setIsDragging(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setIsDragging(false);
+        const file = e.dataTransfer.files?.[0];
+        if (file && file.type.startsWith("image/")) onCoverFile(file);
+      }}
+      className={`relative aspect-4/5 w-full overflow-hidden rounded-[28px] border bg-cart-bg-elev transition-colors ${
+        isDragging ? "border-2 border-dashed border-white/70" : "border-cart-line-strong"
+      }`}
+    >
       {coverPreview ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={coverPreview} alt="" className="absolute inset-0 size-full object-cover" />
       ) : (
-        <div
-          className="absolute inset-0"
-          style={{
-            background: "linear-gradient(135deg, #4B1F9A 0%, #7C3AED 35%, #FF4D5E 100%)",
-          }}
-        />
+        <div className="absolute inset-0" style={{ background: paletteGradient(palette) }} />
       )}
       <div className="absolute inset-0 bg-linear-to-t from-black/85 via-black/30 to-transparent" />
+      {isDragging && (
+        <div className="absolute inset-0 z-10 grid place-items-center bg-black/50 text-[13px] font-medium text-white">
+          Suelta la imagen aquí
+        </div>
+      )}
       <div className="absolute inset-x-0 bottom-0 p-5">
         {(dateLong || time) && (
           <div className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-white/85">
@@ -1364,20 +1622,38 @@ function FlyerCard({
         ref={inputRef}
         type="file"
         accept="image/*"
-        onChange={onPickCover}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) onCoverFile(file);
+          e.target.value = "";
+        }}
         className="sr-only"
       />
-      <button
-        type="button"
-        onClick={() => inputRef.current?.click()}
-        className="absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-black/45 px-3 py-1.5 text-[11.5px] font-medium text-white backdrop-blur transition hover:bg-black/70"
-      >
-        <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
-          <path d="M3 4h2l1-1.5h2L9 4h2v6H3V4z" stroke="currentColor" strokeWidth="1.4" />
-          <circle cx="7" cy="7" r="1.8" stroke="currentColor" strokeWidth="1.4" />
-        </svg>
-        {coverPreview ? "Cambiar portada" : "Subir portada"}
-      </button>
+      {coverPreview && (
+        <button
+          type="button"
+          onClick={onRemoveCover}
+          aria-label="Quitar portada"
+          className="absolute left-3 top-3 grid size-8 shrink-0 place-items-center rounded-full border border-white/20 bg-black/45 text-white backdrop-blur transition hover:bg-black/70"
+        >
+          <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
+            <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          </svg>
+        </button>
+      )}
+      <div className="absolute right-3 top-3 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-white/20 bg-black/45 px-3 py-1.5 text-[11.5px] font-medium text-white backdrop-blur transition hover:bg-black/70"
+        >
+          <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
+            <path d="M3 4h2l1-1.5h2L9 4h2v6H3V4z" stroke="currentColor" strokeWidth="1.4" />
+            <circle cx="7" cy="7" r="1.8" stroke="currentColor" strokeWidth="1.4" />
+          </svg>
+          {coverPreview ? "Cambiar portada" : "Subir portada"}
+        </button>
+      </div>
     </div>
   );
 }
@@ -1573,6 +1849,7 @@ function SmartCta({
   onClick,
   isPending,
   full,
+  accent,
 }: {
   label: string;
   ready: boolean;
@@ -1580,7 +1857,11 @@ function SmartCta({
   onClick: () => void;
   isPending: boolean;
   full?: boolean;
+  /** Color elegido por el organizador — el CTA lo usa cuando está listo
+   *  para publicar, así el botón real (no una maqueta) muestra el color. */
+  accent?: string;
 }) {
+  const tinted = ready && publishNow && accent;
   return (
     <motion.button
       type="button"
@@ -1593,8 +1874,14 @@ function SmartCta({
         (!ready
           ? "border border-amber-500/60 bg-amber-500/15 text-amber-200 "
           : publishNow
-            ? "bg-cart-accent shadow-[0_14px_36px_-8px_var(--color-cart-accent-glow-strong)] hover:-translate-y-px "
+            ? "shadow-[0_14px_36px_-8px_var(--color-cart-accent-glow-strong)] hover:-translate-y-px " +
+              (tinted ? "" : "bg-cart-accent ")
             : "border border-cart-line-strong bg-cart-bg-elev hover:border-white/40 ")
+      }
+      style={
+        tinted
+          ? { background: accent, color: readableTextColor(accent) }
+          : undefined
       }
     >
       {isPending ? (

@@ -13,6 +13,12 @@ export type CreateEventInput = {
   venueUrl: string | null;
   venueSource: "manual" | "google" | "apple" | null;
   venueLayoutUrl: string | null;
+  coverUrl?: string | null;
+  /** Paleta elegida por el organizador (extraída del flyer o personalizada);
+   *  null en los 3 = usa el morado de marca por defecto. */
+  paletteDark?: string | null;
+  paletteMid?: string | null;
+  paletteAccent?: string | null;
   startsAt: string;
   endsAt: string | null;
   timezone: string;
@@ -182,6 +188,9 @@ export type UpdateEventInput = {
   venueSource?: "manual" | "google" | "apple" | null;
   venueLayoutUrl?: string | null;
   coverUrl?: string | null;
+  paletteDark?: string | null;
+  paletteMid?: string | null;
+  paletteAccent?: string | null;
   startsAt?: string;
   category?: EventCategory | null;
   totalCapacity?: number | null;

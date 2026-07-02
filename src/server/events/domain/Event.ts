@@ -41,6 +41,14 @@ export type Event = {
   venueUrl: string | null;
   venueSource: "manual" | "google" | "apple" | null;
   coverUrl: string | null;
+  /** Paleta elegida por el organizador para tematizar la página pública del
+   *  evento (extraída del flyer o personalizada) — null en los 3 campos usa
+   *  el morado de marca por defecto (ver `derivePalette` en
+   *  `@/lib/_shared/color`). Los 3 viajan juntos porque combinan entre sí:
+   *  no se derivan matemáticamente unos de otros. */
+  paletteDark: string | null;
+  paletteMid: string | null;
+  paletteAccent: string | null;
   venueLayoutUrl: string | null;
   startsAt: string;
   endsAt: string | null;

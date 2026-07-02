@@ -15,6 +15,9 @@ export type CreateEventInput = {
   venueSource?: "manual" | "google" | "apple" | null;
   venueLayoutUrl?: string | null;
   coverUrl?: string | null;
+  paletteDark?: string | null;
+  paletteMid?: string | null;
+  paletteAccent?: string | null;
   startsAt: string;
   endsAt?: string | null;
   timezone?: string;

@@ -8,6 +8,7 @@ import { Logo } from "@/components/brand/Logo";
 import { SignInDrawer } from "./SignInDrawer";
 import { CATEGORIES, CATEGORY_BY_ID } from "./categories";
 import type { EventCategory } from "@/server/events/domain/Event";
+import { pageTintGradient } from "@/lib/_shared/color";
 
 // Spring compartido para micro-interacciones (tap/hover).
 const TAP_SPRING = { type: "spring", stiffness: 500, damping: 30 } as const;
@@ -46,12 +47,15 @@ export function AppHeader({
     <header
       className={`sticky top-0 z-50 backdrop-blur-md backdrop-saturate-150 border-b transition-[border-color,background] duration-200 ${scrolled ? "border-cart-line bg-cart-bg/[0.92]" : "border-transparent bg-cart-bg/80"
         }`}
-      // Mismo tono siempre (no varía con el scroll como el header neutro).
-      // Alfa `b3` para que coincida con el stop exterior del radial-gradient
-      // de PageContainer — es el tono que domina la página lejos de la
-      // esquina superior izquierda (donde está el flyer), que es contra lo
-      // que el header hace borde en la mayor parte de su ancho.
-      style={tint ? { background: `${tint}b3` } : undefined}
+      // Mismo gradiente que PageContainer, con `background-attachment: fixed`
+      // en los dos — así el % del gradiente se resuelve contra el viewport y
+      // el header pinta exactamente el mismo recorte que se ve "detrás" de
+      // él, sin costura, a cualquier scroll (ver `pageTintGradient`).
+      style={
+        tint
+          ? { backgroundImage: pageTintGradient(tint), backgroundAttachment: "fixed" }
+          : undefined
+      }
     >
       <div className="mx-auto flex h-[68px] max-w-[1320px] items-center gap-[18px] px-[clamp(20px,4vw,56px)] max-[560px]:h-[60px] max-[560px]:gap-2">
         {children}

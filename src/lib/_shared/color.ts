@@ -1,9 +1,19 @@
 // Utilidades de contraste WCAG — para elegir texto/iconos legibles sobre
 // colores dinámicos (paleta extraída de imágenes). Sin dependencias.
 
-type Rgb = [number, number, number];
+export type Palette = {
+  /** Tono oscuro — base del gradiente. */
+  dark: string;
+  /** Acento medio — cuerpo del gradiente. */
+  mid: string;
+  /** Acento vivo — highlight del gradiente. Es el único valor que el
+   *  organizador elige/guarda; dark/mid se derivan de este. */
+  accent: string;
+};
 
-function hexToRgb(hex: string): Rgb {
+export type Rgb = [number, number, number];
+
+export function hexToRgb(hex: string): Rgb {
   const h = hex.replace("#", "");
   const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
   const n = parseInt(full, 16);
@@ -109,4 +119,32 @@ export function ensureContrast(
     if (contrastRatio(lightened, bgHex) >= minRatio) return lightened;
   }
   return fallback;
+}
+
+/**
+ * Fondo radial tintado de la página de evento — compartido por `PageContainer`
+ * y por `AppHeader` (vía `tint`). Ambos lo pintan con `background-attachment:
+ * fixed`, así que el % del gradiente se resuelve contra el viewport en los dos
+ * casos: el header (68px, sticky top:0) muestra exactamente el mismo recorte
+ * de gradiente que se ve "detrás" de él en la página, sin costura, a
+ * cualquier scroll — no son dos colores parecidos, es el mismo fondo.
+ */
+export function pageTintGradient(tint: string): string {
+  return `radial-gradient(25% 25% at 20% 25%, ${tint}75 15%, ${tint}b3 100%)`;
+}
+
+const BRAND_BASE = "#0D0B14";
+
+/**
+ * Deriva la paleta completa {dark, mid, accent} a partir de UN solo color —
+ * el que el organizador elige (extraído del flyer o personalizado). Antes
+ * `dark`/`mid` se muestreaban por separado de la imagen; ahora se derivan
+ * matemáticamente del `accent` para que el organizador solo tenga una
+ * perilla que girar y el resultado sea siempre consistente con su elección.
+ * Función pura — corre igual en server (persistencia/API) y cliente.
+ */
+export function derivePalette(accent: string): Palette {
+  const dark = ensureDarkBackground(mixColors(BRAND_BASE, accent, 0.35), 0.06);
+  const mid = mixColors(dark, accent, 0.5);
+  return { dark, mid, accent };
 }
