@@ -94,9 +94,14 @@ export const dispatchTicketDelivery = async (
       .maybeSingle<ProfileRow>();
     buyerProfile = prof ?? null;
   }
-  const orderEmail = buyerProfile?.email ?? order.guest_email ?? null;
-  const orderPhone = buyerProfile?.phone ?? order.guest_phone ?? null;
-  const orderHolderName = buyerProfile?.full_name ?? order.guest_name ?? "Titular";
+  // Why: el profile de un guest lleva un email SINTÉTICO garantizado único
+  // (ver SupabaseTicketRepository.buy) — nunca es el contacto real. La
+  // orden (guest_email/guest_phone) es la fuente de verdad para delivery;
+  // el profile solo gana cuando no es una compra de guest (order.guest_email
+  // null → comprador logueado real, ahí sí vale su profile).
+  const orderEmail = order.guest_email ?? buyerProfile?.email ?? null;
+  const orderPhone = order.guest_phone ?? buyerProfile?.phone ?? null;
+  const orderHolderName = order.guest_name ?? buyerProfile?.full_name ?? "Titular";
 
   let emailSentAny = false;
   let whatsappSentAny = false;

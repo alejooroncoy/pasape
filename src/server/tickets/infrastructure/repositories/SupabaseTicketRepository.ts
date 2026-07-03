@@ -250,81 +250,55 @@ export const supabaseTicketRepository: TicketRepository = {
       }
     }
 
-    // Why: si el comprador es guest, resolvemos (o creamos) un profile usando
-    // email o phone como ancla (email tiene prioridad). Reusamos el profile
-    // existente si ya hubo compras previas con ese identificador.
+    // Why: el profile de un guest es un PLACEHOLDER desechable — solo existe
+    // para satisfacer `orders.buyer_id`/`tickets.current_holder` (NOT NULL).
+    // La identidad real del comprador vive en `orders.guest_email/guest_phone`
+    // (fuente de verdad para notificaciones y el endpoint de status), y se
+    // resuelve a una cuenta real recién cuando la persona hace login y
+    // reclama su compra en /unlock (ver `claimOrder`, que reasigna
+    // `current_holder`/`buyer_id` a la cuenta logueada). Por eso NO hace
+    // falta "adivinar" si ya existe un profile para este email/phone — cada
+    // checkout crea uno nuevo, con un email sintético garantizado único
+    // (nunca colisiona, sin importar cuántas compras sin reclamar tenga la
+    // misma persona). Evita la clase de bug entera de intentar deduplicar
+    // por email/phone (ninguno es UNIQUE en profiles; ver historial de este
+    // archivo si hace falta el contexto de por qué existía esa lógica).
     let effectiveBuyerId: string | null = input.buyerId ?? null;
     if (!effectiveBuyerId && input.guest) {
       const emailNorm = input.guest.email?.trim().toLowerCase() ?? null;
       const phoneNorm = input.guest.phone?.replace(/\D/g, "") || null;
       if (!emailNorm && !phoneNorm) return err("guest_contact_required");
 
-      // Why: ni email ni phone son UNIQUE en profiles (un mismo teléfono
-      // puede terminar en varios profiles con el tiempo — reintentos de
-      // checkout, cuentas registradas comprando como guest con su propio
-      // número, etc.). `.maybeSingle()` ERRORA si matchea más de una fila —
-      // y como el código solo desestructuraba `data` (nunca `error`), ese
-      // error quedaba invisible: existingId caía a null y el flujo intentaba
-      // CREAR un auth user nuevo con el mismo email sintético del que ya
-      // existía → "A user with this email address has already been
-      // registered". Con `.limit(1)` + `.order(created_at)` toleramos
-      // múltiples matches y siempre reusamos el más antiguo (consistente).
-      let existingId: string | null = null;
-      if (emailNorm) {
-        const { data } = await db
-          .from("profiles")
-          .select("id")
-          .ilike("email", emailNorm)
-          .order("created_at", { ascending: true })
-          .limit(1);
-        existingId = (data as { id: string }[] | null)?.[0]?.id ?? null;
-      }
-      if (!existingId && phoneNorm) {
-        const { data } = await db
-          .from("profiles")
-          .select("id")
-          .eq("phone", phoneNorm)
-          .order("created_at", { ascending: true })
-          .limit(1);
-        existingId = (data as { id: string }[] | null)?.[0]?.id ?? null;
-      }
-
-      if (existingId) {
-        effectiveBuyerId = existingId;
-      } else {
-        // Why: profiles.id es FK a auth.users(id), no podemos insertar profile
-        // directo. Creamos un auth user (el trigger handle_new_user inserta
-        // la row de profile auto). Si el guest solo dio phone, sintetizamos
-        // un email para satisfacer el requirement de createUser de Supabase.
-        const synthEmail = emailNorm ?? `guest+${phoneNorm}@pasape.app`;
-        const { data: authUser, error: authErr } = await db.auth.admin.createUser({
-          email: synthEmail,
-          phone: phoneNorm ?? undefined,
-          email_confirm: true,
-          phone_confirm: !!phoneNorm,
-          user_metadata: { full_name: input.guest.fullName },
+      // Why: profiles.id es FK a auth.users(id), no podemos insertar profile
+      // directo. Creamos un auth user (el trigger handle_new_user inserta la
+      // row de profile auto) con un email SIEMPRE sintético y único —
+      // aunque el guest haya dado su email real, ese real vive en
+      // `orders.guest_email` (fuente de verdad para delivery), no acá.
+      const synthEmail = `guest+${crypto.randomUUID()}@pasape.app`;
+      const { data: authUser, error: authErr } = await db.auth.admin.createUser({
+        email: synthEmail,
+        email_confirm: true,
+        user_metadata: { full_name: input.guest.fullName },
+      });
+      if (authErr || !authUser?.user) {
+        // Punto ciego real detectado en QA: si esto falla, el comprador se
+        // queda sin poder pagar y antes no quedaba ningún rastro del porqué.
+        Sentry.captureException(new Error(authErr?.message ?? "guest_profile_create_failed"), {
+          tags: { area: "tickets-buy", stage: "guest-profile-create" },
         });
-        if (authErr || !authUser?.user) {
-          // Punto ciego real detectado en QA: si esto falla (ej. colisión de
-          // email sintético con un profile huérfano), el comprador se queda
-          // sin poder pagar y antes no quedaba ningún rastro del porqué.
-          Sentry.captureException(new Error(authErr?.message ?? "guest_profile_create_failed"), {
-            tags: { area: "tickets-buy", stage: "guest-profile-create" },
-            extra: { synthEmail, hasPhone: !!phoneNorm },
-          });
-          return err(authErr?.message ?? "guest_profile_create_failed");
-        }
-        // El trigger creó (id, email, full_name) pero no copia phone — lo
-        // actualizamos acá. DNI vive en orders.guest_dni (no en profiles).
-        await db
-          .from("profiles")
-          .update({
-            phone: phoneNorm,
-            initial_role: "buyer",
-          })
-          .eq("id", authUser.user.id);
-        effectiveBuyerId = authUser.user.id;
+        return err(authErr?.message ?? "guest_profile_create_failed");
       }
+      // El trigger creó (id, email, full_name) pero no copia phone — lo
+      // actualizamos acá solo como referencia; nada hace lookup por él.
+      // DNI vive en orders.guest_dni (no en profiles).
+      await db
+        .from("profiles")
+        .update({
+          phone: phoneNorm,
+          initial_role: "buyer",
+        })
+        .eq("id", authUser.user.id);
+      effectiveBuyerId = authUser.user.id;
     }
     if (!effectiveBuyerId) return err("buyer_required");
 
@@ -914,20 +888,6 @@ export const supabaseTicketRepository: TicketRepository = {
         claimed_by: input.toProfile,
       })
       .eq("id", order.id);
-
-    // Libera el email del guest huérfano (suelta el índice único) y, si la cuenta
-    // real quedó sin email (caso colisión: el trigger lo dejó null), se lo asocia.
-    if (order.guest_email) {
-      await db.from("profiles").update({ email: null }).eq("id", guest).eq("email", order.guest_email);
-      const { data: claimer } = await db
-        .from("profiles")
-        .select("email")
-        .eq("id", input.toProfile)
-        .maybeSingle<{ email: string | null }>();
-      if (claimer && !claimer.email) {
-        await db.from("profiles").update({ email: order.guest_email }).eq("id", input.toProfile);
-      }
-    }
 
     return ok({
       ticketsClaimed: updatedIds.length,
