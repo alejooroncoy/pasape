@@ -26,10 +26,10 @@ const schema = z.object({
 });
 
 // 10 req/min por IP: tokenización de tarjeta el día del evento.
-const limiter = createRateLimiter(10);
+const limiter = createRateLimiter("payments:tokenize", 10);
 
 export async function POST(req: NextRequest) {
-  if (!limiter.check(req)) return limiter.response();
+  if (!(await limiter.check(req))) return limiter.response();
   const body = await req.json().catch(() => null);
   const parsed = schema.safeParse(body);
   if (!parsed.success) {

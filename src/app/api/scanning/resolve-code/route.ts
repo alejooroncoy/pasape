@@ -7,10 +7,10 @@ import { createRateLimiter } from "@/server/_shared/rateLimit";
 // Sin límite, este endpoint (que confirma si un código existe + el evento) sería
 // un oráculo de fuerza bruta. 15/min por IP: un portero real teclea un código,
 // no cientos.
-const limiter = createRateLimiter(15);
+const limiter = createRateLimiter("scanning:resolve-code", 15);
 
 export const GET = async (req: NextRequest) => {
-  if (!limiter.check(req)) return limiter.response();
+  if (!(await limiter.check(req))) return limiter.response();
   const code = req.nextUrl.searchParams.get("code") ?? "";
   return json(await ScanningController.resolveCode(code));
 };

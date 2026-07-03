@@ -4,10 +4,10 @@ import { json } from "@/server/_shared/http";
 import { createRateLimiter } from "@/server/_shared/rateLimit";
 
 // 10 req/min por IP: evita polling/abuso agresivo del reclamo de orden.
-const limiter = createRateLimiter(10);
+const limiter = createRateLimiter("tickets:claim-order", 10);
 
 export const POST = async (req: NextRequest) => {
-  if (!limiter.check(req)) return limiter.response();
+  if (!(await limiter.check(req))) return limiter.response();
   const body = await req.json().catch(() => ({}));
   return json(await TicketsController.claimOrder(body));
 };

@@ -12,10 +12,10 @@ const schema = z.object({
 });
 
 // 10 req/min por IP: intentos de pago con Yape el día del evento.
-const limiter = createRateLimiter(10);
+const limiter = createRateLimiter("payments:yape", 10);
 
 export const POST = async (req: NextRequest) => {
-  if (!limiter.check(req)) return limiter.response();
+  if (!(await limiter.check(req))) return limiter.response();
   const body = await req.json().catch(() => ({}));
   const parsed = schema.safeParse(body);
   if (!parsed.success) {

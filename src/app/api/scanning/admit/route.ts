@@ -6,10 +6,10 @@ import { createRateLimiter } from "@/server/_shared/rateLimit";
 
 // 60 req/min por IP: tráfico interno de porteros admitiendo en puerta, más
 // permisivo que endpoints públicos de compra.
-const limiter = createRateLimiter(60);
+const limiter = createRateLimiter("scanning:admit", 60);
 
 export const POST = async (req: NextRequest) => {
-  if (!limiter.check(req)) return limiter.response();
+  if (!(await limiter.check(req))) return limiter.response();
   const body = await req.json().catch(() => ({}));
   const deviceId = req.headers.get(SCANNER_DEVICE_HEADER) ?? undefined;
   return json(
