@@ -329,7 +329,12 @@ function BuyFlowInner({ params }: Props) {
         );
       } catch {}
     } catch (e) {
-      const reason = encodeURIComponent((e as Error).message || "unknown");
+      // Pedido gratis: nunca se intentó cobrar nada (falló crear la orden/los
+      // tickets en sí) — el copy de "no pudimos cobrarte" del reason default
+      // es incorrecto y confunde. `buy_failed` tiene copy neutral.
+      const reason = encodeURIComponent(
+        total === 0 ? "buy_failed" : (e as Error).message || "unknown",
+      );
       router.replace(`/events/${slug}/pay-error?reason=${reason}`);
     }
   };
