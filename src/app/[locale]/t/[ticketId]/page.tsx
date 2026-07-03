@@ -34,7 +34,7 @@ export default async function PublicTicketPage({ params, searchParams }: Props) 
   // No dueño → exige la llave del link y lo encauza al desbloqueo de la compra.
   if (!k || !verifyTicketLink(ticketId, k)) notFound();
   if (ticket.order_id) {
-    redirect(`/${locale}/unlock/${ticket.order_id}/${signOrderLink(ticket.order_id)}`);
+    redirect(`/${locale}/order/${ticket.order_id}/${signOrderLink(ticket.order_id)}`);
   }
   // Sin orden (caso raro) → login hacia la billetera.
   redirect(`/${locale}/login?next=${encodeURIComponent(`/${locale}/tickets/${ticketId}`)}`);

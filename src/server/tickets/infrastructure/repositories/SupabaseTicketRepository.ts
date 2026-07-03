@@ -256,7 +256,7 @@ export const supabaseTicketRepository: TicketRepository = {
     // La identidad real del comprador vive en `orders.guest_email/guest_phone`
     // (fuente de verdad para notificaciones y el endpoint de status), y se
     // resuelve a una cuenta real recién cuando la persona hace login y
-    // reclama su compra en /unlock (ver `claimOrder`, que reasigna
+    // reclama su compra en /order (ver `claimOrder`, que reasigna
     // `current_holder`/`buyer_id` a la cuenta logueada). Por eso NO hace
     // falta "adivinar" si ya existe un profile para este email/phone — cada
     // checkout crea uno nuevo, con un email sintético garantizado único
