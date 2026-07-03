@@ -2,6 +2,7 @@ import { z } from "zod";
 import { headers } from "next/headers";
 import { err, ok, type Result } from "@/server/_shared/result";
 import { getAuthContext, resolveActiveOrgSlug } from "@/server/_shared/AuthContext";
+import { supabaseAdmin } from "@/server/_shared/supabase/admin";
 import { supabaseOrganizationRepository } from "@/server/identity/organizations/infrastructure/repositories/SupabaseOrganizationRepository";
 import { supabaseOrgPromoterRepository as repo } from "../../infrastructure/repositories/SupabaseOrgPromoterRepository";
 import type {
@@ -66,13 +67,28 @@ const resolveOrigin = async () => {
 
 type Ctx = { profileId: string; orgId: string };
 
-const resolveOrgCtx = async (): Promise<Result<Ctx>> => {
+// `allowedRoles` (opcional): las escrituras (crear/editar/borrar promotores,
+// enviar invitaciones por WhatsApp con costo) DEBEN exigir rol; ser miembro no
+// basta. Las lecturas (list/detail) lo omiten.
+const ORG_WRITE_ROLES = ["owner", "admin", "editor"];
+
+const resolveOrgCtx = async (allowedRoles?: string[]): Promise<Result<Ctx>> => {
   const auth = await getAuthContext();
   if (!auth.ok) return err(auth.error);
   const slug = await resolveActiveOrgSlug(auth.value.profileId);
   if (!slug) return err("no_active_org");
   const org = await supabaseOrganizationRepository.findBySlug(slug);
   if (!org) return err("no_active_org");
+  if (allowedRoles) {
+    const { data: membership } = await supabaseAdmin()
+      .from("memberships")
+      .select("role")
+      .eq("scope_type", "organization")
+      .eq("scope_id", org.id)
+      .eq("profile_id", auth.value.profileId)
+      .maybeSingle<{ role: string }>();
+    if (!membership || !allowedRoles.includes(membership.role)) return err("forbidden");
+  }
   return ok({ profileId: auth.value.profileId, orgId: org.id });
 };
 
@@ -102,8 +118,9 @@ const sanitizeWhatsapp = (raw: string | null | undefined): string | null => {
 
 const guardPromoterInOrg = async (
   id: string,
+  allowedRoles?: string[],
 ): Promise<Result<{ ctx: Ctx; promoter: OrgPromoter }>> => {
-  const ctx = await resolveOrgCtx();
+  const ctx = await resolveOrgCtx(allowedRoles);
   if (!ctx.ok) return err(ctx.error);
   const promoter = await repo.findById(id);
   if (!promoter) return err("not_found");
@@ -119,7 +136,7 @@ export const OrgPromotersController = {
   },
 
   async create(input: unknown): Promise<Result<OrgPromoter>> {
-    const ctx = await resolveOrgCtx();
+    const ctx = await resolveOrgCtx(ORG_WRITE_ROLES);
     if (!ctx.ok) return err(ctx.error);
     const parsed = createSchema.safeParse(input);
     if (!parsed.success) return err(parsed.error.issues[0]?.message ?? "invalid_input");
@@ -138,7 +155,7 @@ export const OrgPromotersController = {
   },
 
   async update(id: string, input: unknown): Promise<Result<OrgPromoter>> {
-    const guard = await guardPromoterInOrg(id);
+    const guard = await guardPromoterInOrg(id, ORG_WRITE_ROLES);
     if (!guard.ok) return err(guard.error);
     const parsed = updateSchema.safeParse(input);
     if (!parsed.success) return err(parsed.error.issues[0]?.message ?? "invalid_input");
@@ -170,7 +187,7 @@ export const OrgPromotersController = {
   },
 
   async remove(id: string): Promise<Result<true>> {
-    const guard = await guardPromoterInOrg(id);
+    const guard = await guardPromoterInOrg(id, ORG_WRITE_ROLES);
     if (!guard.ok) return err(guard.error);
     return repo.softDelete(id, guard.value.ctx.orgId);
   },

@@ -14,6 +14,10 @@ export type CreateCommissionTierInput = {
 
 export type UpdateCommissionTierInput = {
   id: string;
+  /** Link al que DEBE pertenecer el tier (scoping anti-IDOR). El caller ya
+   *  verificó la propiedad de este link; sin este filtro, un tierId de otra org
+   *  se editaría igual porque el UPDATE solo casa por id. */
+  promoterLinkId: string;
   thresholdCount?: number;
   rewardKind?: CommissionRewardKind;
   rewardAmountCents?: number | null;
@@ -31,7 +35,7 @@ export interface CommissionTierRepository {
   listForLink(linkId: string): Promise<CommissionTier[]>;
   create(input: CreateCommissionTierInput): Promise<Result<CommissionTier>>;
   update(input: UpdateCommissionTierInput): Promise<Result<CommissionTier>>;
-  remove(id: string): Promise<Result<{ id: string }>>;
+  remove(id: string, promoterLinkId: string): Promise<Result<{ id: string }>>;
   /** Marca como unlocked todos los tiers cuyo umbral fue alcanzado. */
   recalcUnlocksForLink(
     linkId: string,

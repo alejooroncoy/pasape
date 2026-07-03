@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { json } from "@/server/_shared/http";
 import { err } from "@/server/_shared/result";
 import { payWithCard } from "@/server/payments/application/PayWithCard";
+import { createRateLimiter } from "@/server/_shared/rateLimit";
 
 const schema = z.object({
   orderId: z.string().uuid(),
@@ -12,7 +13,11 @@ const schema = z.object({
   issuerId: z.string().nullable().optional(),
 });
 
+// 10 req/min por IP: intentos de pago con tarjeta el día del evento.
+const limiter = createRateLimiter("payments:card", 10);
+
 export const POST = async (req: NextRequest) => {
+  if (!(await limiter.check(req))) return limiter.response();
   const body = await req.json().catch(() => ({}));
   const parsed = schema.safeParse(body);
   if (!parsed.success) {

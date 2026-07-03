@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
+import { createRateLimiter } from "@/server/_shared/rateLimit";
 
 // Why: MP rechaza /v1/card_tokens desde el browser para nuestra cuenta
 // sandbox (issue conocido). Proxy server-side: card data llega por HTTPS
@@ -24,7 +25,11 @@ const schema = z.object({
   expiration_year: z.string().regex(/^20\d{2}$/),
 });
 
+// 10 req/min por IP: tokenización de tarjeta el día del evento.
+const limiter = createRateLimiter("payments:tokenize", 10);
+
 export async function POST(req: NextRequest) {
+  if (!(await limiter.check(req))) return limiter.response();
   const body = await req.json().catch(() => null);
   const parsed = schema.safeParse(body);
   if (!parsed.success) {

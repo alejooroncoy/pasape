@@ -31,12 +31,21 @@ export const GET = async (req: NextRequest, ctx: { params: Promise<{ id: string 
   if (!row) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
   const auth = await getAuthContext();
+  const authEmail = auth.ok ? auth.value.email?.toLowerCase() ?? null : null;
   const isOwner = auth.ok && auth.value.profileId === row.buyer_id;
   const isGuest = email && row.guest_email && row.guest_email.toLowerCase() === email;
   // Compra de invitado aún no reclamada: el logueado puede obtener el link de
-  // desbloqueo (p. ej. aterrizó en /done tras Google en vez de /unlock).
+  // desbloqueo (p. ej. aterrizó en /done tras Google en vez de /unlock) SOLO si
+  // inició sesión con el mismo correo de la compra. Sin la coincidencia de email,
+  // cualquier usuario logueado que conociera el UUID de la orden podría llevarse
+  // el unlockUrl firmado y apropiarse de las entradas (IDOR).
   const canClaimGuestOrder =
-    auth.ok && !!row.guest_email && !row.claimed_at && row.status === "paid";
+    auth.ok &&
+    !!row.guest_email &&
+    !row.claimed_at &&
+    row.status === "paid" &&
+    !!authEmail &&
+    authEmail === row.guest_email.toLowerCase();
   if (!isOwner && !isGuest && !canClaimGuestOrder) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }

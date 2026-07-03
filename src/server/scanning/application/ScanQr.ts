@@ -7,11 +7,18 @@ type Deps = { ticketRepo: TicketRepository };
 
 export const scanQr = async (
   { ticketRepo }: Deps,
-  input: { qrCode: string; scanner: ScannerRef; usedAt?: Date; zoneId?: string | null },
+  input: {
+    qrCode: string;
+    scanner: ScannerRef;
+    usedAt?: Date;
+    zoneId?: string | null;
+    expectedEventId?: string;
+  },
 ): Promise<Result<ScanResult>> => {
   const result = await ticketRepo.markUsedByQr(input.qrCode, input.scanner, {
     usedAt: input.usedAt,
     zoneId: input.zoneId,
+    expectedEventId: input.expectedEventId,
   });
   if (!result.ok) {
     const kind =

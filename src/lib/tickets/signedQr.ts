@@ -122,16 +122,17 @@ export async function signWindow(
   return bytesToB64url(new Uint8Array(sig));
 }
 
-export async function verifyWindow(
+// Verifica SOLO la autenticidad criptográfica de la firma del window, sin exigir
+// frescura. Úsalo en el sync offline: el window ya venció (el scan ocurrió antes
+// de sincronizar), pero la firma ECDSA debe seguir siendo válida. Sin este
+// chequeo, un cliente podría marcar tickets con una firma basura enviando
+// `offlineScannedAt` — la firma dejaría de aportar cualquier garantía.
+export async function verifyWindowSignature(
   ticketPublicJwk: JWK,
   ticketId: string,
   claimedWindow: number,
   sigB64url: string,
-  now: number = Date.now(),
 ): Promise<boolean> {
-  if (Math.abs(claimedWindow - currentWindow(now)) > WINDOW_TOLERANCE) {
-    return false;
-  }
   try {
     const key = await crypto.subtle.importKey(
       "jwk",
@@ -149,6 +150,20 @@ export async function verifyWindow(
   } catch {
     return false;
   }
+}
+
+export async function verifyWindow(
+  ticketPublicJwk: JWK,
+  ticketId: string,
+  claimedWindow: number,
+  sigB64url: string,
+  now: number = Date.now(),
+): Promise<boolean> {
+  // Frescura del window (anti-screenshot) + autenticidad de la firma.
+  if (Math.abs(claimedWindow - currentWindow(now)) > WINDOW_TOLERANCE) {
+    return false;
+  }
+  return verifyWindowSignature(ticketPublicJwk, ticketId, claimedWindow, sigB64url);
 }
 
 // ── Formato del QR firmado: cert ~ windowIdx ~ sig ───────────────────────────

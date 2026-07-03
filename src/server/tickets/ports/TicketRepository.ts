@@ -84,16 +84,18 @@ export interface TicketRepository {
   // `opts.zoneId` = puerta activa del portero. Si se pasa y la entrada no
   // pertenece a esa puerta (custom), devuelve err("wrong_zone") SIN marcar.
   // null/undefined o puerta principal → valida todas. No se aplica en el sync.
+  // `opts.expectedEventId` = evento de la sesión del portero; si el ticket
+  // resuelto pertenece a otro evento, devuelve err("wrong_event") SIN marcar.
   markUsedByQr(
     qrCode: string,
     scanner: ScannerRef,
-    opts?: { usedAt?: Date; zoneId?: string | null },
+    opts?: { usedAt?: Date; zoneId?: string | null; expectedEventId?: string },
   ): Promise<Result<MarkUsedResult>>;
   /** Admisión confiable por ticketId (alta manual o sync de scan ya verificado). */
   markUsedByTicketId(
     ticketId: string,
     scanner: ScannerRef,
-    opts?: { usedAt?: Date },
+    opts?: { usedAt?: Date; expectedEventId?: string },
   ): Promise<Result<MarkUsedResult>>;
   /**
    * Calcula el alcance del carrusel de entradas para un ticket dado.

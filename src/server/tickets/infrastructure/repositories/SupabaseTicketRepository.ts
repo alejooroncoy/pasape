@@ -15,6 +15,7 @@ import { supabaseCommissionTierRepository } from "@/server/promoters/tiers/infra
 import { supabaseBoxRepository } from "@/server/boxes/infrastructure/repositories/SupabaseBoxRepository";
 import { encryptDni, dniLast4, normalizeDni } from "@/server/_shared/crypto/dni";
 import crypto from "node:crypto";
+import * as Sentry from "@sentry/nextjs";
 
 const generateQr = () =>
   crypto.randomBytes(24).toString("base64url");
@@ -410,7 +411,20 @@ export const supabaseTicketRepository: TicketRepository = {
       .from("tickets")
       .insert(ticketsToInsert)
       .select("*");
-    if (tkErr || !tkRows) return err(tkErr?.message ?? "tickets_create_failed");
+    if (tkErr || !tkRows) {
+      // Why: el check de arriba (`tt.sold + item.qty > tt.capacity`) es
+      // lectura-luego-escritura sin lock — solo una validación temprana de
+      // UX. El backstop atómico real es el constraint
+      // ticket_types_sold_le_capacity (ver migración
+      // 20260702180000_ticket_type_sold_capacity_check.sql): el trigger
+      // tickets_sync_sold recalcula `sold` con un UPDATE que toma row-lock,
+      // así que compras concurrentes del último cupo se serializan y la
+      // segunda choca contra el constraint (23514) en vez de sobrevender.
+      // La orden queda huérfana en 'pending' y expira sola (30min, ver
+      // expire_stale_pending_orders).
+      if (tkErr?.code === "23514") return err("sold_out");
+      return err(tkErr?.message ?? "tickets_create_failed");
+    }
 
     // ticket_types.sold lo mantiene el trigger tickets_sync_sold a partir de los
     // tickets reales — no se toca a mano (antes se desfasaba).
@@ -424,6 +438,10 @@ export const supabaseTicketRepository: TicketRepository = {
 
       void dispatchTicketDelivery({ db }, orderRow.id).catch((e) => {
         console.error("[buy:free] dispatchTicketDelivery failed:", (e as Error).message);
+        Sentry.captureException(e, {
+          tags: { area: "ticket-delivery" },
+          extra: { orderId: orderRow.id, stage: "buy:free" },
+        });
       });
       // Box gratis (invitación/cortesía): su grupo también nace al "pagar".
       void supabaseBoxRepository.ensureForOrder(orderRow.id).catch((e) => {
@@ -919,14 +937,21 @@ export const supabaseTicketRepository: TicketRepository = {
   },
 
   async markUsedByQr(qrCode, scanner, opts = {}) {
-    const { usedAt, zoneId } = opts;
+    const { usedAt, zoneId, expectedEventId } = opts;
     const db = supabaseAdmin();
     // Solo QR firmado ECDSA (cert~window~sig). Offline (usedAt presente) omite
-    // la frescura del window: ya se verificó en la puerta al escanear.
+    // la frescura del window: ya se verificó en la puerta al escanear (pero la
+    // firma sigue verificándose, ver resolveScanInput).
     const resolved = await resolveScanInput(qrCode, { offline: !!usedAt });
     if (!resolved.ok) {
       // No registramos scan_event acá porque no tenemos ticket_id ni event_id.
       return err(resolved.error);
+    }
+    // El ticket resuelto DEBE pertenecer al evento de la sesión del portero.
+    // Sin esto, un portero del evento A podría quemar/admitir tickets del
+    // evento B presentándole un QR (genuino o forjado) de otro evento.
+    if (expectedEventId && resolved.value.eventId !== expectedEventId) {
+      return err("wrong_event");
     }
     // Puerta del portero: si está en una puerta custom y la entrada no le
     // corresponde, no la marca (la principal valida todas).
@@ -1065,10 +1090,16 @@ export const supabaseTicketRepository: TicketRepository = {
     // scan ya verificado offline. No requiere firma.
     const { data: row } = await db
       .from("tickets")
-      .select("qr_code")
+      .select("qr_code, ticket_types!inner(event_id)")
       .eq("id", ticketId)
-      .maybeSingle<{ qr_code: string }>();
+      .maybeSingle<{ qr_code: string; ticket_types: { event_id: string } }>();
     if (!row) return err("invalid");
+    // Igual que en el scan: el ticket debe pertenecer al evento de la sesión.
+    // markUsedByTicketId no valida firma, así que este es el ÚNICO control que
+    // impide admitir/quemar un ticketId de otro evento conociendo su UUID.
+    if (opts.expectedEventId && row.ticket_types.event_id !== opts.expectedEventId) {
+      return err("wrong_event");
+    }
     return markByQrCode(db, row.qr_code, scanner, opts.usedAt, ticketId);
   },
 };
@@ -1251,13 +1282,14 @@ async function markByQrCode(
 async function resolveScanInput(
   raw: string,
   opts: { offline?: boolean } = {},
-): Promise<Result<{ qrCode: string }>> {
+): Promise<Result<{ qrCode: string; eventId: string }>> {
   const {
     isCompactQrPayload,
     parseCompactQrPayload,
     parseSignedQrPayload,
     verifyCert,
     verifyWindow,
+    verifyWindowSignature,
   } = await import("@/lib/tickets/signedQr");
 
   const db = supabaseAdmin();
@@ -1270,13 +1302,14 @@ async function resolveScanInput(
 
     const { data: row } = await db
       .from("tickets")
-      .select("id, qr_code, last_used_window, signing_pub")
+      .select("id, qr_code, last_used_window, signing_pub, ticket_types!inner(event_id)")
       .eq("id", parsed.ticketId)
       .maybeSingle<{
         id: string;
         qr_code: string;
         last_used_window: number | null;
         signing_pub: import("jose").JWK | null;
+        ticket_types: { event_id: string };
       }>();
     if (!row) return err("invalid");
     if (!row.signing_pub) return err("invalid_code");
@@ -1299,9 +1332,20 @@ async function resolveScanInput(
         .from("tickets")
         .update({ last_used_window: parsed.windowIdx })
         .eq("id", row.id);
+    } else {
+      // Offline (sync): el window ya venció, pero la firma DEBE ser auténtica.
+      // Verificar solo la firma (sin frescura) cierra el bypass en que el cliente
+      // mandaba `offlineScannedAt` con una firma basura para quemar tickets.
+      const authentic = await verifyWindowSignature(
+        row.signing_pub,
+        parsed.ticketId,
+        parsed.windowIdx,
+        parsed.sig,
+      );
+      if (!authentic) return err("invalid_code");
     }
 
-    return ok({ qrCode: row.qr_code });
+    return ok({ qrCode: row.qr_code, eventId: row.ticket_types.event_id });
   }
 
   // ── Formato legado (cert~window~sig) ──
@@ -1359,7 +1403,19 @@ async function resolveScanInput(
       .from("tickets")
       .update({ last_used_window: parsed.windowIdx })
       .eq("id", row.id);
+  } else {
+    // Offline (sync): el cert ya probó autenticidad del ticket contra el evento,
+    // pero la firma de window prueba posesión de la privada del ticket. Sin
+    // verificarla (aunque sea vencida) un screenshot del cert con firma basura
+    // pasaría. Verificamos solo la firma, no la frescura.
+    const authentic = await verifyWindowSignature(
+      claims.ticketPub,
+      ticketId,
+      parsed.windowIdx,
+      parsed.sig,
+    );
+    if (!authentic) return err("invalid_code");
   }
 
-  return ok({ qrCode: row.qr_code });
+  return ok({ qrCode: row.qr_code, eventId: row.ticket_types.event_id });
 }
