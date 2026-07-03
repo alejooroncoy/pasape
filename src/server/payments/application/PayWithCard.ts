@@ -4,7 +4,7 @@ import crypto from "node:crypto";
 import * as Sentry from "@sentry/nextjs";
 import { err, ok, type Result } from "@/server/_shared/result";
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
-import { appBaseUrl, isPublicBaseUrl } from "../infrastructure/MercadoPagoClient";
+import { appBaseUrl, isPublicBaseUrl, buildOrderItems } from "../infrastructure/MercadoPagoClient";
 import { reportMpError } from "../infrastructure/reportMpError";
 import { dispatchTicketDelivery } from "@/server/notifications/application/DispatchTicketDelivery";
 
@@ -50,9 +50,10 @@ type OrderRow = {
   guest_email: string | null;
   guest_name: string | null;
   guest_dni: string | null;
+  guest_phone: string | null;
 };
 
-type ProfileRow = { id: string; email: string | null; full_name: string | null };
+type ProfileRow = { id: string; email: string | null; full_name: string | null; phone: string | null };
 type EventRow = { id: string; title: string };
 
 export const payWithCard = async (
@@ -66,7 +67,7 @@ export const payWithCard = async (
   const { data: order } = await db
     .from("orders")
     .select(
-      "id, buyer_id, event_id, status, total_cents, guest_email, guest_name, guest_dni",
+      "id, buyer_id, event_id, status, total_cents, guest_email, guest_name, guest_dni, guest_phone",
     )
     .eq("id", input.orderId)
     .maybeSingle<OrderRow>();
@@ -76,15 +77,17 @@ export const payWithCard = async (
 
   let email = order.guest_email ?? null;
   let fullName = order.guest_name ?? null;
+  let phone = order.guest_phone ?? null;
   const dni = order.guest_dni ?? null;
   if (order.buyer_id) {
     const { data: profile } = await db
       .from("profiles")
-      .select("id, email, full_name")
+      .select("id, email, full_name, phone")
       .eq("id", order.buyer_id)
       .maybeSingle<ProfileRow>();
     email = email ?? profile?.email ?? null;
     fullName = fullName ?? profile?.full_name ?? null;
+    phone = phone ?? profile?.phone ?? null;
   }
   if (!email) return err("payer_email_missing");
 
@@ -102,6 +105,10 @@ export const payWithCard = async (
   // MP rechaza notification_url no pública. En dev sin túnel la omitimos — el
   // polling de status cubre la confirmación vía /api/tickets/order/[id]/status.
   const isPublicUrl = isPublicBaseUrl(base);
+  // Why: additional_info.items + payer.phone son parte del checklist oficial
+  // de "medición de calidad" de MP (mejor approval rate, mejor puntaje) — ver
+  // https://www.mercadopago.com.pe/developers/es/docs/checkout-api-payments/integration-test/go-to-production-requirements
+  const items = await buildOrderItems(db, order.id);
   const body: Record<string, unknown> = {
     transaction_amount: Money.toSoles(Math.round(order.total_cents)),
     token: input.token,
@@ -116,6 +123,14 @@ export const payWithCard = async (
       first_name: firstName,
       last_name: lastName,
       ...(dni ? { identification: { type: "DNI", number: dni } } : {}),
+    },
+    additional_info: {
+      ...(items.length > 0 ? { items } : {}),
+      payer: {
+        first_name: firstName,
+        last_name: lastName,
+        ...(phone ? { phone: { area_code: "51", number: phone } } : {}),
+      },
     },
   };
   if (input.issuerId) body.issuer_id = input.issuerId;
