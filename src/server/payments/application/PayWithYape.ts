@@ -1,6 +1,7 @@
 import { Money } from "@/lib/_shared/money";
 import "server-only";
 import crypto from "node:crypto";
+import { after } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { err, ok, type Result } from "@/server/_shared/result";
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
@@ -248,10 +249,12 @@ export const payWithYape = async (
   // Si quedó aprobado, dispara el envío del QR. El webhook también lo
   // intentará — DispatchTicketDelivery es idempotente vía notification_dispatches.
   if (status === "approved") {
-    dispatchTicketDelivery({}, order.id).catch((e) => {
-      console.error("[payWithYape] dispatchTicketDelivery failed:", e);
-      Sentry.captureException(e, { tags: { area: "ticket-delivery", orderId: order.id } });
-    });
+    after(() =>
+      dispatchTicketDelivery({}, order.id).catch((e) => {
+        console.error("[payWithYape] dispatchTicketDelivery failed:", e);
+        Sentry.captureException(e, { tags: { area: "ticket-delivery", orderId: order.id } });
+      }),
+    );
   }
 
   return ok({
