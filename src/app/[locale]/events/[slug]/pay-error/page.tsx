@@ -54,6 +54,11 @@ const REASON_MAP: Record<string, ReasonInfo> = {
     body: "Necesitamos tu WhatsApp o email para enviarte el QR.",
     note: null,
   },
+  buy_failed: {
+    title: "No pudimos completar tu pedido",
+    body: "Algo falló de nuestro lado. No se te cobró nada — intenta de nuevo en unos segundos.",
+    note: null,
+  },
   unknown: {
     title: "No pudimos cobrarte",
     body: "Algo salió mal con el pago. Tu entrada no fue cobrada.",
