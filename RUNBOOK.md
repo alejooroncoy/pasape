@@ -16,6 +16,7 @@ Hacer esto con al menos 24h y de nuevo 2-3h antes de puertas abiertas:
 - [ ] **Cada portero logueado con internet ANTES de llegar al venue.** El login no funciona offline — si un portero llega sin sesión y sin señal en el venue, queda bloqueado hasta conseguir red.
 - [ ] **App nativa del portero (scanner) con build actualizado instalado en cada dispositivo.** Correr `npm run build:door-app` (o `build:door-app:ios`) desde la raíz — encadena el build del scanner + `cap sync`. Ver sección "app del portero" en escenario 3.3.
 - [ ] **Confirmar `VITE_API_URL` correcto** en `scanner/.env` apuntando al backend de producción (`https://app.pasape.com` o el dominio real) antes de generar el build — si apunta a localhost o a un preview, el portero no podrá escanear nada.
+- [x] **`UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` seteados en Vercel (Production).** Sin esto, el rate limiting cae a in-memory (funciona pero menos preciso en serverless multi-instancia) — confirmado seteado 2026-07-03.
 
 ---
 
@@ -85,9 +86,9 @@ No hay CI/CD con pasos de rollback automatizados (el único workflow en `.github
 
 | Rol | Nombre / Teléfono |
 |---|---|
-| Responsable técnico (deploys, Vercel, Supabase) | `[nombre/teléfono]` |
-| Responsable de pagos (Mercado Pago) | `[nombre/teléfono]` |
-| Responsable de WhatsApp/Kapso | `[nombre/teléfono]` |
+| Responsable técnico (deploys, Vercel, Supabase) | Alejandro Oroncoy — adoa2705@gmail.com — +51 946 189 585 |
+| Responsable de pagos (Mercado Pago) | Alejandro Oroncoy — adoa2705@gmail.com — +51 946 189 585 |
+| Responsable de WhatsApp/Kapso | Alejandro Oroncoy — adoa2705@gmail.com — +51 946 189 585 |
 | Responsable en sitio (organizador / puerta) | `[nombre/teléfono]` |
 | Contacto de soporte Mercado Pago | `[teléfono/canal]` |
 | Contacto de soporte Vercel (si hay plan pago) | `[canal]` |
