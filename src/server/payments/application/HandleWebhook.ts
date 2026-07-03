@@ -179,31 +179,75 @@ export const handleMpWebhook = async (
   const status = payment.status ?? "unknown";
   const mapped = mapOrderStatus(status);
 
-  // Always snapshot mp_status + mp_payment_id.
-  const update: Record<string, unknown> = {
-    mp_status: status,
-    mp_payment_id: dataId,
-    updated_at: new Date().toISOString(),
-  };
-  if (mapped === "paid") {
-    update.status = "paid";
-    update.paid_at = new Date().toISOString();
-  } else if (mapped === "failed") {
-    update.status = "failed";
-  } else if (mapped === "refunded") {
-    // Reembolso/contracargo: estado terminal. Cambiar status (no solo mp_status)
-    // hace que el trigger AFTER UPDATE OF status emita el broadcast y que el
-    // rollup (filtra status='paid') deje de contar esta orden.
-    update.status = "refunded";
-  }
+  let orderRow: { id: string; status: string; promoter_link_id: string | null } | null = null;
 
-  const { data: orderRow, error: upErr } = await db
-    .from("orders")
-    .update(update)
-    .eq("id", orderId)
-    .select("id, status, promoter_link_id")
-    .maybeSingle<{ id: string; status: string; promoter_link_id: string | null }>();
-  if (upErr) return err(`order_update_failed: ${upErr.message}`);
+  if (mapped === "paid") {
+    // Liquidación atómica: marca la orden pagada Y reactiva los tickets que el
+    // cron pudo anular al expirarla (pago aprobado tardío). Si el aforo ya se
+    // revendió, la RPC aborta por el constraint de capacity y NO dejamos la orden
+    // "pagada" con QR roto — la marcamos para revisión y alertamos.
+    const { data: settled, error: settleErr } = await db.rpc("settle_order_paid", {
+      p_order_id: orderId,
+      p_paid_at: new Date().toISOString(),
+      p_mp_status: status,
+      p_mp_payment_id: dataId,
+    });
+    if (settleErr) {
+      const oversold =
+        settleErr.code === "23514" || /sold_le_capacity/i.test(settleErr.message);
+      Sentry.captureException(
+        new Error(`late_payment_settlement_failed: ${settleErr.message}`),
+        {
+          tags: { area: "mercadopago", mp_stage: "settle", orderId },
+          extra: { mpStatus: status, oversold },
+        },
+      );
+      if (oversold) {
+        // El stock se revendió tras expirar la orden: pago cobrado que NO podemos
+        // honrar sin sobrevender. Reintentar no ayuda. Snapshoteamos mp_status
+        // (deja la orden expired/failed con mp_status='approved' → señal clara de
+        // "pagado, requiere reembolso") y ack-eamos para que MP deje de reintentar.
+        await db
+          .from("orders")
+          .update({ mp_status: status, mp_payment_id: dataId, updated_at: new Date().toISOString() })
+          .eq("id", orderId);
+        return ok({ orderId, status: "oversold_needs_refund" });
+      }
+      // Error transitorio (red/DB): devolver err para que MP reintente el webhook.
+      return err(`order_settlement_failed: ${settleErr.message}`);
+    }
+    if (settled === "not_found") return ok({});
+    const { data } = await db
+      .from("orders")
+      .select("id, status, promoter_link_id")
+      .eq("id", orderId)
+      .maybeSingle<{ id: string; status: string; promoter_link_id: string | null }>();
+    orderRow = data;
+  } else {
+    // failed / refunded / pending: snapshot de mp_status + cambio de estado. No
+    // hay reactivación de tickets acá (la compensación de abajo los anula).
+    const update: Record<string, unknown> = {
+      mp_status: status,
+      mp_payment_id: dataId,
+      updated_at: new Date().toISOString(),
+    };
+    if (mapped === "failed") {
+      update.status = "failed";
+    } else if (mapped === "refunded") {
+      // Reembolso/contracargo: estado terminal. Cambiar status (no solo mp_status)
+      // hace que el trigger AFTER UPDATE OF status emita el broadcast y que el
+      // rollup (filtra status='paid') deje de contar esta orden.
+      update.status = "refunded";
+    }
+    const { data, error: upErr } = await db
+      .from("orders")
+      .update(update)
+      .eq("id", orderId)
+      .select("id, status, promoter_link_id")
+      .maybeSingle<{ id: string; status: string; promoter_link_id: string | null }>();
+    if (upErr) return err(`order_update_failed: ${upErr.message}`);
+    orderRow = data;
+  }
 
   // Despacho del QR por email + WhatsApp al comprador (guest o logueado).
   // Fire-and-forget para no bloquear el ack del webhook; los errores quedan

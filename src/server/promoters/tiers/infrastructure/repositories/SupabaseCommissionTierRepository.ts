@@ -73,15 +73,21 @@ export const supabaseCommissionTierRepository: CommissionTierRepository = {
       .from("commission_tiers")
       .update(patch)
       .eq("id", input.id)
+      // Scoping anti-IDOR: el tier debe pertenecer al link ya autorizado.
+      .eq("promoter_link_id", input.promoterLinkId)
       .select("*")
       .single<Row>();
     if (error || !data) return err(error?.message ?? "tier_update_failed");
     return ok(toDomain(data));
   },
 
-  async remove(id: string): Promise<Result<{ id: string }>> {
+  async remove(id: string, promoterLinkId: string): Promise<Result<{ id: string }>> {
     const db = supabaseAdmin();
-    const { error } = await db.from("commission_tiers").delete().eq("id", id);
+    const { error } = await db
+      .from("commission_tiers")
+      .delete()
+      .eq("id", id)
+      .eq("promoter_link_id", promoterLinkId);
     if (error) return err(error.message);
     return ok({ id });
   },

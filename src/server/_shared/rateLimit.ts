@@ -6,8 +6,13 @@ import { NextResponse, type NextRequest } from "next/server";
 type Bucket = { count: number; resetAt: number };
 
 const ipOf = (req: NextRequest): string =>
+  // `x-real-ip` lo fija la plataforma (Vercel) con la IP real de conexión y el
+  // cliente no puede sobrescribirlo — preferirlo cierra el spoof trivial en que
+  // un atacante manda `X-Forwarded-For: <ip-aleatoria>` para obtener un bucket
+  // nuevo por request. El primer valor de XFF SÍ es inyectable, por eso queda
+  // solo como fallback para entornos sin x-real-ip.
+  req.headers.get("x-real-ip")?.trim() ??
   req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-  req.headers.get("x-real-ip") ??
   "unknown";
 
 export type RateLimiter = {

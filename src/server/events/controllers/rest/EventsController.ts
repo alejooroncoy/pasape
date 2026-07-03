@@ -68,15 +68,33 @@ const resolveOriginFromHeaders = async (): Promise<string> => {
 
 type ResolvedOrgCtx = { profileId: string; orgId: string; orgSlug: string };
 
-const resolveOrgCtx = async (): Promise<Result<ResolvedOrgCtx>> => {
+// `allowedRoles` (opcional): si se pasa, exige que el caller tenga ese rol en la
+// org activa. Sin él, basta con ser miembro (para lecturas como listMine). Las
+// operaciones de escritura DEBEN pasar allowedRoles — ser miembro no alcanza:
+// un reporter/door no debe crear ni publicar eventos.
+const resolveOrgCtx = async (
+  allowedRoles?: string[],
+): Promise<Result<ResolvedOrgCtx>> => {
   const auth = await getAuthContext();
   if (!auth.ok) return err(auth.error);
   const slug = await resolveActiveOrgSlug(auth.value.profileId);
   if (!slug) return err("no_active_org");
   const org = await supabaseOrganizationRepository.findBySlug(slug);
   if (!org) return err("no_active_org");
+  if (allowedRoles) {
+    const { data: membership } = await supabaseAdmin()
+      .from("memberships")
+      .select("role")
+      .eq("scope_type", "organization")
+      .eq("scope_id", org.id)
+      .eq("profile_id", auth.value.profileId)
+      .maybeSingle<{ role: string }>();
+    if (!membership || !allowedRoles.includes(membership.role)) return err("forbidden");
+  }
   return ok({ profileId: auth.value.profileId, orgId: org.id, orgSlug: slug });
 };
+
+const ORG_WRITE_ROLES = ["owner", "admin", "editor"];
 
 const createSchema = z.object({
   title: z.string().min(1),
@@ -157,7 +175,7 @@ export const EventsController = {
   },
 
   async create(input: unknown): Promise<Result<Event>> {
-    const ctx = await resolveOrgCtx();
+    const ctx = await resolveOrgCtx(ORG_WRITE_ROLES);
     if (!ctx.ok) return err(ctx.error);
     const parsed = createSchema.safeParse(input);
     if (!parsed.success) return err(parsed.error.issues[0]?.message ?? "invalid_input");
@@ -195,7 +213,7 @@ export const EventsController = {
   },
 
   async publish(eventId: string): Promise<Result<Event>> {
-    const ctx = await resolveOrgCtx();
+    const ctx = await resolveOrgCtx(ORG_WRITE_ROLES);
     if (!ctx.ok) return err(ctx.error);
     return repo.publish(eventId, ctx.value.orgId);
   },

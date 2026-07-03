@@ -91,13 +91,13 @@ export const CommissionTiersController = {
     if (a.role !== "organizer") return err("forbidden");
     const parsed = updateSchema.safeParse(input);
     if (!parsed.success) return err(parsed.error.issues[0]?.message ?? "invalid_input");
-    return updateTier({ repo }, { id: tierId, ...parsed.data });
+    return updateTier({ repo }, { id: tierId, promoterLinkId: linkId, ...parsed.data });
   },
 
   async remove(linkId: string, tierId: string): Promise<Result<{ id: string }>> {
     const a = await authForLink(linkId);
     if (!a.ok) return err(a.error);
     if (a.role !== "organizer") return err("forbidden");
-    return removeTier({ repo }, tierId);
+    return removeTier({ repo }, tierId, linkId);
   },
 };

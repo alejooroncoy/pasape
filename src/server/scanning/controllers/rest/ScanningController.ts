@@ -60,6 +60,8 @@ export const ScanningController = {
         // Validación de puerta solo en el scan en vivo: en el sync offline la
         // decisión ya se tomó en la puerta (y el ticket pudo marcarse local).
         zoneId:    context?.offlineScannedAt ? undefined : access.value.zoneId,
+        // El ticket debe pertenecer al evento de esta sesión (anti cross-event).
+        expectedEventId: access.value.eventId,
       },
     );
   },
@@ -86,6 +88,8 @@ export const ScanningController = {
         ticketId:  parsed.data.ticketId,
         scanner:   { profileId: access.value.profileId, sessionId: access.value.sessionId },
         usedAt:    context?.offlineScannedAt ? new Date(context.offlineScannedAt) : undefined,
+        // El ticket debe pertenecer al evento de esta sesión (anti cross-event).
+        expectedEventId: access.value.eventId,
       },
     );
   },

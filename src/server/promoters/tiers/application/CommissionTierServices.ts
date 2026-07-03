@@ -15,7 +15,8 @@ export const createTier = ({ repo }: Deps, input: CreateCommissionTierInput) =>
 export const updateTier = ({ repo }: Deps, input: UpdateCommissionTierInput) =>
   repo.update(input);
 
-export const removeTier = ({ repo }: Deps, id: string) => repo.remove(id);
+export const removeTier = ({ repo }: Deps, id: string, promoterLinkId: string) =>
+  repo.remove(id, promoterLinkId);
 
 export const recalcTierUnlocks = (
   { repo }: Deps,

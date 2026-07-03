@@ -1,3 +1,5 @@
+import "server-only";
+
 const required = (key: string): string => {
   const v = process.env[key];
   if (!v) throw new Error(`Missing env var: ${key}`);
