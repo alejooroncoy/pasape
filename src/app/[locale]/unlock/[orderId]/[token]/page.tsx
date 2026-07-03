@@ -11,6 +11,7 @@ import { PhoneField } from "@/components/design/PhoneField";
 import { GoogleBtn } from "@/components/design";
 import { setOauthReturn } from "@/components/auth/PostLoginRedirect";
 import { Logo } from "@/components/brand/Logo";
+import { getCachedClaim, saveClaim } from "@/lib/tickets/claimedOrderStore";
 
 // El token va en la RUTA (no en query): así sobrevive intacto al ida-y-vuelta del
 // OAuth de Google (un ?k= se perdía como query anidado en el redirect_to).
@@ -62,6 +63,14 @@ export default function UnlockPage(props: Props) {
 
   // Logueado → reclamar automáticamente. Si la orden sigue `pending` (carrera con
   // el webhook de pago), reintentar cada 2s hasta que confirme.
+  //
+  // Antes de llamar al server, chequeamos si este device ya reclamó esta orden
+  // (cache local en IndexedDB, ver claimedOrderStore). El claim es una mutación
+  // POST — el Service Worker solo cachea GET — así que sin ese atajo, reabrir el
+  // link de WhatsApp sin señal (típico en la puerta del venue) dejaría a la
+  // persona colgada antes de llegar a ver su ticket, aunque ya sea 100% suyo y
+  // el QR ya sea offline-capable. Solo el primer reclamo de cada persona
+  // necesita red.
   useEffect(() => {
     if (!sessionReady || !isLogged || !token || done) return;
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -72,6 +81,11 @@ export default function UnlockPage(props: Props) {
         .current({ orderId, token })
         .then((res) => {
           if (cancelled) return;
+          void saveClaim(orderId, {
+            ticketsClaimed: res.ticketsClaimed,
+            firstTicketId: res.firstTicketId,
+            eventSlug: res.eventSlug,
+          });
           setDone({
             count: res.ticketsClaimed,
             firstId: res.firstTicketId,
@@ -92,7 +106,14 @@ export default function UnlockPage(props: Props) {
 
     if (!tried.current) {
       tried.current = true;
-      run();
+      getCachedClaim(orderId).then((cached) => {
+        if (cancelled) return;
+        if (cached) {
+          setDone({ count: cached.ticketsClaimed, firstId: cached.firstTicketId, eventSlug: cached.eventSlug });
+          return;
+        }
+        run();
+      });
     }
 
     return () => {
