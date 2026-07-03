@@ -1,5 +1,7 @@
 import "server-only";
 import { MercadoPagoConfig } from "mercadopago";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { Money } from "@/lib/_shared/money";
 
 // Why: `env.mpAccessToken` returns "" si no está seteado para no romper
 // `pnpm build`. Aquí validamos en runtime y dejamos un error claro.
@@ -53,4 +55,54 @@ export const isPublicBaseUrl = (base: string = appBaseUrl()): boolean => {
       base,
     );
   return base.startsWith("https://") && !isPrivateHost;
+};
+
+export type MpPaymentItem = {
+  id: string;
+  title: string;
+  quantity: number;
+  unit_price: number;
+  category_id: string;
+};
+
+// Why: la "medición de calidad" de MP (checkout-api-payments/go-to-production-requirements)
+// pondera enviar `additional_info.items` con el detalle real de la compra — mejora
+// el approval rate y es requisito para llegar al puntaje recomendado (100/100,
+// mínimo 73 para certificar). Los tickets ya existen al momento de cobrar (se
+// crean en el "buy" antes del pago), así que agrupamos por ticket_type real.
+export const buildOrderItems = async (
+  db: SupabaseClient,
+  orderId: string,
+): Promise<MpPaymentItem[]> => {
+  const { data: tickets } = await db
+    .from("tickets")
+    .select("ticket_type_id, price_cents")
+    .eq("order_id", orderId);
+  const rows = (tickets ?? []) as Array<{ ticket_type_id: string; price_cents: number | null }>;
+  if (rows.length === 0) return [];
+
+  const byType = new Map<string, { qty: number; totalCents: number }>();
+  for (const t of rows) {
+    const cur = byType.get(t.ticket_type_id) ?? { qty: 0, totalCents: 0 };
+    cur.qty += 1;
+    cur.totalCents += t.price_cents ?? 0;
+    byType.set(t.ticket_type_id, cur);
+  }
+
+  const typeIds = [...byType.keys()];
+  const { data: types } = await db.from("ticket_types").select("id, name").in("id", typeIds);
+  const nameById = new Map(
+    ((types ?? []) as Array<{ id: string; name: string }>).map((t) => [t.id, t.name]),
+  );
+
+  return typeIds.map((id) => {
+    const { qty, totalCents } = byType.get(id)!;
+    return {
+      id,
+      title: nameById.get(id) ?? "Entrada",
+      quantity: qty,
+      unit_price: Money.toSoles(Math.round(totalCents / qty)),
+      category_id: "tickets",
+    };
+  });
 };

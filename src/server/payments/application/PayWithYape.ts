@@ -4,7 +4,7 @@ import crypto from "node:crypto";
 import * as Sentry from "@sentry/nextjs";
 import { err, ok, type Result } from "@/server/_shared/result";
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
-import { appBaseUrl, isPublicBaseUrl } from "../infrastructure/MercadoPagoClient";
+import { appBaseUrl, isPublicBaseUrl, buildOrderItems } from "../infrastructure/MercadoPagoClient";
 import { reportMpError } from "../infrastructure/reportMpError";
 import { dispatchTicketDelivery } from "@/server/notifications/application/DispatchTicketDelivery";
 
@@ -113,6 +113,10 @@ export const payWithYape = async (
   // polling de status cubre la confirmación vía /api/tickets/order/[id]/status.
   const isPublicUrl = isPublicBaseUrl(base);
 
+  // Why: additional_info.items + payer.phone son parte del checklist oficial
+  // de "medición de calidad" de MP (mejor approval rate, mejor puntaje) — ver
+  // https://www.mercadopago.com.pe/developers/es/docs/checkout-api-payments/integration-test/go-to-production-requirements
+  const items = await buildOrderItems(db, order.id);
   const body: Record<string, unknown> = {
     transaction_amount: Money.toSoles(Math.round(order.total_cents)),
     payment_method_id: "yape",
@@ -133,10 +137,11 @@ export const payWithYape = async (
         : {}),
     },
     additional_info: {
+      ...(items.length > 0 ? { items } : {}),
       payer: {
-        phone: input.phoneNumber
-          ? { area_code: "51", number: input.phoneNumber }
-          : undefined,
+        first_name: firstName,
+        last_name: lastName,
+        ...(input.phoneNumber ? { phone: { area_code: "51", number: input.phoneNumber } } : {}),
       },
     },
   };
