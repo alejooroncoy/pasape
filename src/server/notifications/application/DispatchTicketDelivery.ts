@@ -7,7 +7,14 @@ import { KapsoWhatsAppSender } from "../infrastructure/KapsoWhatsAppSender";
 import { signOrderLink } from "../domain/OrderLinkToken";
 
 // Despacha el QR del ticket por email + WhatsApp tras un pago exitoso.
-// Idempotente respecto a la tabla `notifications` in-app (kind `ticket_ready`).
+//
+// Hasta 2 llamadores independientes pueden marcar la misma orden como pagada
+// casi al mismo tiempo (PayWithCard/PayWithYape, respuesta directa de MP, y
+// HandleWebhook, el webhook real que MP dispara aparte) — sin coordinación
+// entre ellos, el comprador recibiría el email/WhatsApp duplicado. El claim
+// atómico sobre `orders.notified_at` (más abajo) resuelve esto en la raíz,
+// una sola vez, para cualquier llamador presente o futuro — no en cada sitio
+// que dispara el envío.
 
 type Deps = {
   db?: SupabaseClient;
@@ -64,6 +71,21 @@ export const dispatchTicketDelivery = async (
     .maybeSingle<OrderRow>();
   if (orderErr || !order) {
     throw new Error(`dispatchTicketDelivery: order ${orderId} not found (${orderErr?.message ?? "null"})`);
+  }
+
+  // Claim atómico: la primera invocación que reclama `notified_at` es la que
+  // despacha; cualquier otra (el segundo trigger) ve 0 filas afectadas y
+  // no envía nada. `UPDATE ... WHERE notified_at IS NULL` es atómico a nivel
+  // de fila en Postgres — no hay ventana de carrera entre el check y el set.
+  const { data: claimed } = await db
+    .from("orders")
+    .update({ notified_at: new Date().toISOString() })
+    .eq("id", orderId)
+    .is("notified_at", null)
+    .select("id")
+    .maybeSingle();
+  if (!claimed) {
+    return { dispatched: 0, emailSent: false, whatsappSent: false };
   }
 
   const [{ data: event }, { data: tickets }] = await Promise.all([
