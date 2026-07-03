@@ -259,22 +259,34 @@ export const supabaseTicketRepository: TicketRepository = {
       const phoneNorm = input.guest.phone?.replace(/\D/g, "") || null;
       if (!emailNorm && !phoneNorm) return err("guest_contact_required");
 
+      // Why: ni email ni phone son UNIQUE en profiles (un mismo teléfono
+      // puede terminar en varios profiles con el tiempo — reintentos de
+      // checkout, cuentas registradas comprando como guest con su propio
+      // número, etc.). `.maybeSingle()` ERRORA si matchea más de una fila —
+      // y como el código solo desestructuraba `data` (nunca `error`), ese
+      // error quedaba invisible: existingId caía a null y el flujo intentaba
+      // CREAR un auth user nuevo con el mismo email sintético del que ya
+      // existía → "A user with this email address has already been
+      // registered". Con `.limit(1)` + `.order(created_at)` toleramos
+      // múltiples matches y siempre reusamos el más antiguo (consistente).
       let existingId: string | null = null;
       if (emailNorm) {
         const { data } = await db
           .from("profiles")
           .select("id")
           .ilike("email", emailNorm)
-          .maybeSingle<{ id: string }>();
-        existingId = data?.id ?? null;
+          .order("created_at", { ascending: true })
+          .limit(1);
+        existingId = (data as { id: string }[] | null)?.[0]?.id ?? null;
       }
       if (!existingId && phoneNorm) {
         const { data } = await db
           .from("profiles")
           .select("id")
           .eq("phone", phoneNorm)
-          .maybeSingle<{ id: string }>();
-        existingId = data?.id ?? null;
+          .order("created_at", { ascending: true })
+          .limit(1);
+        existingId = (data as { id: string }[] | null)?.[0]?.id ?? null;
       }
 
       if (existingId) {
@@ -293,6 +305,13 @@ export const supabaseTicketRepository: TicketRepository = {
           user_metadata: { full_name: input.guest.fullName },
         });
         if (authErr || !authUser?.user) {
+          // Punto ciego real detectado en QA: si esto falla (ej. colisión de
+          // email sintético con un profile huérfano), el comprador se queda
+          // sin poder pagar y antes no quedaba ningún rastro del porqué.
+          Sentry.captureException(new Error(authErr?.message ?? "guest_profile_create_failed"), {
+            tags: { area: "tickets-buy", stage: "guest-profile-create" },
+            extra: { synthEmail, hasPhone: !!phoneNorm },
+          });
           return err(authErr?.message ?? "guest_profile_create_failed");
         }
         // El trigger creó (id, email, full_name) pero no copia phone — lo
