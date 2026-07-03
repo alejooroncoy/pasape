@@ -118,12 +118,13 @@ export const dispatchTicketDelivery = async (
       phone: ticket.holder_phone ?? orderPhone,
     };
     const holderName = ticket.holder_name ?? orderHolderName;
-    // Una sola página: el link lleva a "Entra para ver tus entradas" (unlock),
-    // que reclama la compra a tu cuenta y la deja en tu billetera con QR offline.
-    // (Reemplaza /t/?k= como vista de QR y /auth/gate, que nunca existió.)
-    const unlockUrl = `${appBaseUrl()}/unlock/${order.id}/${signOrderLink(order.id)}`;
-    const ticketUrl = unlockUrl;
-    const walletSignupUrl = unlockUrl;
+    // Una sola página: el link es un redirector durable a tu orden (/order) —
+    // decide solo si te manda al login+reclamo, o directo a tu ticket ya
+    // reclamado (offline-capable incluido). (Reemplaza /t/?k= como vista de
+    // QR y /auth/gate, que nunca existió.)
+    const orderUrl = `${appBaseUrl()}/order/${order.id}/${signOrderLink(order.id)}`;
+    const ticketUrl = orderUrl;
+    const walletSignupUrl = orderUrl;
 
     const res = await sender.sendTicketDelivery({
       to,

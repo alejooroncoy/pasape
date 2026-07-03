@@ -40,18 +40,18 @@ function Inner({ params }: Props) {
           status: string;
           paidAt: string | null;
           ticketUrl: string | null;
-          unlockUrl: string | null;
+          orderUrl: string | null;
         }>(`/api/tickets/order/${orderId}/status${qs}`);
         if (cancelled) return;
         if (res.status === "paid") {
           setPaid(true);
           await refetchTickets();
           setTimeout(() => {
-            // Invitado → "Entra para desbloquear tus entradas" (unlockUrl).
+            // Invitado → "Entra para desbloquear tus entradas" (orderUrl).
             // Logueado con varias → pantalla de reparto (/done); con una → wallet.
             const n = parseInt(search.get("n") ?? "1", 10);
-            const dest = res.unlockUrl
-              ? res.unlockUrl
+            const dest = res.orderUrl
+              ? res.orderUrl
               : n > 1
                 ? `/events/${slug}/done?order=${orderId}&n=${n}`
                 : "/tickets";

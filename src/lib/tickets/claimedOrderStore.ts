@@ -1,8 +1,8 @@
 import { openDB, type IDBPDatabase } from "idb";
 
-// Recuerda, en este device, qué órdenes ya reclamó el usuario vía /unlock.
+// Recuerda, en este device, qué órdenes ya reclamó el usuario vía /order.
 //
-// UnlockPage dispara `claimOrder` (mutación POST) al detectar sesión activa.
+// OrderPage dispara `claimOrder` (mutación POST) al detectar sesión activa.
 // Las mutaciones no las cubre el Service Worker (solo intercepta GET), así que
 // sin red esa llamada cuelga o falla — aunque la orden ya esté reclamada y el
 // ticket ya sea 100% visible offline (ver /tickets/[id] + useLocalRotatingQr).

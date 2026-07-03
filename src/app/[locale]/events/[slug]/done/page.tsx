@@ -20,8 +20,8 @@ import type { WalletTicket } from "@/server/tickets/domain/Ticket";
 const WALLET_POLL_MS = 2000;
 const WALLET_POLL_MAX = 8;
 
-const unlockTokenFromUrl = (unlockUrl: string | null | undefined): string | null => {
-  const m = unlockUrl?.match(/\/unlock\/[^/]+\/([a-f0-9]{16})$/i);
+const orderTokenFromUrl = (orderUrl: string | null | undefined): string | null => {
+  const m = orderUrl?.match(/\/order\/[^/]+\/([a-f0-9]{16})$/i);
   return m?.[1] ?? null;
 };
 
@@ -61,7 +61,7 @@ function Inner() {
   const hasOrderTickets = mine.length > 0;
 
   // Tras Google: si la compra fue de invitado, hay que reclamar la orden (como
-  // /unlock). Solo si ya es tuya o no aplica guest-claim, poll del wallet.
+  // /order). Solo si ya es tuya o no aplica guest-claim, poll del wallet.
   useEffect(() => {
     if (!mounted || !orderId || !sessionReady || !loggedIn) {
       setSyncing(false);
@@ -83,11 +83,11 @@ function Inner() {
       let token = search.get("k");
       if (!token) {
         try {
-          const status = await api.get<{ unlockUrl: string | null }>(
+          const status = await api.get<{ orderUrl: string | null }>(
             `/api/tickets/order/${orderId}/status`,
           );
           if (cancelled) return;
-          token = unlockTokenFromUrl(status.unlockUrl);
+          token = orderTokenFromUrl(status.orderUrl);
         } catch {
           if (!cancelled) setSyncing(false);
           return;

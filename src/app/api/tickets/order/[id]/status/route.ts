@@ -35,10 +35,10 @@ export const GET = async (req: NextRequest, ctx: { params: Promise<{ id: string 
   const isOwner = auth.ok && auth.value.profileId === row.buyer_id;
   const isGuest = email && row.guest_email && row.guest_email.toLowerCase() === email;
   // Compra de invitado aún no reclamada: el logueado puede obtener el link de
-  // desbloqueo (p. ej. aterrizó en /done tras Google en vez de /unlock) SOLO si
+  // desbloqueo (p. ej. aterrizó en /done tras Google en vez de /order) SOLO si
   // inició sesión con el mismo correo de la compra. Sin la coincidencia de email,
   // cualquier usuario logueado que conociera el UUID de la orden podría llevarse
-  // el unlockUrl firmado y apropiarse de las entradas (IDOR).
+  // el orderUrl firmado y apropiarse de las entradas (IDOR).
   const canClaimGuestOrder =
     auth.ok &&
     !!row.guest_email &&
@@ -51,7 +51,7 @@ export const GET = async (req: NextRequest, ctx: { params: Promise<{ id: string 
   }
 
   let ticketUrl: string | null = null;
-  let unlockUrl: string | null = null;
+  let orderUrl: string | null = null;
   let ticketsCount = 0;
   if (row.status === "paid") {
     const { data: tickets } = await db
@@ -69,7 +69,7 @@ export const GET = async (req: NextRequest, ctx: { params: Promise<{ id: string 
     // Invitado (sin sesión): lo mandamos a "Entra para desbloquear tus entradas"
     // en vez del QR suelto. El logueado ya cae directo a su billetera.
     if (!isOwner) {
-      unlockUrl = `/unlock/${id}/${signOrderLink(id)}`;
+      orderUrl = `/order/${id}/${signOrderLink(id)}`;
     }
   }
 
@@ -78,7 +78,7 @@ export const GET = async (req: NextRequest, ctx: { params: Promise<{ id: string 
       status: row.status,
       paidAt: row.paid_at,
       ticketUrl,
-      unlockUrl,
+      orderUrl,
       ticketsCount,
     },
   });
