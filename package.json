@@ -18,7 +18,9 @@
     "cap:sync": "cap sync",
     "cap:android": "cap open android",
     "cap:ios": "cap open ios",
-    "cap:apk": "cd android && JAVA_HOME=\"/Applications/Android Studio.app/Contents/jbr/Contents/Home\" ./gradlew assembleDebug"
+    "cap:apk": "cd android && JAVA_HOME=\"/Applications/Android Studio.app/Contents/jbr/Contents/Home\" ./gradlew assembleDebug",
+    "build:door-app": "cd scanner && VITE_API_URL=https://app.pasape.lat npm run build && cd .. && npx cap sync android",
+    "build:door-app:ios": "cd scanner && VITE_API_URL=https://app.pasape.lat npm run build && cd .. && npx cap sync ios"
   },
   "dependencies": {
     "@capacitor-community/bluetooth-le": "^8.2.0",

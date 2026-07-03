@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { json } from "@/server/_shared/http";
 import { err } from "@/server/_shared/result";
 import { payWithYape } from "@/server/payments/application/PayWithYape";
+import { createRateLimiter } from "@/server/_shared/rateLimit";
 
 const schema = z.object({
   orderId: z.string().uuid(),
@@ -10,7 +11,11 @@ const schema = z.object({
   phoneNumber: z.string().regex(/^\d{9}$/),
 });
 
+// 10 req/min por IP: intentos de pago con Yape el día del evento.
+const limiter = createRateLimiter(10);
+
 export const POST = async (req: NextRequest) => {
+  if (!limiter.check(req)) return limiter.response();
   const body = await req.json().catch(() => ({}));
   const parsed = schema.safeParse(body);
   if (!parsed.success) {

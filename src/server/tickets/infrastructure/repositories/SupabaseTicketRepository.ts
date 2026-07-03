@@ -15,6 +15,7 @@ import { supabaseCommissionTierRepository } from "@/server/promoters/tiers/infra
 import { supabaseBoxRepository } from "@/server/boxes/infrastructure/repositories/SupabaseBoxRepository";
 import { encryptDni, dniLast4, normalizeDni } from "@/server/_shared/crypto/dni";
 import crypto from "node:crypto";
+import * as Sentry from "@sentry/nextjs";
 
 const generateQr = () =>
   crypto.randomBytes(24).toString("base64url");
@@ -410,7 +411,20 @@ export const supabaseTicketRepository: TicketRepository = {
       .from("tickets")
       .insert(ticketsToInsert)
       .select("*");
-    if (tkErr || !tkRows) return err(tkErr?.message ?? "tickets_create_failed");
+    if (tkErr || !tkRows) {
+      // Why: el check de arriba (`tt.sold + item.qty > tt.capacity`) es
+      // lectura-luego-escritura sin lock — solo una validación temprana de
+      // UX. El backstop atómico real es el constraint
+      // ticket_types_sold_le_capacity (ver migración
+      // 20260702180000_ticket_type_sold_capacity_check.sql): el trigger
+      // tickets_sync_sold recalcula `sold` con un UPDATE que toma row-lock,
+      // así que compras concurrentes del último cupo se serializan y la
+      // segunda choca contra el constraint (23514) en vez de sobrevender.
+      // La orden queda huérfana en 'pending' y expira sola (30min, ver
+      // expire_stale_pending_orders).
+      if (tkErr?.code === "23514") return err("sold_out");
+      return err(tkErr?.message ?? "tickets_create_failed");
+    }
 
     // ticket_types.sold lo mantiene el trigger tickets_sync_sold a partir de los
     // tickets reales — no se toca a mano (antes se desfasaba).
@@ -424,6 +438,10 @@ export const supabaseTicketRepository: TicketRepository = {
 
       void dispatchTicketDelivery({ db }, orderRow.id).catch((e) => {
         console.error("[buy:free] dispatchTicketDelivery failed:", (e as Error).message);
+        Sentry.captureException(e, {
+          tags: { area: "ticket-delivery" },
+          extra: { orderId: orderRow.id, stage: "buy:free" },
+        });
       });
       // Box gratis (invitación/cortesía): su grupo también nace al "pagar".
       void supabaseBoxRepository.ensureForOrder(orderRow.id).catch((e) => {

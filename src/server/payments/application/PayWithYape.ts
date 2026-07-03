@@ -1,11 +1,26 @@
 import { Money } from "@/lib/_shared/money";
 import "server-only";
-import { randomUUID } from "node:crypto";
+import crypto from "node:crypto";
+import * as Sentry from "@sentry/nextjs";
 import { err, ok, type Result } from "@/server/_shared/result";
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
 import { appBaseUrl, isPublicBaseUrl } from "../infrastructure/MercadoPagoClient";
 import { reportMpError } from "../infrastructure/reportMpError";
 import { dispatchTicketDelivery } from "@/server/notifications/application/DispatchTicketDelivery";
+
+// Why: en prod, si MP_ACCESS_TOKEN no arranca con "APP_USR-" (o sea, parece
+// ser de sandbox tipo "TEST-...") cobraríamos con dinero real usando
+// credenciales de prueba. Es un error silencioso y carísimo si nadie lo
+// nota, así que lo dejamos imposible de ignorar en los logs (sin crashear).
+const assertProductionMpToken = (token: string): void => {
+  if (process.env.NODE_ENV !== "production") return;
+  if (token.startsWith("APP_USR-")) return;
+  const message = "MP_ACCESS_TOKEN no parece ser de producción (no empieza con APP_USR-)";
+  console.error(`[payWithYape] ${message}`);
+  Sentry.captureException(new Error(`mercadopago_sandbox_token_in_production: ${message}`), {
+    tags: { area: "mercadopago", mp_stage: "config" },
+  });
+};
 
 // Why: Yape no se renderiza en el Payment Brick, así que usamos el endpoint
 // REST directo de MP (`POST /v1/payments`) con `payment_method_id: "yape"` y
@@ -48,6 +63,7 @@ export const payWithYape = async (
 ): Promise<Result<PayWithYapeOutput>> => {
   const accessToken = process.env.MP_ACCESS_TOKEN;
   if (!accessToken) return err("missing_mp_access_token");
+  assertProductionMpToken(accessToken);
 
   const db = supabaseAdmin();
   const { data: order } = await db
@@ -125,6 +141,41 @@ export const payWithYape = async (
     },
   };
 
+  // Lock atómico: solo un request concurrente puede tomar la orden. `status`
+  // tiene un CHECK constraint que no incluye un valor "processing", así que
+  // usamos `mp_status` (texto libre) como marca de lock — un UPDATE
+  // condicional que solo pasa si nadie más la tomó ya. Dos requests
+  // concurrentes (doble clic, reintento de red) ya no pueden ambos leer
+  // "pending" y ambos cobrar en MP: el segundo pierde el CAS y no llama a MP.
+  const { data: lockedOrder, error: lockErr } = await db
+    .from("orders")
+    .update({ mp_status: "locked" })
+    .eq("id", order.id)
+    .eq("status", "pending")
+    .or("mp_status.is.null,mp_status.neq.locked")
+    .select("id")
+    .maybeSingle();
+  if (lockErr || !lockedOrder) {
+    return err("order_already_processing");
+  }
+
+  const revertLock = async () => {
+    await db
+      .from("orders")
+      .update({ mp_status: null })
+      .eq("id", order.id)
+      .eq("mp_status", "locked");
+  };
+
+  // Idempotency key determinística: hash de orderId + token de Yape. Un
+  // reintento del MISMO request (mismo token) reusa la key y MP lo dedupea de
+  // verdad; un intento nuevo (nuevo token, p.ej. tras un fallo) genera una key
+  // distinta y no queda bloqueado por una respuesta cacheada vieja.
+  const idempotencyKey = crypto
+    .createHash("sha256")
+    .update(`yape:${order.id}:${input.token}`)
+    .digest("hex");
+
   let mpRes: Response;
   try {
     mpRes = await fetch("https://api.mercadopago.com/v1/payments", {
@@ -132,11 +183,12 @@ export const payWithYape = async (
       headers: {
         Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json",
-        "X-Idempotency-Key": randomUUID(),
+        "X-Idempotency-Key": idempotencyKey,
       },
       body: JSON.stringify(body),
     });
   } catch (e) {
+    await revertLock();
     return err(`mp_network_error: ${(e as Error).message}`);
   }
 
@@ -151,6 +203,7 @@ export const payWithYape = async (
   try {
     data = (await mpRes.json()) as MpPaymentResponse;
   } catch {
+    await revertLock();
     return err(`mp_invalid_response: status ${mpRes.status}`);
   }
 
@@ -163,6 +216,7 @@ export const payWithYape = async (
       httpStatus: mpRes.status,
       mpResponse: data,
     });
+    await revertLock();
     return err(`mp_payment_failed: ${message}`);
   }
 
@@ -180,6 +234,10 @@ export const payWithYape = async (
   } else if (status === "rejected" || status === "cancelled") {
     patch.status = "failed";
   }
+  // in_process/pending: `status` sigue "pending" (nunca lo cambiamos, solo
+  // el lock en mp_status) — el webhook la moverá a paid/failed cuando MP
+  // resuelva async. mp_status ya queda sobrescrito arriba con el valor real,
+  // liberando el lock.
   await db.from("orders").update(patch).eq("id", order.id);
 
   // Si quedó aprobado, dispara el envío del QR. El webhook también lo
@@ -187,6 +245,7 @@ export const payWithYape = async (
   if (status === "approved") {
     dispatchTicketDelivery({}, order.id).catch((e) => {
       console.error("[payWithYape] dispatchTicketDelivery failed:", e);
+      Sentry.captureException(e, { tags: { area: "ticket-delivery", orderId: order.id } });
     });
   }
 

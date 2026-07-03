@@ -1,0 +1,35 @@
+-- Backstop atómico contra sobreventa concurrente.
+--
+-- El check en TypeScript (SupabaseTicketRepository.buy, `if (tt.sold +
+-- item.qty > tt.capacity) return err("sold_out")`) es lectura-luego-escritura
+-- SIN lock: lee `sold` con un SELECT y recién más abajo hace el INSERT de
+-- tickets. Dos compras concurrentes del último cupo pueden leer el mismo
+-- `sold` ANTES de que cualquiera inserte, y ambas pasar la validación.
+--
+-- `ticket_types.sold` ya es derivado por trigger (tickets_sync_sold, ver
+-- 20260614195347_ticket_type_sold_trigger.sql): cada insert/void de un ticket
+-- dispara `recompute_ticket_type_sold`, que hace un UPDATE sobre la fila del
+-- ticket_type — ese UPDATE toma un row-lock. Bajo dos transacciones
+-- concurrentes insertando tickets del mismo ticket_type, la segunda espera a
+-- que la primera libere el lock (commit/rollback) antes de recalcular, así
+-- que ve el conteo real ya actualizado.
+--
+-- Lo único que faltaba era un constraint que, al recalcular, ABORTE la
+-- transacción completa (order + tickets de esa compra) si el recuento supera
+-- `capacity`. Sin este check, el trigger simplemente hubiera guardado un
+-- `sold` inconsistente (sobreventa silenciosa). Con el check, la segunda
+-- compra concurrente falla atómicamente y el caller debe reintentar/mostrar
+-- "sold_out" — la primera compra queda intacta.
+--
+-- Verificado antes de aplicar: no hay ninguna fila existente con
+-- sold > capacity (select id from ticket_types where sold > capacity → []).
+--
+-- Caveat conocido: `updateTicketType` (SupabaseEventRepository.ts) permite
+-- reducir `capacity` por debajo del `sold` actual sin validar — antes eso
+-- dejaba silenciosamente sold > capacity; con este constraint, ese UPDATE
+-- ahora falla con un error de Postgres (check_violation, 23514) en vez de
+-- corromper el dato silenciosamente. Si el organizador necesita reducir
+-- capacity por debajo de lo ya vendido, ese flujo necesita su propia
+-- validación amigable (fuera del alcance de este cambio).
+alter table ticket_types
+  add constraint ticket_types_sold_le_capacity check (sold <= capacity);

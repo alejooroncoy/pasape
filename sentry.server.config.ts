@@ -7,6 +7,8 @@ Sentry.init({
   dsn,
   enabled: !!dsn,
   sendDefaultPii: true,
+  // Separa prod/preview/dev en Sentry (VERCEL_ENV: "production" | "preview" | "development").
+  environment: process.env.VERCEL_ENV ?? process.env.NODE_ENV ?? "development",
   tracesSampleRate: process.env.NODE_ENV === "development" ? 1.0 : 0.1,
   // Adjunta el valor de las variables locales a los stack frames.
   includeLocalVariables: true,
