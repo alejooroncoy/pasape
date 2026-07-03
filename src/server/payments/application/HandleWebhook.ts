@@ -1,6 +1,7 @@
 import "server-only";
 import crypto from "node:crypto";
 import { Payment } from "mercadopago";
+import { after } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { err, ok, type Result } from "@/server/_shared/result";
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
@@ -250,19 +251,27 @@ export const handleMpWebhook = async (
   }
 
   // Despacho del QR por email + WhatsApp al comprador (guest o logueado).
-  // Fire-and-forget para no bloquear el ack del webhook; los errores quedan
-  // registrados en `notification_dispatches`.
+  // No bloquea el ack del webhook, pero corre vía `after()` para que Vercel
+  // mantenga viva la invocación hasta que termine (fire-and-forget plano se
+  // puede congelar apenas se envía la respuesta, atrasando el envío real
+  // minutos y dejando `notification_dispatches` sin fila hasta que algo más
+  // reactive la instancia). Errores quedan registrados en esa tabla + Sentry.
   if (mapped === "paid" && orderRow) {
-    void dispatchTicketDelivery({ db }, orderRow.id).catch((e) => {
-      console.error("[mp-webhook] dispatchTicketDelivery failed:", (e as Error).message);
-      Sentry.captureException(e, { tags: { area: "ticket-delivery", orderId: orderRow.id } });
-    });
+    const orderId = orderRow.id;
+    after(() =>
+      dispatchTicketDelivery({ db }, orderId).catch((e) => {
+        console.error("[mp-webhook] dispatchTicketDelivery failed:", (e as Error).message);
+        Sentry.captureException(e, { tags: { area: "ticket-delivery", orderId } });
+      }),
+    );
     // Un box es una compra: su grupo nace al confirmarse el pago, no al abrir el
-    // wallet. Idempotente; fire-and-forget para no bloquear el ack del webhook.
-    void supabaseBoxRepository.ensureForOrder(orderRow.id).catch((e) => {
-      console.error("[mp-webhook] ensureForOrder failed:", (e as Error).message);
-      Sentry.captureException(e, { tags: { area: "box-provisioning", orderId: orderRow.id } });
-    });
+    // wallet. Idempotente; corre vía `after()` por la misma razón de arriba.
+    after(() =>
+      supabaseBoxRepository.ensureForOrder(orderId).catch((e) => {
+        console.error("[mp-webhook] ensureForOrder failed:", (e as Error).message);
+        Sentry.captureException(e, { tags: { area: "box-provisioning", orderId } });
+      }),
+    );
   }
 
   // Recalcular hitos de comisión si la venta vía promotor quedó aprobada.

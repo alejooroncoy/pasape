@@ -155,7 +155,13 @@ export const dispatchTicketDelivery = async (
   }
 
   if (dispatches.length > 0) {
-    await db.from("notification_dispatches").insert(dispatches);
+    const { error: dispatchInsertErr } = await db.from("notification_dispatches").insert(dispatches);
+    if (dispatchInsertErr) {
+      console.error(
+        "[dispatchTicketDelivery] notification_dispatches insert failed:",
+        dispatchInsertErr.message,
+      );
+    }
   }
 
   // In-app notification (solo si hay buyer logueado).

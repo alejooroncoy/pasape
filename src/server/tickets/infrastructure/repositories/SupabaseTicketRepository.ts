@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
 import { err, ok, type Result } from "@/server/_shared/result";
 import type {
@@ -429,17 +430,21 @@ export const supabaseTicketRepository: TicketRepository = {
         .update({ status: "paid", paid_at: new Date().toISOString() })
         .eq("id", orderRow.id);
 
-      void dispatchTicketDelivery({ db }, orderRow.id).catch((e) => {
-        console.error("[buy:free] dispatchTicketDelivery failed:", (e as Error).message);
-        Sentry.captureException(e, {
-          tags: { area: "ticket-delivery" },
-          extra: { orderId: orderRow.id, stage: "buy:free" },
-        });
-      });
+      after(() =>
+        dispatchTicketDelivery({ db }, orderRow.id).catch((e) => {
+          console.error("[buy:free] dispatchTicketDelivery failed:", (e as Error).message);
+          Sentry.captureException(e, {
+            tags: { area: "ticket-delivery" },
+            extra: { orderId: orderRow.id, stage: "buy:free" },
+          });
+        }),
+      );
       // Box gratis (invitación/cortesía): su grupo también nace al "pagar".
-      void supabaseBoxRepository.ensureForOrder(orderRow.id).catch((e) => {
-        console.error("[buy:free] ensureForOrder failed:", (e as Error).message);
-      });
+      after(() =>
+        supabaseBoxRepository.ensureForOrder(orderRow.id).catch((e) => {
+          console.error("[buy:free] ensureForOrder failed:", (e as Error).message);
+        }),
+      );
 
       if (promoterLinkId) {
         const { count: paidCount } = await db
