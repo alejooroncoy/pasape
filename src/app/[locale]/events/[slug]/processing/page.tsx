@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useRouter } from "@/i18n/navigation";
 import { useEvent } from "@/lib/events/hooks/useEvents";
 import { useMyTickets } from "@/lib/tickets/hooks/useTickets";
+import { useSessionReady } from "@/lib/identity/hooks/useSessionReady";
 import { api } from "@/lib/_shared/api-client";
 import { formatMoney } from "@/lib/_shared/format";
 
@@ -27,12 +28,9 @@ function Inner({ params }: Props) {
   const payMethod = search.get("method") ?? "yape";
   const { data: eventData } = useEvent(slug);
   const { data: ticketData, refetch: refetchTickets } = useMyTickets();
+  const { loggedIn } = useSessionReady();
   const [startedAt] = useState(() => Date.now());
   const [paid, setPaid] = useState(false);
-  // Si el siguiente paso es /order (invitado sin cuenta), el destino es un
-  // login, no el QR — la copy de "paid" no puede prometer "tu QR" igual para
-  // todos, o alguien nuevo pensaría que hay un bug al aterrizar en un login.
-  const [needsLogin, setNeedsLogin] = useState(false);
 
   useEffect(() => {
     if (!orderId || paid) return;
@@ -49,19 +47,14 @@ function Inner({ params }: Props) {
         if (cancelled) return;
         if (res.status === "paid") {
           setPaid(true);
-          setNeedsLogin(!!res.orderUrl);
           await refetchTickets();
           setTimeout(() => {
-            // Invitado → login para guardar sus entradas (orderUrl).
-            // Logueado con varias → pantalla de reparto (/done); con una → wallet.
-            const n = parseInt(search.get("n") ?? "1", 10);
-            const dest = res.orderUrl
-              ? res.orderUrl
-              : n > 1
-                ? `/events/${slug}/done?order=${orderId}&n=${n}`
-                : "/tickets";
+            // /order es el único punto de decisión post-pago: reclama la orden
+            // (o confirma que ya es tuya — claimOrder es idempotente para el
+            // dueño) con el conteo REAL de entradas, y recién ahí bifurca a
+            // /done o /tickets/[id]. No se decide acá con datos adivinados.
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            router.replace(dest as any);
+            router.replace((res.orderUrl ?? "/tickets") as any);
           }, 1600);
         } else if (res.status === "failed" || res.status === "expired") {
           router.replace(
@@ -178,7 +171,7 @@ function Inner({ params }: Props) {
             className="mt-2 text-[14px] text-cart-ink-2"
             style={{ animation: "pasape-fade-in 420ms ease-out 540ms both" }}
           >
-            {needsLogin ? "Ya casi. Entra con tu cuenta para guardarlas…" : "Llevándote a tu QR…"}
+            {loggedIn ? "Llevándote a tu QR…" : "Ya casi. Entra con tu cuenta para guardarlas…"}
           </p>
         </div>
       ) : (

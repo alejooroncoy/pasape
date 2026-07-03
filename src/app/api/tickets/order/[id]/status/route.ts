@@ -66,11 +66,12 @@ export const GET = async (req: NextRequest, ctx: { params: Promise<{ id: string 
       const token = signTicketLink(first.id);
       ticketUrl = `/t/${first.id}?k=${token}`;
     }
-    // Invitado (sin sesión): lo mandamos a "Entra para desbloquear tus entradas"
-    // en vez del QR suelto. El logueado ya cae directo a su billetera.
-    if (!isOwner) {
-      orderUrl = `/order/${id}/${signOrderLink(id)}`;
-    }
+    // /order es el único punto de decisión post-pago (ver processing/page.tsx):
+    // reclama con el conteo real (o confirma que la orden ya es tuya, idempotente
+    // en claimOrder) y recién ahí bifurca a /done o /tickets/[id]. Se devuelve
+    // para todos — invitado y dueño logueado — para que nadie decida el destino
+    // con datos adivinados.
+    orderUrl = `/order/${id}/${signOrderLink(id)}`;
   }
 
   return NextResponse.json({

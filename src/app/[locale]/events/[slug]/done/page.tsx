@@ -3,27 +3,18 @@
 import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { useSearchParams } from "next/navigation";
 import { motion } from "motion/react";
-import { useRouter, usePathname } from "@/i18n/navigation";
-import { GoogleBtn } from "@/components/design";
-import { setOauthReturn } from "@/components/auth/PostLoginRedirect";
-import { useGoogleSignIn } from "@/lib/identity/hooks/useFirebaseAuth";
+import { useRouter } from "@/i18n/navigation";
 import { useSessionReady } from "@/lib/identity/hooks/useSessionReady";
 import { UserHeader } from "@/app/[locale]/_home/UserHeader";
 import { HolderEditSheet } from "@/components/tickets/HolderEditSheet";
 import { TransferTicketSheet } from "@/components/tickets/TransferTicketSheet";
-import { useMyTickets, useClaimOrder } from "@/lib/tickets/hooks/useTickets";
+import { useMyTickets } from "@/lib/tickets/hooks/useTickets";
 import { maskPhone } from "@/lib/tickets/phoneFormat";
 import { useOnline } from "@/lib/_shared/useOnline";
-import { api } from "@/lib/_shared/api-client";
 import type { WalletTicket } from "@/server/tickets/domain/Ticket";
 
 const WALLET_POLL_MS = 2000;
 const WALLET_POLL_MAX = 8;
-
-const orderTokenFromUrl = (orderUrl: string | null | undefined): string | null => {
-  const m = orderUrl?.match(/\/order\/[^/]+\/([a-f0-9]{16})$/i);
-  return m?.[1] ?? null;
-};
 
 export default function PurchaseDonePage() {
   return (
@@ -35,19 +26,12 @@ export default function PurchaseDonePage() {
 
 function Inner() {
   const router = useRouter();
-  const pathname = usePathname();
   const search = useSearchParams();
   const orderId = search.get("order");
   const expectedN = Math.max(0, parseInt(search.get("n") ?? "0", 10));
-  const returnTo = search.toString() ? `${pathname}?${search.toString()}` : pathname;
-  const google = useGoogleSignIn({});
   const { sessionReady, loggedIn } = useSessionReady();
   const { data: ticketData, isLoading, refetch } = useMyTickets();
-  const claim = useClaimOrder();
   const [mounted, setMounted] = useState(false);
-  const [syncing, setSyncing] = useState(false);
-  const [claimError, setClaimError] = useState<string | null>(null);
-  const triedClaim = useRef(false);
 
   useEffect(() => {
     setMounted(true);
@@ -60,75 +44,20 @@ function Inner() {
 
   const hasOrderTickets = mine.length > 0;
 
-  // Tras Google: si la compra fue de invitado, hay que reclamar la orden (como
-  // /order). Solo si ya es tuya o no aplica guest-claim, poll del wallet.
+  // Solo se llega acá desde /order, que ya reclamó la compra (o confirmó que
+  // ya era tuya) antes de mandarte para acá — ver goToWallet() en
+  // order/[orderId]/[token]/page.tsx. Sin sesión no hay nada que reclamar sin
+  // el token del link original, así que si por algún motivo raro (p. ej. la
+  // sesión venció justo entre medio) no hay login, mandamos a la wallet en
+  // vez de duplicar la pantalla de login que ya vive en /order.
   useEffect(() => {
-    if (!mounted || !orderId || !sessionReady || !loggedIn) {
-      setSyncing(false);
-      return;
-    }
-    if (hasOrderTickets) {
-      setSyncing(false);
-      return;
-    }
-    if (triedClaim.current) return;
+    if (!mounted || !sessionReady || loggedIn) return;
+    router.replace("/tickets" as never);
+  }, [mounted, sessionReady, loggedIn, router]);
 
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-
-    const run = async () => {
-      setSyncing(true);
-      setClaimError(null);
-
-      let token = search.get("k");
-      if (!token) {
-        try {
-          const status = await api.get<{ orderUrl: string | null }>(
-            `/api/tickets/order/${orderId}/status`,
-          );
-          if (cancelled) return;
-          token = orderTokenFromUrl(status.orderUrl);
-        } catch {
-          if (!cancelled) setSyncing(false);
-          return;
-        }
-      }
-
-      if (!token) {
-        if (!cancelled) setSyncing(false);
-        return;
-      }
-
-      try {
-        await claim.mutateAsync({ orderId, token });
-        if (cancelled) return;
-        await refetch();
-        setSyncing(false);
-      } catch (e) {
-        if (cancelled) return;
-        const msg = (e as Error).message;
-        if (msg === "order_not_paid") {
-          timer = setTimeout(() => void run(), WALLET_POLL_MS);
-          return;
-        }
-        setClaimError(doneClaimErrorCopy(msg));
-        setSyncing(false);
-      }
-    };
-
-    triedClaim.current = true;
-    void run();
-
-    return () => {
-      cancelled = true;
-      if (timer) clearTimeout(timer);
-    };
-  }, [mounted, orderId, sessionReady, loggedIn, hasOrderTickets, claim, refetch, search]);
-
-  // Compra logueada: el wallet puede tardar un instante tras el pago.
+  // El wallet puede tardar un instante en sincronizar el reclamo recién hecho.
   useEffect(() => {
     if (!mounted || !orderId || !sessionReady || !loggedIn || hasOrderTickets) return;
-    if (claimError || syncing) return;
 
     let attempts = 0;
     const id = setInterval(() => {
@@ -138,14 +67,14 @@ function Inner() {
     }, WALLET_POLL_MS);
 
     return () => clearInterval(id);
-  }, [mounted, orderId, sessionReady, loggedIn, hasOrderTickets, claimError, syncing, refetch]);
+  }, [mounted, orderId, sessionReady, loggedIn, hasOrderTickets, refetch]);
 
   // React Query puede restaurar cache persistido antes de hidratar → esperamos
   // al mount y a que la sesión esté resuelta. No usamos isFetching: parpadea.
   const waitingWallet =
-    !mounted || !sessionReady || (loggedIn && isLoading && !hasOrderTickets);
+    !mounted || !sessionReady || !loggedIn || (isLoading && !hasOrderTickets);
 
-  if (waitingWallet || (loggedIn && syncing && !hasOrderTickets)) {
+  if (waitingWallet) {
     return (
       <DoneSkeleton
         expectedN={expectedN > 0 ? expectedN : 1}
@@ -160,35 +89,12 @@ function Inner() {
   return (
     <DoneContent
       n={n}
-      loggedIn={loggedIn}
       first={first}
       rest={rest}
-      googlePending={google.pending}
-      googleError={google.error}
-      claimError={claimError}
-      onGoogleSignIn={() => {
-        setOauthReturn(returnTo);
-        google.signIn();
-      }}
       onGoWallet={() => router.push("/tickets" as never)}
       onViewQr={(id) => router.push(`/tickets/${id}` as never)}
     />
   );
-}
-
-function doneClaimErrorCopy(raw: string): string {
-  switch (raw) {
-    case "order_already_claimed":
-      return "Estas entradas ya se guardaron en otra cuenta. Entra con la cuenta del comprador.";
-    case "order_claim_expired":
-      return "El plazo para guardar esta compra venció.";
-    case "order_not_claimable":
-      return "Esta compra no se puede guardar desde aquí.";
-    case "invalid_token":
-      return "El enlace de la compra no es válido. Abre el link completo que te llegó al pagar.";
-    default:
-      return "No pudimos guardar tus entradas. Inténtalo de nuevo.";
-  }
 }
 
 function SuccessIcon({ large = false }: { large?: boolean }) {
@@ -285,24 +191,14 @@ function DoneSkeleton({ expectedN, centered }: { expectedN: number; centered: bo
 
 function DoneContent({
   n,
-  loggedIn,
   first,
   rest,
-  googlePending,
-  googleError,
-  claimError,
-  onGoogleSignIn,
   onGoWallet,
   onViewQr,
 }: {
   n: number;
-  loggedIn: boolean;
   first: WalletTicket | undefined;
   rest: WalletTicket[];
-  googlePending: boolean;
-  googleError: string | null;
-  claimError: string | null;
-  onGoogleSignIn: () => void;
   onGoWallet: () => void;
   onViewQr: (id: string) => void;
 }) {
@@ -313,10 +209,9 @@ function DoneContent({
     anchorRef: RefObject<HTMLElement | null>;
   } | null>(null);
   const sheetTicket = sheet ? rest.find((t) => t.id === sheet.ticketId) : undefined;
-  const compact = !loggedIn || n === 0;
-  const subtitle = !loggedIn
-    ? "Las guardamos en tu cuenta, con tu propio QR. Así las tienes siempre a la mano y puedes repartirlas."
-    : n > 1
+  const compact = n === 0;
+  const subtitle =
+    n > 1
       ? "La 1ª es tuya. A las demás envíaselas por WhatsApp cuando quieras."
       : n === 1
         ? "Tu entrada ya está en tu wallet, lista para mostrar en la puerta."
@@ -324,26 +219,13 @@ function DoneContent({
 
   const footer = (
     <div className={compact ? "flex w-full flex-col gap-2.5" : "text-center"}>
-      {!loggedIn ? (
-        <>
-          <GoogleBtn
-            onClick={onGoogleSignIn}
-            disabled={googlePending}
-            label={googlePending ? "Abriendo Google…" : "Continuar con Google"}
-          />
-          {googleError && (
-            <p className="mt-1 text-[12px] text-rose-300">No se pudo abrir Google. Reintenta.</p>
-          )}
-        </>
-      ) : (
-        <button
-          type="button"
-          onClick={onGoWallet}
-          className="w-full py-2.5 text-[14px] font-semibold text-white transition hover:text-white/85 active:scale-[0.99]"
-        >
-          Ir a mis entradas
-        </button>
-      )}
+      <button
+        type="button"
+        onClick={onGoWallet}
+        className="w-full py-2.5 text-[14px] font-semibold text-white transition hover:text-white/85 active:scale-[0.99]"
+      >
+        Ir a mis entradas
+      </button>
     </div>
   );
 
@@ -351,23 +233,14 @@ function DoneContent({
     <DoneShell centered={compact} footer={footer}>
       <SuccessIcon large={compact} />
 
-      {!loggedIn && (
-        <p className="mt-5 text-[11px] font-bold uppercase tracking-[0.16em] text-emerald-300">
-          Pago confirmado
-        </p>
-      )}
       <h1
         className={
           compact
-            ? `${loggedIn ? "mt-5" : "mt-1"} text-[24px] font-bold tracking-[-0.02em]`
+            ? "mt-5 text-[24px] font-bold tracking-[-0.02em]"
             : "mt-4 text-center text-[22px] font-bold tracking-[-0.02em]"
         }
       >
-        {!loggedIn
-          ? "Entra para ver tus entradas"
-          : n > 0
-            ? `¡Listo! Tienes ${n} ${n === 1 ? "entrada" : "entradas"}`
-            : "¡Listo! Pago confirmado"}
+        {n > 0 ? `¡Listo! Tienes ${n} ${n === 1 ? "entrada" : "entradas"}` : "¡Listo! Pago confirmado"}
       </h1>
       <p
         className={
@@ -378,9 +251,6 @@ function DoneContent({
       >
         {subtitle}
       </p>
-      {claimError && loggedIn && (
-        <p className="mt-2 text-[13px] leading-snug text-rose-300">{claimError}</p>
-      )}
 
       {!compact && (
         <div className="mt-5 flex flex-col gap-2">
