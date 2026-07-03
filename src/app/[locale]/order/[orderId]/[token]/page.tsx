@@ -32,6 +32,14 @@ export default function OrderPage(props: Props) {
   const [done, setDone] = useState<{ count: number; firstId: string | null; eventSlug: string } | null>(null);
   const tried = useRef(false);
 
+  // Justo al volver de Google, el snapshot de sesión persistido (para que la
+  // app cargue rápido/offline) responde "no logueado" al instante, antes de
+  // que el fetch fresco confirme que sí lo estás — eso hacía parpadear
+  // "Entra para ver tus entradas" un instante tras loguearte. Mientras haya
+  // un fetch en curso Y el resultado actual diga "no logueado", no lo
+  // mostramos todavía: puede cambiar en cuanto llegue el dato real.
+  const identityUnsettled = !sessionReady || (me.isFetching && !isLogged);
+
   const goToWallet = () => {
     if (done && done.count > 1) {
       router.replace(`/events/${done.eventSlug}/done?order=${orderId}&n=${done.count}` as never);
@@ -168,7 +176,7 @@ export default function OrderPage(props: Props) {
               Abre el enlace que te llegó al pagar, completo.
             </p>
           </>
-        ) : !sessionReady ? (
+        ) : identityUnsettled ? (
           <p className="text-[14px] text-cart-ink-3">Cargando…</p>
         ) : !isLogged ? (
           /* Pagado, falta entrar */
