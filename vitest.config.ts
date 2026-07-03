@@ -28,6 +28,11 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
+      // "server-only" siempre lanza fuera del bundler de Next (que lo
+      // intercepta especialmente para React Server Components) — bajo
+      // vitest (Node puro) hace falta un no-op para poder importar código
+      // de servidor en los tests.
+      "server-only": fileURLToPath(new URL("./scripts/server-only-shim.ts", import.meta.url)),
     },
   },
   test: {
