@@ -179,11 +179,11 @@ function Inner() {
 function doneClaimErrorCopy(raw: string): string {
   switch (raw) {
     case "order_already_claimed":
-      return "Estas entradas ya se desbloquearon en otra cuenta. Entra con la cuenta del comprador.";
+      return "Estas entradas ya se guardaron en otra cuenta. Entra con la cuenta del comprador.";
     case "order_claim_expired":
-      return "El plazo para desbloquear esta compra venció.";
+      return "El plazo para guardar esta compra venció.";
     case "order_not_claimable":
-      return "Esta compra no se puede desbloquear desde aquí.";
+      return "Esta compra no se puede guardar desde aquí.";
     case "invalid_token":
       return "El enlace de la compra no es válido. Abre el link completo que te llegó al pagar.";
     default:

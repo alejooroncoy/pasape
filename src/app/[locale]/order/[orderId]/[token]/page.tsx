@@ -278,7 +278,7 @@ export default function OrderPage(props: Props) {
           </>
         ) : errorMsg ? (
           <>
-            <h1 className="text-[24px] font-bold tracking-[-0.02em]">No pudimos desbloquearlas</h1>
+            <h1 className="text-[24px] font-bold tracking-[-0.02em]">No pudimos guardarlas</h1>
             <p className="mx-auto mt-2 max-w-[34ch] text-[13.5px] leading-snug text-cart-ink-3">{errorMsg}</p>
             <button
               type="button"
@@ -308,11 +308,11 @@ export default function OrderPage(props: Props) {
 function unlockErrorCopy(raw: string): string {
   switch (raw) {
     case "order_already_claimed":
-      return "Estas entradas ya se desbloquearon en otra cuenta. Si fuiste tú, entra con esa cuenta.";
+      return "Estas entradas ya se guardaron en otra cuenta. Si fuiste tú, entra con esa cuenta.";
     case "order_claim_expired":
-      return "El enlace de desbloqueo venció. Recupera tus entradas desde “Mis entradas”.";
+      return "El enlace para guardar esta compra venció. Recupera tus entradas desde “Mis entradas”.";
     case "order_not_claimable":
-      return "Esta compra no se puede desbloquear por aquí.";
+      return "Esta compra no se puede guardar por aquí.";
     case "order_not_found":
       return "No encontramos esta compra.";
     case "invalid_token":

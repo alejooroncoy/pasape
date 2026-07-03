@@ -29,6 +29,10 @@ function Inner({ params }: Props) {
   const { data: ticketData, refetch: refetchTickets } = useMyTickets();
   const [startedAt] = useState(() => Date.now());
   const [paid, setPaid] = useState(false);
+  // Si el siguiente paso es /order (invitado sin cuenta), el destino es un
+  // login, no el QR — la copy de "paid" no puede prometer "tu QR" igual para
+  // todos, o alguien nuevo pensaría que hay un bug al aterrizar en un login.
+  const [needsLogin, setNeedsLogin] = useState(false);
 
   useEffect(() => {
     if (!orderId || paid) return;
@@ -45,9 +49,10 @@ function Inner({ params }: Props) {
         if (cancelled) return;
         if (res.status === "paid") {
           setPaid(true);
+          setNeedsLogin(!!res.orderUrl);
           await refetchTickets();
           setTimeout(() => {
-            // Invitado → "Entra para desbloquear tus entradas" (orderUrl).
+            // Invitado → login para guardar sus entradas (orderUrl).
             // Logueado con varias → pantalla de reparto (/done); con una → wallet.
             const n = parseInt(search.get("n") ?? "1", 10);
             const dest = res.orderUrl
@@ -173,7 +178,7 @@ function Inner({ params }: Props) {
             className="mt-2 text-[14px] text-cart-ink-2"
             style={{ animation: "pasape-fade-in 420ms ease-out 540ms both" }}
           >
-            Llevándote a tu QR…
+            {needsLogin ? "Ya casi. Entra con tu cuenta para guardarlas…" : "Llevándote a tu QR…"}
           </p>
         </div>
       ) : (
