@@ -303,6 +303,7 @@ function ThreeDsChallenge({
   onComplete: () => void;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -310,7 +311,9 @@ function ThreeDsChallenge({
 
     const iframe = document.createElement("iframe");
     iframe.name = "mp-3ds-frame";
-    iframe.className = "h-[440px] w-full rounded-xl border-0 bg-white lg:h-[520px]";
+    // El contenido es del banco (cross-origin); solo enmarcamos el iframe.
+    iframe.className = "block h-[460px] w-full border-0 bg-white lg:h-[520px]";
+    iframe.addEventListener("load", () => setLoading(false));
     host.appendChild(iframe);
 
     const idoc = iframe.contentWindow?.document;
@@ -345,12 +348,46 @@ function ThreeDsChallenge({
 
   return (
     <div className="rounded-2xl border border-cart-line bg-cart-bg-elev p-5">
-      <div className="text-[16px] font-semibold tracking-[-0.01em]">Verificación de tu banco</div>
-      <p className="mt-1 text-[12.5px] text-cart-ink-3">
-        Tu banco pide confirmar el pago. Completa la verificación en la ventana de abajo —
-        no cierres esta pantalla.
+      {/* Header: candado + copy claro de por qué aparece esta pantalla */}
+      <div className="flex items-start gap-3">
+        <span className="mt-0.5 grid size-9 shrink-0 place-items-center rounded-full bg-cart-accent-soft text-cart-accent">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <path
+              d="M12 2l7 3v6c0 4.4-3 8.4-7 9.5C8 19.4 5 15.4 5 11V5l7-3z"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinejoin="round"
+            />
+            <path d="M9.2 12l2 2 3.6-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </span>
+        <div className="min-w-0">
+          <div className="text-[16px] font-semibold tracking-[-0.01em]">Verificación de tu banco</div>
+          <p className="mt-1 text-[12.5px] leading-relaxed text-cart-ink-3">
+            Tu banco pide confirmar el pago para proteger tu tarjeta. Completa la verificación
+            aquí abajo — <span className="text-cart-ink-2">no cierres ni recargues</span> esta pantalla.
+          </p>
+        </div>
+      </div>
+
+      {/* Marco del challenge: el iframe del banco (blanco) va dentro de un panel
+          con borde propio, para que se vea intencional sobre el fondo oscuro.
+          Mientras carga, un spinner ocupa su lugar. */}
+      <div className="relative mt-4 overflow-hidden rounded-2xl border border-cart-line bg-white shadow-[0_12px_40px_-16px_rgba(0,0,0,0.6)]">
+        {loading && (
+          <div className="absolute inset-0 z-10 grid place-items-center bg-white">
+            <div className="flex flex-col items-center gap-3 text-cart-bg">
+              <span className="size-7 animate-spin rounded-full border-[3px] border-black/15 border-t-black/70" />
+              <span className="text-[12.5px] font-medium text-black/55">Conectando con tu banco…</span>
+            </div>
+          </div>
+        )}
+        <div ref={hostRef} />
+      </div>
+
+      <p className="mt-3 text-center text-[11px] text-cart-ink-4">
+        Autenticación segura 3-D Secure · Procesado por Mercado Pago
       </p>
-      <div ref={hostRef} className="mt-4 overflow-hidden rounded-xl" />
     </div>
   );
 }
