@@ -470,11 +470,43 @@ export const supabasePromoterRepository: PromoterRepository = {
     const base = slugCode(applicant?.full_name ?? "promotor");
     const code = `${base}-${crypto.randomBytes(2).toString("hex")}`;
 
+    // Un promotor aprobado ES un promotor de la marca: lo inscribimos en el pool
+    // (org_promoters) y enganchamos su link, para que herede también el nivel
+    // MARCA (link → evento → marca), igual que los agregados desde el brand. Sin
+    // esto, los que entran por el link de grupo se quedaban sin nivel marca.
+    // Buscar-o-crear por profile: un promotor que vuelve reusa su fila, no se
+    // duplica en el pool.
+    let orgPromoterId: string | null = null;
+    const { data: existingOrgPromoter } = await db
+      .from("org_promoters")
+      .select("id")
+      .eq("organization_id", orgId)
+      .eq("profile_id", a.applicant_id)
+      .is("deleted_at", null)
+      .maybeSingle<{ id: string }>();
+    if (existingOrgPromoter) {
+      orgPromoterId = existingOrgPromoter.id;
+    } else {
+      const { data: createdOrgPromoter } = await db
+        .from("org_promoters")
+        .insert({
+          organization_id: orgId,
+          name: applicant?.full_name ?? "Promotor",
+          profile_id: a.applicant_id,
+          created_by: decidedBy,
+        })
+        .select("id")
+        .maybeSingle<{ id: string }>();
+      orgPromoterId = createdOrgPromoter?.id ?? null;
+    }
+
     const { data: created, error } = await db
       .from("promoter_links")
       .insert({
         event_id: a.event_id,
         promoter_id: a.applicant_id,
+        // Engancha al pool de la marca → habilita la herencia del nivel marca.
+        org_promoter_id: orgPromoterId,
         code,
         // null → el link NO fija % propio y hereda el esquema del evento
         // (resolveCommissionScheme: link → evento → marca). Solo se guarda un
