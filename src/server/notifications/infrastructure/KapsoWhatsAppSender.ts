@@ -3,6 +3,7 @@ import type {
   TicketDeliveryInput,
   TicketDeliveryResult,
 } from "../ports/NotificationSender";
+import { humanizeName } from "../humanizeName";
 
 // Adapter WhatsApp vía Kapso Meta Proxy API (https://api.kapso.ai/meta/whatsapp/v24.0).
 // Env vars requeridas:
@@ -138,17 +139,24 @@ export class KapsoWhatsAppSender implements NotificationSender {
     // (NUMBER_ID) durante la transición.
     const phoneNumberId =
       process.env.KAPSO_WA_PHONE_NUMBER_ID ?? process.env.KAPSO_WA_NUMBER_ID;
-    const templateName = process.env.KAPSO_WA_TEMPLATE_NAME;
+    // Template v2 con botón de URL. Env var independiente de la vieja
+    // KAPSO_WA_TEMPLATE_NAME (que apuntaba al template sin botón) para evitar
+    // que un valor viejo en prod choque con este nuevo shape (body sin
+    // ticket_url + componente de botón).
+    const templateName = process.env.KAPSO_WA_TEMPLATE_NAME_V2 ?? "ticket_delivery_v2";
     const templateLang = process.env.KAPSO_WA_TEMPLATE_LANG ?? "es";
-    if (!apiKey || !phoneNumberId || !templateName) {
+    if (!apiKey || !phoneNumberId) {
       console.warn(
-        "[KapsoWhatsAppSender] Faltan KAPSO_API_KEY/KAPSO_WA_PHONE_NUMBER_ID/KAPSO_WA_TEMPLATE_NAME — skip WhatsApp",
+        "[KapsoWhatsAppSender] Faltan KAPSO_API_KEY/KAPSO_WA_PHONE_NUMBER_ID — skip WhatsApp",
       );
       return { emailSent: false, whatsappSent: false };
     }
     if (!input.to.phone) {
       return { emailSent: false, whatsappSent: false };
     }
+    // El botón dinámico del template apunta a `https://pasape.lat/order/{{1}}`,
+    // así que el parámetro es el sufijo tras "/order/" ("<orderId>/<firma>").
+    const buttonUrlSuffix = input.ticketUrl.split("/order/")[1] ?? input.ticketUrl;
     try {
       const res = await fetch(`${KAPSO_BASE}/${phoneNumberId}/messages`, {
         method: "POST",
@@ -168,15 +176,20 @@ export class KapsoWhatsAppSender implements NotificationSender {
               {
                 type: "body",
                 parameters: [
-                  { type: "text", parameter_name: "holder_name", text: input.holderName },
+                  { type: "text", parameter_name: "holder_name", text: humanizeName(input.holderName) },
                   { type: "text", parameter_name: "event_title", text: input.eventTitle },
                   {
                     type: "text",
                     parameter_name: "event_starts_at",
                     text: formatDateForTemplate(input.eventStartsAt),
                   },
-                  { type: "text", parameter_name: "ticket_url", text: input.ticketUrl },
                 ],
+              },
+              {
+                type: "button",
+                sub_type: "url",
+                index: "0",
+                parameters: [{ type: "text", text: buttonUrlSuffix }],
               },
             ],
           },
