@@ -1,5 +1,15 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { headers } from "next/headers";
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
+
+// Origin visto por el navegador (ngrok/proxy reescriben Host): sin esto el
+// redirect mandaría al comprador a localhost en vez del dominio público.
+const resolveOrigin = async (req: NextRequest) => {
+  const h = await headers();
+  const host = h.get("x-forwarded-host") ?? h.get("host") ?? req.nextUrl.host;
+  const proto = h.get("x-forwarded-proto") ?? req.nextUrl.protocol.replace(":", "");
+  return `${proto}://${host}`;
+};
 
 /**
  * Referral entry — link que el promotor comparte por WhatsApp.
@@ -33,7 +43,7 @@ export async function GET(
   // (el comprador puede ver el evento pero no se atribuye a nadie).
   const target = new URL(
     `/${locale}/events/${link.event.slug}${eventActive ? `?promo=${encodeURIComponent(code)}` : ""}`,
-    req.url,
+    await resolveOrigin(req),
   );
   const res = NextResponse.redirect(target, 302);
   if (eventActive) {

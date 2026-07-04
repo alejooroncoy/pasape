@@ -48,7 +48,12 @@ export type EventStats = {
   /** Reservadas: tickets de órdenes pending dentro de la ventana de 30 min. */
   reserved: number;
   validated: number;
+  /** Bruto que pagaron los compradores (sum total_cents de órdenes pagadas — incluye la comisión de Pasape). */
   revenueCents: number;
+  /** Comisión de Pasape acumulada (sum service_fee_cents de órdenes pagadas). */
+  serviceFeeCents: number;
+  /** Lo que recibe el organizador = revenueCents − serviceFeeCents. La única definición de "neto". */
+  netCents: number;
   capacity: number | null;
   /** Serie diaria desde el view `event_sales_by_day`. Vacío = sin ventas. */
   salesSeries: SalesSeriesPoint[];
@@ -246,6 +251,11 @@ export type PromoterReportRow = {
   revenueCents: number;
   commissionPct: number;
   commissionCalculatedCents: number;
+  /** Esquema de comisión — "inkind" se muestra como "En especie" en el Excel
+      (su payout en soles es 0 y confundía: parecía que no se le debía nada). */
+  commissionType: string;
+  /** Hitos/premios desbloqueados (solo esquemas por hitos). */
+  unlockedRewards: string[];
 };
 
 export type EventExportData = {

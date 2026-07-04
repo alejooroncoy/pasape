@@ -17,6 +17,16 @@ export const useMyPromoterLinks = () =>
     queryFn: () => api.get<PromoterLink[]>("/api/promoters/links"),
   });
 
+/** Nombre público del promotor detrás de un código (chip del checkout / banner del evento). */
+export const usePromoterDisplayName = (code: string | null) =>
+  useQuery({
+    queryKey: ["promoters", "display-name", code],
+    queryFn: () => api.get<{ name: string }>(`/api/r/${encodeURIComponent(code!)}/name`),
+    enabled: !!code,
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+
 export const usePromoterHome = (slug: string) =>
   useQuery({
     queryKey: ["promoters", "home", slug],

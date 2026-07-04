@@ -14,6 +14,7 @@ import { useBuyTickets, useOrderQuote } from "@/lib/tickets/hooks/useTickets";
 import type { OrderQuote } from "@/server/tickets/domain/Ticket";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { useDniLookup } from "@/lib/identity/hooks/useDniLookup";
+import { usePromoterDisplayName } from "@/lib/promoters/hooks/usePromoter";
 import { formatMoney, formatPrice } from "@/lib/_shared/format";
 import { Price } from "@/components/ui/Price";
 import { CardForm } from "@/components/payments/CardForm";
@@ -1681,6 +1682,9 @@ function OrderSummary({
   showFee: boolean;
   promo: string | null;
 }) {
+  // Nombre real del promotor; el código queda como fallback mientras carga.
+  const { data: promoterInfo } = usePromoterDisplayName(promo);
+  const promoterLabel = promoterInfo?.name ?? promo;
   const lines = ticketTypes.filter((tt) => (qty[tt.id] ?? 0) > 0);
   const startsAt = new Date(event.startsAt);
   const dateLabel = new Intl.DateTimeFormat("es-PE", {
@@ -1730,14 +1734,6 @@ function OrderSummary({
               </span>
             </div>
           ))}
-          {showFee && (
-            <div className="flex items-baseline justify-between">
-              <span className="text-[12.5px] text-cart-ink-3">Servicio</span>
-              <span className="text-[13px] tabular-nums text-cart-ink-2">
-                {formatMoney(fee)}
-              </span>
-            </div>
-          )}
         </div>
       )}
 
@@ -1752,6 +1748,14 @@ function OrderSummary({
         </span>
       </div>
 
+      {/* Las líneas ya son precio "todo incluido" (buyerPriceCents): la comisión
+          se aclara como nota, no como fila que parezca sumarse otra vez. */}
+      {showFee && fee > 0 && (
+        <p className="mt-1 text-right text-[11px] text-cart-ink-4">
+          Incluye {formatMoney(fee)} de servicio
+        </p>
+      )}
+
       {promo && (
         <div className="mt-4 flex items-center gap-2 rounded-xl border border-cart-accent/30 bg-cart-accent-soft px-3 py-2">
           <span className="grid size-5 place-items-center rounded-full bg-cart-accent/30 text-cart-accent">
@@ -1760,7 +1764,7 @@ function OrderSummary({
             </svg>
           </span>
           <span className="truncate text-[11.5px] text-cart-ink-2">
-            Promotor: <span className="font-mono text-white">{promo}</span>
+            Promotor: <span className="font-medium text-white">{promoterLabel}</span>
           </span>
         </div>
       )}
