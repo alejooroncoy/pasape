@@ -19,6 +19,7 @@ import {
   useUpdateAssignmentCommission,
 } from "@/lib/promoters/hooks/useEventPromoters";
 import { PersonalizeSheet, type PayPatch } from "./team/page";
+import { CourtesiesSection } from "./_components/CourtesiesSection";
 import type { EventStatsPayload } from "@/lib/events/hooks/useEventStats";
 import type { EventPartner } from "@/server/events/application/EventPartners";
 import type { EventPromoterAssignment } from "@/server/promoters/application/EventPromoterAssignment";
@@ -234,6 +235,9 @@ function LivePanel({
 
       {/* Boxes — cómo se van llenando en vivo */}
       <BoxesSection ticketTypes={stats?.ticketTypes ?? []} />
+
+      {/* Cortesías — regalos nominativos (cumpleañeros, prensa, auspicios) */}
+      <CourtesiesSection slug={slug} />
 
       {/* Partners */}
       <PartnersSection slug={slug} />
