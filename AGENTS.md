@@ -32,6 +32,16 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 **Regla práctica:** si escribes `new Date()` o `Date.now()` fuera de un formatter de display o del EventComposer, detente y pregúntate si esa lógica pertenece al backend.
 
+### Dinero: modelo híbrido (local instantáneo + quote autoritativo)
+
+Validar inputs (formato, requeridos, longitud) en formularios sí es frontend. Pero **el monto que se muestra/cobra lo decide el backend**. El patrón acordado es híbrido:
+
+1. **Feedback instantáneo**: el cliente PUEDE precalcular con el módulo compartido (`@/lib/tickets/serviceFee`, `@/lib/events/pricing`) mientras el usuario arma el carrito (+/− sin lag). Nunca reimplementar la fórmula: solo importar el módulo único.
+2. **El server pisa**: en cada transición de paso del checkout se pide `POST /api/tickets/quote` (misma implementación `priceOrder` que usa `buy()` en `SupabaseTicketRepository`) y sus números reemplazan los locales. La orden creada (`res.order.totalCents/serviceFeeCents`) es la verdad final en la fase de pago.
+3. **Drift = bug**: si el precálculo local difiere del quote/orden, se loggea `[checkout] drift` — significa que el módulo compartido quedó desincronizado del server (versiones desplegadas distintas, etc.).
+
+Motivo: la fórmula ya cambió varias veces (por tramos → piso único → S/3) y una vista que "olvidó" aplicar el fee mostró S/1 donde se cobraba S/4. Ver `useOrderQuote` (`@/lib/tickets/hooks/useTickets`) y su uso en `events/[slug]/buy/page.tsx`.
+
 ## Box vs entrada individual — `capacity` es ambiguo
 
 Un **box** y una **entrada individual** comparten la tabla `ticket_types`, pero NO son lo mismo:

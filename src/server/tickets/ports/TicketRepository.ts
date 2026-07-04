@@ -1,4 +1,4 @@
-import type { Order, Ticket, WalletTicket } from "../domain/Ticket";
+import type { Order, OrderQuote, Ticket, WalletTicket } from "../domain/Ticket";
 import type { Result } from "@/server/_shared/result";
 
 // Quién escanea: el organizador tiene profile (membership); el portero por
@@ -30,8 +30,16 @@ export type BuyOutput = {
   preference: { id: string; initPoint: string };
 };
 
+export type QuoteInput = {
+  eventId: string;
+  items: Array<{ ticketTypeId: string; qty: number }>;
+};
+
 export interface TicketRepository {
   buy(input: BuyInput): Promise<Result<BuyOutput>>;
+  /** Cotiza un pedido con el MISMO cálculo que buy() (precio activo + promos +
+      fee). Read-only: no reserva stock ni crea orden. */
+  quote(input: QuoteInput): Promise<Result<OrderQuote>>;
   listMine(buyerId: string): Promise<WalletTicket[]>;
   getById(ticketId: string, buyerId: string): Promise<WalletTicket | null>;
   /** Asigna/edita el titular de una entrada propia (reparto post-compra). Solo

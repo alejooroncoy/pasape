@@ -10,7 +10,8 @@ const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffec
 import { useRouter } from "@/i18n/navigation";
 import { UserHeader } from "@/app/[locale]/_home/UserHeader";
 import { useEvent } from "@/lib/events/hooks/useEvents";
-import { useBuyTickets } from "@/lib/tickets/hooks/useTickets";
+import { useBuyTickets, useOrderQuote } from "@/lib/tickets/hooks/useTickets";
+import type { OrderQuote } from "@/server/tickets/domain/Ticket";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { useDniLookup } from "@/lib/identity/hooks/useDniLookup";
 import { formatMoney, formatPrice } from "@/lib/_shared/format";
@@ -60,6 +61,13 @@ function BuyFlowInner({ params }: Props) {
   const { data } = useEvent(slug);
   const me = useCurrentUser();
   const buy = useBuyTickets();
+  const quote = useOrderQuote();
+  // Quote autoritativo del backend (modelo híbrido): el cálculo local da
+  // feedback instantáneo al armar el carrito; en cada transición de paso el
+  // server cotiza y sus números pisan los locales. Se guarda junto a la firma
+  // del carrito que cotizó — si el carrito cambia, la cotización deja de
+  // aplicar sola (se deriva null) sin necesidad de effects.
+  const [quoted, setQuoted] = useState<{ sig: string; quote: OrderQuote } | null>(null);
   const search = useSearchParams();
   const [phase, setPhase] = useState<Phase>("pick");
   const [qty, setQty] = useState<Record<string, number>>({});
@@ -264,6 +272,42 @@ function BuyFlowInner({ params }: Props) {
     promoResult.lines,
   );
 
+  // Si el carrito cambia después de cotizar, la cotización vieja ya no aplica:
+  // volvemos al cálculo local hasta la próxima transición de paso.
+  const cartSig = useMemo(() => JSON.stringify(items), [items]);
+  const serverQuote = quoted && quoted.sig === cartSig ? quoted.quote : null;
+
+  // Números que se MUESTRAN: los del server si ya cotizó este carrito; si no,
+  // el precálculo local (mismo módulo compartido que usa el backend).
+  const displaySubtotal = serverQuote?.subtotalCents ?? total;
+  const displayFee = serverQuote?.serviceFeeCents ?? fee;
+  const displayShowFee = serverQuote?.showFeeLine ?? showFee;
+  const displayTotal = displaySubtotal + displayFee;
+
+  // Pide la cotización autoritativa y detecta drift local↔server (si difieren,
+  // el módulo compartido quedó desincronizado de lo que realmente se cobra).
+  const requestQuote = () => {
+    if (!data || items.length === 0) return;
+    const localTotal = total + fee;
+    quote.mutate(
+      { eventId: data.event.id, items: items.map((i) => ({ ticketTypeId: i.ticketTypeId, qty: i.qty })) },
+      {
+        onSuccess: (q) => {
+          setQuoted({ sig: cartSig, quote: q });
+          if (q.totalCents !== localTotal) {
+            console.warn("[checkout] drift local vs server quote", {
+              localTotal,
+              serverTotal: q.totalCents,
+            });
+          }
+        },
+        // Error de red/rate-limit: seguimos con el cálculo local (el backend
+        // igual recalcula y cobra lo suyo al crear la orden).
+        onError: () => {},
+      },
+    );
+  };
+
   // Vence la reserva localmente cuando se cumplen los 30 min (el backend ya la
   // expira en paralelo). Solo corre durante la fase de pago.
   useEffect(() => {
@@ -310,6 +354,25 @@ function BuyFlowInner({ params }: Props) {
       });
       setPreferenceId(res.preference.id);
       setOrderId(res.order.id);
+      // La orden creada es LA verdad final: sus montos pisan cualquier
+      // precálculo (local o quote previo) para la fase de pago.
+      if (res.order.totalCents !== total + fee) {
+        console.warn("[checkout] drift local vs orden creada", {
+          localTotal: total + fee,
+          orderTotal: res.order.totalCents,
+        });
+      }
+      setQuoted((prev) => ({
+        sig: cartSig,
+        quote: {
+          lines: prev?.sig === cartSig ? prev.quote.lines : [],
+          subtotalCents: res.order.totalCents - res.order.serviceFeeCents,
+          serviceFeeCents: res.order.serviceFeeCents,
+          totalCents: res.order.totalCents,
+          showFeeLine: prev?.sig === cartSig ? prev.quote.showFeeLine : showFee,
+          currency: res.order.currency,
+        },
+      }));
 
       // Órdenes gratuitas: la orden ya está pagada en el server.
       // Saltar PayPhase e ir directo a processing con total=0.
@@ -356,6 +419,9 @@ function BuyFlowInner({ params }: Props) {
 
   const onPrimary = () => {
     if (phase === "pick" && pickValid) {
+      // No bloquea el paso: la cotización llega en paralelo y pisa los números
+      // locales al aterrizar.
+      requestQuote();
       setPhase("data");
       return;
     }
@@ -402,12 +468,12 @@ function BuyFlowInner({ params }: Props) {
     if (phase === "pick") {
       if (!pickValid) return "Elige una entrada";
       if (isFreeOrder) return "Continuar · Gratis";
-      return `Continuar · ${formatPrice(total)}`;
+      return `Continuar · ${formatPrice(displayTotal)}`;
     }
     if (phase === "data") {
       if (!dataValid) return "Completa tus datos";
       if (total === 0) return "Confirmar entrada gratuita";
-      return `Ir a pagar · ${formatMoney(total)}`;
+      return `Ir a pagar · ${formatMoney(displayTotal)}`;
     }
     return "Continuar";
   };
@@ -476,8 +542,8 @@ function BuyFlowInner({ params }: Props) {
                   payMethod={payMethod}
                   setPayMethod={setPayMethod}
                   orderId={orderId}
-                total={total}
-                fee={fee}
+                total={displaySubtotal}
+                fee={displayFee}
                 isLogged={isLogged}
                 userPhone={me.data?.user?.phone ?? ""}
                 userName={me.data?.user?.fullName ?? ""}
@@ -499,7 +565,7 @@ function BuyFlowInner({ params }: Props) {
                   const emailQs = !isLogged && guestEmail.trim()
                     ? `&email=${encodeURIComponent(guestEmail.trim())}`
                     : "";
-                  router.push(`/events/${slug}/processing?order=${orderId}&total=${total}&method=${payMethod}&n=${totalItems}${emailQs}`);
+                  router.push(`/events/${slug}/processing?order=${orderId}&total=${displayTotal}&method=${payMethod}&n=${totalItems}${emailQs}`);
                 }}
                 />
               </>
@@ -517,9 +583,9 @@ function BuyFlowInner({ params }: Props) {
                 event={data.event}
                 ticketTypes={data.ticketTypes}
                 qty={qty}
-                total={total}
-                fee={phase === "pay" ? fee : 0}
-                showFee={phase === "pay" && showFee}
+                total={displaySubtotal}
+                fee={displayFee}
+                showFee={displayShowFee}
                 promo={promoCode}
               />
               {phase !== "pay" && (
