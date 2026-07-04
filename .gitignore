@@ -72,3 +72,4 @@ DerivedData/
 
 bun.lock
 .gstack/
+devserver.log

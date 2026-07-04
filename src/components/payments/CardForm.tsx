@@ -16,6 +16,9 @@ type Props = {
   initialEmail?: string;
   onPaid: () => void;
   onError?: (message: string) => void;
+  // La orden expiró (pasaron los 30 min de reserva y pg_cron la cerró): hay que
+  // re-reservar. El padre muestra el modal de "reserva vencida" para reintentar.
+  onExpired?: () => void;
 };
 
 type CardBrand = "visa" | "master" | "amex" | "diners" | "unknown";
@@ -45,6 +48,7 @@ export function CardForm({
   initialEmail: _initialEmail,
   onPaid,
   onError,
+  onExpired,
 }: Props) {
   const mp = useMpSdk(onError);
   const [holder, setHolder] = useState(initialHolder ?? "");
@@ -53,6 +57,8 @@ export function CardForm({
   const [fieldsReady, setFieldsReady] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Cuando el emisor exige 3DS, guardamos el challenge para renderizarlo.
+  const [challenge, setChallenge] = useState<{ externalResourceUrl: string; creq: string } | null>(null);
 
   // Instancias de los Secure Fields — se montan una sola vez cuando el SDK está
   // listo y se desmontan al salir. Los refs evitan re-montar en cada render.
@@ -150,14 +156,27 @@ export function CardForm({
           token: token.id,
           paymentMethodId,
           installments: 1,
+          // Device fingerprint que el SDK v2 crea al cargar (antifraude).
+          deviceId: typeof window !== "undefined" ? window.MP_DEVICE_SESSION_ID ?? null : null,
         }),
       });
       const body = (await res.json()) as {
-        data?: { status: string; paymentId: string; message?: string };
+        data?: {
+          status: string;
+          paymentId: string;
+          message?: string;
+          threeDsInfo?: { externalResourceUrl: string; creq: string };
+        };
         error?: string;
       };
       if (!res.ok || body.error) {
         const errMsg = body.error ?? `HTTP ${res.status}`;
+        // Orden vencida/expirada: no es un error de tarjeta — la reserva de 30
+        // min pasó. Delegamos al padre para re-reservar (modal de reintento).
+        if (errMsg.startsWith("order_status_invalid:expired") || errMsg === "order_expired") {
+          onExpired?.();
+          return;
+        }
         setError(humanizeCardError(errMsg));
         onError?.(errMsg);
         return;
@@ -167,7 +186,11 @@ export function CardForm({
         setError(humanizeCardError("empty_response"));
         return;
       }
-      if (value.status === "approved" || value.status === "in_process") {
+      if (value.status === "challenge" && value.threeDsInfo) {
+        // 3DS: el emisor pide autenticar. Mostramos el challenge del banco; el
+        // resultado se resuelve por webhook + polling en /processing tras COMPLETE.
+        setChallenge(value.threeDsInfo);
+      } else if (value.status === "approved" || value.status === "in_process") {
         onPaid();
       } else {
         setError(humanizeCardError(value.message ?? "rejected"));
@@ -190,8 +213,17 @@ export function CardForm({
     );
   }
 
+  // 3DS activo: superponemos el challenge del banco SIN desmontar el form. Clave:
+  // los Secure Fields (iframes de MP) se ROMPEN si se desmontan y re-montan —
+  // quedan vacíos y no editables. Por eso el form se queda montado (solo oculto)
+  // y el challenge se renderiza como capa aparte; al cancelar, el form sigue vivo
+  // con los datos intactos y editable.
   return (
-    <form onSubmit={onSubmit} className="rounded-2xl border border-cart-line bg-cart-bg-elev p-5">
+    <>
+      <form
+        onSubmit={onSubmit}
+        className={`rounded-2xl border border-cart-line bg-cart-bg-elev p-5${challenge ? " hidden" : ""}`}
+      >
       <div className="text-[16px] font-semibold tracking-[-0.01em]">Paga con tu tarjeta</div>
       <p className="mt-1 text-[12.5px] text-cart-ink-3">
         Visa, Mastercard, AMEX, Diners — débito o crédito.
@@ -266,7 +298,150 @@ export function CardForm({
       <p className="mt-3 text-center text-[11px] text-cart-ink-4">
         Pago seguro · Procesado por Mercado Pago
       </p>
-    </form>
+      </form>
+      {challenge && (
+        <ThreeDsChallenge
+          info={challenge}
+          onComplete={onPaid}
+          onCancel={() => setChallenge(null)}
+        />
+      )}
+    </>
+  );
+}
+
+// Challenge 3DS: monta un iframe y le postea el `creq` al `external_resource_url`
+// del banco (contrato de MP). El banco emite un `message` con status "COMPLETE"
+// cuando el usuario termina — ahí seguimos a /processing (el estado final del
+// pago se resuelve async por webhook, no es inmediato). El challenge DEBE
+// arrancar en <30s de creado el pago: por eso se postea al montar.
+function ThreeDsChallenge({
+  info,
+  onComplete,
+  onCancel,
+}: {
+  info: { externalResourceUrl: string; creq: string };
+  onComplete: () => void;
+  onCancel: () => void;
+}) {
+  const hostRef = useRef<HTMLDivElement>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+
+    const iframe = document.createElement("iframe");
+    iframe.name = "mp-3ds-frame";
+    // HACK de fondo: el contenido del banco es cross-origin (no podemos estilarlo
+    // por dentro), PERO la página 3DS de MP no pinta un fondo opaco en su <body> —
+    // solo dibuja su modal. Si NO forzamos `bg-white` en el iframe y en cambio lo
+    // dejamos transparente, el color del CONTENEDOR (el mismo de la card) se ve a
+    // través del vacío. Resultado: el modal del banco queda flotando sobre la card,
+    // sin el bloque blanco top-anclado — sin tocar el alto ni el contenido ajeno.
+    // `allowtransparency` + background transparent es la llave del truco.
+    iframe.className = "block h-[520px] w-full border-0";
+    // Fondo sólido en blanco TENUE (no puro #fff): transparente no sirve porque
+    // donde el banco no pinta fondo se colaba la card oscura y el contenido se
+    // perdía. Un off-white da respaldo claro y legible sin herir la vista. Es
+    // NUESTRO elemento, no tocamos su DOM cross-origin.
+    iframe.style.background = "#f1f1f4";
+    // Además, un toque menos de brillo suaviza los blancos puros que el propio
+    // banco pinta encima (su modal), para que todo quede parejo y tenue.
+    iframe.style.filter = "brightness(0.97)";
+    iframe.addEventListener("load", () => setLoading(false));
+    host.appendChild(iframe);
+
+    const idoc = iframe.contentWindow?.document;
+    if (idoc) {
+      const form = idoc.createElement("form");
+      form.name = "mp-3ds-form";
+      form.setAttribute("target", "mp-3ds-frame");
+      form.setAttribute("method", "post");
+      form.setAttribute("action", info.externalResourceUrl);
+      const field = idoc.createElement("input");
+      field.setAttribute("type", "hidden");
+      field.setAttribute("name", "creq");
+      field.setAttribute("value", info.creq);
+      form.appendChild(field);
+      idoc.body.appendChild(form);
+      form.submit();
+    }
+
+    const onMessage = (e: MessageEvent) => {
+      const data = e.data as { status?: string } | null;
+      if (data?.status === "COMPLETE") onComplete();
+    };
+    window.addEventListener("message", onMessage);
+
+    return () => {
+      window.removeEventListener("message", onMessage);
+      try {
+        host.removeChild(iframe);
+      } catch {}
+    };
+  }, [info, onComplete]);
+
+  return (
+    <div className="rounded-2xl border border-cart-line bg-cart-bg-elev p-5">
+      {/* Header: candado + copy claro de por qué aparece esta pantalla */}
+      <div className="flex items-start gap-3">
+        <span className="mt-0.5 grid size-9 shrink-0 place-items-center rounded-full bg-cart-accent-soft text-cart-accent">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <path
+              d="M12 2l7 3v6c0 4.4-3 8.4-7 9.5C8 19.4 5 15.4 5 11V5l7-3z"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinejoin="round"
+            />
+            <path d="M9.2 12l2 2 3.6-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </span>
+        <div className="min-w-0">
+          <div className="text-[16px] font-semibold tracking-[-0.01em]">Verificación de tu banco</div>
+          <p className="mt-1 text-[12.5px] leading-relaxed text-cart-ink-3">
+            Tu banco pide confirmar el pago para proteger tu tarjeta. Completa la verificación
+            aquí abajo — <span className="text-cart-ink-2">no cierres ni recargues</span> esta pantalla.
+          </p>
+        </div>
+      </div>
+
+      {/* Marco del challenge: mismo color que la card (bg-cart-bg-elev), sin el
+          panel oscuro que lo enmarcaba. Con el iframe transparente, el vacío del
+          banco toma este color y el modal del banco queda flotando sobre la card
+          — se ve centrado e integrado sin pelear con el alto ajeno (cross-origin). */}
+      <div className="mt-4 flex justify-center rounded-2xl bg-cart-bg-elev">
+        <div className="relative w-full max-w-[440px]">
+          {loading && (
+            <div className="absolute inset-0 z-10 grid place-items-center rounded-xl bg-cart-bg-elev">
+              <div className="flex flex-col items-center gap-3">
+                <span className="size-7 animate-spin rounded-full border-[3px] border-white/15 border-t-white/70" />
+                <span className="text-[12.5px] font-medium text-cart-ink-3">Conectando con tu banco…</span>
+              </div>
+            </div>
+          )}
+          {/* MP monta el iframe (transparente, alto fijo) aquí dentro. El host
+              lleva el color de la card para que el vacío del banco se funda. */}
+          <div ref={hostRef} className="overflow-hidden rounded-xl bg-cart-bg-elev" />
+        </div>
+      </div>
+
+      {/* Salida: botón visible para que el usuario nunca quede atrapado. */}
+      <button
+        type="button"
+        onClick={onCancel}
+        className="mt-4 flex w-full items-center justify-center gap-2 rounded-full border border-cart-line bg-cart-bg-elev-2 py-3.5 text-[14px] font-semibold text-cart-ink-2 transition hover:border-cart-line-strong hover:text-white"
+      >
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden>
+          <path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        Cancelar y volver
+      </button>
+
+      <p className="mt-3 text-center text-[11px] text-cart-ink-4">
+        Autenticación segura 3-D Secure · Procesado por Mercado Pago
+      </p>
+    </div>
   );
 }
 

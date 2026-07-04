@@ -11,6 +11,11 @@ const schema = z.object({
   paymentMethodId: z.string().min(2).max(40),
   installments: z.number().int().min(1).max(36),
   issuerId: z.string().nullable().optional(),
+  // Device fingerprint (window.MP_DEVICE_SESSION_ID). Opcional: si el SDK no lo
+  // pobló, el pago igual procede (solo baja un poco el approval rate). OJO: los
+  // fingerprints reales de MP (prefijo "armor.") pasan holgados los 200 chars —
+  // rondan 250–400 — así que el tope va en 1000 para no rechazarlos.
+  deviceId: z.string().max(1000).nullable().optional(),
 });
 
 // 10 req/min por IP: intentos de pago con tarjeta el día del evento.

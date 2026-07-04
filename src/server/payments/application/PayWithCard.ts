@@ -34,12 +34,20 @@ export type PayWithCardInput = {
   paymentMethodId: string; // "visa", "master", "amex", "debvisa", etc. — MP lo infiere del BIN
   installments: number; // 1 = pago único
   issuerId?: string | null;
+  // Device fingerprint de MP (window.MP_DEVICE_SESSION_ID, creado por el SDK v2).
+  // Mejora approval rate y antifraude — se envía como header X-meli-session-id.
+  deviceId?: string | null;
 };
 
+// Datos del challenge 3DS cuando el emisor pide autenticación. El frontend debe
+// renderizar el `externalResourceUrl` (POST del `creq`) en un iframe.
+export type ThreeDsInfo = { externalResourceUrl: string; creq: string };
+
 export type PayWithCardOutput = {
-  status: "approved" | "in_process" | "rejected";
+  status: "approved" | "in_process" | "rejected" | "challenge";
   paymentId: string;
   message?: string;
+  threeDsInfo?: ThreeDsInfo;
 };
 
 type OrderRow = {
@@ -119,6 +127,11 @@ export const payWithCard = async (
     external_reference: order.id,
     ...(isPublicUrl ? { notification_url: `${base}/api/webhook/mp` } : {}),
     statement_descriptor: "PASAPE",
+    // 3DS 2.0: "optional" = MP solo pide challenge cuando el emisor lo exige.
+    // Requiere capture automático (default true) y binary_mode desactivado
+    // (default false) — ambos ya se cumplen al no enviarlos. Ver manejo de
+    // `pending_challenge` abajo.
+    three_d_secure_mode: "optional",
     payer: {
       email,
       first_name: firstName,
@@ -179,6 +192,8 @@ export const payWithCard = async (
         Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json",
         "X-Idempotency-Key": idempotencyKey,
+        // Device fingerprint (antifraude / approval rate). MP lo ignora si viene vacío.
+        ...(input.deviceId ? { "X-meli-session-id": input.deviceId } : {}),
       },
       body: JSON.stringify(body),
     });
@@ -193,6 +208,7 @@ export const payWithCard = async (
     status_detail?: string;
     message?: string;
     error?: string;
+    three_ds_info?: { external_resource_url?: string; creq?: string };
   };
   let data: MpPaymentResponse;
   try {
@@ -241,6 +257,24 @@ export const payWithCard = async (
         Sentry.captureException(e, { tags: { area: "ticket-delivery", orderId: order.id } });
       }),
     );
+  }
+
+  // 3DS challenge: MP pide autenticar. La orden queda pending (el webhook la
+  // resolverá cuando el comprador complete el challenge). El frontend debe
+  // renderizar el challenge con `threeDsInfo` — arrancarlo en <30s (regla de MP).
+  const tds = data.three_ds_info;
+  if (
+    status === "pending" &&
+    data.status_detail === "pending_challenge" &&
+    tds?.external_resource_url &&
+    tds?.creq
+  ) {
+    return ok({
+      status: "challenge",
+      paymentId,
+      message: data.status_detail,
+      threeDsInfo: { externalResourceUrl: tds.external_resource_url, creq: tds.creq },
+    });
   }
 
   return ok({
