@@ -3,7 +3,7 @@ import { supabaseAdmin } from "@/server/_shared/supabase/admin";
 import type { NotificationSender } from "../ports/NotificationSender";
 import { CompositeNotificationSender } from "../infrastructure/CompositeNotificationSender";
 import { ResendEmailSender } from "../infrastructure/ResendEmailSender";
-import { KapsoWhatsAppSender } from "../infrastructure/KapsoWhatsAppSender";
+import { WhatsAppNotificationSender } from "../infrastructure/WhatsAppNotificationSender";
 import { signOrderLink } from "../domain/OrderLinkToken";
 
 // Despacha el QR del ticket por email + WhatsApp tras un pago exitoso.
@@ -52,7 +52,7 @@ type TicketRow = {
 };
 
 const defaultSender = (): NotificationSender =>
-  new CompositeNotificationSender([new ResendEmailSender(), new KapsoWhatsAppSender()]);
+  new CompositeNotificationSender([new ResendEmailSender(), new WhatsAppNotificationSender()]);
 
 const appBaseUrl = (): string =>
   process.env.APP_BASE_URL ?? process.env.NEXT_PUBLIC_APP_BASE_URL ?? "https://app.pasape.lat";

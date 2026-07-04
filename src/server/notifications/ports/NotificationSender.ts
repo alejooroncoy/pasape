@@ -1,5 +1,6 @@
 // Port de despacho de notificaciones transaccionales (no in-app).
-// Implementaciones: ResendEmailSender, TwilioWhatsAppSender, CompositeNotificationSender.
+// Implementaciones: ResendEmailSender, WhatsAppNotificationSender, CompositeNotificationSender.
+// El "cómo se manda" por WhatsApp (Kapso vs Meta) vive detrás de WhatsAppGateway.
 
 export type TicketDeliveryRecipient = {
   email?: string | null;

@@ -1,9 +1,10 @@
-// Envía invitación al promotor por WhatsApp via Kapso Meta Proxy.
+// Envía la invitación al promotor por WhatsApp. El transporte (Kapso/Meta) lo
+// resuelve el WhatsAppGateway; este sender solo arma el template.
 //
-// === Template requerido (registrado vía Kapso CLI, esperar aprobación Meta) ===
+// === Template requerido (registrar/aprobar en el dashboard del proveedor) ===
 //
-//   Nombre:   promoter_invite_v4    (override KAPSO_WA_PROMOTER_TEMPLATE_NAME)
-//   Idioma:   es                    (override KAPSO_WA_PROMOTER_TEMPLATE_LANG)
+//   Nombre:   promoter_invite_v4    (override WA_PROMOTER_TEMPLATE_NAME)
+//   Idioma:   es                    (override WA_PROMOTER_TEMPLATE_LANG)
 //   Tipo:     UTILITY
 //
 //   BODY:
@@ -20,6 +21,9 @@
 // Magic-link sin OTP: el token en sí es la prueba de posesión del canal
 // WhatsApp (el organizador tipeó el número, lo validamos al delivery).
 
+import { whatsAppGateway } from "./whatsapp";
+import { bodyComponent } from "./whatsapp/components";
+
 type PromoterInviteInput = {
   to: string; // phone E.164 (con o sin "+")
   promoterName: string;
@@ -28,86 +32,43 @@ type PromoterInviteInput = {
   claimToken: string;
 };
 
-const KAPSO_BASE = "https://api.kapso.ai/meta/whatsapp/v24.0";
 const DEFAULT_CLAIM_BASE =
   process.env.NEXT_PUBLIC_APP_URL?.replace(/\/+$/, "") ?? "https://app.pasape.lat";
 
-const formatPhone = (raw: string): string => {
-  let p = raw.trim();
-  if (p.startsWith("whatsapp:")) p = p.slice("whatsapp:".length);
-  if (p.startsWith("+")) p = p.slice(1);
-  return p.replace(/\D/g, "");
-};
-
 export class PromoterInviteWhatsAppSender {
-  /** Devuelve true si se envió. False = no-op (envs faltantes o error). */
+  /** Devuelve true si se envió. False = no-op (proveedor sin configurar o error). */
   async send(input: PromoterInviteInput): Promise<boolean> {
-    const apiKey = process.env.KAPSO_API_KEY;
-    const phoneNumberId =
-      process.env.KAPSO_WA_PHONE_NUMBER_ID ?? process.env.KAPSO_WA_NUMBER_ID;
+    const gateway = whatsAppGateway();
     const templateName =
-      process.env.KAPSO_WA_PROMOTER_TEMPLATE_NAME ?? "promoter_invite_v4";
+      process.env.WA_PROMOTER_TEMPLATE_NAME ??
+      process.env.KAPSO_WA_PROMOTER_TEMPLATE_NAME ??
+      "promoter_invite_v4";
     const templateLang =
-      process.env.KAPSO_WA_PROMOTER_TEMPLATE_LANG ?? "es";
+      process.env.WA_PROMOTER_TEMPLATE_LANG ??
+      process.env.KAPSO_WA_PROMOTER_TEMPLATE_LANG ??
+      "es";
 
-    if (!apiKey || !phoneNumberId) {
-      console.warn(
-        "[PromoterInviteWhatsAppSender] Faltan KAPSO_API_KEY / KAPSO_WA_PHONE_NUMBER_ID — skip",
-      );
+    if (!gateway.configured()) {
+      console.warn("[PromoterInviteWhatsAppSender] proveedor de WhatsApp sin configurar — skip");
       return false;
     }
 
     const claimUrl = `${DEFAULT_CLAIM_BASE}/es/c/${input.claimToken}`;
 
     try {
-      const res = await fetch(`${KAPSO_BASE}/${phoneNumberId}/messages`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-API-Key": apiKey,
-        },
-        body: JSON.stringify({
-          messaging_product: "whatsapp",
-          recipient_type: "individual",
-          to: formatPhone(input.to),
-          type: "template",
-          template: {
-            name: templateName,
-            language: { code: templateLang },
-            components: [
-              {
-                type: "body",
-                parameters: [
-                  {
-                    type: "text",
-                    parameter_name: "promoter_name",
-                    text: input.promoterName.trim() || "Promotor",
-                  },
-                  {
-                    type: "text",
-                    parameter_name: "org_name",
-                    text: input.orgName.trim() || "Tu marca",
-                  },
-                  {
-                    type: "text",
-                    parameter_name: "event_title",
-                    text: input.eventTitle.trim() || "tu evento",
-                  },
-                  {
-                    type: "text",
-                    parameter_name: "claim_url",
-                    text: claimUrl,
-                  },
-                ],
-              },
-            ],
-          },
-        }),
+      await gateway.sendTemplate({
+        to: input.to,
+        templateName,
+        languageCode: templateLang,
+        components: [
+          bodyComponent({
+            promoter_name: input.promoterName.trim() || "Promotor",
+            org_name: input.orgName.trim() || "Tu marca",
+            event_title: input.eventTitle.trim() || "tu evento",
+            claim_url: claimUrl,
+          }),
+        ],
       });
-      if (!res.ok) {
-        const errText = await res.text().catch(() => "");
-        throw new Error(`kapso ${res.status}: ${errText.slice(0, 200)}`);
-      }
       return true;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
