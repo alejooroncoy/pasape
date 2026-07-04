@@ -10,7 +10,7 @@ import type {
 import type { Order, Ticket, WalletTicket } from "@/server/tickets/domain/Ticket";
 import type { EventCategory, EventStatus, Promo } from "@/server/events/domain/Event";
 import { activePricing, applyPromos, type PromoLineInput } from "@/lib/events/pricing";
-import { computeServiceFeeCents } from "@/lib/tickets/serviceFee";
+import { resolveOrderFee } from "@/lib/tickets/serviceFee";
 import { createPreference } from "@/server/payments/application/CreatePreference";
 import { dispatchTicketDelivery } from "@/server/notifications/application/DispatchTicketDelivery";
 import { supabaseCommissionTierRepository } from "@/server/promoters/tiers/infrastructure/repositories/SupabaseCommissionTierRepository";
@@ -194,16 +194,19 @@ export const supabaseTicketRepository: TicketRepository = {
     const promoResult = applyPromos(priceItems, promos);
     const subtotal = promoResult.totalCents;
     // Comisión de Pasape (por tramos, ver serviceFee.ts) — no se cobra en
-    // órdenes gratis. Se calcula acá (server, fuente de verdad) y, según
-    // `fee_mode` del evento, se suma aparte al cobro (buyer_pays_extra,
-    // default) o queda incluida en el precio que puso el organizador
-    // (included_in_price — el comprador no paga más, el organizador absorbe
-    // la comisión en su liquidación). `service_fee_cents` en la orden
-    // siempre guarda cuánto es, sin importar el modo — es lo que usa la
-    // liquidación manual al organizador para saber cuánto descontarle.
-    const serviceFeeCents = subtotal === 0 ? 0 : computeServiceFeeCents(promoResult.lines);
-    const total =
-      evStatus.fee_mode === "included_in_price" ? subtotal : subtotal + serviceFeeCents;
+    // órdenes gratis. Se calcula acá (server, fuente de verdad). Por debajo
+    // de S/15 de subtotal el fee SIEMPRE se cobra pero nunca se muestra
+    // aparte (protege a Pasape y evita un desglose que asuste al comprador
+    // en montos chicos); desde S/15 se respeta `fee_mode` tal cual lo
+    // eligió el organizador. `service_fee_cents` en la orden siempre guarda
+    // cuánto es, sin importar si se mostró o no — lo usa la liquidación
+    // manual al organizador para saber cuánto descontarle.
+    const { chargedFeeCents: serviceFeeCents, showFeeLine } = resolveOrderFee(
+      subtotal,
+      evStatus.fee_mode,
+      promoResult.lines,
+    );
+    const total = subtotal + serviceFeeCents;
     // Subtotal real por tipo (con promos) → para repartir entre los tickets de
     // cada línea y persistir tickets.price_cents (recaudado por tipo exacto).
     // El fee NO se reparte acá: es un cargo de plataforma, no revenue de un
@@ -515,11 +518,11 @@ export const supabaseTicketRepository: TicketRepository = {
             currency: tt?.currency ?? "PEN",
           };
         }),
-        // La suma de items debe igualar lo cobrado (total_cents). En
-        // buyer_pays_extra el fee se suma aparte y se desglosa como línea
-        // informativa; en included_in_price ya está adentro del precio de
-        // cada entrada, así que no se agrega una línea extra (sumaría de más).
-        ...(serviceFeeCents > 0 && evStatus.fee_mode !== "included_in_price"
+        // La suma de items debe igualar lo cobrado (total_cents) cuando se
+        // muestra la línea. Cuando el fee está oculto (showFeeLine=false),
+        // no se agrega item — MP no exige que items sume exacto
+        // (es informativo/antifraude, ver research previo).
+        ...(showFeeLine
           ? [
               {
                 id: "service_fee",
