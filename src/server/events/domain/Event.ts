@@ -110,6 +110,15 @@ type TicketTypeBase = {
   eventId: string;
   name: string;
   priceCents: number;
+  /**
+   * Backend-computed: precio "todo incluido" que ve y paga el comprador por 1
+   * unidad, sobre el precio ACTIVO (gratis/preventa/normal). Cuando la comisión
+   * va horneada (entradas baratas), ya la incluye (ej. priceCents S/1 →
+   * buyerPriceCents S/4); cuando se muestra aparte o el organizador la absorbe,
+   * es igual al precio activo. El frontend pinta ESTE número — no recalcula la
+   * comisión (ver `@/lib/tickets/serviceFee`, regla en AGENTS.md).
+   */
+  buyerPriceCents: number;
   currency: string;
   /**
    * Unidades tomadas. En una entrada = tickets vendidos. En un box = tickets del

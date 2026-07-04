@@ -8,6 +8,7 @@ const tt = (over: Partial<AdmissionTicketType>): TicketType => ({
   name: "General",
   kind: "general",
   priceCents: 3000,
+  buyerPriceCents: 3000,
   currency: "PEN",
   stock: 100,
   sold: 0,

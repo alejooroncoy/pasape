@@ -204,20 +204,26 @@ const priceOrder = async (
   // eligió el organizador. `service_fee_cents` en la orden siempre guarda
   // cuánto es, sin importar si se mostró o no — lo usa la liquidación
   // manual al organizador para saber cuánto descontarle.
-  const { chargedFeeCents: serviceFeeCents, showFeeLine } = resolveOrderFee(
+  // Tres números distintos: `commissionCents` = lo que gana Pasape (SIEMPRE →
+  // orders.service_fee_cents, para la liquidación); `chargedToBuyerCents` = lo
+  // que se le SUMA al comprador (0 en included_in_price, donde el organizador la
+  // absorbe); `showFeeLine` = si se muestra la línea aparte. El total cobrado es
+  // subtotal + chargedToBuyer. Ingreso del organizador = total − commission
+  // (uniforme en ambos modos).
+  const { commissionCents, chargedToBuyerCents, showFeeLine } = resolveOrderFee(
     subtotal,
     evStatus.fee_mode,
     promoResult.lines,
   );
-  const total = subtotal + serviceFeeCents;
-  return ok({ evStatus, tts, promoResult, subtotal, serviceFeeCents, showFeeLine, total });
+  const total = subtotal + chargedToBuyerCents;
+  return ok({ evStatus, tts, promoResult, subtotal, commissionCents, chargedToBuyerCents, showFeeLine, total });
 };
 
 export const supabaseTicketRepository: TicketRepository = {
   async quote(input: QuoteInput): Promise<Result<OrderQuote>> {
     const priced = await priceOrder(supabaseAdmin(), input);
     if (!priced.ok) return priced;
-    const { promoResult, subtotal, serviceFeeCents, showFeeLine, total, tts } = priced.value;
+    const { promoResult, subtotal, chargedToBuyerCents, showFeeLine, total, tts } = priced.value;
     return ok({
       lines: promoResult.lines.map((l) => ({
         ticketTypeId: l.ticketTypeId,
@@ -225,7 +231,8 @@ export const supabaseTicketRepository: TicketRepository = {
         subtotalCents: l.subtotalCents,
       })),
       subtotalCents: subtotal,
-      serviceFeeCents,
+      // Cara al comprador: lo que se le suma (0 si el organizador la absorbe).
+      serviceFeeCents: chargedToBuyerCents,
       totalCents: total,
       showFeeLine,
       currency: tts[0]?.currency ?? "PEN",
@@ -239,7 +246,9 @@ export const supabaseTicketRepository: TicketRepository = {
 
     const priced = await priceOrder(db, input);
     if (!priced.ok) return priced;
-    const { tts, promoResult, serviceFeeCents, showFeeLine, total } = priced.value;
+    // `commissionCents` (lo que gana Pasape) → service_fee_cents SIEMPRE.
+    // `chargedToBuyerCents` ya está dentro de `total`. `showFeeLine` = display.
+    const { tts, promoResult, commissionCents: serviceFeeCents, showFeeLine, total } = priced.value;
     // Subtotal real por tipo (con promos) → para repartir entre los tickets de
     // cada línea y persistir tickets.price_cents (recaudado por tipo exacto).
     // El fee NO se reparte acá: es un cargo de plataforma, no revenue de un

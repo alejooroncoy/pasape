@@ -14,7 +14,8 @@ import type {
   UpdateEventInput,
   UpdateTicketTypeInput,
 } from "@/server/events/ports/EventRepository";
-import type { Event, EventCategory, Promo, PresaleTier, TicketType } from "@/server/events/domain/Event";
+import type { Event, EventCategory, FeeMode, Promo, PresaleTier, TicketType } from "@/server/events/domain/Event";
+import { buyerUnitPriceCents } from "@/lib/tickets/serviceFee";
 import {
   computePromoterPayout,
   resolveCommissionScheme,
@@ -157,10 +158,19 @@ const toEvent = (r: EventRow): Event => ({
   createdAt: r.created_at,
 });
 
-const toTicketType = (r: TicketTypeRow, tiers: PresaleTierRow[] = [], now: Date = new Date()): TicketType => {
+const toTicketType = (
+  r: TicketTypeRow,
+  tiers: PresaleTierRow[] = [],
+  now: Date = new Date(),
+  feeMode: FeeMode = "buyer_pays_extra",
+): TicketType => {
   const myTiers = tiers.filter(t => t.ticket_type_id === r.id);
   const active = activePresaleTier(myTiers, now);
   const sorted = [...myTiers].sort((a, b) => new Date(a.ends_at).getTime() - new Date(b.ends_at).getTime());
+  // Precio activo (gratis gana sobre preventa, preventa sobre normal) — misma
+  // regla que activePricing. De ahí sale el precio "todo incluido" del comprador.
+  const isFreeActive = r.is_free && (r.free_until_at == null || new Date(r.free_until_at) > now);
+  const activePriceCents = isFreeActive ? 0 : (active?.price_cents ?? r.price_cents);
   // Frontera ÚNICA donde la columna `capacity` (ambigua) se traduce a su
   // significado tipado: `seats` en un box, `stock` en una entrada. De aquí en
   // adelante el resto del código no puede confundirlos (unión discriminada).
@@ -169,6 +179,7 @@ const toTicketType = (r: TicketTypeRow, tiers: PresaleTierRow[] = [], now: Date 
     eventId: r.event_id,
     name: r.name,
     priceCents: r.price_cents,
+    buyerPriceCents: buyerUnitPriceCents(activePriceCents, feeMode),
     currency: r.currency,
     sold: r.sold,
     position: r.position,
@@ -182,8 +193,7 @@ const toTicketType = (r: TicketTypeRow, tiers: PresaleTierRow[] = [], now: Date 
     description: r.description,
     isFree: r.is_free,
     freeUntilAt: r.free_until_at,
-    isFreeActive:
-      r.is_free && (r.free_until_at == null || new Date(r.free_until_at) > now),
+    isFreeActive,
     saleStatus: computeSaleStatus(r, now),
     isPresaleActive: active != null,
     presaleTiers: sorted.map(t => ({
@@ -288,7 +298,7 @@ export const supabaseEventRepository: EventRepository = {
     return {
       event: toEvent(event),
       ticketTypes: (tts as TicketTypeRow[] | null)?.map((r) =>
-        toTicketType(r, (tierRows as PresaleTierRow[] | null) ?? [], now),
+        toTicketType(r, (tierRows as PresaleTierRow[] | null) ?? [], now, event.fee_mode),
       ) ?? [],
       promos: (promos as PromoRow[] | null)?.map((r) => toPromo(r)) ?? [],
     };

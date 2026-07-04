@@ -32,7 +32,6 @@ import {
   unitNounPlural,
 } from "@/lib/events/ticketDisplay";
 import { activePricing, applyPromos } from "@/lib/events/pricing";
-import { resolveOrderFee } from "@/lib/tickets/serviceFee";
 
 type Props = { params: Promise<{ slug: string }> };
 type Phase = "pick" | "data" | "pay";
@@ -246,62 +245,55 @@ function BuyFlowInner({ params }: Props) {
         .map(([ticketTypeId, q]) => ({ ticketTypeId, qty: q })),
     [qty],
   );
+  // Subtotal "todo incluido" del comprador: suma los `buyerPriceCents` que YA
+  // vienen calculados del backend (comisión horneada cuando aplica) × promos
+  // 2x1/3x2. El cliente NO recalcula la comisión — solo suma precios que le dio
+  // el backend (regla en AGENTS.md). El total autoritativo llega en el quote.
   const promoResult = useMemo(() => {
     if (!data) return { totalCents: 0, lines: [] };
-    // Precio activo (preventa o normal) + promos 2x1/3x2.
     const lineItems = data.ticketTypes
       .filter((tt) => (qty[tt.id] ?? 0) > 0)
       .map((tt) => ({
         ticketTypeId: tt.id,
         qty: qty[tt.id] ?? 0,
-        unitPriceCents: activePricing(tt).priceCents,
+        unitPriceCents: tt.buyerPriceCents,
       }));
     return applyPromos(lineItems, data.promos ?? []);
   }, [data, qty]);
-  const total = promoResult.totalCents;
+  const buyerSubtotal = promoResult.totalCents;
   const totalItems = items.reduce((a, b) => a + b.qty, 0);
-  // Preview del fee de servicio (por tramos, ver resolveOrderFee) — el
-  // backend recalcula esto mismo al crear la orden, nunca se confía en lo
-  // que calcule el cliente. Por debajo de S/15 el fee SIEMPRE se cobra pero
-  // nunca se muestra aparte (protege a Pasape y evita un desglose que
-  // asuste en montos chicos); desde S/15 se respeta lo que eligió el
-  // organizador (aparte / incluida).
-  const { chargedFeeCents: fee, showFeeLine: showFee } = resolveOrderFee(
-    total,
-    data?.event.feeMode ?? "buyer_pays_extra",
-    promoResult.lines,
-  );
 
   // Si el carrito cambia después de cotizar, la cotización vieja ya no aplica:
-  // volvemos al cálculo local hasta la próxima transición de paso.
+  // volvemos a la suma local (de precios del backend) hasta el próximo quote.
   const cartSig = useMemo(() => JSON.stringify(items), [items]);
   const serverQuote = quoted && quoted.sig === cartSig ? quoted.quote : null;
 
-  // Números que se MUESTRAN: los del server si ya cotizó este carrito; si no,
-  // el precálculo local (mismo módulo compartido que usa el backend).
-  const displaySubtotal = serverQuote?.subtotalCents ?? total;
-  const displayFee = serverQuote?.serviceFeeCents ?? fee;
-  const displayShowFee = serverQuote?.showFeeLine ?? showFee;
-  const displayTotal = displaySubtotal + displayFee;
+  // Números que se MUESTRAN. La línea "Servicio" aparte solo existe cuando el
+  // backend lo indica (entradas >= S/15 con comisión aparte); en entradas
+  // baratas la comisión va horneada en `buyerPriceCents`, sin línea.
+  const displayShowFee = serverQuote?.showFeeLine ?? false;
+  const displayFee = displayShowFee ? (serverQuote?.serviceFeeCents ?? 0) : 0;
+  // Total: el autoritativo del quote si ya llegó; si no, la suma local de
+  // `buyerPriceCents` (exacta cuando la comisión va horneada).
+  const displayTotal = serverQuote?.totalCents ?? buyerSubtotal + displayFee;
 
-  // Pide la cotización autoritativa y detecta drift local↔server (si difieren,
-  // el módulo compartido quedó desincronizado de lo que realmente se cobra).
+  // Pide la cotización autoritativa y detecta drift (si la suma local de
+  // `buyerPriceCents` difiere del total del server, algo quedó desincronizado).
   const requestQuote = () => {
     if (!data || items.length === 0) return;
-    const localTotal = total + fee;
     quote.mutate(
       { eventId: data.event.id, items: items.map((i) => ({ ticketTypeId: i.ticketTypeId, qty: i.qty })) },
       {
         onSuccess: (q) => {
           setQuoted({ sig: cartSig, quote: q });
-          if (q.totalCents !== localTotal) {
-            console.warn("[checkout] drift local vs server quote", {
-              localTotal,
+          if (q.totalCents !== buyerSubtotal) {
+            console.warn("[checkout] drift suma local vs total del server", {
+              localTotal: buyerSubtotal,
               serverTotal: q.totalCents,
             });
           }
         },
-        // Error de red/rate-limit: seguimos con el cálculo local (el backend
+        // Error de red/rate-limit: seguimos con la suma local (el backend
         // igual recalcula y cobra lo suyo al crear la orden).
         onError: () => {},
       },
@@ -323,7 +315,7 @@ function BuyFlowInner({ params }: Props) {
   const isLogged = !!me.data?.user;
   // Pedido gratis: hay entradas pero el total es 0 → no hay pago. El flujo es de
   // 2 pasos (pedido → datos) y se omite todo el lenguaje/paso de checkout.
-  const isFreeOrder = total === 0 && totalItems > 0;
+  const isFreeOrder = buyerSubtotal === 0 && totalItems > 0;
   const emailOk = /.+@.+\..+/.test(guestEmail.trim());
   const phoneOk = guestPhone.replace(/\D/g, "").length === 9;
   // El portero valida por DNI — es obligatorio también para logueados. La
@@ -356,27 +348,36 @@ function BuyFlowInner({ params }: Props) {
       setOrderId(res.order.id);
       // La orden creada es LA verdad final: sus montos pisan cualquier
       // precálculo (local o quote previo) para la fase de pago.
-      if (res.order.totalCents !== total + fee) {
-        console.warn("[checkout] drift local vs orden creada", {
-          localTotal: total + fee,
+      if (res.order.totalCents !== buyerSubtotal) {
+        console.warn("[checkout] drift suma local vs orden creada", {
+          localTotal: buyerSubtotal,
           orderTotal: res.order.totalCents,
         });
       }
-      setQuoted((prev) => ({
-        sig: cartSig,
-        quote: {
-          lines: prev?.sig === cartSig ? prev.quote.lines : [],
-          subtotalCents: res.order.totalCents - res.order.serviceFeeCents,
-          serviceFeeCents: res.order.serviceFeeCents,
-          totalCents: res.order.totalCents,
-          showFeeLine: prev?.sig === cartSig ? prev.quote.showFeeLine : showFee,
-          currency: res.order.currency,
-        },
-      }));
+      // El desglose cara-al-comprador (subtotal / lo que se le carga / si se
+      // muestra) es el del quote previo — es la verdad del backend. `res.order`
+      // solo aporta el total FINAL y su `serviceFeeCents` es la COMISIÓN de
+      // Pasape (incluye lo que absorbe el organizador), no lo cobrado al
+      // comprador, así que no se usa para el desglose. Solo se fija el total.
+      setQuoted((prev) =>
+        prev?.sig === cartSig
+          ? { sig: cartSig, quote: { ...prev.quote, totalCents: res.order.totalCents } }
+          : {
+              sig: cartSig,
+              quote: {
+                lines: [],
+                subtotalCents: res.order.totalCents,
+                serviceFeeCents: 0,
+                totalCents: res.order.totalCents,
+                showFeeLine: false,
+                currency: res.order.currency,
+              },
+            },
+      );
 
       // Órdenes gratuitas: la orden ya está pagada en el server.
       // Saltar PayPhase e ir directo a processing con total=0.
-      if (total === 0) {
+      if (buyerSubtotal === 0) {
         const emailQs = !isLogged && guestEmail.trim()
           ? `&email=${encodeURIComponent(guestEmail.trim())}`
           : "";
@@ -408,7 +409,7 @@ function BuyFlowInner({ params }: Props) {
       // tickets en sí) — el copy de "no pudimos cobrarte" del reason default
       // es incorrecto y confunde. `buy_failed` tiene copy neutral.
       const reason = encodeURIComponent(
-        total === 0 ? "buy_failed" : (e as Error).message || "unknown",
+        buyerSubtotal === 0 ? "buy_failed" : (e as Error).message || "unknown",
       );
       router.replace(`/events/${slug}/pay-error?reason=${reason}`);
     }
@@ -472,7 +473,7 @@ function BuyFlowInner({ params }: Props) {
     }
     if (phase === "data") {
       if (!dataValid) return "Completa tus datos";
-      if (total === 0) return "Confirmar entrada gratuita";
+      if (buyerSubtotal === 0) return "Confirmar entrada gratuita";
       return `Ir a pagar · ${formatMoney(displayTotal)}`;
     }
     return "Continuar";
@@ -542,8 +543,7 @@ function BuyFlowInner({ params }: Props) {
                   payMethod={payMethod}
                   setPayMethod={setPayMethod}
                   orderId={orderId}
-                total={displaySubtotal}
-                fee={displayFee}
+                totalCents={displayTotal}
                 isLogged={isLogged}
                 userPhone={me.data?.user?.phone ?? ""}
                 userName={me.data?.user?.fullName ?? ""}
@@ -583,7 +583,7 @@ function BuyFlowInner({ params }: Props) {
                 event={data.event}
                 ticketTypes={data.ticketTypes}
                 qty={qty}
-                total={displaySubtotal}
+                total={displayTotal}
                 fee={displayFee}
                 showFee={displayShowFee}
                 promo={promoCode}
@@ -1100,16 +1100,17 @@ function BoxGrid({
   onChange: (ticketTypeId: string, value: number) => void;
 }) {
   const selectedItems = items.filter((tt) => (qty[tt.id] ?? 0) > 0);
-  const totalCents = selectedItems.reduce((acc, tt) => acc + tt.priceCents, 0);
+  // Precio "todo incluido" del backend (comisión ya horneada cuando aplica).
+  const totalCents = selectedItems.reduce((acc, tt) => acc + tt.buyerPriceCents, 0);
   const totalPeople = selectedItems.reduce((acc, tt) => acc + boxSeats(tt), 0);
 
   // Si todos los espacios tienen el mismo precio y capacidad, se muestra una
   // sola vez arriba del grid. Es el caso típico.
-  const uniqPrices = new Set(items.map((i) => i.priceCents));
+  const uniqPrices = new Set(items.map((i) => i.buyerPriceCents));
   const uniqCaps = new Set(items.map((i) => boxSeats(i)));
   const samePrice = uniqPrices.size === 1;
   const sameCap = uniqCaps.size === 1;
-  const commonPriceCents = samePrice ? items[0].priceCents : null;
+  const commonPriceCents = samePrice ? items[0].buyerPriceCents : null;
   const commonCap = sameCap ? boxSeats(items[0]) : null;
   const currency = items[0].currency;
   // Noun más usado en el grupo (los items suelen compartirlo). Default "box".
@@ -1176,7 +1177,7 @@ function BoxGrid({
                 {tileLabel(tt)}
               </span>
               {showPriceOnTile && !sold && (
-                <Price cents={tt.priceCents} currency={tt.currency} className="mt-0.5 block text-[9.5px] font-medium opacity-80" />
+                <Price cents={tt.buyerPriceCents} currency={tt.currency} className="mt-0.5 block text-[9.5px] font-medium opacity-80" />
               )}
               {sold && (
                 <span className="absolute inset-x-2 top-1/2 h-px -translate-y-1/2 -rotate-45 bg-cart-ink-4/60" />
@@ -1334,7 +1335,7 @@ function TicketCard({
               {formatMoney(ap.basePriceCents, tt.currency)}
             </div>
           )}
-          <Price cents={ap.priceCents} currency={tt.currency} className="block text-[16px] font-bold tracking-[-0.01em]" />
+          <Price cents={tt.buyerPriceCents} currency={tt.currency} className="block text-[16px] font-bold tracking-[-0.01em]" />
         </div>
       </div>
       <div className="mt-4 flex items-center justify-between">
@@ -1505,8 +1506,7 @@ function PayPhase({
   payMethod,
   setPayMethod,
   orderId,
-  total,
-  fee,
+  totalCents,
   isLogged,
   userPhone,
   userName,
@@ -1522,8 +1522,7 @@ function PayPhase({
   payMethod: "yape" | "mp";
   setPayMethod: (m: "yape" | "mp") => void;
   orderId: string | null;
-  total: number;
-  fee: number;
+  totalCents: number;
   isLogged: boolean;
   userPhone: string;
   userName: string;
@@ -1548,7 +1547,7 @@ function PayPhase({
             Total a pagar
           </span>
           <span className="text-[22px] font-bold tabular-nums tracking-[-0.02em]">
-            {formatMoney(total + fee)}
+            {formatMoney(totalCents)}
           </span>
         </div>
       </div>
@@ -1605,7 +1604,7 @@ function PayPhase({
         {payMethod === "yape" ? (
           <YapeForm
             orderId={orderId}
-            amount={(total + fee) / 100}
+            amount={totalCents / 100}
             initialPhone={isLogged ? userPhone : guestPhone}
             onPaid={onPaid}
             onError={(msg) => console.warn("yape error:", msg)}
@@ -1629,7 +1628,7 @@ function PayPhase({
         ) : (
           <CardForm
             orderId={orderId}
-            amount={(total + fee) / 100}
+            amount={totalCents / 100}
             initialHolder={isLogged ? userName : guestName}
             initialDni={isLogged ? "" : guestDni}
             initialEmail={isLogged ? userEmail : guestEmail}
@@ -1723,7 +1722,7 @@ function OrderSummary({
                 {tt.name} <span className="text-cart-ink-3">× {qty[tt.id]}</span>
               </span>
               <span className="text-[13px] font-semibold tabular-nums">
-                <Price cents={tt.priceCents * (qty[tt.id] ?? 0)} currency={tt.currency} />
+                <Price cents={tt.buyerPriceCents * (qty[tt.id] ?? 0)} currency={tt.currency} />
               </span>
             </div>
           ))}
@@ -1745,7 +1744,7 @@ function OrderSummary({
           Total
         </span>
         <span className="text-[22px] font-bold tabular-nums tracking-[-0.02em]">
-          <Price cents={total + fee} />
+          <Price cents={total} />
         </span>
       </div>
 
