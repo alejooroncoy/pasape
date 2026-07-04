@@ -27,13 +27,11 @@
  */
 
 export const SERVICE_FEE_RATE = 0.1;
-// Piso por tramos (no uno solo): un piso fijo único dejaba un huequito de
-// margen negativo justo antes de que el 10% lo superara (~S/18-20 con piso
-// S/2 plano). Con dos tramos de piso el margen queda positivo en todo el
-// rango, a costa de un salto pequeño en el fee justo en S/10 (S/2 → S/3).
-export const SERVICE_FEE_FLOOR_LOW_CENTS = 200; // S/2 — subtotal < S/10
-export const SERVICE_FEE_FLOOR_LOW_CEILING_CENTS = 1_000; // S/10
-export const SERVICE_FEE_FLOOR_CENTS = 300; // S/3 — subtotal >= S/10
+// Piso único S/3 (sin tramos): simple de explicar ("la comisión mínima
+// siempre es S/3") y matemáticamente seguro — el margen queda positivo en
+// todo el rango de S/1 a S/30 (donde el 10% empieza a superar el piso),
+// sin huecos ni saltos.
+export const SERVICE_FEE_FLOOR_CENTS = 300; // S/3
 export const SERVICE_FEE_BRACKET2_CEILING_CENTS = 30_000; // S/300 de subtotal
 export const SERVICE_FEE_RATE_ABOVE_BRACKET2 = 0.05;
 
@@ -72,11 +70,7 @@ export function computeServiceFeeCents(lines: ServiceFeeLineInput[]): number {
       : SERVICE_FEE_BRACKET2_CEILING_CENTS * SERVICE_FEE_RATE +
         (subtotalCents - SERVICE_FEE_BRACKET2_CEILING_CENTS) * SERVICE_FEE_RATE_ABOVE_BRACKET2;
 
-  const floor =
-    subtotalCents < SERVICE_FEE_FLOOR_LOW_CEILING_CENTS
-      ? SERVICE_FEE_FLOOR_LOW_CENTS
-      : SERVICE_FEE_FLOOR_CENTS;
-  return Math.max(Math.round(raw), floor);
+  return Math.max(Math.round(raw), SERVICE_FEE_FLOOR_CENTS);
 }
 
 export type ResolvedOrderFee = {
