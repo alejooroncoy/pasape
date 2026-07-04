@@ -3,6 +3,7 @@ import { err } from "@/server/_shared/result";
 import type { Event } from "../domain/Event";
 import type { CreateEventInput, EventRepository } from "../ports/EventRepository";
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
+import { MIN_PAID_TICKET_PRICE_CENTS } from "@/lib/tickets/serviceFee";
 
 type Deps = { repo: EventRepository };
 
@@ -36,6 +37,11 @@ export const createEvent = async (
   // Sin label no podemos diferenciar box 10 vs box 11 — se exige al crear.
   for (const tt of input.ticketTypes) {
     if (tt.kind === "box" && !tt.boxLabel?.trim()) return err("box_label_required");
+    // Entrada de pago por debajo del mínimo: el fee de servicio (piso S/3)
+    // sería una proporción absurda del precio.
+    if (tt.priceCents > 0 && tt.priceCents < MIN_PAID_TICKET_PRICE_CENTS) {
+      return err("price_below_minimum");
+    }
   }
 
   const created = await repo.create(input);

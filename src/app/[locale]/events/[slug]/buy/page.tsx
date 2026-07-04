@@ -31,6 +31,7 @@ import {
   unitNounPlural,
 } from "@/lib/events/ticketDisplay";
 import { activePricing, applyPromos } from "@/lib/events/pricing";
+import { computeServiceFeeCents } from "@/lib/tickets/serviceFee";
 
 type Props = { params: Promise<{ slug: string }> };
 type Phase = "pick" | "data" | "pay";
@@ -237,8 +238,8 @@ function BuyFlowInner({ params }: Props) {
         .map(([ticketTypeId, q]) => ({ ticketTypeId, qty: q })),
     [qty],
   );
-  const total = useMemo(() => {
-    if (!data) return 0;
+  const promoResult = useMemo(() => {
+    if (!data) return { totalCents: 0, lines: [] };
     // Precio activo (preventa o normal) + promos 2x1/3x2.
     const lineItems = data.ticketTypes
       .filter((tt) => (qty[tt.id] ?? 0) > 0)
@@ -247,10 +248,18 @@ function BuyFlowInner({ params }: Props) {
         qty: qty[tt.id] ?? 0,
         unitPriceCents: activePricing(tt).priceCents,
       }));
-    return applyPromos(lineItems, data.promos ?? []).totalCents;
+    return applyPromos(lineItems, data.promos ?? []);
   }, [data, qty]);
+  const total = promoResult.totalCents;
   const totalItems = items.reduce((a, b) => a + b.qty, 0);
-  const fee = totalItems > 0 ? 300 : 0;
+  // Preview del fee de servicio (por tramos, ver serviceFee.ts) — el backend
+  // recalcula esto mismo al crear la orden, nunca se confía en lo que
+  // calcule el cliente. Si el organizador eligió que el fee vaya incluido
+  // en el precio, el comprador no paga nada aparte (no se muestra ni se
+  // suma) — el precio que ve ya es el final.
+  const feeIncludedInPrice = data?.event.feeMode === "included_in_price";
+  const fee =
+    total > 0 && !feeIncludedInPrice ? computeServiceFeeCents(promoResult.lines) : 0;
 
   // Vence la reserva localmente cuando se cumplen los 30 min (el backend ya la
   // expira en paralelo). Solo corre durante la fase de pago.

@@ -10,6 +10,8 @@ export type Order = {
   promoterLinkId: string | null;
   status: OrderStatus;
   totalCents: number;
+  /** Comisión de Pasape ya incluida en totalCents (10% por entrada, tope S/15/entrada). */
+  serviceFeeCents: number;
   currency: string;
   createdAt: string;
 };

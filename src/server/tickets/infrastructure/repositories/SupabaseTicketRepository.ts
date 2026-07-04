@@ -10,6 +10,7 @@ import type {
 import type { Order, Ticket, WalletTicket } from "@/server/tickets/domain/Ticket";
 import type { EventCategory, EventStatus, Promo } from "@/server/events/domain/Event";
 import { activePricing, applyPromos, type PromoLineInput } from "@/lib/events/pricing";
+import { computeServiceFeeCents } from "@/lib/tickets/serviceFee";
 import { createPreference } from "@/server/payments/application/CreatePreference";
 import { dispatchTicketDelivery } from "@/server/notifications/application/DispatchTicketDelivery";
 import { supabaseCommissionTierRepository } from "@/server/promoters/tiers/infrastructure/repositories/SupabaseCommissionTierRepository";
@@ -28,6 +29,7 @@ type OrderRow = {
   promoter_link_id: string | null;
   status: Order["status"];
   total_cents: number;
+  service_fee_cents: number;
   currency: string;
   created_at: string;
 };
@@ -56,6 +58,7 @@ const toOrder = (r: OrderRow): Order => ({
   promoterLinkId: r.promoter_link_id,
   status: r.status,
   totalCents: r.total_cents,
+  serviceFeeCents: r.service_fee_cents,
   currency: r.currency,
   createdAt: r.created_at,
 });
@@ -126,9 +129,9 @@ export const supabaseTicketRepository: TicketRepository = {
     // organizador aún no lanzó. Cerrado/cancelado también bloqueado.
     const { data: evStatus } = await db
       .from("events")
-      .select("status, ends_at")
+      .select("status, ends_at, fee_mode")
       .eq("id", input.eventId)
-      .maybeSingle<{ status: string; ends_at: string | null }>();
+      .maybeSingle<{ status: string; ends_at: string | null; fee_mode: "buyer_pays_extra" | "included_in_price" }>();
     if (!evStatus) return err("event_not_found");
     if (evStatus.status !== "published") return err("event_not_published");
     if (evStatus.ends_at && new Date(evStatus.ends_at) < new Date()) return err("event_sales_closed");
@@ -189,9 +192,22 @@ export const supabaseTicketRepository: TicketRepository = {
       priceItems.push({ ticketTypeId: tt.id, qty: item.qty, unitPriceCents: ap.priceCents });
     }
     const promoResult = applyPromos(priceItems, promos);
-    const total = promoResult.totalCents;
+    const subtotal = promoResult.totalCents;
+    // Comisión de Pasape (por tramos, ver serviceFee.ts) — no se cobra en
+    // órdenes gratis. Se calcula acá (server, fuente de verdad) y, según
+    // `fee_mode` del evento, se suma aparte al cobro (buyer_pays_extra,
+    // default) o queda incluida en el precio que puso el organizador
+    // (included_in_price — el comprador no paga más, el organizador absorbe
+    // la comisión en su liquidación). `service_fee_cents` en la orden
+    // siempre guarda cuánto es, sin importar el modo — es lo que usa la
+    // liquidación manual al organizador para saber cuánto descontarle.
+    const serviceFeeCents = subtotal === 0 ? 0 : computeServiceFeeCents(promoResult.lines);
+    const total =
+      evStatus.fee_mode === "included_in_price" ? subtotal : subtotal + serviceFeeCents;
     // Subtotal real por tipo (con promos) → para repartir entre los tickets de
     // cada línea y persistir tickets.price_cents (recaudado por tipo exacto).
+    // El fee NO se reparte acá: es un cargo de plataforma, no revenue de un
+    // ticket_type puntual.
     const subtotalByType = new Map<string, number>();
     for (const l of promoResult.lines) subtotalByType.set(l.ticketTypeId, l.subtotalCents);
 
@@ -322,6 +338,7 @@ export const supabaseTicketRepository: TicketRepository = {
         // failed/cancelled, se hace rollback (tickets -> void, sold -=).
         status: "pending",
         total_cents: total,
+        service_fee_cents: serviceFeeCents,
         currency: tts[0]?.currency ?? "PEN",
         guest_email: input.guest?.email ?? null,
         guest_phone: input.guest?.phone ?? null,
@@ -487,16 +504,33 @@ export const supabaseTicketRepository: TicketRepository = {
       eventSlug: ev?.slug ?? "",
       eventTitle: ev?.title ?? "",
       payerEmail: input.payerEmail ?? input.guest?.email ?? null,
-      items: input.items.map((it) => {
-        const tt = tts.find((t) => t.id === it.ticketTypeId);
-        return {
-          id: it.ticketTypeId,
-          title: nameById.get(it.ticketTypeId) ?? "Entrada",
-          quantity: it.qty,
-          unitPriceCents: tt?.price_cents ?? 0,
-          currency: tt?.currency ?? "PEN",
-        };
-      }),
+      items: [
+        ...input.items.map((it) => {
+          const tt = tts.find((t) => t.id === it.ticketTypeId);
+          return {
+            id: it.ticketTypeId,
+            title: nameById.get(it.ticketTypeId) ?? "Entrada",
+            quantity: it.qty,
+            unitPriceCents: tt?.price_cents ?? 0,
+            currency: tt?.currency ?? "PEN",
+          };
+        }),
+        // La suma de items debe igualar lo cobrado (total_cents). En
+        // buyer_pays_extra el fee se suma aparte y se desglosa como línea
+        // informativa; en included_in_price ya está adentro del precio de
+        // cada entrada, así que no se agrega una línea extra (sumaría de más).
+        ...(serviceFeeCents > 0 && evStatus.fee_mode !== "included_in_price"
+          ? [
+              {
+                id: "service_fee",
+                title: "Servicio Pasape",
+                quantity: 1,
+                unitPriceCents: serviceFeeCents,
+                currency: tts[0]?.currency ?? "PEN",
+              },
+            ]
+          : []),
+      ],
     });
 
     if (!prefResult.ok) {
