@@ -160,14 +160,14 @@ const priceFeeHint = (
   if (priceCents < MIN_PAID_TICKET_PRICE_CENTS) {
     return { text: `El precio mínimo de venta es ${fmt(MIN_PAID_TICKET_PRICE_CENTS)}.`, tone: "error" };
   }
-  const { chargedFeeCents, showFeeLine } = resolveOrderFee(
+  const { chargedToBuyerCents, showFeeLine } = resolveOrderFee(
     priceCents,
     feeMode,
     [{ unitPriceCents: priceCents, chargedQty: 1 }],
   );
   if (priceCents < HIDDEN_FEE_THRESHOLD_CENTS) {
     return {
-      text: `Tú recibes tus ${fmt(priceCents)} completos. El comprador paga ${fmt(priceCents + chargedFeeCents)} en total, pero no le mostramos la comisión aparte por ser un precio bajo (aplica igual sin importar el tipo de comisión que elijas, "Aparte" o "Incluida").`,
+      text: `Tú recibes tus ${fmt(priceCents)} completos. El comprador paga ${fmt(priceCents + chargedToBuyerCents)} en total, pero no le mostramos la comisión aparte por ser un precio bajo (aplica igual sin importar el tipo de comisión que elijas, "Aparte" o "Incluida").`,
       tone: "warn",
     };
   }
@@ -178,7 +178,7 @@ const priceFeeHint = (
     };
   }
   return {
-    text: `El comprador paga ${fmt(priceCents + chargedFeeCents)} (${fmt(priceCents)} + ${fmt(chargedFeeCents)} de comisión, aparte).`,
+    text: `El comprador paga ${fmt(priceCents + chargedToBuyerCents)} (${fmt(priceCents)} + ${fmt(chargedToBuyerCents)} de comisión, aparte).`,
     tone: "info",
   };
 };

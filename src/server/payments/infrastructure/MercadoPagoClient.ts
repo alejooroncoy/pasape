@@ -2,7 +2,6 @@ import "server-only";
 import { MercadoPagoConfig } from "mercadopago";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { Money } from "@/lib/_shared/money";
-import { HIDDEN_FEE_THRESHOLD_CENTS } from "@/lib/tickets/serviceFee";
 
 // Why: `env.mpAccessToken` returns "" si no está seteado para no romper
 // `pnpm build`. Aquí validamos en runtime y dejamos un error claro.
@@ -96,6 +95,10 @@ export const buildOrderItems = async (
     ((types ?? []) as Array<{ id: string; name: string }>).map((t) => [t.id, t.name]),
   );
 
+  // Las líneas de entrada llevan su precio de cara (lo que recibe el
+  // organizador). La parte de comisión que PAGA el comprador va como línea
+  // aparte (abajo), no horneada en la entrada.
+  const subtotalCents = rows.reduce((sum, r) => sum + (r.price_cents ?? 0), 0);
   const items = typeIds.map((id) => {
     const { qty, totalCents } = byType.get(id)!;
     return {
@@ -107,33 +110,27 @@ export const buildOrderItems = async (
     };
   });
 
-  // La suma de items debe igualar transaction_amount cuando se muestra la
-  // línea del fee. Por debajo de S/15 de subtotal el fee siempre se cobra
-  // pero nunca se muestra aparte (ver resolveOrderFee); desde S/15 se
-  // respeta fee_mode. MP no exige que items sume exacto cuando se omite
-  // (es informativo/antifraude, no valida contra transaction_amount).
-  const subtotalCents = rows.reduce((sum, r) => sum + (r.price_cents ?? 0), 0);
+  // Línea de servicio = lo que efectivamente se le CARGA al comprador encima del
+  // subtotal = `total_cents − subtotal`. Así `additional_info.items` suma exacto
+  // a `total_cents` en ambos modos:
+  //  - aparte (o banda S/1–S/15): total > subtotal → aparece la línea.
+  //  - included_in_price: total == subtotal (el organizador absorbe la comisión,
+  //    no se le carga al comprador) → NO hay línea, la entrada ya la contiene.
+  // Se usa `total_cents − subtotal`, NO `service_fee_cents`: este último es la
+  // comisión de Pasape (incluye la parte que absorbe el organizador en modo
+  // incluido), que NO es lo que paga el comprador.
   const { data: order } = await db
     .from("orders")
-    .select("service_fee_cents, event_id")
+    .select("total_cents")
     .eq("id", orderId)
-    .maybeSingle<{ service_fee_cents: number | null; event_id: string }>();
-  const serviceFeeCents = order?.service_fee_cents ?? 0;
-  const { data: event } = order
-    ? await db
-        .from("events")
-        .select("fee_mode")
-        .eq("id", order.event_id)
-        .maybeSingle<{ fee_mode: string }>()
-    : { data: null };
-  const showFeeLine =
-    subtotalCents >= HIDDEN_FEE_THRESHOLD_CENTS && event?.fee_mode !== "included_in_price";
-  if (serviceFeeCents > 0 && showFeeLine) {
+    .maybeSingle<{ total_cents: number | null }>();
+  const buyerChargedFeeCents = (order?.total_cents ?? subtotalCents) - subtotalCents;
+  if (buyerChargedFeeCents > 0) {
     items.push({
       id: "service_fee",
       title: "Servicio Pasape",
       quantity: 1,
-      unit_price: Money.toSoles(serviceFeeCents),
+      unit_price: Money.toSoles(buyerChargedFeeCents),
       category_id: "service_fee",
     });
   }
