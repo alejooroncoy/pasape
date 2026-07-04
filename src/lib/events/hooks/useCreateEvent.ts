@@ -2,12 +2,14 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/_shared/api-client";
-import type { Event, EventCategory } from "@/server/events/domain/Event";
+import type { Event, EventCategory, FeeMode } from "@/server/events/domain/Event";
 
 export type CreateEventInput = {
   title: string;
   description?: string | null;
   category?: EventCategory | null;
+  /** Default "buyer_pays_extra" si se omite. */
+  feeMode?: FeeMode;
   venue?: string | null;
   venueLat?: number | null;
   venueLng?: number | null;

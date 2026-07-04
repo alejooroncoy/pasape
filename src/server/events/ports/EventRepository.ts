@@ -1,4 +1,4 @@
-import type { Event, EventCategory, EventStatus, Promo, PromoKind, PresaleTier, TicketType } from "../domain/Event";
+import type { Event, EventCategory, EventStatus, FeeMode, Promo, PromoKind, PresaleTier, TicketType } from "../domain/Event";
 import type { Result } from "@/server/_shared/result";
 import type { CommissionConfig, CommissionType } from "@/server/promoters/domain/OrgPromoter";
 
@@ -29,6 +29,8 @@ export type CreateEventInput = {
   transferDeadlineHours: number | null;
   transferMaxCount: number;
   transferRequiresKyc: boolean;
+  /** Default "buyer_pays_extra" si se omite. */
+  feeMode?: FeeMode;
 };
 
 export type SalesSeriesPoint = {
@@ -216,6 +218,7 @@ export type UpdateEventInput = {
   transferDeadlineHours?: number | null;
   transferMaxCount?: number;
   transferRequiresKyc?: boolean;
+  feeMode?: FeeMode;
 };
 
 export type AttendeeRow = {

@@ -53,6 +53,7 @@ type EventRow = {
   transfer_deadline_hours: number | null;
   transfer_max_count: number;
   transfer_requires_kyc: boolean;
+  fee_mode: Event["feeMode"];
   version: number;
   created_at: string;
 };
@@ -151,6 +152,7 @@ const toEvent = (r: EventRow): Event => ({
     maxCount: r.transfer_max_count,
     requiresKyc: r.transfer_requires_kyc,
   },
+  feeMode: r.fee_mode,
   version: r.version,
   createdAt: r.created_at,
 });
@@ -323,6 +325,7 @@ export const supabaseEventRepository: EventRepository = {
         transfer_deadline_hours: input.transferDeadlineHours,
         transfer_max_count: input.transferMaxCount,
         transfer_requires_kyc: input.transferRequiresKyc,
+        fee_mode: input.feeMode ?? "buyer_pays_extra",
       })
       .select("*")
       .single<EventRow>();
@@ -404,6 +407,7 @@ export const supabaseEventRepository: EventRepository = {
     if (input.transferMaxCount !== undefined) patch.transfer_max_count = input.transferMaxCount;
     if (input.transferRequiresKyc !== undefined)
       patch.transfer_requires_kyc = input.transferRequiresKyc;
+    if (input.feeMode !== undefined) patch.fee_mode = input.feeMode;
     if (Object.keys(patch).length === 0) return err("nothing_to_update");
     const { data, error } = await db
       .from("events")

@@ -119,6 +119,7 @@ const createSchema = z.object({
   transferDeadlineHours: z.number().int().nullable().optional(),
   transferMaxCount: z.number().int().min(0).default(1),
   transferRequiresKyc: z.boolean().default(false),
+  feeMode: z.enum(["buyer_pays_extra", "included_in_price"]).optional(),
   ticketTypes: z
     .array(
       z.object({
@@ -207,6 +208,7 @@ export const EventsController = {
         transferDeadlineHours: parsed.data.transferDeadlineHours ?? null,
         transferMaxCount: parsed.data.transferMaxCount,
         transferRequiresKyc: parsed.data.transferRequiresKyc,
+        feeMode: parsed.data.feeMode,
         ticketTypes: parsed.data.ticketTypes,
       },
     );
@@ -613,6 +615,7 @@ const updateSchema = z.object({
   transferDeadlineHours: z.number().int().nullable().optional(),
   transferMaxCount: z.number().int().min(0).optional(),
   transferRequiresKyc: z.boolean().optional(),
+  feeMode: z.enum(["buyer_pays_extra", "included_in_price"]).optional(),
 });
 
 async function guardEventMember(

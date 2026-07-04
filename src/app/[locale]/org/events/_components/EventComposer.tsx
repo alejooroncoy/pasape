@@ -32,6 +32,7 @@ import type { OrgPromoter } from "@/server/promoters/domain/OrgPromoter";
 import type {
   Event as EventDomain,
   EventCategory,
+  FeeMode,
   PromoKind,
   TicketType,
   TicketTypeKind,
@@ -332,6 +333,7 @@ export function EventComposer(props: EventComposerProps) {
       title: ev.title,
       description: ev.description ?? "",
       category: ev.category ?? null,
+      feeMode: ev.feeMode,
       date,
       time,
       durationHours: durationHoursFromEdit > 0 ? String(durationHoursFromEdit) : "",
@@ -372,6 +374,9 @@ export function EventComposer(props: EventComposerProps) {
   // Preseleccionada en "fiestas" (categoría dominante del ICP nightlife) y requerida:
   // los chips funcionan como radio, nunca queda en null → el evento siempre es filtrable.
   const [category, setCategory] = useState<EventCategory>(seedFromEdit?.category ?? "fiestas");
+  // Quién absorbe la comisión de Pasape: el comprador la paga aparte
+  // (default) o el organizador la incluye en el precio que puso.
+  const [feeMode, setFeeMode] = useState<FeeMode>(seedFromEdit?.feeMode ?? "buyer_pays_extra");
   const [date, setDate] = useState(seedFromEdit?.date ?? "");
   const [time, setTime] = useState(seedFromEdit?.time ?? "");
   const [durationHours, setDurationHours] = useState(seedFromEdit?.durationHours ?? "");
@@ -645,6 +650,7 @@ export function EventComposer(props: EventComposerProps) {
         ticketTypes,
         transfersEnabled: true,
         transferRequiresKyc: false,
+        feeMode,
       });
       if (selectedPromoterIds.size > 0 && ev.slug) {
         try {
@@ -721,6 +727,7 @@ export function EventComposer(props: EventComposerProps) {
       const nextDesc = description.trim() || null;
       if (nextDesc !== ev.description) patch.description = nextDesc;
       if (category !== (ev.category ?? null)) patch.category = category;
+      if (feeMode !== ev.feeMode) patch.feeMode = feeMode;
       const nextVenueName = venue.name.trim() || null;
       if (nextVenueName !== ev.venue) patch.venue = nextVenueName;
       if (venue.lat !== ev.venueLat) patch.venueLat = venue.lat;
@@ -1049,6 +1056,41 @@ export function EventComposer(props: EventComposerProps) {
                     }
                   >
                     {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Comisión de Pasape: quién la paga — el comprador aparte (default) o
+              el organizador la incluye en el precio que puso. */}
+          <div className="rounded-2xl border border-cart-line bg-cart-bg-elev px-4 py-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">
+                Comisión de Pasape
+              </span>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {(
+                [
+                  { id: "buyer_pays_extra" as const, label: "Aparte", hint: "el comprador la paga sobre tu precio" },
+                  { id: "included_in_price" as const, label: "Incluida", hint: "tu precio ya la incluye, la absorbes tú" },
+                ]
+              ).map(({ id, label, hint }) => {
+                const active = feeMode === id;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setFeeMode(id)}
+                    className={`flex flex-col items-start rounded-xl border px-3 py-2 text-left transition-colors ${
+                      active
+                        ? "border-cart-accent bg-cart-accent/10"
+                        : "border-cart-line text-cart-ink-3 hover:border-cart-line-strong hover:text-white"
+                    }`}
+                  >
+                    <span className={`text-[12.5px] font-medium ${active ? "text-white" : ""}`}>{label}</span>
+                    <span className="text-[11px] text-cart-ink-3">{hint}</span>
                   </button>
                 );
               })}

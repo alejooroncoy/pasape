@@ -95,7 +95,7 @@ export const buildOrderItems = async (
     ((types ?? []) as Array<{ id: string; name: string }>).map((t) => [t.id, t.name]),
   );
 
-  return typeIds.map((id) => {
+  const items = typeIds.map((id) => {
     const { qty, totalCents } = byType.get(id)!;
     return {
       id,
@@ -105,4 +105,33 @@ export const buildOrderItems = async (
       category_id: "tickets",
     };
   });
+
+  // La suma de items debe igualar transaction_amount (order.total_cents).
+  // En buyer_pays_extra el fee se suma aparte y se desglosa como línea
+  // informativa; en included_in_price ya está adentro del precio de cada
+  // entrada, así que no se agrega una línea extra (sumaría de más).
+  const { data: order } = await db
+    .from("orders")
+    .select("service_fee_cents, event_id")
+    .eq("id", orderId)
+    .maybeSingle<{ service_fee_cents: number | null; event_id: string }>();
+  const serviceFeeCents = order?.service_fee_cents ?? 0;
+  const { data: event } = order
+    ? await db
+        .from("events")
+        .select("fee_mode")
+        .eq("id", order.event_id)
+        .maybeSingle<{ fee_mode: string }>()
+    : { data: null };
+  if (serviceFeeCents > 0 && event?.fee_mode !== "included_in_price") {
+    items.push({
+      id: "service_fee",
+      title: "Servicio Pasape",
+      quantity: 1,
+      unit_price: Money.toSoles(serviceFeeCents),
+      category_id: "service_fee",
+    });
+  }
+
+  return items;
 };

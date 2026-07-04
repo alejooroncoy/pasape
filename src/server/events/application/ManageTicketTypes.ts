@@ -5,6 +5,7 @@ import type {
   EventRepository,
   UpdateTicketTypeInput,
 } from "../ports/EventRepository";
+import { MIN_PAID_TICKET_PRICE_CENTS } from "@/lib/tickets/serviceFee";
 
 type Deps = { repo: EventRepository };
 
@@ -15,6 +16,11 @@ export const createTicketType = async (
 ): Promise<Result<TicketType>> => {
   if (!input.name.trim()) return err("name_required");
   if (input.priceCents < 0) return err("price_invalid");
+  // Entrada de pago (no gratis) por debajo del mínimo: el fee de servicio
+  // (piso S/3) sería una proporción absurda del precio.
+  if (input.priceCents > 0 && input.priceCents < MIN_PAID_TICKET_PRICE_CENTS) {
+    return err("price_below_minimum");
+  }
   if (input.capacity < 0) return err("capacity_invalid");
   if (input.kind === "box" && !input.boxLabel?.trim()) return err("box_label_required");
   return repo.createTicketType(eventId, input);
@@ -33,7 +39,12 @@ export const updateTicketType = async (
   if (input.capacity !== undefined && input.capacity < current.sold) {
     return err("capacity_below_sold");
   }
-  if (input.priceCents !== undefined && input.priceCents < 0) return err("price_invalid");
+  if (input.priceCents !== undefined) {
+    if (input.priceCents < 0) return err("price_invalid");
+    if (input.priceCents > 0 && input.priceCents < MIN_PAID_TICKET_PRICE_CENTS) {
+      return err("price_below_minimum");
+    }
+  }
   if (input.name !== undefined && !input.name.trim()) return err("name_required");
   return repo.updateTicketType(ticketTypeId, eventId, input);
 };

@@ -74,15 +74,21 @@ export function Price({ waHref }: { waHref: string }) {
                 10
                 <span className="text-[0.32em] font-medium tracking-[-0.02em] text-ink-3">%</span>
               </h3>
-              <p className="m-0 mt-2 text-[15px] text-ink-3">Por entrada · sin costo fijo</p>
+              <p className="m-0 mt-2 text-[15px] text-ink-3">Por entrada de pago · sin costo fijo</p>
             </div>
 
             <p className="m-0 text-[15px] leading-normal text-ink-2 md:text-base">
               Cargo al <b className="font-semibold text-ink">comprador</b>, no al local. Tú
               defines tu precio y recibes siempre el{" "}
               <b className="font-semibold text-ink">100% de ese monto</b>. El cargo de Pasape
-              se suma aparte para el comprador, con tope de{" "}
-              <b className="font-semibold text-ink">S/15 por transacción</b>.
+              se suma aparte para el comprador: mínimo{" "}
+              <b className="font-semibold text-ink">S/3</b>, y en entradas de más de S/300 baja a{" "}
+              <b className="font-semibold text-ink">5%</b> sobre el excedente.
+            </p>
+            <p className="m-0 text-[13px] leading-normal text-ink-3">
+              En los pilotos 2026 el 10% aplica solo a{" "}
+              <b className="font-medium text-ink-2">entradas de pago</b> — las entradas gratis
+              no suman comisión.
             </p>
           </div>
         </div>

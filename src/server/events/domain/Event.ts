@@ -28,6 +28,10 @@ export type CapacityPolicy = {
   overbookPct: number;
 };
 
+/** buyer_pays_extra: comisión aparte del precio (default). included_in_price:
+ *  el precio ya la incluye, la absorbe el organizador. */
+export type FeeMode = "buyer_pays_extra" | "included_in_price";
+
 export type Event = {
   id: string;
   slug: string;
@@ -59,6 +63,9 @@ export type Event = {
   currency: string;
   capacity: CapacityPolicy;
   transferPolicy: TransferPolicy;
+  /** Quién absorbe la comisión de Pasape: el comprador (aparte, default) o
+   *  el organizador (ya incluida en el precio que puso). */
+  feeMode: FeeMode;
   version: number;
   createdAt: string;
   /**
