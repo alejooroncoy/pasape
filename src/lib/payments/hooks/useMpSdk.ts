@@ -6,16 +6,26 @@ import { useEffect, useState } from "react";
 // misma public key. Centralizamos aquí la carga y los tipos.
 
 export type MpField = {
-  mount: (el: HTMLElement | string) => void;
+  mount: (el: HTMLElement | string) => MpField;
   unmount: () => void;
-  on: (event: string, cb: (data: unknown) => void) => void;
+  on: (event: "binChange" | "error" | "focus" | "blur" | "ready", cb: (data: unknown) => void) => void;
 };
+
+// `binChange` payload del campo de número (Secure Fields): el bin son 8 dígitos.
+export type BinChangeData = { bin?: string | null };
 
 export type MpFieldsFactory = {
   create: (
     kind: "cardNumber" | "securityCode" | "expirationDate",
     opts?: { placeholder?: string; style?: Record<string, unknown> },
   ) => MpField;
+  // Secure Fields: tokeniza leyendo PAN/exp/CVV directo de los iframes de MP —
+  // esos datos NUNCA tocan nuestro DOM ni nuestro servidor (PCI SAQ-A).
+  createCardToken: (input: {
+    cardholderName: string;
+    identificationType: string;
+    identificationNumber: string;
+  }) => Promise<CardTokenResp>;
 };
 
 export type CardTokenInput = {
