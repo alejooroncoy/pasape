@@ -213,21 +213,17 @@ export function CardForm({
     );
   }
 
-  // 3DS activo: reemplazamos el formulario por el challenge del banco. Al
-  // completarse (evento "COMPLETE"), continuamos a /processing, que hace polling
-  // del estado hasta que el webhook confirme (approved/rejected).
-  if (challenge) {
-    return (
-      <ThreeDsChallenge
-        info={challenge}
-        onComplete={onPaid}
-        onCancel={() => setChallenge(null)}
-      />
-    );
-  }
-
+  // 3DS activo: superponemos el challenge del banco SIN desmontar el form. Clave:
+  // los Secure Fields (iframes de MP) se ROMPEN si se desmontan y re-montan —
+  // quedan vacíos y no editables. Por eso el form se queda montado (solo oculto)
+  // y el challenge se renderiza como capa aparte; al cancelar, el form sigue vivo
+  // con los datos intactos y editable.
   return (
-    <form onSubmit={onSubmit} className="rounded-2xl border border-cart-line bg-cart-bg-elev p-5">
+    <>
+      <form
+        onSubmit={onSubmit}
+        className={`rounded-2xl border border-cart-line bg-cart-bg-elev p-5${challenge ? " hidden" : ""}`}
+      >
       <div className="text-[16px] font-semibold tracking-[-0.01em]">Paga con tu tarjeta</div>
       <p className="mt-1 text-[12.5px] text-cart-ink-3">
         Visa, Mastercard, AMEX, Diners — débito o crédito.
@@ -302,7 +298,15 @@ export function CardForm({
       <p className="mt-3 text-center text-[11px] text-cart-ink-4">
         Pago seguro · Procesado por Mercado Pago
       </p>
-    </form>
+      </form>
+      {challenge && (
+        <ThreeDsChallenge
+          info={challenge}
+          onComplete={onPaid}
+          onCancel={() => setChallenge(null)}
+        />
+      )}
+    </>
   );
 }
 
@@ -329,10 +333,22 @@ function ThreeDsChallenge({
 
     const iframe = document.createElement("iframe");
     iframe.name = "mp-3ds-frame";
-    // El contenido es del banco (cross-origin): NO podemos estilarlo por dentro.
-    // Lo tratamos como una tarjeta con alto acotado; si el contenido del banco
-    // es más alto, el propio iframe hace scroll (no lo corta).
-    iframe.className = "block h-[520px] w-full border-0 bg-white";
+    // HACK de fondo: el contenido del banco es cross-origin (no podemos estilarlo
+    // por dentro), PERO la página 3DS de MP no pinta un fondo opaco en su <body> —
+    // solo dibuja su modal. Si NO forzamos `bg-white` en el iframe y en cambio lo
+    // dejamos transparente, el color del CONTENEDOR (el mismo de la card) se ve a
+    // través del vacío. Resultado: el modal del banco queda flotando sobre la card,
+    // sin el bloque blanco top-anclado — sin tocar el alto ni el contenido ajeno.
+    // `allowtransparency` + background transparent es la llave del truco.
+    iframe.className = "block h-[520px] w-full border-0";
+    // Fondo sólido en blanco TENUE (no puro #fff): transparente no sirve porque
+    // donde el banco no pinta fondo se colaba la card oscura y el contenido se
+    // perdía. Un off-white da respaldo claro y legible sin herir la vista. Es
+    // NUESTRO elemento, no tocamos su DOM cross-origin.
+    iframe.style.background = "#f1f1f4";
+    // Además, un toque menos de brillo suaviza los blancos puros que el propio
+    // banco pinta encima (su modal), para que todo quede parejo y tenue.
+    iframe.style.filter = "brightness(0.97)";
     iframe.addEventListener("load", () => setLoading(false));
     host.appendChild(iframe);
 
@@ -390,22 +406,23 @@ function ThreeDsChallenge({
         </div>
       </div>
 
-      {/* Marco del challenge: el iframe del banco (blanco) se muestra como una
-          TARJETA CENTRADA sobre el panel oscuro (no a lo ancho). No podemos
-          centrar el contenido POR DENTRO (cross-origin), así que centramos la
-          tarjeta y le damos un ancho acotado tipo challenge window de 3DS. */}
-      <div className="mt-4 flex justify-center rounded-2xl border border-cart-line bg-cart-bg p-3 sm:p-5">
+      {/* Marco del challenge: mismo color que la card (bg-cart-bg-elev), sin el
+          panel oscuro que lo enmarcaba. Con el iframe transparente, el vacío del
+          banco toma este color y el modal del banco queda flotando sobre la card
+          — se ve centrado e integrado sin pelear con el alto ajeno (cross-origin). */}
+      <div className="mt-4 flex justify-center rounded-2xl bg-cart-bg-elev">
         <div className="relative w-full max-w-[440px]">
           {loading && (
-            <div className="absolute inset-0 z-10 grid place-items-center rounded-xl bg-white">
+            <div className="absolute inset-0 z-10 grid place-items-center rounded-xl bg-cart-bg-elev">
               <div className="flex flex-col items-center gap-3">
-                <span className="size-7 animate-spin rounded-full border-[3px] border-black/15 border-t-black/70" />
-                <span className="text-[12.5px] font-medium text-black/55">Conectando con tu banco…</span>
+                <span className="size-7 animate-spin rounded-full border-[3px] border-white/15 border-t-white/70" />
+                <span className="text-[12.5px] font-medium text-cart-ink-3">Conectando con tu banco…</span>
               </div>
             </div>
           )}
-          {/* MP monta el iframe (bg-white, alto fijo) aquí dentro */}
-          <div ref={hostRef} className="overflow-hidden rounded-xl shadow-[0_12px_40px_-16px_rgba(0,0,0,0.6)]" />
+          {/* MP monta el iframe (transparente, alto fijo) aquí dentro. El host
+              lleva el color de la card para que el vacío del banco se funda. */}
+          <div ref={hostRef} className="overflow-hidden rounded-xl bg-cart-bg-elev" />
         </div>
       </div>
 

@@ -73,7 +73,28 @@ declare global {
 const SDK_V2_URL = "https://sdk.mercadopago.com/js/v2";
 const SDK_SCRIPT_ID = "mp-sdk-v2";
 
+// Fingerprint antifraude de MP. OJO: el SDK v2 (sdk.mercadopago.com/js/v2) NO
+// puebla `window.MP_DEVICE_SESSION_ID` por sí solo — ese global lo escribe ESTE
+// script aparte. Sin él, X-meli-session-id viaja vacío (peor approval rate y
+// score en el checklist de go-to-production). `view="checkout"` es el contexto
+// correcto para la pantalla de pago.
+const SECURITY_JS_URL = "https://www.mercadopago.com/v2/security.js";
+const SECURITY_SCRIPT_ID = "mp-security-js";
+
 let cached: MpInstance | null = null;
+
+// Inyecta security.js una sola vez (idempotente). Fire-and-forget: no bloquea el
+// render; el fingerprint se puebla en background y se lee recién en el submit.
+const ensureDeviceScriptLoaded = (): void => {
+  if (typeof document === "undefined") return;
+  if (document.getElementById(SECURITY_SCRIPT_ID)) return;
+  const s = document.createElement("script");
+  s.id = SECURITY_SCRIPT_ID;
+  s.src = SECURITY_JS_URL;
+  s.setAttribute("view", "checkout");
+  s.async = true;
+  document.body.appendChild(s);
+};
 
 const ensureSdkLoaded = (): Promise<void> =>
   new Promise((resolve, reject) => {
@@ -109,6 +130,9 @@ export function useMpSdk(onError?: (msg: string) => void): MpInstance | null {
       onError?.("missing_mp_public_key");
       return;
     }
+    // Arranca el fingerprint apenas montamos el form de pago: así tiene tiempo
+    // de poblar window.MP_DEVICE_SESSION_ID antes de que el usuario dé "Pagar".
+    ensureDeviceScriptLoaded();
     let cancelled = false;
     ensureSdkLoaded()
       .then(() => {
