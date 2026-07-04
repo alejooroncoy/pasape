@@ -4,6 +4,8 @@ import { err, ok, type Result } from "@/server/_shared/result";
 import type {
   BuyInput,
   BuyOutput,
+  CourtesyInput,
+  CourtesySummary,
   QuoteInput,
   ScannerRef,
   TicketRepository,
@@ -125,7 +127,7 @@ const loadTransferable = async (
 // Read-only: valida evento publicado, ventas abiertas y stock, sin reservar.
 const priceOrder = async (
   db: ReturnType<typeof supabaseAdmin>,
-  input: { eventId: string; items: Array<{ ticketTypeId: string; qty: number }> },
+  input: { eventId: string; items: Array<{ ticketTypeId: string; qty: number }>; courtesy?: boolean },
 ) => {
   // Why: bloquear compras a eventos no publicados (draft/closed/cancelled).
   // Sin esto, cualquiera con el slug podría comprar a un evento que el
@@ -170,7 +172,9 @@ const priceOrder = async (
   for (const item of input.items) {
     const tt = tts.find((t) => t.id === item.ticketTypeId);
     if (!tt) return err("ticket_type_missing");
-    if (tt.sale_ends_at && new Date(tt.sale_ends_at) < new Date()) return err("ticket_type_sales_closed");
+    // Cortesía: el organizador puede regalar aunque la venta del tipo ya cerró
+    // (comps del día del evento). El stock sí se respeta siempre.
+    if (!input.courtesy && tt.sale_ends_at && new Date(tt.sale_ends_at) < new Date()) return err("ticket_type_sales_closed");
     // Respeta el aforo de la entrada (no sobrevende el espacio). Se libera solo
     // al anular el ticket (el trigger recalcula sold).
     if (tt.sold + item.qty > tt.capacity) return err("sold_out");
@@ -192,7 +196,9 @@ const priceOrder = async (
       isFreeActive,
       freeUntilAt: tt.free_until_at,
     });
-    priceItems.push({ ticketTypeId: tt.id, qty: item.qty, unitPriceCents: ap.priceCents });
+    // Cortesía: precio efectivo 0 sin importar el precio del tipo. Subtotal 0
+    // → sin fee → total 0 → la rama de órdenes gratis hace el resto.
+    priceItems.push({ ticketTypeId: tt.id, qty: item.qty, unitPriceCents: input.courtesy ? 0 : ap.priceCents });
   }
   const promoResult = applyPromos(priceItems, promos);
   const subtotal = promoResult.totalCents;
@@ -388,7 +394,11 @@ export const supabaseTicketRepository: TicketRepository = {
         guest_email: input.guest?.email ?? null,
         guest_phone: input.guest?.phone ?? null,
         guest_name: input.guest?.fullName ?? null,
-        guest_dni: input.guest?.dni ?? null,
+        // || (no ??): la cortesía manda dni "" — se captura al reclamar el link.
+        guest_dni: input.guest?.dni || null,
+        // Solo en cortesías: así una compra normal no depende de la columna
+        // (el default false lo pone la DB).
+        ...(input.courtesy ? { is_courtesy: true } : {}),
       })
       .select("*")
       .single<OrderRow>();
@@ -592,6 +602,71 @@ export const supabaseTicketRepository: TicketRepository = {
       tickets: (tkRows as TicketRow[]).map(toTicket),
       preference: { id: prefResult.value.preferenceId, initPoint: prefResult.value.initPoint },
     });
+  },
+
+  async issueCourtesy(input: CourtesyInput): Promise<Result<BuyOutput>> {
+    // Misma tubería que una compra de guest, con `courtesy: true` (precio 0 →
+    // total 0 → paid inmediato + dispatch email/WhatsApp + box si aplica).
+    return supabaseTicketRepository.buy({
+      eventId: input.eventId,
+      items: [{ ticketTypeId: input.ticketTypeId, qty: input.qty }],
+      guest: {
+        email: input.guest.email?.trim() || null,
+        phone: input.guest.phone?.trim() || null,
+        fullName: input.guest.fullName.trim(),
+        // El DNI se captura cuando el invitado reclama su link (igual que en
+        // una transferencia): el organizador no lo conoce al emitir.
+        dni: "",
+      },
+      courtesy: true,
+    });
+  },
+
+  async listCourtesies(eventId: string): Promise<Result<CourtesySummary[]>> {
+    const db = supabaseAdmin();
+    const { data, error } = await db
+      .from("orders")
+      .select(
+        "id, created_at, guest_name, guest_email, guest_phone, tickets(id, status, box_host_ticket_id, ticket_type:ticket_types(name, kind, box_label))",
+      )
+      .eq("event_id", eventId)
+      .eq("is_courtesy", true)
+      .eq("status", "paid")
+      .order("created_at", { ascending: false });
+    if (error) return err(error.message);
+    type Row = {
+      id: string;
+      created_at: string;
+      guest_name: string | null;
+      guest_email: string | null;
+      guest_phone: string | null;
+      tickets: Array<{
+        id: string;
+        status: string;
+        box_host_ticket_id: string | null;
+        ticket_type: { name: string; kind: string; box_label: string | null } | null;
+      }>;
+    };
+    return ok(
+      ((data ?? []) as unknown as Row[]).map((o) => {
+        const first = o.tickets[0]?.ticket_type ?? null;
+        return {
+          orderId: o.id,
+          createdAt: o.created_at,
+          guestName: o.guest_name,
+          guestEmail: o.guest_email,
+          guestPhone: o.guest_phone,
+          ticketTypeName: first?.name ?? "Entrada",
+          kind: first?.kind ?? "general",
+          boxLabel: first?.box_label ?? null,
+          // Emitidas al beneficiario: excluye a los amigos que se suman al box
+          // por invite link (llevan box_host_ticket_id).
+          ticketCount: o.tickets.filter((t) => t.box_host_ticket_id == null).length,
+          // Ingresos reales: acá sí cuentan todos (host + invitados del box).
+          usedCount: o.tickets.filter((t) => t.status === "used").length,
+        };
+      }),
+    );
   },
 
   async listMine(buyerId: string): Promise<WalletTicket[]> {

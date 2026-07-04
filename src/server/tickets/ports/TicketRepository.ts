@@ -22,6 +22,33 @@ export type BuyInput = {
   items: Array<{ ticketTypeId: string; qty: number; holderName?: string | null }>;
   promoCode?: string | null;
   payerEmail?: string | null;
+  /** SOLO uso interno (issueCourtesy): fuerza precio 0 y marca la orden como
+      cortesía. El endpoint público de compra nunca lo acepta (buySchema no lo
+      incluye, zod lo descarta). */
+  courtesy?: boolean;
+};
+
+export type CourtesyInput = {
+  eventId: string;
+  ticketTypeId: string;
+  qty: number;
+  guest: { email?: string | null; phone?: string | null; fullName: string };
+};
+
+/** Read-model de una cortesía enviada, para la lista del panel del organizador. */
+export type CourtesySummary = {
+  orderId: string;
+  createdAt: string;
+  guestName: string | null;
+  guestEmail: string | null;
+  guestPhone: string | null;
+  ticketTypeName: string;
+  kind: string;
+  boxLabel: string | null;
+  /** Entradas emitidas al beneficiario (box = 1, la del host). */
+  ticketCount: number;
+  /** Personas que ya ingresaron (incluye invitados del box). */
+  usedCount: number;
 };
 
 export type BuyOutput = {
@@ -37,6 +64,11 @@ export type QuoteInput = {
 
 export interface TicketRepository {
   buy(input: BuyInput): Promise<Result<BuyOutput>>;
+  /** Emite una cortesía del organizador: misma tubería que buy() pero a S/0
+      (sin Mercado Pago, paid inmediato, envío del link de entrega por
+      email/WhatsApp). El DNI del beneficiario se captura cuando reclama. */
+  issueCourtesy(input: CourtesyInput): Promise<Result<BuyOutput>>;
+  listCourtesies(eventId: string): Promise<Result<CourtesySummary[]>>;
   /** Cotiza un pedido con el MISMO cálculo que buy() (precio activo + promos +
       fee). Read-only: no reserva stock ni crea orden. */
   quote(input: QuoteInput): Promise<Result<OrderQuote>>;
