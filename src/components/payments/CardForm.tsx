@@ -1,13 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useMpSdk } from "@/lib/payments/hooks/useMpSdk";
+import { useEffect, useRef, useState } from "react";
+import { useMpSdk, type BinChangeData, type MpField } from "@/lib/payments/hooks/useMpSdk";
 
-// Why: el CardPayment Brick de MP falla con `Failed to create card token`
-// en sandbox (limitación conocida de MP). Migramos a Checkout API directa
-// usando inputs propios + mp.createCardToken() — funciona tanto en sandbox
-// como en producción, conserva UI propio del rediseño, y es PCI-acceptable
-// porque el SDK envía la card directo a MP sin tocar nuestro server.
+// PCI SAQ-A: la tarjeta se captura con Secure Fields de MP (iframes montados por
+// el SDK). El PAN/expiración/CVV NUNCA tocan nuestro DOM ni nuestro servidor:
+// `mp.fields.createCardToken()` los lee directo de los iframes y devuelve un
+// token; a nuestro backend solo viaja ese token. Ya no existe /api/payments/tokenize.
 
 type Props = {
   orderId: string;
@@ -19,60 +18,23 @@ type Props = {
   onError?: (message: string) => void;
 };
 
-type CardBrand =
-  | "visa"
-  | "master"
-  | "amex"
-  | "diners"
-  | "elo"
-  | "hipercard"
-  | "unknown";
+type CardBrand = "visa" | "master" | "amex" | "diners" | "unknown";
 
-const detectBrandFromBin = (digits: string): CardBrand => {
-  if (digits.startsWith("4")) return "visa";
-  if (/^5[1-5]/.test(digits) || /^2[2-7]/.test(digits)) return "master";
-  if (/^3[47]/.test(digits)) return "amex";
-  if (/^3[0689]/.test(digits)) return "diners";
+const brandFromPaymentMethodId = (id: string | null): CardBrand => {
+  if (!id) return "unknown";
+  if (id.includes("visa")) return "visa";
+  if (id.includes("master")) return "master";
+  if (id.includes("amex")) return "amex";
+  if (id.includes("diners")) return "diners";
   return "unknown";
 };
 
-// Fallback cuando MP sandbox devuelve 500 en payment_methods/search?bins=…
-// (bug intermitente del entorno de prueba). Preferimos el id de MP cuando
-// responde; si no, inferimos por BIN / tarjetas de prueba documentadas PE.
-const paymentMethodIdFromDigits = (digits: string): string | null => {
-  if (digits.length < 6) return null;
-  if (digits.startsWith("50317557")) return "master";
-  if (digits.startsWith("40091753")) return "visa";
-  if (digits.startsWith("371180")) return "amex";
-  if (digits.startsWith("517878")) return "debmaster";
-  switch (detectBrandFromBin(digits)) {
-    case "visa":
-      return "visa";
-    case "master":
-      return "master";
-    case "amex":
-      return "amex";
-    case "diners":
-      return "diners";
-    default:
-      return null;
-  }
-};
-
-const formatCardNumber = (raw: string, brand: CardBrand): string => {
-  const d = raw.replace(/\D/g, "").slice(0, brand === "amex" ? 15 : 16);
-  if (brand === "amex") {
-    return d.replace(/^(\d{0,4})(\d{0,6})(\d{0,5}).*/, (_, a, b, c) =>
-      [a, b, c].filter(Boolean).join(" "),
-    );
-  }
-  return d.replace(/(\d{4})(?=\d)/g, "$1 ");
-};
-
-const formatExp = (raw: string): string => {
-  const d = raw.replace(/\D/g, "").slice(0, 4);
-  if (d.length <= 2) return d;
-  return `${d.slice(0, 2)}/${d.slice(2)}`;
+// Estilo del input DENTRO del iframe seguro de MP (no lo controla nuestro CSS).
+const SECURE_FIELD_STYLE: Record<string, unknown> = {
+  color: "#FFFFFF",
+  "font-size": "15px",
+  "font-family": "ui-monospace, SFMono-Regular, Menlo, monospace",
+  placeholderColor: "rgba(255,255,255,0.32)",
 };
 
 export function CardForm({
@@ -85,108 +47,109 @@ export function CardForm({
   onError,
 }: Props) {
   const mp = useMpSdk(onError);
-  const [cardNumber, setCardNumber] = useState("");
-  const [exp, setExp] = useState("");
-  const [cvv, setCvv] = useState("");
   const [holder, setHolder] = useState(initialHolder ?? "");
   const [dni, setDni] = useState(initialDni ?? "");
   const [paymentMethodId, setPaymentMethodId] = useState<string | null>(null);
-  const [issuerId, setIssuerId] = useState<string | null>(null);
+  const [fieldsReady, setFieldsReady] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const digits = cardNumber.replace(/\D/g, "");
-  const brand = detectBrandFromBin(digits);
-  const cvvLen = brand === "amex" ? 4 : 3;
-  const minLen = brand === "amex" ? 15 : 16;
-  const fallbackPaymentMethodId = paymentMethodIdFromDigits(digits);
-  const effectivePaymentMethodId = paymentMethodId ?? fallbackPaymentMethodId;
+  // Instancias de los Secure Fields — se montan una sola vez cuando el SDK está
+  // listo y se desmontan al salir. Los refs evitan re-montar en cada render.
+  const mountedRef = useRef(false);
+  const fieldsRef = useRef<MpField[]>([]);
 
-  // BIN lookup → resuelve paymentMethodId real desde MP (crédito vs débito).
-  // Si el sandbox de MP falla (500 en search?bins=), usamos fallback local.
   useEffect(() => {
-    if (!mp || digits.length < 6) {
-      setPaymentMethodId(null);
-      return;
-    }
-    const bin = digits.slice(0, 8);
-    let cancelled = false;
-    mp.getPaymentMethods({ bin })
-      .then((res) => {
-        if (cancelled) return;
-        const first = res?.results?.[0];
-        if (first) setPaymentMethodId(first.id);
-      })
-      .catch(() => {
-        if (!cancelled) setPaymentMethodId(null);
+    if (!mp || mountedRef.current) return;
+    mountedRef.current = true;
+    try {
+      const cardNumber = mp.fields
+        .create("cardNumber", { placeholder: "1234 1234 1234 1234", style: SECURE_FIELD_STYLE })
+        .mount("mp-card-number");
+      const expiration = mp.fields
+        .create("expirationDate", { placeholder: "MM/AA", style: SECURE_FIELD_STYLE })
+        .mount("mp-card-exp");
+      const securityCode = mp.fields
+        .create("securityCode", { placeholder: "CVV", style: SECURE_FIELD_STYLE })
+        .mount("mp-card-cvv");
+      fieldsRef.current = [cardNumber, expiration, securityCode];
+
+      // El bin (8 dígitos) llega por evento del propio iframe — no podemos leer
+      // los dígitos nosotros. Con él resolvemos el medio de pago real (crédito
+      // vs débito, marca) desde MP.
+      cardNumber.on("binChange", async (raw) => {
+        const bin = (raw as BinChangeData)?.bin ?? null;
+        if (!bin || bin.length < 6) {
+          setPaymentMethodId(null);
+          return;
+        }
+        try {
+          const res = await mp.getPaymentMethods({ bin });
+          setPaymentMethodId(res?.results?.[0]?.id ?? null);
+        } catch {
+          setPaymentMethodId(null);
+        }
       });
+      setFieldsReady(true);
+    } catch (e) {
+      onError?.((e as Error).message ?? "mp_fields_failed");
+    }
+
     return () => {
-      cancelled = true;
+      for (const f of fieldsRef.current) {
+        try {
+          f.unmount();
+        } catch {}
+      }
+      fieldsRef.current = [];
+      mountedRef.current = false;
     };
-  }, [mp, digits]);
+  }, [mp, onError]);
 
-  const expParts = useMemo(() => {
-    const [m, y] = exp.split("/");
-    return { month: (m ?? "").padStart(2, "0"), year: y ?? "" };
-  }, [exp]);
-
+  const brand = brandFromPaymentMethodId(paymentMethodId);
   const canSubmit =
     !submitting &&
     !!mp &&
-    digits.length >= minLen &&
-    expParts.month.length === 2 &&
-    expParts.year.length === 2 &&
-    cvv.length === cvvLen &&
+    fieldsReady &&
     holder.trim().length >= 2 &&
     dni.length >= 8 &&
-    !!effectivePaymentMethodId;
+    !!paymentMethodId;
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canSubmit || !mp || !effectivePaymentMethodId) return;
+    if (!canSubmit || !mp || !paymentMethodId) return;
     setSubmitting(true);
     setError(null);
     try {
-      const yearFull = `20${expParts.year}`;
-      // Why: MP rechaza /v1/card_tokens desde el browser para esta cuenta
-      // sandbox (issue conocido del Brick + SDK + fetch directo). Hacemos
-      // tokenización server-side via /api/payments/tokenize que proxiea a
-      // MP con access_token. PCI SAQ-A-EP: card data en memoria, HTTPS,
-      // sin persistencia.
-      const tokenRes = await fetch("/api/payments/tokenize", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          card_number: digits,
-          cardholder: {
-            name: holder.trim(),
-            identification: { type: "DNI", number: dni },
-          },
-          security_code: cvv,
-          expiration_month: expParts.month,
-          expiration_year: yearFull,
-        }),
-      });
-      const tokenBody = (await tokenRes.json()) as {
-        data?: { id: string };
-        error?: string;
-      };
-      if (!tokenRes.ok || !tokenBody.data?.id) {
-        const code = tokenBody.error ?? "token_failed";
+      // Tokenización en el cliente: MP lee la tarjeta de sus iframes seguros.
+      // Si algún campo está incompleto/ inválido, esto lanza con `cause`.
+      let token: { id: string };
+      try {
+        token = await mp.fields.createCardToken({
+          cardholderName: holder.trim(),
+          identificationType: "DNI",
+          identificationNumber: dni,
+        });
+      } catch (tokenErr) {
+        const cause = (tokenErr as { cause?: Array<{ code?: string }> })?.cause?.[0]?.code;
+        const code = cause ?? "token_failed";
         setError(humanizeCardError(code));
         onError?.(code);
         return;
       }
-      const tokenResp = { id: tokenBody.data.id };
+      if (!token?.id) {
+        setError(humanizeCardError("token_failed"));
+        return;
+      }
+
       const res = await fetch("/api/payments/card", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           orderId,
-          token: tokenResp.id,
-          paymentMethodId: effectivePaymentMethodId,
+          token: token.id,
+          paymentMethodId,
           installments: 1,
-          issuerId,
         }),
       });
       const body = (await res.json()) as {
@@ -235,19 +198,14 @@ export function CardForm({
       </p>
 
       <div className="mt-5 flex flex-col gap-3">
-        {/* Número de tarjeta */}
+        {/* Número de tarjeta — Secure Field (iframe de MP) */}
         <CardField label="Número de tarjeta">
           <div className="relative">
-            <input
-              type="tel"
-              inputMode="numeric"
-              autoComplete="cc-number"
-              value={formatCardNumber(cardNumber, brand)}
-              onChange={(e) => setCardNumber(e.target.value)}
-              placeholder="1234 1234 1234 1234"
-              className="block w-full rounded-2xl border border-cart-line bg-cart-bg-elev-2 px-4 py-3.5 pr-14 font-mono text-[15px] tracking-[0.04em] text-white outline-none transition focus:border-cart-accent focus:shadow-[0_0_0_3px_var(--color-cart-accent-soft)]"
+            <div
+              id="mp-card-number"
+              className="block h-[50px] w-full rounded-2xl border border-cart-line bg-cart-bg-elev-2 px-4 pr-14 transition focus-within:border-cart-accent focus-within:shadow-[0_0_0_3px_var(--color-cart-accent-soft)] [&>iframe]:h-full [&>iframe]:w-full"
             />
-            <span className="absolute right-3 top-1/2 -translate-y-1/2">
+            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2">
               <BrandIcon brand={brand} />
             </span>
           </div>
@@ -255,25 +213,15 @@ export function CardForm({
 
         <div className="grid grid-cols-2 gap-3">
           <CardField label="Vencimiento">
-            <input
-              type="tel"
-              inputMode="numeric"
-              autoComplete="cc-exp"
-              value={formatExp(exp)}
-              onChange={(e) => setExp(e.target.value)}
-              placeholder="MM/AA"
-              className="block w-full rounded-2xl border border-cart-line bg-cart-bg-elev-2 px-4 py-3.5 font-mono text-[15px] tracking-[0.04em] text-white outline-none transition focus:border-cart-accent focus:shadow-[0_0_0_3px_var(--color-cart-accent-soft)]"
+            <div
+              id="mp-card-exp"
+              className="block h-[50px] w-full rounded-2xl border border-cart-line bg-cart-bg-elev-2 px-4 transition focus-within:border-cart-accent focus-within:shadow-[0_0_0_3px_var(--color-cart-accent-soft)] [&>iframe]:h-full [&>iframe]:w-full"
             />
           </CardField>
           <CardField label="CVV">
-            <input
-              type="tel"
-              inputMode="numeric"
-              autoComplete="cc-csc"
-              value={cvv}
-              onChange={(e) => setCvv(e.target.value.replace(/\D/g, "").slice(0, cvvLen))}
-              placeholder={cvvLen === 4 ? "1234" : "123"}
-              className="block w-full rounded-2xl border border-cart-line bg-cart-bg-elev-2 px-4 py-3.5 font-mono text-[15px] tracking-[0.04em] text-white outline-none transition focus:border-cart-accent focus:shadow-[0_0_0_3px_var(--color-cart-accent-soft)]"
+            <div
+              id="mp-card-cvv"
+              className="block h-[50px] w-full rounded-2xl border border-cart-line bg-cart-bg-elev-2 px-4 transition focus-within:border-cart-accent focus-within:shadow-[0_0_0_3px_var(--color-cart-accent-soft)] [&>iframe]:h-full [&>iframe]:w-full"
             />
           </CardField>
         </div>
@@ -389,6 +337,6 @@ function humanizeCardError(raw: string): string {
     case "empty_response":
       return "No recibimos respuesta del banco. Vuelve a intentar.";
     default:
-      return "No pudimos cobrarte. Vuelve a intentar o usa otra tarjeta.";
+      return "No pudimos cobrarte. Revisa los datos o usa otra tarjeta.";
   }
 }
