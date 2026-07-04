@@ -54,6 +54,6 @@ export const decideApplication = (
     decidedBy: string;
     orgId: string;
     decision: "approved" | "rejected";
-    commissionPct: number;
+    commissionPct?: number | null;
   },
 ) => repo.decideApplication(input);

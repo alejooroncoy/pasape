@@ -130,7 +130,7 @@ export default function OrgPendingRequestsPage({ params }: Props) {
                     type="button"
                     disabled={isPendingDecision}
                     onClick={() =>
-                      decide.mutate({ applicationId: req.id, decision: "approved", commissionPct: 15 })
+                      decide.mutate({ applicationId: req.id, decision: "approved" })
                     }
                     style={{
                       flex: 1,

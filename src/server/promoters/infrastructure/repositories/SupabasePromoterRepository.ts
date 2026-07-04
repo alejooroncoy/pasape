@@ -30,6 +30,23 @@ type LinkRow = {
   };
 };
 
+// Campos extra del esquema de comisión (evento + marca) que se suman al LinkRow
+// cuando queremos resolver el % efectivo heredado.
+type SchemeRow = {
+  commission_type: CommissionType | null;
+  commission_config_override: unknown;
+  event: {
+    promoter_commission_pct: number | null;
+    promoter_commission_type: CommissionType | null;
+    promoter_commission_config: unknown;
+  };
+  org_promoter: {
+    default_commission_pct: number | null;
+    commission_type: CommissionType | null;
+    commission_config: unknown;
+  } | null;
+};
+
 const computeEventStatus = (
   startsAt: string,
   status: string,
@@ -72,11 +89,30 @@ export const supabasePromoterRepository: PromoterRepository = {
     const { data } = await db
       .from("promoter_links")
       .select(
-        "*, event:events!inner(id, slug, title, starts_at, venue, organization_id, status)",
+        "*, event:events!inner(id, slug, title, starts_at, venue, organization_id, status, " +
+          "promoter_commission_pct, promoter_commission_type, promoter_commission_config), " +
+          "org_promoter:org_promoters(default_commission_pct, commission_type, commission_config)",
       )
       .eq("promoter_id", promoterId)
       .order("created_at", { ascending: false });
-    return (data as unknown as LinkRow[] | null)?.map((r) => toLink(r)) ?? [];
+    const rows = (data as unknown as (LinkRow & SchemeRow)[] | null) ?? [];
+    // commissionPct del dominio = % EFECTIVO (heredado), no el crudo del link:
+    // con herencia el link tiene commission_pct null y sin esto se vería "null%".
+    // Mismo resolver de 3 niveles que earnings/home — una sola fuente de verdad.
+    return rows.map((r) => {
+      const scheme = resolveCommissionScheme({
+        linkType: r.commission_type ?? null,
+        linkPct: r.commission_pct,
+        linkConfigOverride: r.commission_config_override,
+        eventType: r.event.promoter_commission_type,
+        eventConfig: r.event.promoter_commission_config,
+        eventPct: r.event.promoter_commission_pct,
+        orgType: r.org_promoter?.commission_type ?? null,
+        orgConfig: r.org_promoter?.commission_config ?? null,
+        orgPct: r.org_promoter?.default_commission_pct ?? null,
+      });
+      return { ...toLink(r), commissionPct: scheme.pct };
+    });
   },
 
   async getHomeData(promoterId, slug) {
@@ -246,7 +282,8 @@ export const supabasePromoterRepository: PromoterRepository = {
     const { data: ev } = await db
       .from("events")
       .select(
-        "id, slug, title, organization:organizations!inner(name)",
+        "id, slug, title, promoter_commission_pct, promoter_commission_type, " +
+          "promoter_commission_config, organization:organizations!inner(name)",
       )
       .eq("slug", slug)
       .maybeSingle();
@@ -255,15 +292,35 @@ export const supabasePromoterRepository: PromoterRepository = {
       id: string;
       slug: string;
       title: string;
+      promoter_commission_pct: number | null;
+      promoter_commission_type: CommissionType | null;
+      promoter_commission_config: unknown;
       organization: { name: string };
     };
     const e = ev as unknown as E;
+    // Esquema que verá el candidato ANTES de unirse: aún no hay link ni override
+    // de marca, así que solo aplica el nivel EVENTO — mismo resolver que usa el
+    // resto (una sola fuente de verdad de la herencia). Si el organizador no
+    // definió nada, pct=0/config=null → la vista muestra "por definir".
+    const scheme = resolveCommissionScheme({
+      linkType: null,
+      linkPct: null,
+      linkConfigOverride: null,
+      eventType: e.promoter_commission_type,
+      eventConfig: e.promoter_commission_config,
+      eventPct: e.promoter_commission_pct,
+      orgType: null,
+      orgConfig: null,
+      orgPct: null,
+    });
     return {
       eventId: e.id,
       eventSlug: e.slug,
       eventTitle: e.title,
-      commissionPct: 15,
       orgName: e.organization.name,
+      commissionType: scheme.type,
+      commissionPct: scheme.pct,
+      commissionConfig: scheme.config,
     };
   },
 
@@ -419,7 +476,10 @@ export const supabasePromoterRepository: PromoterRepository = {
         event_id: a.event_id,
         promoter_id: a.applicant_id,
         code,
-        commission_pct: commissionPct,
+        // null → el link NO fija % propio y hereda el esquema del evento
+        // (resolveCommissionScheme: link → evento → marca). Solo se guarda un
+        // número cuando el organizador overridea a este promotor puntual.
+        commission_pct: commissionPct ?? null,
         active: true,
       })
       .select(
