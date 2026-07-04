@@ -1,14 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { use, useState } from "react";
 import { AnimatePresence } from "motion/react";
 import { useEvent } from "@/lib/events/hooks/useEvents";
 import { useCourtesies, useSendCourtesy } from "@/lib/events/hooks/useCourtesies";
 import { formatMoney } from "@/lib/_shared/format";
 import { isBox, boxSeats, unitNoun, unitsRemaining } from "@/lib/events/ticketDisplay";
+import { EventShell } from "../_shell/EventShell";
 import { Sheet } from "../_shell/Sheet";
 import type { TicketType } from "@/server/events/domain/Event";
 import type { CourtesySummary } from "@/server/tickets/ports/TicketRepository";
+
+type Params = Promise<{ slug: string; locale: string }>;
 
 /**
  * Cortesías: el organizador regala una entrada o un box a una persona con
@@ -16,45 +19,80 @@ import type { CourtesySummary } from "@/server/tickets/ports/TicketRepository";
  * la misma tubería de compra — al invitado le llega el link de entrega con su
  * QR por WhatsApp/correo, y si es box invita a su grupo desde su entrada.
  */
-export function CourtesiesSection({ slug }: { slug: string }) {
+export default function CourtesiesPage({ params }: { params: Params }) {
+  const { slug } = use(params);
+  return (
+    <EventShell slug={slug} active="courtesies">
+      <CourtesiesContent slug={slug} />
+    </EventShell>
+  );
+}
+
+function CourtesiesContent({ slug }: { slug: string }) {
   const event = useEvent(slug);
   const courtesies = useCourtesies(slug);
   const [open, setOpen] = useState(false);
 
   const list = courtesies.data ?? [];
   const ticketTypes = event.data?.ticketTypes ?? [];
+  const entered = list.reduce((acc, c) => acc + c.usedCount, 0);
 
   return (
-    <section className="mt-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-[13px] font-semibold text-cart-ink-2">Cortesías</span>
-          {list.length > 0 && (
-            <span className="rounded-full bg-white/8 px-1.5 py-0.5 text-[10px] font-semibold text-cart-ink-3">
-              {list.length}
-            </span>
-          )}
+    <>
+      {/* Header de la sección: qué es + acción principal */}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-[17px] font-semibold tracking-[-0.01em]">Cortesías</h2>
+          <p className="mt-1 max-w-[440px] text-[12.5px] text-cart-ink-3">
+            Regala entradas o un box a invitados especiales — les llega su QR
+            por WhatsApp o correo, y aquí ves quién entró.
+          </p>
         </div>
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="rounded-full border border-cart-line px-2.5 py-1 text-[11.5px] font-medium text-cart-ink-2 transition hover:border-cart-line-strong hover:text-white"
+          className="shrink-0 rounded-full bg-cart-accent px-4 py-2 text-[13px] font-semibold text-cart-bg transition hover:brightness-110"
         >
           + Enviar cortesía
         </button>
       </div>
 
+      {/* Resumen */}
+      {list.length > 0 && (
+        <div className="mt-5 grid grid-cols-2 gap-3 sm:max-w-[380px]">
+          <div className="rounded-2xl border border-cart-line bg-cart-bg-elev px-4 py-3">
+            <div className="text-[11px] uppercase tracking-[0.06em] text-cart-ink-4">Enviadas</div>
+            <div className="mt-0.5 text-[22px] font-semibold">{list.length}</div>
+          </div>
+          <div className="rounded-2xl border border-cart-line bg-cart-bg-elev px-4 py-3">
+            <div className="text-[11px] uppercase tracking-[0.06em] text-cart-ink-4">Ingresaron</div>
+            <div className="mt-0.5 text-[22px] font-semibold text-emerald-400">{entered}</div>
+          </div>
+        </div>
+      )}
+
+      {/* Lista */}
       {list.length > 0 ? (
-        <div className="mt-3 divide-y divide-cart-line rounded-2xl border border-cart-line bg-cart-bg-elev">
+        <div className="mt-5 divide-y divide-cart-line rounded-2xl border border-cart-line bg-cart-bg-elev">
           {list.map((c) => (
             <CourtesyRow key={c.orderId} courtesy={c} />
           ))}
         </div>
       ) : (
-        <p className="mt-2 text-[12px] text-cart-ink-4">
-          Regala entradas o un box a invitados especiales — les llega su QR por
-          WhatsApp o correo, gratis y con tu registro de quién entró.
-        </p>
+        <div className="mt-6 rounded-2xl border border-dashed border-cart-line px-5 py-10 text-center">
+          <div className="mx-auto grid size-11 place-items-center rounded-full bg-cart-accent-soft text-cart-accent">
+            <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
+              <rect x="3" y="8" width="14" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.6" />
+              <path d="M3 11h14M10 8v9" stroke="currentColor" strokeWidth="1.6" />
+              <path d="M10 8C10 8 8.5 4.5 6.5 4.5A1.75 1.75 0 006.5 8H10zm0 0c0 0 1.5-3.5 3.5-3.5A1.75 1.75 0 0113.5 8H10z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+            </svg>
+          </div>
+          <p className="mt-3 text-[14px] font-medium">Aún no envías cortesías</p>
+          <p className="mx-auto mt-1 max-w-[340px] text-[12.5px] text-cart-ink-4">
+            Perfectas para cumpleañeros, prensa o auspiciadores: eliges la
+            entrada o el box, pones su nombre y contacto, y le llega gratis.
+          </p>
+        </div>
       )}
 
       <AnimatePresence>
@@ -64,7 +102,7 @@ export function CourtesiesSection({ slug }: { slug: string }) {
           </Sheet>
         )}
       </AnimatePresence>
-    </section>
+    </>
   );
 }
 
@@ -79,12 +117,13 @@ function CourtesyRow({ courtesy: c }: { courtesy: CourtesySummary }) {
       : c.ticketCount > 1
         ? `${c.ticketCount} × ${c.ticketTypeName}`
         : c.ticketTypeName;
+  const contact = c.guestPhone || c.guestEmail || "—";
   return (
-    <div className="flex items-center justify-between gap-3 px-4 py-3">
+    <div className="flex items-center justify-between gap-3 px-4 py-3 lg:px-5">
       <div className="min-w-0">
-        <div className="truncate text-[13px] font-medium">{c.guestName ?? "Invitado"}</div>
+        <div className="truncate text-[13.5px] font-medium">{c.guestName ?? "Invitado"}</div>
         <div className="truncate text-[11.5px] text-cart-ink-4">
-          {detail} · {sent}
+          {detail} · {contact} · {sent}
         </div>
       </div>
       {c.usedCount > 0 ? (
