@@ -63,7 +63,10 @@ export default function OrderPage(props: Props) {
   const [phone, setPhone] = useState("");
   const [phoneSkipped, setPhoneSkipped] = useState(false);
   const hasPhone = !!me.data?.user?.phone;
-  const needPhone = !!done && !hasPhone && !phoneSkipped;
+  // Tras el claim, `me` se refresca (el claim pudo copiar el teléfono de la orden
+  // al profile). Mientras ese refetch está en curso no decidimos pedir el número:
+  // evita el parpadeo de "Déjanos tu número" si en realidad ya lo tenemos.
+  const needPhone = !!done && !hasPhone && !phoneSkipped && !me.isFetching;
   const phoneOk = phone.length >= 9;
   const savePhone = () => {
     if (!phoneOk) return;

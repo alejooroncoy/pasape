@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useTransferTicket } from "@/lib/tickets/hooks/useTickets";
 import { useProfileLookup } from "@/lib/identity/hooks/useProfileLookup";
 import { formatPhone, transferErrorCopy } from "@/lib/tickets/phoneFormat";
+import { focusOnDesktop } from "@/lib/_shared/focusOnDesktop";
 import { TicketActionSurface } from "./TicketActionSurface";
 
 export function TransferTicketSheet({
@@ -56,7 +57,9 @@ export function TransferTicketSheet({
           value={recipient}
           onChange={(e) => setRecipient(e.target.value.replace(/[^\d\s]/g, "").slice(0, 11))}
           placeholder="987 654 321"
-          autoFocus
+          // autoFocus nativo en iOS enfoca sin abrir teclado ("doble tap"):
+          // enfocamos solo en desktop.
+          ref={online ? focusOnDesktop : undefined}
           disabled={!online}
           className="mt-1.5 block w-full rounded-2xl border border-cart-line bg-cart-bg-elev-2 px-4 py-3.5 font-mono text-[15px] tracking-[0.04em] text-white outline-none transition focus:border-cart-accent focus:shadow-[0_0_0_3px_var(--color-cart-accent-soft)] disabled:opacity-50"
         />

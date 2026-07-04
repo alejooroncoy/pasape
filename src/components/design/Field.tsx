@@ -1,6 +1,7 @@
 "use client";
 
 import type { InputHTMLAttributes } from "react";
+import { focusOnDesktop } from "@/lib/_shared/focusOnDesktop";
 import { C, FONT_BODY, FONT_DISPLAY, FONT_MONO } from "./tokens";
 
 type Props = InputHTMLAttributes<HTMLInputElement> & {
@@ -10,7 +11,10 @@ type Props = InputHTMLAttributes<HTMLInputElement> & {
   hint?: string;
 };
 
-export const Field = ({ label, mono, active, hint, style, ...input }: Props) => (
+// `autoFocus` se estrecha aparte: en móvil solo pone el cursor sin abrir el
+// teclado (se siente como "doble tap"), así que lo convertimos en un enfoque
+// solo-desktop vía focusOnDesktop en vez de pasarlo al input nativo.
+export const Field = ({ label, mono, active, hint, style, autoFocus, ...input }: Props) => (
   <div style={{ marginBottom: 12 }}>
     <div style={{ fontSize: 11, color: C.dimmer, letterSpacing: "0.06em", marginBottom: 6 }}>{label.toUpperCase()}</div>
     <div
@@ -28,6 +32,7 @@ export const Field = ({ label, mono, active, hint, style, ...input }: Props) => 
     >
       <input
         {...input}
+        ref={autoFocus ? focusOnDesktop : undefined}
         style={{
           flex: 1,
           border: 0,

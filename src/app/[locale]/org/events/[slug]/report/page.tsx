@@ -94,6 +94,15 @@ export default function OrgReportPage({ params }: { params: Params }) {
           >
             {formatMoney(revenue, ev?.currency)}
           </div>
+          {(stats.data?.serviceFeeCents ?? 0) > 0 && (
+            <div style={{ marginTop: 8, fontSize: 13, color: C.dim }}>
+              Recibes{" "}
+              <span style={{ color: C.text, fontWeight: 600 }}>
+                {formatMoney(stats.data?.netCents ?? 0, ev?.currency)}
+              </span>{" "}
+              · Servicio Pasape {formatMoney(stats.data?.serviceFeeCents ?? 0, ev?.currency)}
+            </div>
+          )}
           <div
             style={{
               display: "flex",

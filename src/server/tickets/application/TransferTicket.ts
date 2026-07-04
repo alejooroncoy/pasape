@@ -3,7 +3,7 @@ import type { Result } from "@/server/_shared/result";
 import { err, ok } from "@/server/_shared/result";
 import type { TicketRepository } from "../ports/TicketRepository";
 import type { TransferOutcome } from "../domain/Ticket";
-import { KapsoWhatsAppSender } from "@/server/notifications/infrastructure/KapsoWhatsAppSender";
+import { WhatsAppNotificationSender } from "@/server/notifications/infrastructure/WhatsAppNotificationSender";
 
 type Deps = { repo: TicketRepository };
 
@@ -48,10 +48,10 @@ export const transferTicket = async (
   if (!pending.ok) return pending;
 
   // Le llega el link por WhatsApp con el template dedicado de transferencia
-  // (ticket_claim_invite). Si Kapso no está configurado o el template aún no
-  // está aprobado, degrada a no-op: el envío queda pendiente y el emisor puede
+  // (ticket_claim_invite). Si el proveedor no está configurado o el template aún
+  // no está aprobado, degrada a no-op: el envío queda pendiente y el emisor puede
   // reenviarlo o cancelarlo.
-  await new KapsoWhatsAppSender()
+  await new WhatsAppNotificationSender()
     .sendTransferClaim({
       phone,
       senderName: input.fromName ?? "Un amigo",

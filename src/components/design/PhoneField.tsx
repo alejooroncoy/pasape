@@ -1,5 +1,6 @@
 "use client";
 
+import { focusOnDesktop } from "@/lib/_shared/focusOnDesktop";
 import { C, FONT_MONO } from "./tokens";
 
 type Props = {
@@ -44,7 +45,9 @@ export const PhoneField = ({ value, onChange, autoFocus }: Props) => {
         <span style={{ fontFamily: FONT_MONO, fontSize: 15, color: C.dim }}>+51</span>
       </div>
       <input
-        autoFocus={autoFocus}
+        // autoFocus nativo en iOS enfoca sin abrir teclado ("doble tap"): en su
+        // lugar enfocamos solo en desktop.
+        ref={autoFocus ? focusOnDesktop : undefined}
         type="tel"
         inputMode="tel"
         placeholder="987 654 321"

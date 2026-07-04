@@ -1,6 +1,7 @@
 import { Money } from "@/lib/_shared/money";
 import "server-only";
 import crypto from "node:crypto";
+import { MercadoPagoConfig, Payment } from "mercadopago";
 import { after } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { err, ok, type Result } from "@/server/_shared/result";
@@ -32,6 +33,11 @@ export type PayWithYapeInput = {
   orderId: string;
   token: string; // yape token generado por SDK v2 en el frontend
   phoneNumber: string; // 9 dígitos PE, viene del form
+  // Device fingerprint de MP (window.MP_DEVICE_SESSION_ID, creado por el SDK v2).
+  // Se envía como header X-Meli-Session-Id. Es el ítem "SDK de frontend" del
+  // checklist de calidad: si la medición cae sobre un pago Yape, sin esto MP no
+  // detecta el uso del SDK y baja el puntaje. También mejora el antifraude.
+  deviceId?: string | null;
 };
 
 export type PayWithYapeOutput = {
@@ -182,22 +188,6 @@ export const payWithYape = async (
     .update(`yape:${order.id}:${input.token}`)
     .digest("hex");
 
-  let mpRes: Response;
-  try {
-    mpRes = await fetch("https://api.mercadopago.com/v1/payments", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-        "X-Idempotency-Key": idempotencyKey,
-      },
-      body: JSON.stringify(body),
-    });
-  } catch (e) {
-    await revertLock();
-    return err(`mp_network_error: ${(e as Error).message}`);
-  }
-
   type MpPaymentResponse = {
     id?: number | string;
     status?: "approved" | "in_process" | "rejected" | "pending" | "cancelled";
@@ -205,24 +195,37 @@ export const payWithYape = async (
     message?: string;
     error?: string;
   };
+  type CreateBody = Parameters<Payment["create"]>[0]["body"];
+
+  // SDK oficial de MP (checklist "SDK de backend", +5 pts): manda los headers de
+  // tracking (X-Product-Id / User-Agent) que MP reconoce como integración con
+  // SDK. Preservamos idempotencyKey y el device_id vía requestOptions — el SDK
+  // los mapea a X-Idempotency-Key y X-Meli-Session-Id, idénticos al flujo raw.
+  const client = new MercadoPagoConfig({ accessToken });
   let data: MpPaymentResponse;
   try {
-    data = (await mpRes.json()) as MpPaymentResponse;
-  } catch {
+    data = (await new Payment(client).create({
+      body: body as unknown as CreateBody,
+      requestOptions: {
+        idempotencyKey,
+        // Device fingerprint (antifraude / approval rate). MP lo ignora si es vacío.
+        ...(input.deviceId ? { meliSessionId: input.deviceId } : {}),
+      },
+    })) as MpPaymentResponse;
+  } catch (e) {
+    // El SDK lanza ante error de API (rechazo de request, auth) o de red. Los
+    // rechazos de Yape (OTP, fondos…) NO caen aquí: vuelven con status 2xx y
+    // status="rejected", y se tratan más abajo.
     await revertLock();
-    return err(`mp_invalid_response: status ${mpRes.status}`);
-  }
-
-  if (!mpRes.ok) {
-    const message = data.message ?? data.error ?? `status ${mpRes.status}`;
+    const apiErr = e as { message?: string; status?: number; cause?: unknown };
+    const message = apiErr?.message ?? "mp_error";
     reportMpError(message, {
       stage: "payment",
       method: "yape",
       orderId: order.id,
-      httpStatus: mpRes.status,
-      mpResponse: data,
+      httpStatus: apiErr?.status ?? 0,
+      mpResponse: apiErr,
     });
-    await revertLock();
     return err(`mp_payment_failed: ${message}`);
   }
 

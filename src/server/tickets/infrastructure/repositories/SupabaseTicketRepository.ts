@@ -973,13 +973,15 @@ export const supabaseTicketRepository: TicketRepository = {
     const db = supabaseAdmin();
     const { data: order } = await db
       .from("orders")
-      .select("id, status, buyer_id, guest_email, paid_at, event_id, claimed_at")
+      .select("id, status, buyer_id, guest_email, guest_phone, guest_name, paid_at, event_id, claimed_at")
       .eq("id", input.orderId)
       .maybeSingle<{
         id: string;
         status: string;
         buyer_id: string | null;
         guest_email: string | null;
+        guest_phone: string | null;
+        guest_name: string | null;
         paid_at: string | null;
         event_id: string;
         claimed_at: string | null;
@@ -1047,6 +1049,25 @@ export const supabaseTicketRepository: TicketRepository = {
         claimed_by: input.toProfile,
       })
       .eq("id", order.id);
+
+    // El comprador ya dejó su celular (y nombre) al pagar. Al reclamar con Google
+    // aterriza en un profile nuevo SIN teléfono (Google no lo comparte) → sin esto
+    // la pantalla post-claim se lo volvería a pedir. Lo copiamos de la orden, pero
+    // SOLO si el profile destino aún no lo tiene: nunca pisamos lo que el usuario
+    // ya guardó.
+    if (order.guest_phone || order.guest_name) {
+      const { data: dest } = await db
+        .from("profiles")
+        .select("phone, full_name")
+        .eq("id", input.toProfile)
+        .maybeSingle<{ phone: string | null; full_name: string | null }>();
+      const patch: { phone?: string; full_name?: string } = {};
+      if (order.guest_phone && !dest?.phone) patch.phone = order.guest_phone;
+      if (order.guest_name && !dest?.full_name) patch.full_name = order.guest_name;
+      if (Object.keys(patch).length > 0) {
+        await db.from("profiles").update(patch).eq("id", input.toProfile);
+      }
+    }
 
     return ok({
       ticketsClaimed: updatedIds.length,

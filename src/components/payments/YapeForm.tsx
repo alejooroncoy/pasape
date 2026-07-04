@@ -64,6 +64,9 @@ export function YapeForm({ orderId, amount, initialPhone = "", onPaid, onError }
           orderId,
           token: tokenResp.id,
           phoneNumber: phoneDigits,
+          // Device fingerprint que el SDK v2 crea al cargar (antifraude +
+          // ítem "SDK de frontend" del checklist cuando la muestra es Yape).
+          deviceId: typeof window !== "undefined" ? window.MP_DEVICE_SESSION_ID ?? null : null,
         }),
       });
       // El backend usa el helper json() → respuesta `{data: ...}` en éxito o
