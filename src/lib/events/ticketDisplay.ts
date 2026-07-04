@@ -1,5 +1,4 @@
 import type { TicketType, BoxTicketType } from "@/server/events/domain/Event";
-import { activePricing } from "./pricing";
 
 /**
  * Sustantivo de la unidad reservable. Default "box" cuando el organizador no
@@ -169,8 +168,10 @@ export function summarizeGroup(group: TicketGroup): GroupSummary {
     const status = ticketStatus(tt);
     if (status.kind === "available") {
       anyAvailable = true;
-      // Precio activo (preventa vigente o normal) para el "desde S/…".
-      const price = activePricing(tt).priceCents;
+      // Precio "todo incluido" que ve el comprador (backend-computed:
+      // `buyerPriceCents`, ya con precio activo + comisión). MISMA fuente que la
+      // buy page — el frontend no recalcula la comisión.
+      const price = tt.buyerPriceCents;
       minPriceCents = minPriceCents == null ? price : Math.min(minPriceCents, price);
     }
   }
