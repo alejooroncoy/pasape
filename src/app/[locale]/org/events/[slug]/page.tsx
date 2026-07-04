@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useRef, useState } from "react";
+import { use, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Link } from "@/i18n/navigation";
 import { useEvent } from "@/lib/events/hooks/useEvents";
@@ -68,7 +68,10 @@ function LivePanel({
   const reserved = stats?.reserved ?? 0;
   const validated = stats?.validated ?? 0;
   const revenue = stats?.revenueCents ?? 0;
-  const capacity = ev?.capacity.totalCapacity ?? 0;
+  // Aforo: el evento casi nunca tiene total_capacity (el composer no lo pide);
+  // caemos al derivado del backend (suma de capacidades de entradas + asientos
+  // de boxes, vía event_stats_rollup) para no mostrar "Sin aforo definido".
+  const capacity = ev?.capacity.totalCapacity ?? stats?.capacity ?? 0;
   const soldPct = capacity ? Math.min(100, Math.round((sold / capacity) * 100)) : 0;
   const validatedPct = sold ? Math.round((validated / sold) * 100) : 0;
   // Reservadas = en proceso de pago (orden pending <30min). No son ventas aún.
@@ -117,7 +120,20 @@ function LivePanel({
         <KpiCard
           label="Recaudado"
           value={formatMoneyClean(revenue, ev?.currency)}
-          hint="acumulado en el evento"
+          hint={
+            (stats?.serviceFeeCents ?? 0) > 0 ? (
+              // "Recibes" es EL número que le importa al organizador — no puede
+              // pasar desapercibido como una línea gris.
+              <span className="flex flex-col gap-0.5">
+                <span className="text-[14px] font-semibold text-white">
+                  Recibes {formatMoneyClean(stats?.netCents ?? 0, ev?.currency)}
+                </span>
+                <span>Servicio Pasape {formatMoneyClean(stats?.serviceFeeCents ?? 0, ev?.currency)}</span>
+              </span>
+            ) : (
+              "acumulado en el evento"
+            )
+          }
           tone="neutral"
         />
       </section>
@@ -293,7 +309,8 @@ function FinalReport({
   const validated = stats?.validated ?? 0;
   const noShow = Math.max(0, sold - validated);
   const revenue = stats?.revenueCents ?? 0;
-  const capacity = ev?.capacity.totalCapacity ?? 0;
+  // Mismo fallback de aforo que el panel en vivo (total_capacity casi nunca existe).
+  const capacity = ev?.capacity.totalCapacity ?? stats?.capacity ?? 0;
   const soldPct = capacity ? Math.min(100, Math.round((sold / capacity) * 100)) : 0;
   const attendancePct = sold ? Math.round((validated / sold) * 100) : 0;
 
@@ -345,6 +362,15 @@ function FinalReport({
         <div className="mt-2 font-sans text-[48px] font-semibold leading-none tracking-[-0.04em] lg:text-[60px]">
           {formatMoneyClean(revenue, ev?.currency)}
         </div>
+        {(stats?.serviceFeeCents ?? 0) > 0 && (
+          <div className="mt-2 text-[13px] text-cart-ink-3">
+            Recibes{" "}
+            <span className="font-semibold text-white">
+              {formatMoneyClean(stats?.netCents ?? 0, ev?.currency)}
+            </span>{" "}
+            · Servicio Pasape {formatMoneyClean(stats?.serviceFeeCents ?? 0, ev?.currency)}
+          </div>
+        )}
 
         {/* Trío de stats */}
         <div className="mt-5 grid grid-cols-3 gap-3 border-t border-white/8 pt-5">
@@ -628,7 +654,7 @@ function KpiCard({
 }: {
   label: string;
   value: string;
-  hint: string;
+  hint: ReactNode;
   progress?: number | null;
   tone: "accent" | "green" | "neutral";
 }) {

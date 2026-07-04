@@ -4,7 +4,9 @@ import { use, useEffect, useMemo, useRef, useState, type ReactNode } from "react
 import { AnimatePresence, motion } from "motion/react";
 import { Link } from "@/i18n/navigation";
 import { useDoorLink } from "@/lib/events/hooks/useDoorLink";
+import { useEvent } from "@/lib/events/hooks/useEvents";
 import { useEventStats } from "@/lib/events/hooks/useEventStats";
+import { useRealtimeEventStats } from "@/lib/events/hooks/useRealtimeEventStats";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { useOrgInvites } from "@/lib/identity/organizations/hooks/useOrgInvites";
 import {
@@ -316,6 +318,10 @@ function CoOrgPicker({
 // PROMOTERS SECTION (sin cambios funcionales — sigue editable)
 // ============================================================
 export function PromotersSection({ slug }: { slug: string }) {
+  const event = useEvent(slug);
+  // Ventas en vivo: el mismo Broadcast del dashboard invalida las queries de
+  // promotores — sin esto la pestaña solo se actualizaba al reenfocar.
+  useRealtimeEventStats(event.data?.event?.id, slug);
   const pool = useOrgPromoters();
   const assignments = useEventPromoters(slug);
   const assign = useAssignPromotersToEvent(slug);

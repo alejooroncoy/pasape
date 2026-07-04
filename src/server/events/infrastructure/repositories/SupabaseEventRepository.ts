@@ -672,6 +672,20 @@ export const supabaseEventRepository: EventRepository = {
     const validatedCount = rollup?.validated ?? 0;
     const revenueCents = rollup?.revenue_cents ?? 0;
 
+    // Comisión de Pasape acumulada → neto del organizador. Mismo universo que
+    // el rollup (órdenes pagadas); definición del negocio en serviceFee.ts:
+    // ingreso del organizador = total_cents − service_fee_cents.
+    const { data: feeRows } = await db
+      .from("orders")
+      .select("service_fee_cents")
+      .eq("event_id", eventId)
+      .eq("status", "paid");
+    const serviceFeeCents = ((feeRows as Array<{ service_fee_cents: number | null }> | null) ?? []).reduce(
+      (sum, o) => sum + (o.service_fee_cents ?? 0),
+      0,
+    );
+    const netCents = revenueCents - serviceFeeCents;
+
     // Vendidas por tipo (pagadas, activas/usadas) para el desglose del reporte —
     // NO usamos `ticket_types.sold` porque incluye reservas pendientes.
     const PAGE = 1000;
@@ -932,6 +946,8 @@ export const supabaseEventRepository: EventRepository = {
       reserved,
       validated: validatedCount,
       revenueCents,
+      serviceFeeCents,
+      netCents,
       capacity: capacity || null,
       salesSeries,
       ticketTypes: ticketTypes.map((t) => ({
@@ -961,14 +977,18 @@ export const supabaseEventRepository: EventRepository = {
     const PAGE = 1000;
     const ticketRows: unknown[] = [];
     for (let from = 0; ; from += PAGE) {
-      const { data: page } = await db
+      // OJO: orders tiene DOS FKs a profiles (buyer_id y claimed_by) — hay que
+      // desambiguar con !orders_buyer_id_fkey o PostgREST devuelve PGRST201.
+      // El buyer va LEFT (sin !inner): una orden guest/claim raro no debe
+      // desaparecer de la hoja Asistentes.
+      const { data: page, error } = await db
         .from("tickets")
         .select(
           `id, holder_name, holder_dni_enc, holder_dni_last4, status, used_at, order_id,
            ticket_type:ticket_types!inner(id, name),
            order:orders!inner(
              id, event_id, promoter_link_id, status,
-             buyer:profiles!inner(id, email, phone),
+             buyer:profiles!orders_buyer_id_fkey(id, email, phone),
              promoter_link:promoter_links(id, code)
            )`,
         )
@@ -977,6 +997,7 @@ export const supabaseEventRepository: EventRepository = {
         .in("status", ["active", "used"])
         .order("id", { ascending: true })
         .range(from, from + PAGE - 1);
+      if (error) throw new Error(`exportData tickets: ${error.message}`);
       const rows = page ?? [];
       ticketRows.push(...rows);
       if (rows.length < PAGE) break;
@@ -1031,6 +1052,8 @@ export const supabaseEventRepository: EventRepository = {
       revenueCents: p.revenueCents,
       commissionPct: p.commissionPct,
       commissionCalculatedCents: p.payoutCents,
+      commissionType: p.commissionType,
+      unlockedRewards: p.unlockedRewards.map((r) => r.label),
     }));
 
     return { attendees, promoters, summary };
