@@ -33,6 +33,11 @@ export type PayWithYapeInput = {
   orderId: string;
   token: string; // yape token generado por SDK v2 en el frontend
   phoneNumber: string; // 9 dígitos PE, viene del form
+  // Device fingerprint de MP (window.MP_DEVICE_SESSION_ID, creado por el SDK v2).
+  // Se envía como header X-Meli-Session-Id. Es el ítem "SDK de frontend" del
+  // checklist de calidad: si la medición cae sobre un pago Yape, sin esto MP no
+  // detecta el uso del SDK y baja el puntaje. También mejora el antifraude.
+  deviceId?: string | null;
 };
 
 export type PayWithYapeOutput = {
@@ -194,14 +199,18 @@ export const payWithYape = async (
 
   // SDK oficial de MP (checklist "SDK de backend", +5 pts): manda los headers de
   // tracking (X-Product-Id / User-Agent) que MP reconoce como integración con
-  // SDK. Preservamos idempotencyKey vía requestOptions (→ X-Idempotency-Key),
-  // idéntico al flujo raw. Yape no lleva device_id.
+  // SDK. Preservamos idempotencyKey y el device_id vía requestOptions — el SDK
+  // los mapea a X-Idempotency-Key y X-Meli-Session-Id, idénticos al flujo raw.
   const client = new MercadoPagoConfig({ accessToken });
   let data: MpPaymentResponse;
   try {
     data = (await new Payment(client).create({
       body: body as unknown as CreateBody,
-      requestOptions: { idempotencyKey },
+      requestOptions: {
+        idempotencyKey,
+        // Device fingerprint (antifraude / approval rate). MP lo ignora si es vacío.
+        ...(input.deviceId ? { meliSessionId: input.deviceId } : {}),
+      },
     })) as MpPaymentResponse;
   } catch (e) {
     // El SDK lanza ante error de API (rechazo de request, auth) o de red. Los
