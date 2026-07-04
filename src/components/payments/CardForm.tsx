@@ -320,8 +320,9 @@ function ThreeDsChallenge({
     const iframe = document.createElement("iframe");
     iframe.name = "mp-3ds-frame";
     // El contenido es del banco (cross-origin): NO podemos estilarlo por dentro.
-    // Lo tratamos como una tarjeta: alto fijo tipo challenge window de 3DS (~600).
-    iframe.className = "block h-[600px] w-full border-0 bg-white";
+    // Lo tratamos como una tarjeta con alto acotado; si el contenido del banco
+    // es más alto, el propio iframe hace scroll (no lo corta).
+    iframe.className = "block h-[520px] w-full border-0 bg-white";
     iframe.addEventListener("load", () => setLoading(false));
     host.appendChild(iframe);
 
@@ -398,16 +399,19 @@ function ThreeDsChallenge({
         </div>
       </div>
 
-      {/* Salida: que el usuario nunca quede atrapado si abandona el challenge. */}
+      {/* Salida: botón visible para que el usuario nunca quede atrapado. */}
       <button
         type="button"
         onClick={onCancel}
-        className="mt-3 w-full text-center text-[12.5px] text-cart-ink-3 underline underline-offset-2 transition hover:text-white"
+        className="mt-4 flex w-full items-center justify-center gap-2 rounded-full border border-cart-line bg-cart-bg-elev-2 py-3.5 text-[14px] font-semibold text-cart-ink-2 transition hover:border-cart-line-strong hover:text-white"
       >
-        Cancelar y volver a elegir cómo pagar
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden>
+          <path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        Cancelar y volver
       </button>
 
-      <p className="mt-2 text-center text-[11px] text-cart-ink-4">
+      <p className="mt-3 text-center text-[11px] text-cart-ink-4">
         Autenticación segura 3-D Secure · Procesado por Mercado Pago
       </p>
     </div>
