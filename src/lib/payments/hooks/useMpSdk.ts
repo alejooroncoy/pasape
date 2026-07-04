@@ -64,6 +64,9 @@ export type MpCtor = new (publicKey: string, opts?: { locale?: string }) => MpIn
 declare global {
   interface Window {
     MercadoPago?: MpCtor;
+    // Device fingerprint que el SDK v2 de MP crea automáticamente al cargar.
+    // Se envía como header X-meli-session-id al crear el pago (antifraude).
+    MP_DEVICE_SESSION_ID?: string;
   }
 }
 

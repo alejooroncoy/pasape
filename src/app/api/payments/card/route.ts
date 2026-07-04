@@ -11,6 +11,9 @@ const schema = z.object({
   paymentMethodId: z.string().min(2).max(40),
   installments: z.number().int().min(1).max(36),
   issuerId: z.string().nullable().optional(),
+  // Device fingerprint (window.MP_DEVICE_SESSION_ID). Opcional: si el SDK no lo
+  // pobló, el pago igual procede (solo baja un poco el approval rate).
+  deviceId: z.string().max(200).nullable().optional(),
 });
 
 // 10 req/min por IP: intentos de pago con tarjeta el día del evento.

@@ -53,6 +53,8 @@ export function CardForm({
   const [fieldsReady, setFieldsReady] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Cuando el emisor exige 3DS, guardamos el challenge para renderizarlo.
+  const [challenge, setChallenge] = useState<{ externalResourceUrl: string; creq: string } | null>(null);
 
   // Instancias de los Secure Fields — se montan una sola vez cuando el SDK está
   // listo y se desmontan al salir. Los refs evitan re-montar en cada render.
@@ -150,10 +152,17 @@ export function CardForm({
           token: token.id,
           paymentMethodId,
           installments: 1,
+          // Device fingerprint que el SDK v2 crea al cargar (antifraude).
+          deviceId: typeof window !== "undefined" ? window.MP_DEVICE_SESSION_ID ?? null : null,
         }),
       });
       const body = (await res.json()) as {
-        data?: { status: string; paymentId: string; message?: string };
+        data?: {
+          status: string;
+          paymentId: string;
+          message?: string;
+          threeDsInfo?: { externalResourceUrl: string; creq: string };
+        };
         error?: string;
       };
       if (!res.ok || body.error) {
@@ -167,7 +176,11 @@ export function CardForm({
         setError(humanizeCardError("empty_response"));
         return;
       }
-      if (value.status === "approved" || value.status === "in_process") {
+      if (value.status === "challenge" && value.threeDsInfo) {
+        // 3DS: el emisor pide autenticar. Mostramos el challenge del banco; el
+        // resultado se resuelve por webhook + polling en /processing tras COMPLETE.
+        setChallenge(value.threeDsInfo);
+      } else if (value.status === "approved" || value.status === "in_process") {
         onPaid();
       } else {
         setError(humanizeCardError(value.message ?? "rejected"));
@@ -188,6 +201,13 @@ export function CardForm({
         Cargando…
       </div>
     );
+  }
+
+  // 3DS activo: reemplazamos el formulario por el challenge del banco. Al
+  // completarse (evento "COMPLETE"), continuamos a /processing, que hace polling
+  // del estado hasta que el webhook confirme (approved/rejected).
+  if (challenge) {
+    return <ThreeDsChallenge info={challenge} onComplete={onPaid} />;
   }
 
   return (
@@ -267,6 +287,71 @@ export function CardForm({
         Pago seguro · Procesado por Mercado Pago
       </p>
     </form>
+  );
+}
+
+// Challenge 3DS: monta un iframe y le postea el `creq` al `external_resource_url`
+// del banco (contrato de MP). El banco emite un `message` con status "COMPLETE"
+// cuando el usuario termina — ahí seguimos a /processing (el estado final del
+// pago se resuelve async por webhook, no es inmediato). El challenge DEBE
+// arrancar en <30s de creado el pago: por eso se postea al montar.
+function ThreeDsChallenge({
+  info,
+  onComplete,
+}: {
+  info: { externalResourceUrl: string; creq: string };
+  onComplete: () => void;
+}) {
+  const hostRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+
+    const iframe = document.createElement("iframe");
+    iframe.name = "mp-3ds-frame";
+    iframe.className = "h-[440px] w-full rounded-xl border-0 bg-white lg:h-[520px]";
+    host.appendChild(iframe);
+
+    const idoc = iframe.contentWindow?.document;
+    if (idoc) {
+      const form = idoc.createElement("form");
+      form.name = "mp-3ds-form";
+      form.setAttribute("target", "mp-3ds-frame");
+      form.setAttribute("method", "post");
+      form.setAttribute("action", info.externalResourceUrl);
+      const field = idoc.createElement("input");
+      field.setAttribute("type", "hidden");
+      field.setAttribute("name", "creq");
+      field.setAttribute("value", info.creq);
+      form.appendChild(field);
+      idoc.body.appendChild(form);
+      form.submit();
+    }
+
+    const onMessage = (e: MessageEvent) => {
+      const data = e.data as { status?: string } | null;
+      if (data?.status === "COMPLETE") onComplete();
+    };
+    window.addEventListener("message", onMessage);
+
+    return () => {
+      window.removeEventListener("message", onMessage);
+      try {
+        host.removeChild(iframe);
+      } catch {}
+    };
+  }, [info, onComplete]);
+
+  return (
+    <div className="rounded-2xl border border-cart-line bg-cart-bg-elev p-5">
+      <div className="text-[16px] font-semibold tracking-[-0.01em]">Verificación de tu banco</div>
+      <p className="mt-1 text-[12.5px] text-cart-ink-3">
+        Tu banco pide confirmar el pago. Completa la verificación en la ventana de abajo —
+        no cierres esta pantalla.
+      </p>
+      <div ref={hostRef} className="mt-4 overflow-hidden rounded-xl" />
+    </div>
   );
 }
 

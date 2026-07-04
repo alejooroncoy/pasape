@@ -60,6 +60,7 @@ export const isPublicBaseUrl = (base: string = appBaseUrl()): boolean => {
 export type MpPaymentItem = {
   id: string;
   title: string;
+  description?: string;
   quantity: number;
   unit_price: number;
   category_id: string;
@@ -90,20 +91,25 @@ export const buildOrderItems = async (
   }
 
   const typeIds = [...byType.keys()];
-  const { data: types } = await db.from("ticket_types").select("id, name").in("id", typeIds);
-  const nameById = new Map(
-    ((types ?? []) as Array<{ id: string; name: string }>).map((t) => [t.id, t.name]),
+  const { data: types } = await db.from("ticket_types").select("id, name, description").in("id", typeIds);
+  const byId = new Map(
+    ((types ?? []) as Array<{ id: string; name: string; description: string | null }>).map((t) => [t.id, t]),
   );
 
   // Las líneas de entrada llevan su precio de cara (lo que recibe el
   // organizador). La parte de comisión que PAGA el comprador va como línea
   // aparte (abajo), no horneada en la entrada.
   const subtotalCents = rows.reduce((sum, r) => sum + (r.price_cents ?? 0), 0);
-  const items = typeIds.map((id) => {
+  const items: MpPaymentItem[] = typeIds.map((id) => {
     const { qty, totalCents } = byType.get(id)!;
+    const tt = byId.get(id);
+    const title = tt?.name ?? "Entrada";
     return {
       id,
-      title: nameById.get(id) ?? "Entrada",
+      title,
+      // `items.description` mejora el approval rate (checklist oficial de MP).
+      // Si el organizador no puso descripción, cae al nombre de la entrada.
+      description: (tt?.description?.trim() || title).slice(0, 256),
       quantity: qty,
       unit_price: Money.toSoles(Math.round(totalCents / qty)),
       category_id: "tickets",
