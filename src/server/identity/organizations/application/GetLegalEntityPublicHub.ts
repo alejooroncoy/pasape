@@ -1,4 +1,6 @@
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
+import { buyerUnitPriceCents } from "@/lib/tickets/serviceFee";
+import type { FeeMode } from "@/server/events/domain/Event";
 import { supabaseLegalEntityRepository } from "../infrastructure/repositories/SupabaseLegalEntityRepository";
 import type { LegalEntity } from "../domain/LegalEntity";
 
@@ -58,7 +60,7 @@ export const getLegalEntityPublicHub = async (slug: string): Promise<PublicHub |
 
   const { data: rawEvents } = await db
     .from("events")
-    .select("id, slug, title, starts_at, venue, cover_url, organization_id")
+    .select("id, slug, title, starts_at, venue, cover_url, organization_id, fee_mode")
     .in("organization_id", orgIds)
     .eq("status", "published")
     .gte("starts_at", cutoff)
@@ -72,10 +74,14 @@ export const getLegalEntityPublicHub = async (slug: string): Promise<PublicHub |
     venue: string | null;
     cover_url: string | null;
     organization_id: string;
+    fee_mode: FeeMode;
   };
   const events = (rawEvents as EventRow[] | null) ?? [];
+  const feeModeByEvent = new Map(events.map((e) => [e.id, e.fee_mode]));
 
-  // Min price per event (single query for everything).
+  // Min price per event (single query for everything). Precio "todo incluido"
+  // que ve el comprador (comisión ya aplicada), misma fuente que la buy page y
+  // el detalle — nunca se muestra el precio de cara.
   const minPriceByEvent: Record<string, number> = {};
   if (events.length > 0) {
     const { data: tts } = await db
@@ -86,9 +92,10 @@ export const getLegalEntityPublicHub = async (slug: string): Promise<PublicHub |
         events.map((e) => e.id),
       );
     for (const row of (tts as Array<{ event_id: string; price_cents: number }> | null) ?? []) {
+      const price = buyerUnitPriceCents(row.price_cents, feeModeByEvent.get(row.event_id) ?? "buyer_pays_extra");
       const prev = minPriceByEvent[row.event_id];
-      if (prev == null || row.price_cents < prev) {
-        minPriceByEvent[row.event_id] = row.price_cents;
+      if (prev == null || price < prev) {
+        minPriceByEvent[row.event_id] = price;
       }
     }
   }

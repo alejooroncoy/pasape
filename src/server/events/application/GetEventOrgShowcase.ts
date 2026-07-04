@@ -1,4 +1,6 @@
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
+import { buyerUnitPriceCents } from "@/lib/tickets/serviceFee";
+import type { FeeMode } from "@/server/events/domain/Event";
 
 export type ShowcaseOrg = {
   id: string;
@@ -55,7 +57,7 @@ export const getEventOrgShowcase = async (
   const cutoff = new Date(Date.now() - 6 * 3600 * 1000).toISOString();
   const { data: rawEvents } = await db
     .from("events")
-    .select("id, slug, title, cover_url, starts_at, venue")
+    .select("id, slug, title, cover_url, starts_at, venue, fee_mode")
     .eq("organization_id", org.id)
     .eq("status", "published")
     .neq("id", ev.id)
@@ -70,8 +72,10 @@ export const getEventOrgShowcase = async (
     cover_url: string | null;
     starts_at: string;
     venue: string | null;
+    fee_mode: FeeMode;
   };
   const rows = (rawEvents as Row[] | null) ?? [];
+  const feeModeByEvent = new Map(rows.map((r) => [r.id, r.fee_mode]));
 
   // Precio mínimo por evento (una sola consulta).
   const minByEvent: Record<string, number> = {};
@@ -84,8 +88,11 @@ export const getEventOrgShowcase = async (
         rows.map((r) => r.id),
       );
     for (const t of (tts as Array<{ event_id: string; price_cents: number }> | null) ?? []) {
+      // Precio "todo incluido" que ve el comprador (comisión ya aplicada), misma
+      // fuente que la buy page y el detalle — no se muestra el precio de cara.
+      const price = buyerUnitPriceCents(t.price_cents, feeModeByEvent.get(t.event_id) ?? "buyer_pays_extra");
       const prev = minByEvent[t.event_id];
-      if (prev == null || t.price_cents < prev) minByEvent[t.event_id] = t.price_cents;
+      if (prev == null || price < prev) minByEvent[t.event_id] = price;
     }
   }
 
