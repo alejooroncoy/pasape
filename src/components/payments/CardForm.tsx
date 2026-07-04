@@ -207,7 +207,13 @@ export function CardForm({
   // completarse (evento "COMPLETE"), continuamos a /processing, que hace polling
   // del estado hasta que el webhook confirme (approved/rejected).
   if (challenge) {
-    return <ThreeDsChallenge info={challenge} onComplete={onPaid} />;
+    return (
+      <ThreeDsChallenge
+        info={challenge}
+        onComplete={onPaid}
+        onCancel={() => setChallenge(null)}
+      />
+    );
   }
 
   return (
@@ -298,9 +304,11 @@ export function CardForm({
 function ThreeDsChallenge({
   info,
   onComplete,
+  onCancel,
 }: {
   info: { externalResourceUrl: string; creq: string };
   onComplete: () => void;
+  onCancel: () => void;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
@@ -311,8 +319,9 @@ function ThreeDsChallenge({
 
     const iframe = document.createElement("iframe");
     iframe.name = "mp-3ds-frame";
-    // El contenido es del banco (cross-origin); solo enmarcamos el iframe.
-    iframe.className = "block h-[460px] w-full border-0 bg-white lg:h-[520px]";
+    // El contenido es del banco (cross-origin): NO podemos estilarlo por dentro.
+    // Lo tratamos como una tarjeta: alto fijo tipo challenge window de 3DS (~600).
+    iframe.className = "block h-[600px] w-full border-0 bg-white";
     iframe.addEventListener("load", () => setLoading(false));
     host.appendChild(iframe);
 
@@ -370,22 +379,35 @@ function ThreeDsChallenge({
         </div>
       </div>
 
-      {/* Marco del challenge: el iframe del banco (blanco) va dentro de un panel
-          con borde propio, para que se vea intencional sobre el fondo oscuro.
-          Mientras carga, un spinner ocupa su lugar. */}
-      <div className="relative mt-4 overflow-hidden rounded-2xl border border-cart-line bg-white shadow-[0_12px_40px_-16px_rgba(0,0,0,0.6)]">
-        {loading && (
-          <div className="absolute inset-0 z-10 grid place-items-center bg-white">
-            <div className="flex flex-col items-center gap-3 text-cart-bg">
-              <span className="size-7 animate-spin rounded-full border-[3px] border-black/15 border-t-black/70" />
-              <span className="text-[12.5px] font-medium text-black/55">Conectando con tu banco…</span>
+      {/* Marco del challenge: el iframe del banco (blanco) se muestra como una
+          TARJETA CENTRADA sobre el panel oscuro (no a lo ancho). No podemos
+          centrar el contenido POR DENTRO (cross-origin), así que centramos la
+          tarjeta y le damos un ancho acotado tipo challenge window de 3DS. */}
+      <div className="mt-4 flex justify-center rounded-2xl border border-cart-line bg-cart-bg p-3 sm:p-5">
+        <div className="relative w-full max-w-[440px]">
+          {loading && (
+            <div className="absolute inset-0 z-10 grid place-items-center rounded-xl bg-white">
+              <div className="flex flex-col items-center gap-3">
+                <span className="size-7 animate-spin rounded-full border-[3px] border-black/15 border-t-black/70" />
+                <span className="text-[12.5px] font-medium text-black/55">Conectando con tu banco…</span>
+              </div>
             </div>
-          </div>
-        )}
-        <div ref={hostRef} />
+          )}
+          {/* MP monta el iframe (bg-white, alto fijo) aquí dentro */}
+          <div ref={hostRef} className="overflow-hidden rounded-xl shadow-[0_12px_40px_-16px_rgba(0,0,0,0.6)]" />
+        </div>
       </div>
 
-      <p className="mt-3 text-center text-[11px] text-cart-ink-4">
+      {/* Salida: que el usuario nunca quede atrapado si abandona el challenge. */}
+      <button
+        type="button"
+        onClick={onCancel}
+        className="mt-3 w-full text-center text-[12.5px] text-cart-ink-3 underline underline-offset-2 transition hover:text-white"
+      >
+        Cancelar y volver a elegir cómo pagar
+      </button>
+
+      <p className="mt-2 text-center text-[11px] text-cart-ink-4">
         Autenticación segura 3-D Secure · Procesado por Mercado Pago
       </p>
     </div>
