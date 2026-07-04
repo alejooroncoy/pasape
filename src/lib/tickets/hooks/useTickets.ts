@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/_shared/api-client";
 import { useSessionReady } from "@/lib/identity/hooks/useSessionReady";
+import { currentUserKey } from "@/lib/identity/hooks/useCurrentUser";
 import type { Order, OrderQuote, Ticket, TransferOutcome, WalletTicket } from "@/server/tickets/domain/Ticket";
 
 export const myTicketsKey = ["tickets", "mine"] as const;
@@ -174,6 +175,12 @@ export const useClaimOrder = () => {
         "/api/tickets/claim-order",
         input,
       ),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ticketsRoot }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ticketsRoot });
+      // El claim pudo copiar el teléfono/nombre de la orden al profile (ver
+      // claimOrder en el repo) → refrescamos `me` para que la pantalla post-claim
+      // no vuelva a pedir un número que ya tenemos.
+      qc.invalidateQueries({ queryKey: currentUserKey });
+    },
   });
 };
