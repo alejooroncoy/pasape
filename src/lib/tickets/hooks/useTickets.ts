@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/_shared/api-client";
 import { useSessionReady } from "@/lib/identity/hooks/useSessionReady";
-import type { Order, Ticket, TransferOutcome, WalletTicket } from "@/server/tickets/domain/Ticket";
+import type { Order, OrderQuote, Ticket, TransferOutcome, WalletTicket } from "@/server/tickets/domain/Ticket";
 
 export const myTicketsKey = ["tickets", "mine"] as const;
 
@@ -91,6 +91,16 @@ export type BuyResult = {
   tickets: Ticket[];
   preference: { id: string; initPoint: string };
 };
+
+// Cotización autoritativa del pedido (modelo híbrido): el checkout muestra al
+// instante el cálculo local (módulo compartido) y en cada transición de paso
+// pide este quote al backend, que pisa los números locales. Ver AGENTS.md
+// ("Dinero: nunca reimplementar la fórmula en el frontend").
+export const useOrderQuote = () =>
+  useMutation({
+    mutationFn: (input: { eventId: string; items: Array<{ ticketTypeId: string; qty: number }> }) =>
+      api.post<OrderQuote>("/api/tickets/quote", input),
+  });
 
 export const useBuyTickets = () => {
   const qc = useQueryClient();

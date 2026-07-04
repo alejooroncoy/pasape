@@ -4,10 +4,11 @@ import { err, ok, type Result } from "@/server/_shared/result";
 import type {
   BuyInput,
   BuyOutput,
+  QuoteInput,
   ScannerRef,
   TicketRepository,
 } from "@/server/tickets/ports/TicketRepository";
-import type { Order, Ticket, WalletTicket } from "@/server/tickets/domain/Ticket";
+import type { Order, OrderQuote, Ticket, WalletTicket } from "@/server/tickets/domain/Ticket";
 import type { EventCategory, EventStatus, Promo } from "@/server/events/domain/Event";
 import { activePricing, applyPromos, type PromoLineInput } from "@/lib/events/pricing";
 import { resolveOrderFee } from "@/lib/tickets/serviceFee";
@@ -118,95 +119,127 @@ const loadTransferable = async (
   return ok({ row: joined, event: ev });
 };
 
+// Precio autoritativo de un pedido: precio activo (preventa/gratis) + promos
+// 2x1/3x2 + comisión de servicio. ÚNICA implementación server-side — la usan
+// buy() (al cobrar) y quote() (preview del checkout) para que nunca diverjan.
+// Read-only: valida evento publicado, ventas abiertas y stock, sin reservar.
+const priceOrder = async (
+  db: ReturnType<typeof supabaseAdmin>,
+  input: { eventId: string; items: Array<{ ticketTypeId: string; qty: number }> },
+) => {
+  // Why: bloquear compras a eventos no publicados (draft/closed/cancelled).
+  // Sin esto, cualquiera con el slug podría comprar a un evento que el
+  // organizador aún no lanzó. Cerrado/cancelado también bloqueado.
+  const { data: evStatus } = await db
+    .from("events")
+    .select("status, ends_at, fee_mode")
+    .eq("id", input.eventId)
+    .maybeSingle<{ status: string; ends_at: string | null; fee_mode: "buyer_pays_extra" | "included_in_price" }>();
+  if (!evStatus) return err("event_not_found");
+  if (evStatus.status !== "published") return err("event_not_published");
+  if (evStatus.ends_at && new Date(evStatus.ends_at) < new Date()) return err("event_sales_closed");
+
+  const ttIds = input.items.map((i) => i.ticketTypeId);
+  const { data: tts, error: ttErr } = await db
+    .from("ticket_types")
+    .select(
+      "id, price_cents, capacity, sold, currency, event_id, kind, box_label, sale_ends_at, presale_price_cents, presale_qty, presale_ends_at, is_free, free_until_at",
+    )
+    .in("id", ttIds);
+  if (ttErr || !tts) return err(ttErr?.message ?? "ticket_types_lookup_failed");
+  if (tts.some((t) => t.event_id !== input.eventId)) return err("event_mismatch");
+
+  // Promos activas del evento (2x1 / 3x2), aplicadas al total server-side.
+  const { data: promoRows } = await db
+    .from("ticket_promos")
+    .select("id, event_id, ticket_type_id, kind, ends_at")
+    .eq("event_id", input.eventId);
+  const now = new Date();
+  const promos: Promo[] = (promoRows ?? []).map((r) => ({
+    id: r.id,
+    eventId: r.event_id,
+    ticketTypeId: r.ticket_type_id,
+    kind: r.kind as Promo["kind"],
+    endsAt: r.ends_at,
+    isActive: r.ends_at == null || new Date(r.ends_at) > now,
+  }));
+
+  // Why: el precio NO se confía del cliente. Se resuelve el precio activo
+  // (preventa vigente o normal) y luego se aplican las promos.
+  const priceItems: PromoLineInput[] = [];
+  for (const item of input.items) {
+    const tt = tts.find((t) => t.id === item.ticketTypeId);
+    if (!tt) return err("ticket_type_missing");
+    if (tt.sale_ends_at && new Date(tt.sale_ends_at) < new Date()) return err("ticket_type_sales_closed");
+    // Respeta el aforo de la entrada (no sobrevende el espacio). Se libera solo
+    // al anular el ticket (el trigger recalcula sold).
+    if (tt.sold + item.qty > tt.capacity) return err("sold_out");
+    // El precio sale del ticket-type. Una entrada gratis es simplemente un tipo
+    // a precio 0 → el flujo normal la cobra a 0, sin caso especial.
+    const isPresaleActive =
+      tt.presale_price_cents != null &&
+      (tt.presale_qty == null || tt.sold < tt.presale_qty) &&
+      (tt.presale_ends_at == null || now < new Date(tt.presale_ends_at));
+    const isFreeActive =
+      tt.is_free && (tt.free_until_at == null || now < new Date(tt.free_until_at));
+    const ap = activePricing({
+      priceCents: tt.price_cents,
+      presalePriceCents: tt.presale_price_cents,
+      presaleQty: tt.presale_qty,
+      presaleEndsAt: tt.presale_ends_at,
+      sold: tt.sold,
+      isPresaleActive,
+      isFreeActive,
+      freeUntilAt: tt.free_until_at,
+    });
+    priceItems.push({ ticketTypeId: tt.id, qty: item.qty, unitPriceCents: ap.priceCents });
+  }
+  const promoResult = applyPromos(priceItems, promos);
+  const subtotal = promoResult.totalCents;
+  // Comisión de Pasape (por tramos, ver serviceFee.ts) — no se cobra en
+  // órdenes gratis. Se calcula acá (server, fuente de verdad). Por debajo
+  // de S/15 de subtotal el fee SIEMPRE se cobra pero nunca se muestra
+  // aparte (protege a Pasape y evita un desglose que asuste al comprador
+  // en montos chicos); desde S/15 se respeta `fee_mode` tal cual lo
+  // eligió el organizador. `service_fee_cents` en la orden siempre guarda
+  // cuánto es, sin importar si se mostró o no — lo usa la liquidación
+  // manual al organizador para saber cuánto descontarle.
+  const { chargedFeeCents: serviceFeeCents, showFeeLine } = resolveOrderFee(
+    subtotal,
+    evStatus.fee_mode,
+    promoResult.lines,
+  );
+  const total = subtotal + serviceFeeCents;
+  return ok({ evStatus, tts, promoResult, subtotal, serviceFeeCents, showFeeLine, total });
+};
+
 export const supabaseTicketRepository: TicketRepository = {
+  async quote(input: QuoteInput): Promise<Result<OrderQuote>> {
+    const priced = await priceOrder(supabaseAdmin(), input);
+    if (!priced.ok) return priced;
+    const { promoResult, subtotal, serviceFeeCents, showFeeLine, total, tts } = priced.value;
+    return ok({
+      lines: promoResult.lines.map((l) => ({
+        ticketTypeId: l.ticketTypeId,
+        qty: l.qty,
+        subtotalCents: l.subtotalCents,
+      })),
+      subtotalCents: subtotal,
+      serviceFeeCents,
+      totalCents: total,
+      showFeeLine,
+      currency: tts[0]?.currency ?? "PEN",
+    });
+  },
+
   async buy(input: BuyInput): Promise<Result<BuyOutput>> {
     const db = supabaseAdmin();
 
     if (!input.buyerId && !input.guest) return err("buyer_required");
 
-    // Why: bloquear compras a eventos no publicados (draft/closed/cancelled).
-    // Sin esto, cualquiera con el slug podría comprar a un evento que el
-    // organizador aún no lanzó. Cerrado/cancelado también bloqueado.
-    const { data: evStatus } = await db
-      .from("events")
-      .select("status, ends_at, fee_mode")
-      .eq("id", input.eventId)
-      .maybeSingle<{ status: string; ends_at: string | null; fee_mode: "buyer_pays_extra" | "included_in_price" }>();
-    if (!evStatus) return err("event_not_found");
-    if (evStatus.status !== "published") return err("event_not_published");
-    if (evStatus.ends_at && new Date(evStatus.ends_at) < new Date()) return err("event_sales_closed");
-
-    const ttIds = input.items.map((i) => i.ticketTypeId);
-    const { data: tts, error: ttErr } = await db
-      .from("ticket_types")
-      .select(
-        "id, price_cents, capacity, sold, currency, event_id, kind, box_label, sale_ends_at, presale_price_cents, presale_qty, presale_ends_at, is_free, free_until_at",
-      )
-      .in("id", ttIds);
-    if (ttErr || !tts) return err(ttErr?.message ?? "ticket_types_lookup_failed");
-    if (tts.some((t) => t.event_id !== input.eventId)) return err("event_mismatch");
-
-    // Promos activas del evento (2x1 / 3x2), aplicadas al total server-side.
-    const { data: promoRows } = await db
-      .from("ticket_promos")
-      .select("id, event_id, ticket_type_id, kind, ends_at")
-      .eq("event_id", input.eventId);
-    const now = new Date();
-    const promos: Promo[] = (promoRows ?? []).map((r) => ({
-      id: r.id,
-      eventId: r.event_id,
-      ticketTypeId: r.ticket_type_id,
-      kind: r.kind as Promo["kind"],
-      endsAt: r.ends_at,
-      isActive: r.ends_at == null || new Date(r.ends_at) > now,
-    }));
-
-    // Why: el precio NO se confía del cliente. Se resuelve el precio activo
-    // (preventa vigente o normal) y luego se aplican las promos.
-    const priceItems: PromoLineInput[] = [];
-    for (const item of input.items) {
-      const tt = tts.find((t) => t.id === item.ticketTypeId);
-      if (!tt) return err("ticket_type_missing");
-      if (tt.sale_ends_at && new Date(tt.sale_ends_at) < new Date()) return err("ticket_type_sales_closed");
-      // Respeta el aforo de la entrada (no sobrevende el espacio). Se libera solo
-      // al anular el ticket (el trigger recalcula sold).
-      if (tt.sold + item.qty > tt.capacity) return err("sold_out");
-      // El precio sale del ticket-type. Una entrada gratis es simplemente un tipo
-      // a precio 0 → el flujo normal la cobra a 0, sin caso especial.
-      const isPresaleActive =
-        tt.presale_price_cents != null &&
-        (tt.presale_qty == null || tt.sold < tt.presale_qty) &&
-        (tt.presale_ends_at == null || now < new Date(tt.presale_ends_at));
-      const isFreeActive =
-        tt.is_free && (tt.free_until_at == null || now < new Date(tt.free_until_at));
-      const ap = activePricing({
-        priceCents: tt.price_cents,
-        presalePriceCents: tt.presale_price_cents,
-        presaleQty: tt.presale_qty,
-        presaleEndsAt: tt.presale_ends_at,
-        sold: tt.sold,
-        isPresaleActive,
-        isFreeActive,
-        freeUntilAt: tt.free_until_at,
-      });
-      priceItems.push({ ticketTypeId: tt.id, qty: item.qty, unitPriceCents: ap.priceCents });
-    }
-    const promoResult = applyPromos(priceItems, promos);
-    const subtotal = promoResult.totalCents;
-    // Comisión de Pasape (por tramos, ver serviceFee.ts) — no se cobra en
-    // órdenes gratis. Se calcula acá (server, fuente de verdad). Por debajo
-    // de S/15 de subtotal el fee SIEMPRE se cobra pero nunca se muestra
-    // aparte (protege a Pasape y evita un desglose que asuste al comprador
-    // en montos chicos); desde S/15 se respeta `fee_mode` tal cual lo
-    // eligió el organizador. `service_fee_cents` en la orden siempre guarda
-    // cuánto es, sin importar si se mostró o no — lo usa la liquidación
-    // manual al organizador para saber cuánto descontarle.
-    const { chargedFeeCents: serviceFeeCents, showFeeLine } = resolveOrderFee(
-      subtotal,
-      evStatus.fee_mode,
-      promoResult.lines,
-    );
-    const total = subtotal + serviceFeeCents;
+    const priced = await priceOrder(db, input);
+    if (!priced.ok) return priced;
+    const { tts, promoResult, serviceFeeCents, showFeeLine, total } = priced.value;
     // Subtotal real por tipo (con promos) → para repartir entre los tickets de
     // cada línea y persistir tickets.price_cents (recaudado por tipo exacto).
     // El fee NO se reparte acá: es un cargo de plataforma, no revenue de un
@@ -497,7 +530,7 @@ export const supabaseTicketRepository: TicketRepository = {
     const { data: ttsForPref } = await db
       .from("ticket_types")
       .select("id, name")
-      .in("id", ttIds);
+      .in("id", input.items.map((i) => i.ticketTypeId));
     const nameById = new Map<string, string>(
       (ttsForPref ?? []).map((t) => [t.id, t.name]),
     );

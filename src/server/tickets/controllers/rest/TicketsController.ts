@@ -10,7 +10,7 @@ import { getMyTicketById, getMyTickets } from "../../application/GetMyTickets";
 import { transferTicket } from "../../application/TransferTicket";
 import { claimTransfer } from "../../application/ClaimTransfer";
 import { claimOrder } from "../../application/ClaimOrder";
-import type { Ticket, TransferOutcome, WalletTicket } from "../../domain/Ticket";
+import type { OrderQuote, Ticket, TransferOutcome, WalletTicket } from "../../domain/Ticket";
 import type { BuyOutput } from "../../ports/TicketRepository";
 
 // Why: el QR llega por WhatsApp o email — exigimos al menos uno. DNI es
@@ -83,7 +83,22 @@ const setHolderSchema = z.object({
     .optional(),
 });
 
+// Cotización del pedido (sin crear orden). Público: es el mismo precio que ya
+// muestra la página del evento; no expone nada sensible.
+const quoteSchema = z.object({
+  eventId: z.string().uuid(),
+  items: z
+    .array(z.object({ ticketTypeId: z.string().uuid(), qty: z.number().int().min(1).max(10) }))
+    .min(1),
+});
+
 export const TicketsController = {
+  async quote(input: unknown): Promise<Result<OrderQuote>> {
+    const parsed = quoteSchema.safeParse(input);
+    if (!parsed.success) return err("invalid_input");
+    return repo.quote(parsed.data);
+  },
+
   async buy(input: unknown): Promise<Result<BuyOutput>> {
     const parsed = buySchema.safeParse(input);
     if (!parsed.success) return err(parsed.error.issues[0]?.message ?? "invalid_input");

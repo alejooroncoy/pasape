@@ -16,6 +16,19 @@ export type Order = {
   createdAt: string;
 };
 
+/** Cotización autoritativa de un pedido ANTES de crear la orden. El checkout
+    la pide al backend en cada transición de paso; el cliente puede precalcular
+    con el módulo compartido para feedback instantáneo, pero el número que se
+    muestra/paga siempre termina siendo este. */
+export type OrderQuote = {
+  lines: Array<{ ticketTypeId: string; qty: number; subtotalCents: number }>;
+  subtotalCents: number;
+  serviceFeeCents: number;
+  totalCents: number;
+  showFeeLine: boolean;
+  currency: string;
+};
+
 export type Ticket = {
   id: string;
   orderId: string;
