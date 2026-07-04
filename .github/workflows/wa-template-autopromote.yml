@@ -1,0 +1,63 @@
+name: WA template auto-promote
+
+# Vigila la aprobación en Meta del template `ticket_delivery_v2` y, cuando pasa
+# a APPROVED, auto-mergea el PR del cambio de código (rama feat/wa-template-v2)
+# a main — lo que dispara el deploy en Vercel. Mientras el template siga en
+# PENDING/REJECTED, no hace nada.
+#
+# Requiere el secret de repo: META_WHATSAPP_TOKEN (System User token de Meta con
+# whatsapp_business_management). Corre en cron cada 6 h y también manualmente.
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  WABA_ID: "1461892809283783"
+  TEMPLATE_NAME: "ticket_delivery_v2"
+  PR_HEAD: "feat/wa-template-v2"
+
+jobs:
+  check-and-merge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Consultar estado del template en Meta
+        id: meta
+        run: |
+          if [ -z "${META_WHATSAPP_TOKEN}" ]; then
+            echo "::error::Falta el secret META_WHATSAPP_TOKEN"; exit 1
+          fi
+          status=$(curl -sS -G "https://graph.facebook.com/v24.0/${WABA_ID}/message_templates" \
+            --data-urlencode "fields=name,status" \
+            --data-urlencode "limit=200" \
+            -H "Authorization: Bearer ${META_WHATSAPP_TOKEN}" \
+            | jq -r --arg n "${TEMPLATE_NAME}" '[.data[] | select(.name==$n) | .status] | first // "NOT_FOUND"')
+          echo "Template ${TEMPLATE_NAME}: ${status}"
+          echo "status=${status}" >> "$GITHUB_OUTPUT"
+        env:
+          META_WHATSAPP_TOKEN: ${{ secrets.META_WHATSAPP_TOKEN }}
+
+      - name: Auto-mergear el PR si está aprobado
+        if: steps.meta.outputs.status == 'APPROVED'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          read -r number state mergeable < <(gh pr view "${PR_HEAD}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --json number,state,mergeable \
+            --jq '"\(.number) \(.state) \(.mergeable)"' 2>/dev/null || echo "")
+          if [ -z "${number:-}" ] || [ "${state}" != "OPEN" ]; then
+            echo "No hay PR abierto para ${PR_HEAD} (probablemente ya se mergeó). Nada que hacer."
+            exit 0
+          fi
+          echo "Template APPROVED. PR #${number} state=${state} mergeable=${mergeable}"
+          if [ "${mergeable}" = "CONFLICTING" ]; then
+            echo "::error::PR #${number} tiene conflictos — requiere intervención manual"; exit 1
+          fi
+          gh pr merge "${number}" --repo "${GITHUB_REPOSITORY}" --squash --delete-branch
+          echo "PR #${number} mergeado a main. Vercel desplegará el cambio."
