@@ -543,6 +543,7 @@ function BuyFlowInner({ params }: Props) {
                   payMethod={payMethod}
                   setPayMethod={setPayMethod}
                   orderId={orderId}
+                onExpired={() => setReservationExpired(true)}
                 totalCents={displayTotal}
                 isLogged={isLogged}
                 userPhone={me.data?.user?.phone ?? ""}
@@ -1518,6 +1519,7 @@ function PayPhase({
   guestDni,
   emailOk,
   onPaid,
+  onExpired,
 }: {
   payMethod: "yape" | "mp";
   setPayMethod: (m: "yape" | "mp") => void;
@@ -1534,6 +1536,7 @@ function PayPhase({
   guestDni: string;
   emailOk: boolean;
   onPaid: () => void;
+  onExpired: () => void;
 }) {
   if (!orderId) {
     return <p className="py-8 text-center text-[13px] text-cart-ink-3">Preparando el checkout…</p>;
@@ -1634,6 +1637,7 @@ function PayPhase({
             initialEmail={isLogged ? userEmail : guestEmail}
             onPaid={onPaid}
             onError={(msg) => console.warn("card error:", msg)}
+            onExpired={onExpired}
           />
         )}
       </div>

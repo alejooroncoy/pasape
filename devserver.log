@@ -1,0 +1,168 @@
+
+> pasape-app@0.1.0 dev
+> next dev --turbopack
+
+⚠ Port 3000 is in use by an unknown process, using available port 3001 instead.
+▲ Next.js 16.2.6 (Turbopack)
+- Local:         http://localhost:3001
+- Network:       http://192.168.18.167:3001
+- Environments: .env
+✓ Ready in 1060ms
+- Experiments (use with caution):
+  · clientTraceMetadata
+
+○ Compiling /[locale] ...
+ GET /es 200 in 7.1s (next.js: 5.4s, proxy.ts: 127ms, generate-params: 285ms, application-code: 1536ms)
+○ Compiling /api/identity/me ...
+ GET /api/events 200 in 3.7s (next.js: 3.5s, application-code: 276ms)
+ GET /api/identity/me 200 in 4.1s (next.js: 2.9s, application-code: 1243ms)
+ GET /api/identity/saved-events 200 in 1614ms (next.js: 1293ms, application-code: 322ms)
+ GET /api/tickets/my 200 in 2.5s (next.js: 1945ms, application-code: 597ms)
+ GET /es/organizadores 200 in 2.0s (next.js: 1687ms, proxy.ts: 164ms, generate-params: 333ms, application-code: 190ms)
+ GET /es/events/reverb-x-la-selva-kx39/buy 200 in 1651ms (next.js: 1567ms, proxy.ts: 9ms, application-code: 76ms)
+ GET /api/identity/me 200 in 7ms (next.js: 3ms, application-code: 4ms)
+ GET /api/events/reverb-x-la-selva-kx39 200 in 2.1s (next.js: 1391ms, application-code: 691ms)
+ GET /api/identity/me 200 in 14ms (next.js: 3ms, application-code: 11ms)
+ GET /api/events 200 in 145ms (next.js: 2ms, application-code: 142ms)
+ POST /api/tickets/quote 200 in 3.2s (next.js: 719ms, application-code: 2.5s)
+ GET /api/identity/dni-lookup?dni=12345678 404 in 489ms (next.js: 119ms, application-code: 370ms)
+(node:73746) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ POST /api/tickets/buy 201 in 4.5s (next.js: 405ms, application-code: 4.1s)
+ GET /es 200 in 1586ms (next.js: 17ms, proxy.ts: 246ms, generate-params: 3ms, application-code: 1323ms)
+ GET /api/events 200 in 219ms (next.js: 7ms, application-code: 211ms)
+ GET /api/identity/saved-events 200 in 347ms (next.js: 2ms, application-code: 345ms)
+ GET /api/tickets/my 200 in 768ms (next.js: 4ms, application-code: 763ms)
+ GET /api/identity/me 200 in 2.5s (next.js: 2ms, application-code: 2.5s)
+ GET /es 200 in 758ms (next.js: 11ms, proxy.ts: 256ms, generate-params: 1832µs, application-code: 491ms)
+ GET /api/events 200 in 147ms (next.js: 6ms, application-code: 141ms)
+ GET /api/identity/me 200 in 1028ms (next.js: 3ms, application-code: 1025ms)
+ GET /api/events/reverb-x-la-selva-kx39 200 in 731ms (next.js: 3ms, application-code: 727ms)
+ GET /es/events/reverb-x-la-selva-kx39 200 in 2.7s (next.js: 1303ms, proxy.ts: 170ms, application-code: 1212ms)
+ GET /api/identity/me 200 in 1201ms (next.js: 5ms, application-code: 1197ms)
+ GET /api/events/reverb-x-la-selva-kx39/showcase 200 in 1614ms (next.js: 982ms, application-code: 632ms)
+ GET /api/events/reverb-x-la-selva-kx39/partners 200 in 1890ms (next.js: 963ms, application-code: 927ms)
+ GET /es/events/reverb-x-la-selva-kx39/buy?sel=b0a5323f-40ff-4508-b7fb-5827c8d5ea14%3A2 200 in 200ms (next.js: 16ms, proxy.ts: 168ms, application-code: 16ms)
+ GET /api/identity/dni-lookup?dni=73172442 200 in 350ms (next.js: 3ms, application-code: 347ms)
+ GET /api/identity/me 200 in 1024ms (next.js: 2ms, application-code: 1021ms)
+ POST /api/tickets/quote 200 in 1032ms (next.js: 4ms, application-code: 1028ms)
+ POST /api/tickets/buy 201 in 3.1s (next.js: 4ms, application-code: 3.1s)
+ POST /api/payments/card 200 in 3.9s (next.js: 578ms, application-code: 3.3s)
+[browser] MercadoPago.js - Error when mounting field mp-card-number: Container not found (https://sdk.mercadopago.com/js/v2:1:126657)
+[browser] MercadoPago.js - Error when mounting field mp-card-exp: Container not found (https://sdk.mercadopago.com/js/v2:1:126657)
+[browser] MercadoPago.js - Error when mounting field mp-card-cvv: Container not found (https://sdk.mercadopago.com/js/v2:1:126657)
+✓ Compiled in 340ms
+✓ Compiled in 159ms
+ GET /es/events/reverb-x-la-selva-kx39/buy?sel=b0a5323f-40ff-4508-b7fb-5827c8d5ea14%3A2&order=421dc047-690a-44f4-bdc1-b376e587a427 200 in 722ms (next.js: 27ms, proxy.ts: 641ms, application-code: 54ms)
+ GET /api/events/reverb-x-la-selva-kx39 200 in 812ms (next.js: 4ms, application-code: 808ms)
+ GET /api/identity/dni-lookup?dni=73172442 200 in 352ms (next.js: 1452µs, application-code: 350ms)
+ GET /api/events 200 in 160ms (next.js: 3ms, application-code: 157ms)
+ GET /api/identity/me 200 in 1223ms (next.js: 3ms, application-code: 1220ms)
+ POST /api/payments/card 200 in 3.1s (next.js: 10ms, application-code: 3.1s)
+ GET /es/events/reverb-x-la-selva-kx39/buy?sel=b0a5323f-40ff-4508-b7fb-5827c8d5ea14%3A2&order=421dc047-690a-44f4-bdc1-b376e587a427 200 in 96ms (next.js: 25ms, proxy.ts: 11ms, application-code: 60ms)
+✓ Compiled in 225ms
+ GET /es/events/reverb-x-la-selva-kx39/buy?sel=b0a5323f-40ff-4508-b7fb-5827c8d5ea14%3A2&order=421dc047-690a-44f4-bdc1-b376e587a427 200 in 1105ms (next.js: 53ms, proxy.ts: 999ms, application-code: 53ms)
+ GET /api/identity/dni-lookup?dni=73172442 200 in 357ms (next.js: 3ms, application-code: 354ms)
+ GET /api/events/reverb-x-la-selva-kx39 200 in 1004ms (next.js: 8ms, application-code: 996ms)
+ GET /api/events 200 in 142ms (next.js: 2ms, application-code: 139ms)
+ GET /api/identity/me 200 in 1413ms (next.js: 4ms, application-code: 1409ms)
+ POST /api/payments/card 200 in 3.3s (next.js: 11ms, application-code: 3.3s)
+✓ Compiled in 195ms
+ GET /es/events/reverb-x-la-selva-kx39/buy?sel=b0a5323f-40ff-4508-b7fb-5827c8d5ea14%3A2&order=421dc047-690a-44f4-bdc1-b376e587a427 200 in 411ms (next.js: 19ms, proxy.ts: 352ms, application-code: 40ms)
+ GET /api/identity/dni-lookup?dni=73172442 200 in 349ms (next.js: 1661µs, application-code: 347ms)
+ GET /api/events/reverb-x-la-selva-kx39 200 in 1176ms (next.js: 4ms, application-code: 1173ms)
+ GET /api/identity/me 200 in 1219ms (next.js: 1816µs, application-code: 1217ms)
+ GET /api/events 200 in 218ms (next.js: 3ms, application-code: 215ms)
+ POST /api/payments/card 200 in 3.3s (next.js: 12ms, application-code: 3.3s)
+✓ Compiled in 140ms
+ GET /es/events/reverb-x-la-selva-kx39/buy?sel=b0a5323f-40ff-4508-b7fb-5827c8d5ea14%3A2&order=421dc047-690a-44f4-bdc1-b376e587a427 200 in 292ms (next.js: 46ms, proxy.ts: 199ms, application-code: 47ms)
+ GET /api/events/reverb-x-la-selva-kx39 200 in 663ms (next.js: 2ms, application-code: 661ms)
+ GET /api/events 200 in 176ms (next.js: 1558µs, application-code: 174ms)
+ GET /api/identity/dni-lookup?dni=73172442 200 in 343ms (next.js: 1834µs, application-code: 341ms)
+ GET /api/identity/me 200 in 996ms (next.js: 1880µs, application-code: 994ms)
+ POST /api/payments/card 200 in 3.0s (next.js: 7ms, application-code: 3.0s)
+ GET /es/events/reverb-x-la-selva-kx39/installHook.js.map 404 in 2.2s (next.js: 2.2s, application-code: 30ms)
+✓ Compiled in 141ms
+✓ Compiled in 124ms
+ GET /es/events/reverb-x-la-selva-kx39/buy?sel=b0a5323f-40ff-4508-b7fb-5827c8d5ea14%3A2&order=421dc047-690a-44f4-bdc1-b376e587a427 200 in 784ms (next.js: 16ms, proxy.ts: 726ms, application-code: 42ms)
+ GET /es/events/reverb-x-la-selva-kx39/installHook.js.map 404 in 22ms (next.js: 3ms, application-code: 19ms)
+ GET /api/events/reverb-x-la-selva-kx39 200 in 814ms (next.js: 4ms, application-code: 810ms)
+ GET /api/identity/me 200 in 1077ms (next.js: 5ms, application-code: 1071ms)
+ GET /api/identity/dni-lookup?dni=73172442 200 in 350ms (next.js: 2ms, application-code: 348ms)
+ GET /api/events 200 in 138ms (next.js: 3ms, application-code: 134ms)
+ GET /api/identity/me 200 in 988ms (next.js: 968µs, application-code: 987ms)
+ POST /api/payments/card 200 in 2.9s (next.js: 9ms, application-code: 2.9s)
+✓ Compiled in 112ms
+✓ Compiled in 60ms
+✓ Compiled in 64ms
+ GET /es/events/reverb-x-la-selva-kx39/buy?sel=b0a5323f-40ff-4508-b7fb-5827c8d5ea14%3A2&order=421dc047-690a-44f4-bdc1-b376e587a427 200 in 445ms (next.js: 38ms, proxy.ts: 322ms, application-code: 84ms)
+ GET /es/events/reverb-x-la-selva-kx39/installHook.js.map 404 in 25ms (next.js: 3ms, application-code: 22ms)
+ GET /api/events/reverb-x-la-selva-kx39 200 in 950ms (next.js: 4ms, application-code: 946ms)
+ GET /api/identity/dni-lookup?dni=73172442 200 in 346ms (next.js: 1588µs, application-code: 345ms)
+ GET /api/events 200 in 134ms (next.js: 3ms, application-code: 131ms)
+ GET /api/identity/me 200 in 1168ms (next.js: 1971µs, application-code: 1166ms)
+ POST /api/payments/card 200 in 3.0s (next.js: 15ms, application-code: 3.0s)
+✓ Compiled in 137ms
+ GET /es/events/reverb-x-la-selva-kx39/buy?sel=b0a5323f-40ff-4508-b7fb-5827c8d5ea14%3A2&order=421dc047-690a-44f4-bdc1-b376e587a427 200 in 309ms (next.js: 12ms, proxy.ts: 262ms, application-code: 36ms)
+ GET /es/events/reverb-x-la-selva-kx39/installHook.js.map 404 in 24ms (next.js: 5ms, application-code: 20ms)
+ GET /api/events/reverb-x-la-selva-kx39 200 in 639ms (next.js: 3ms, application-code: 636ms)
+ GET /api/events 200 in 129ms (next.js: 1911µs, application-code: 127ms)
+ GET /api/identity/dni-lookup?dni=73172442 200 in 405ms (next.js: 2ms, application-code: 403ms)
+ GET /api/identity/me 200 in 1095ms (next.js: 1761µs, application-code: 1093ms)
+ POST /api/payments/card 200 in 3.0s (next.js: 3ms, application-code: 3.0s)
+✓ Compiled in 241ms
+✓ Compiled in 233ms
+✓ Compiled in 200ms
+ GET /es/events/reverb-x-la-selva-kx39/buy?sel=b0a5323f-40ff-4508-b7fb-5827c8d5ea14%3A2&order=421dc047-690a-44f4-bdc1-b376e587a427 200 in 1039ms (next.js: 19ms, proxy.ts: 965ms, application-code: 54ms)
+ GET /es/events/reverb-x-la-selva-kx39/installHook.js.map 404 in 63ms (next.js: 5ms, application-code: 58ms)
+ GET /api/events/reverb-x-la-selva-kx39 200 in 884ms (next.js: 8ms, application-code: 875ms)
+ GET /api/identity/dni-lookup?dni=73172442 200 in 465ms (next.js: 1950µs, application-code: 463ms)
+ GET /api/events 200 in 140ms (next.js: 2ms, application-code: 138ms)
+ GET /api/identity/me 200 in 1200ms (next.js: 3ms, application-code: 1197ms)
+ POST /api/payments/card 200 in 3.6s (next.js: 12ms, application-code: 3.6s)
+✓ Compiled in 184ms
+✓ Compiled in 121ms
+ GET /es/events/reverb-x-la-selva-kx39/buy?sel=b0a5323f-40ff-4508-b7fb-5827c8d5ea14%3A2&order=421dc047-690a-44f4-bdc1-b376e587a427 200 in 579ms (next.js: 23ms, proxy.ts: 515ms, application-code: 41ms)
+ GET /api/events/reverb-x-la-selva-kx39 200 in 702ms (next.js: 4ms, application-code: 698ms)
+ GET /api/events 200 in 142ms (next.js: 2ms, application-code: 140ms)
+ GET /api/identity/dni-lookup?dni=73172442 200 in 348ms (next.js: 1728µs, application-code: 347ms)
+ GET /api/identity/me 200 in 1080ms (next.js: 1911µs, application-code: 1078ms)
+ POST /api/payments/card 400 in 705ms (next.js: 9ms, application-code: 696ms)
+[browser] card error: order_status_invalid:expired (src/app/[locale]/events/[slug]/buy/page.tsx:1636:39)
+ POST /api/payments/card 400 in 633ms (next.js: 23ms, application-code: 610ms)
+[browser] card error: order_status_invalid:expired (src/app/[locale]/events/[slug]/buy/page.tsx:1636:39)
+ GET /es/events/reverb-x-la-selva-kx39/buy?sel=b0a5323f-40ff-4508-b7fb-5827c8d5ea14%3A2&order=421dc047-690a-44f4-bdc1-b376e587a427 200 in 84ms (next.js: 25ms, proxy.ts: 10ms, application-code: 49ms)
+ GET /es/events/reverb-x-la-selva-kx39/installHook.js.map 404 in 28ms (next.js: 4ms, application-code: 24ms)
+ POST /api/payments/card 400 in 734ms (next.js: 5ms, application-code: 730ms)
+[browser] card error: order_status_invalid:expired (src/app/[locale]/events/[slug]/buy/page.tsx:1636:39)
+ POST /api/tickets/buy 201 in 2.9s (next.js: 10ms, application-code: 2.9s)
+✓ Compiled in 143ms
+✓ Compiled in 137ms
+✓ Compiled in 164ms
+✓ Compiled in 185ms
+[browser] Uncaught ReferenceError: onExpired is not defined
+    at PayPhase (src/app/[locale]/events/[slug]/buy/page.tsx:1637:13)
+    at renderer_attach/p.scheduleRefresh (<anonymous code>:1:88621)
+    at <unknown> (src/app/[locale]/events/[slug]/buy/page.tsx:1768:10)
+    at BuyFlowInner (src/app/[locale]/events/[slug]/buy/page.tsx:540:53)
+    at BuyFlowPage (src/app/[locale]/events/[slug]/buy/page.tsx:51:6)
+  1635 |             onPaid={onPaid}
+  1636 |             onError={(msg) => console.warn("card error:", msg)}
+> 1637 |             onExpired={onExpired}
+       |             ^
+  1638 |           />
+  1639 |         )}
+  1640 |       </div>
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+✓ Compiled in 165ms
+ GET /es/events/reverb-x-la-selva-kx39/buy?sel=b0a5323f-40ff-4508-b7fb-5827c8d5ea14%3A2&order=ed358908-a7dc-41a7-a998-cdb44fec0101 200 in 1245ms (next.js: 28ms, proxy.ts: 1166ms, application-code: 50ms)
+ GET /api/identity/dni-lookup?dni=73172442 200 in 385ms (next.js: 1569µs, application-code: 384ms)
+ GET /api/events/reverb-x-la-selva-kx39 200 in 1642ms (next.js: 2ms, application-code: 1639ms)
+ GET /api/identity/me 200 in 2.1s (next.js: 4ms, application-code: 2.1s)
+ GET /api/events/reverb-x-la-selva-kx39 200 in 532ms (next.js: 2ms, application-code: 530ms)
+ GET /api/identity/me 200 in 896ms (next.js: 1046µs, application-code: 895ms)
+ GET /api/events 200 in 143ms (next.js: 3ms, application-code: 139ms)
+ GET /api/identity/dni-lookup?dni=73172442 200 in 125ms (next.js: 5ms, application-code: 120ms)
+✓ Compiled in 139ms
+ GET /api/identity/dni-lookup?dni=73172442 200 in 673ms (next.js: 2ms, application-code: 671ms)
+ GET /api/identity/me 200 in 3.0s (next.js: 5ms, application-code: 3.0s)

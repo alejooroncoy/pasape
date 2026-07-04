@@ -16,6 +16,9 @@ type Props = {
   initialEmail?: string;
   onPaid: () => void;
   onError?: (message: string) => void;
+  // La orden expiró (pasaron los 30 min de reserva y pg_cron la cerró): hay que
+  // re-reservar. El padre muestra el modal de "reserva vencida" para reintentar.
+  onExpired?: () => void;
 };
 
 type CardBrand = "visa" | "master" | "amex" | "diners" | "unknown";
@@ -45,6 +48,7 @@ export function CardForm({
   initialEmail: _initialEmail,
   onPaid,
   onError,
+  onExpired,
 }: Props) {
   const mp = useMpSdk(onError);
   const [holder, setHolder] = useState(initialHolder ?? "");
@@ -167,6 +171,12 @@ export function CardForm({
       };
       if (!res.ok || body.error) {
         const errMsg = body.error ?? `HTTP ${res.status}`;
+        // Orden vencida/expirada: no es un error de tarjeta — la reserva de 30
+        // min pasó. Delegamos al padre para re-reservar (modal de reintento).
+        if (errMsg.startsWith("order_status_invalid:expired") || errMsg === "order_expired") {
+          onExpired?.();
+          return;
+        }
         setError(humanizeCardError(errMsg));
         onError?.(errMsg);
         return;
