@@ -31,7 +31,7 @@ import {
   unitNounPlural,
 } from "@/lib/events/ticketDisplay";
 import { activePricing, applyPromos } from "@/lib/events/pricing";
-import { computeServiceFeeCents } from "@/lib/tickets/serviceFee";
+import { resolveOrderFee } from "@/lib/tickets/serviceFee";
 
 type Props = { params: Promise<{ slug: string }> };
 type Phase = "pick" | "data" | "pay";
@@ -252,14 +252,17 @@ function BuyFlowInner({ params }: Props) {
   }, [data, qty]);
   const total = promoResult.totalCents;
   const totalItems = items.reduce((a, b) => a + b.qty, 0);
-  // Preview del fee de servicio (por tramos, ver serviceFee.ts) — el backend
-  // recalcula esto mismo al crear la orden, nunca se confía en lo que
-  // calcule el cliente. Si el organizador eligió que el fee vaya incluido
-  // en el precio, el comprador no paga nada aparte (no se muestra ni se
-  // suma) — el precio que ve ya es el final.
-  const feeIncludedInPrice = data?.event.feeMode === "included_in_price";
-  const fee =
-    total > 0 && !feeIncludedInPrice ? computeServiceFeeCents(promoResult.lines) : 0;
+  // Preview del fee de servicio (por tramos, ver resolveOrderFee) — el
+  // backend recalcula esto mismo al crear la orden, nunca se confía en lo
+  // que calcule el cliente. Por debajo de S/15 el fee SIEMPRE se cobra pero
+  // nunca se muestra aparte (protege a Pasape y evita un desglose que
+  // asuste en montos chicos); desde S/15 se respeta lo que eligió el
+  // organizador (aparte / incluida).
+  const { chargedFeeCents: fee, showFeeLine: showFee } = resolveOrderFee(
+    total,
+    data?.event.feeMode ?? "buyer_pays_extra",
+    promoResult.lines,
+  );
 
   // Vence la reserva localmente cuando se cumplen los 30 min (el backend ya la
   // expira en paralelo). Solo corre durante la fase de pago.
@@ -516,6 +519,7 @@ function BuyFlowInner({ params }: Props) {
                 qty={qty}
                 total={total}
                 fee={phase === "pay" ? fee : 0}
+                showFee={phase === "pay" && showFee}
                 promo={promoCode}
               />
               {phase !== "pay" && (
@@ -1597,6 +1601,7 @@ function OrderSummary({
   qty,
   total,
   fee,
+  showFee,
   promo,
 }: {
   event: { title: string; coverUrl: string | null; startsAt: string; timezone: string };
@@ -1604,6 +1609,7 @@ function OrderSummary({
   qty: Record<string, number>;
   total: number;
   fee: number;
+  showFee: boolean;
   promo: string | null;
 }) {
   const lines = ticketTypes.filter((tt) => (qty[tt.id] ?? 0) > 0);
@@ -1655,7 +1661,7 @@ function OrderSummary({
               </span>
             </div>
           ))}
-          {fee > 0 && (
+          {showFee && (
             <div className="flex items-baseline justify-between">
               <span className="text-[12.5px] text-cart-ink-3">Servicio</span>
               <span className="text-[13px] tabular-nums text-cart-ink-2">

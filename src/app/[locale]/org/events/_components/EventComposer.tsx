@@ -41,6 +41,11 @@ import { CATEGORIES } from "../../../_home/categories";
 import { createSupabaseBrowserClient } from "@/server/_shared/supabase/client";
 import { extractFlyerPaletteFromUrl } from "@/lib/_shared/extractFlyerPalette";
 import { derivePalette, readableTextColor, type Palette } from "@/lib/_shared/color";
+import {
+  resolveOrderFee,
+  MIN_PAID_TICKET_PRICE_CENTS,
+  HIDDEN_FEE_THRESHOLD_CENTS,
+} from "@/lib/tickets/serviceFee";
 
 // Morado de marca — default cuando el organizador no elige/sube nada.
 const BRAND_ACCENT = "#b87cff";
@@ -137,6 +142,54 @@ export type EventComposerProps =
 // ============================================================
 const uid = () => Math.random().toString(36).slice(2, 9);
 const toCents = (s: string) => Money.toCents(s);
+
+/**
+ * Preview de "cuánto le va a llegar cobrado al comprador" mientras el
+ * organizador escribe el precio — para que sepa de una que el fee de
+ * Pasape se suma (o se esconde adentro) antes de publicar, no como
+ * sorpresa después.
+ */
+const priceFeeHint = (
+  priceSoles: string,
+  feeMode: FeeMode,
+): { text: string; tone: "info" | "warn" | "error" } | null => {
+  const priceCents = toCents(priceSoles);
+  if (priceCents <= 0) return null; // gratis: sin fee, nada que avisar.
+  const fmt = (c: number) => `S/${(c / 100).toLocaleString("es-PE", { minimumFractionDigits: c % 100 === 0 ? 0 : 2 })}`;
+
+  if (priceCents < MIN_PAID_TICKET_PRICE_CENTS) {
+    return { text: `El precio mínimo de venta es ${fmt(MIN_PAID_TICKET_PRICE_CENTS)}.`, tone: "error" };
+  }
+  const { chargedFeeCents, showFeeLine } = resolveOrderFee(
+    priceCents,
+    feeMode,
+    [{ unitPriceCents: priceCents, chargedQty: 1 }],
+  );
+  if (priceCents < HIDDEN_FEE_THRESHOLD_CENTS) {
+    return {
+      text: `Tú recibes tus ${fmt(priceCents)} completos. El comprador paga ${fmt(priceCents + chargedFeeCents)} en total, pero no le mostramos la comisión aparte por ser un precio bajo (aplica igual sin importar el tipo de comisión que elijas, "Aparte" o "Incluida").`,
+      tone: "warn",
+    };
+  }
+  if (!showFeeLine) {
+    return {
+      text: `El comprador paga ${fmt(priceCents)} en total (ya incluye la comisión que tú absorbes).`,
+      tone: "info",
+    };
+  }
+  return {
+    text: `El comprador paga ${fmt(priceCents + chargedFeeCents)} (${fmt(priceCents)} + ${fmt(chargedFeeCents)} de comisión, aparte).`,
+    tone: "info",
+  };
+};
+
+function PriceFeeHint({ priceSoles, feeMode }: { priceSoles: string; feeMode: FeeMode }) {
+  const hint = priceFeeHint(priceSoles, feeMode);
+  if (!hint) return null;
+  const color =
+    hint.tone === "error" ? "text-rose-300" : hint.tone === "warn" ? "text-amber-300" : "text-cart-ink-3";
+  return <p className={`mt-1.5 text-[11px] ${color}`}>{hint.text}</p>;
+}
 const fromCents = (n: number) => Money.toSoles(n).toString();
 
 /** Convierte presaleTiers del form al payload para la API. */
@@ -1062,41 +1115,6 @@ export function EventComposer(props: EventComposerProps) {
             </div>
           </div>
 
-          {/* Comisión de Pasape: quién la paga — el comprador aparte (default) o
-              el organizador la incluye en el precio que puso. */}
-          <div className="rounded-2xl border border-cart-line bg-cart-bg-elev px-4 py-3">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">
-                Comisión de Pasape
-              </span>
-            </div>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {(
-                [
-                  { id: "buyer_pays_extra" as const, label: "Aparte", hint: "el comprador la paga sobre tu precio" },
-                  { id: "included_in_price" as const, label: "Incluida", hint: "tu precio ya la incluye, la absorbes tú" },
-                ]
-              ).map(({ id, label, hint }) => {
-                const active = feeMode === id;
-                return (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => setFeeMode(id)}
-                    className={`flex flex-col items-start rounded-xl border px-3 py-2 text-left transition-colors ${
-                      active
-                        ? "border-cart-accent bg-cart-accent/10"
-                        : "border-cart-line text-cart-ink-3 hover:border-cart-line-strong hover:text-white"
-                    }`}
-                  >
-                    <span className={`text-[12.5px] font-medium ${active ? "text-white" : ""}`}>{label}</span>
-                    <span className="text-[11px] text-cart-ink-3">{hint}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
           {/* Descripción — junto a nombre/categoría: completa el "de qué va" el evento */}
           <CardButton
             icon={<IconText />}
@@ -1210,6 +1228,43 @@ export function EventComposer(props: EventComposerProps) {
               />
             </FieldShell>
           </Card>
+
+          {/* Comisión de Pasape: quién la paga — el comprador aparte (default) o
+              el organizador la incluye en el precio que puso. Justo antes de
+              Entradas: el organizador decide esto primero y configura los
+              precios de las entradas ya sabiendo el modo elegido. */}
+          <div className="rounded-2xl border border-cart-line bg-cart-bg-elev px-4 py-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">
+                Comisión de Pasape
+              </span>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {(
+                [
+                  { id: "buyer_pays_extra" as const, label: "Aparte", hint: "el comprador la paga sobre tu precio" },
+                  { id: "included_in_price" as const, label: "Incluida", hint: "tu precio ya la incluye, la absorbes tú" },
+                ]
+              ).map(({ id, label, hint }) => {
+                const active = feeMode === id;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setFeeMode(id)}
+                    className={`flex flex-col items-start rounded-xl border px-3 py-2 text-left transition-colors ${
+                      active
+                        ? "border-cart-accent bg-cart-accent/10"
+                        : "border-cart-line text-cart-ink-3 hover:border-cart-line-strong hover:text-white"
+                    }`}
+                  >
+                    <span className={`text-[12.5px] font-medium ${active ? "text-white" : ""}`}>{label}</span>
+                    <span className="text-[11px] text-cart-ink-3">{hint}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
           {/* Tickets */}
           <CardButton
@@ -1364,6 +1419,7 @@ export function EventComposer(props: EventComposerProps) {
               setTickets={setTickets}
               spaceGroups={spaceGroups}
               setSpaceGroups={setSpaceGroups}
+              feeMode={feeMode}
             />
           </Sheet>
         )}
@@ -2195,6 +2251,7 @@ function BoxGroupEditor({
   onAddOne,
   presaleRow,
   onPresaleChange,
+  feeMode,
 }: {
   boxes: TicketRow[];
   canDelete: boolean;
@@ -2204,6 +2261,7 @@ function BoxGroupEditor({
   onAddOne: () => void;
   presaleRow: TicketRow;
   onPresaleChange: (patch: Partial<TicketRow>) => void;
+  feeMode: FeeMode;
 }) {
   const [advOpen, setAdvOpen] = useState(false);
   const first = boxes[0]!;
@@ -2251,6 +2309,7 @@ function BoxGroupEditor({
           onChange={(v) => onUpdateAll({ capacity: v })}
         />
       </div>
+      <PriceFeeHint priceSoles={first.priceSoles} feeMode={feeMode} />
 
       <AdvancedToggle
         open={advOpen}
@@ -2401,11 +2460,13 @@ function TicketsEditor({
   setTickets,
   spaceGroups,
   setSpaceGroups,
+  feeMode,
 }: {
   tickets: TicketRow[];
   setTickets: Dispatch<SetStateAction<TicketRow[]>>;
   spaceGroups: SpaceGroup[];
   setSpaceGroups: Dispatch<SetStateAction<SpaceGroup[]>>;
+  feeMode: FeeMode;
 }) {
   const [advancedOpen, setAdvancedOpen] = useState<Set<string>>(new Set());
   const toggleAdvanced = (rowKey: string) =>
@@ -2533,6 +2594,7 @@ function TicketsEditor({
               onChange={(v) => update(t.rowKey, { capacity: v })}
             />
           </div>
+          <PriceFeeHint priceSoles={t.priceSoles} feeMode={feeMode} />
           <AdvancedToggle
             open={advancedOpen.has(t.rowKey)}
             onToggle={() => toggleAdvanced(t.rowKey)}
@@ -2563,6 +2625,7 @@ function TicketsEditor({
               onRemove={(rowKey) => remove(rowKey)}
               presaleRow={first}
               onPresaleChange={(patch) => updateAll(group.map((b) => b.rowKey), patch)}
+              feeMode={feeMode}
               onAddOne={() => {
                 const next = String.fromCharCode(65 + group.length);
                 const nounCap = first.unitNoun
@@ -2628,6 +2691,7 @@ function TicketsEditor({
               <Stepper label="Precio" suffix="S/" value={t.priceSoles} onChange={(v) => update(t.rowKey, { priceSoles: v })} />
               <Stepper label="Cupos" value={t.capacity} onChange={(v) => update(t.rowKey, { capacity: v })} />
             </div>
+            <PriceFeeHint priceSoles={t.priceSoles} feeMode={feeMode} />
             <label className="mt-2 flex flex-col gap-1 rounded-xl bg-cart-bg-elev px-3 py-2">
               <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">Etiqueta del box</span>
               <input
@@ -2666,6 +2730,7 @@ function TicketsEditor({
             setSpaceGroups((prev) => prev.map((x) => (x.rowKey === g.rowKey ? { ...x, ...patch } : x)))
           }
           onRemove={() => setSpaceGroups((prev) => prev.filter((x) => x.rowKey !== g.rowKey))}
+          feeMode={feeMode}
         />
       ))}
 
@@ -3045,10 +3110,12 @@ function SpaceGroupCard({
   group,
   onChange,
   onRemove,
+  feeMode,
 }: {
   group: SpaceGroup;
   onChange: (patch: Partial<SpaceGroup>) => void;
   onRemove: () => void;
+  feeMode: FeeMode;
 }) {
   const [renaming, setRenaming] = useState(false);
   const n = spaceCount(group);
@@ -3115,6 +3182,7 @@ function SpaceGroupCard({
         <Stepper label="Personas/box" value={group.seats} onChange={(v) => onChange({ seats: v })} />
         <Stepper label="Cuántos" value={group.count} onChange={(v) => onChange({ count: v })} />
       </div>
+      <PriceFeeHint priceSoles={group.priceSoles} feeMode={feeMode} />
 
       {/* Etiquetas de los boxes */}
       <div className="mt-2 flex flex-col gap-1 rounded-xl bg-cart-bg-elev px-3 py-2">

@@ -16,8 +16,9 @@ export const createTicketType = async (
 ): Promise<Result<TicketType>> => {
   if (!input.name.trim()) return err("name_required");
   if (input.priceCents < 0) return err("price_invalid");
-  // Entrada de pago (no gratis) por debajo del mínimo: el fee de servicio
-  // (piso S/3) sería una proporción absurda del precio.
+  // Piso absoluto S/3 (el fee nunca puede superar el precio). Entre S/3 y
+  // S/15 el fee se cobra igual pero se oculta como línea aparte (ver
+  // resolveOrderFee) — no depende de fee_mode, por eso el mínimo es fijo.
   if (input.priceCents > 0 && input.priceCents < MIN_PAID_TICKET_PRICE_CENTS) {
     return err("price_below_minimum");
   }

@@ -2,6 +2,7 @@ import "server-only";
 import { MercadoPagoConfig } from "mercadopago";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { Money } from "@/lib/_shared/money";
+import { HIDDEN_FEE_THRESHOLD_CENTS } from "@/lib/tickets/serviceFee";
 
 // Why: `env.mpAccessToken` returns "" si no está seteado para no romper
 // `pnpm build`. Aquí validamos en runtime y dejamos un error claro.
@@ -106,10 +107,12 @@ export const buildOrderItems = async (
     };
   });
 
-  // La suma de items debe igualar transaction_amount (order.total_cents).
-  // En buyer_pays_extra el fee se suma aparte y se desglosa como línea
-  // informativa; en included_in_price ya está adentro del precio de cada
-  // entrada, así que no se agrega una línea extra (sumaría de más).
+  // La suma de items debe igualar transaction_amount cuando se muestra la
+  // línea del fee. Por debajo de S/15 de subtotal el fee siempre se cobra
+  // pero nunca se muestra aparte (ver resolveOrderFee); desde S/15 se
+  // respeta fee_mode. MP no exige que items sume exacto cuando se omite
+  // (es informativo/antifraude, no valida contra transaction_amount).
+  const subtotalCents = rows.reduce((sum, r) => sum + (r.price_cents ?? 0), 0);
   const { data: order } = await db
     .from("orders")
     .select("service_fee_cents, event_id")
@@ -123,7 +126,9 @@ export const buildOrderItems = async (
         .eq("id", order.event_id)
         .maybeSingle<{ fee_mode: string }>()
     : { data: null };
-  if (serviceFeeCents > 0 && event?.fee_mode !== "included_in_price") {
+  const showFeeLine =
+    subtotalCents >= HIDDEN_FEE_THRESHOLD_CENTS && event?.fee_mode !== "included_in_price";
+  if (serviceFeeCents > 0 && showFeeLine) {
     items.push({
       id: "service_fee",
       title: "Servicio Pasape",
