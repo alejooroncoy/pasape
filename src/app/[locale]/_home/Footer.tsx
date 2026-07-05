@@ -41,7 +41,7 @@ export function Footer() {
           <span>© 2026 Pasape S.A.C. — Lima, Perú.</span>
           <div className="flex flex-wrap items-center gap-4">
             <a
-              href="/libro-de-reclamaciones"
+              href="/complaints"
               className="inline-flex items-center gap-2 rounded-md border border-cart-line-2 px-3 py-1.5 text-cart-ink-3 transition-colors hover:border-white/40 hover:text-white"
             >
               <span aria-hidden className="text-[14px]">📖</span>
