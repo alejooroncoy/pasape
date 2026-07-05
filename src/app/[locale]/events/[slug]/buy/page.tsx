@@ -84,6 +84,9 @@ function BuyFlowInner({ params }: Props) {
   const [promoCode, setPromoCode] = useState<string | null>(null);
   const [, setPreferenceId] = useState<string | null>(null);
   const [orderId, setOrderId] = useState<string | null>(null);
+  // Llave firmada de la orden (la devuelve buy): autoriza el polling de estado
+  // en /processing para el guest sin sesión ni email.
+  const [orderToken, setOrderToken] = useState<string | null>(null);
   // Reserva: al crear la orden (pending) el stock queda apartado 30 min. Si no
   // se paga, el backend la expira (pg_cron) y libera el stock. En el cliente
   // mostramos el countdown y, al vencer, un popover para reintentar o salir.
@@ -169,6 +172,7 @@ function BuyFlowInner({ params }: Props) {
         guestName: string;
         guestDni: string;
         guestPhone: string;
+        orderToken?: string;
       };
       setQty(restored.qty ?? {});
       setPayMethod(restored.payMethod ?? "yape");
@@ -177,6 +181,7 @@ function BuyFlowInner({ params }: Props) {
       setGuestDni(restored.guestDni ?? "");
       setGuestPhone(restored.guestPhone ?? "");
       setOrderId(orderFromUrl);
+      setOrderToken(restored.orderToken ?? null);
       setPhase("pay");
     } catch {}
   }, []);
@@ -366,6 +371,7 @@ function BuyFlowInner({ params }: Props) {
       });
       setPreferenceId(res.preference.id);
       setOrderId(res.order.id);
+      setOrderToken(res.orderToken ?? null);
       // La orden creada es LA verdad final: sus montos pisan cualquier
       // precálculo (local o quote previo) para la fase de pago.
       if (res.order.totalCents !== buyerSubtotal) {
@@ -401,7 +407,8 @@ function BuyFlowInner({ params }: Props) {
         const emailQs = !isLogged && guestEmail.trim()
           ? `&email=${encodeURIComponent(guestEmail.trim())}`
           : "";
-        router.push(`/events/${slug}/processing?order=${res.order.id}&total=0&n=${totalItems}${emailQs}`);
+        const tokenQs = res.orderToken ? `&k=${res.orderToken}` : "";
+        router.push(`/events/${slug}/processing?order=${res.order.id}&total=0&n=${totalItems}${emailQs}${tokenQs}`);
         return;
       }
 
@@ -421,6 +428,7 @@ function BuyFlowInner({ params }: Props) {
             guestName: guestName.trim(),
             guestDni: guestDni.trim(),
             guestPhone, // E.164; el PhoneField lo re-parsea al restaurar.
+            orderToken: res.orderToken ?? null,
           }),
         );
       } catch {}
@@ -598,7 +606,8 @@ function BuyFlowInner({ params }: Props) {
                   const emailQs = !isLogged && guestEmail.trim()
                     ? `&email=${encodeURIComponent(guestEmail.trim())}`
                     : "";
-                  router.push(`/events/${slug}/processing?order=${orderId}&total=${displayTotal}&method=${payMethod}&n=${totalItems}${emailQs}`);
+                  const tokenQs = orderToken ? `&k=${orderToken}` : "";
+                  router.push(`/events/${slug}/processing?order=${orderId}&total=${displayTotal}&method=${payMethod}&n=${totalItems}${emailQs}${tokenQs}`);
                 }}
                 />
               </>

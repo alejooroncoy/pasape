@@ -4,7 +4,7 @@ import { err, type Result } from "@/server/_shared/result";
 import { getAuthContext } from "@/server/_shared/AuthContext";
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
 import { verifyTicketLink } from "@/server/notifications/domain/TicketLinkToken";
-import { verifyOrderLink } from "@/server/notifications/domain/OrderLinkToken";
+import { signOrderLink, verifyOrderLink } from "@/server/notifications/domain/OrderLinkToken";
 import { supabaseTicketRepository as repo } from "../../infrastructure/repositories/SupabaseTicketRepository";
 import { buyTickets } from "../../application/BuyTickets";
 import { getMyTicketById, getMyTickets } from "../../application/GetMyTickets";
@@ -116,12 +116,19 @@ export const TicketsController = {
     const auth = await getAuthContext();
     // Why: compra como invitado es first-class — el comprador es commodity y
     // no debe registrarse para comprar. Si no hay sesión, exigimos guest.
+    let res: Result<BuyOutput>;
     if (!auth.ok) {
       if (!parsed.data.guest) return err("guest_required");
       // Sin sesión no hay perfil que actualizar — buyer no aplica.
-      return buyTickets({ repo }, { ...parsed.data, guest: parsed.data.guest, buyer: undefined });
+      res = await buyTickets({ repo }, { ...parsed.data, guest: parsed.data.guest, buyer: undefined });
+    } else {
+      res = await buyTickets({ repo }, { buyerId: auth.value.profileId, ...parsed.data });
     }
-    return buyTickets({ repo }, { buyerId: auth.value.profileId, ...parsed.data });
+    // Adjunta la llave firmada de la orden: el cliente la conserva para leer el
+    // estado de su propia compra en /processing (polling) aun sin sesión ni
+    // email — imprescindible para el guest que paga con Yape sin correo.
+    if (res.ok) return { ok: true, value: { ...res.value, orderToken: signOrderLink(res.value.order.id) } };
+    return res;
   },
 
   async mine(): Promise<Result<WalletTicket[]>> {

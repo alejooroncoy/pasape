@@ -55,6 +55,10 @@ export type BuyOutput = {
   order: Order;
   tickets: Ticket[];
   preference: { id: string; initPoint: string };
+  /** Token firmado (HMAC) de la orden. Llave que el cliente conserva para leer
+      el estado de su propia compra (polling de /processing) sin sesión — clave
+      para el guest que paga con Yape sin email. Lo adjunta el controller. */
+  orderToken?: string;
 };
 
 export type QuoteInput = {

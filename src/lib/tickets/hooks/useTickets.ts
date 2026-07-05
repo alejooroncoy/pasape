@@ -91,6 +91,9 @@ export type BuyResult = {
   order: Order;
   tickets: Ticket[];
   preference: { id: string; initPoint: string };
+  /** Llave firmada de la orden: el cliente la usa para leer el estado de su
+      propia compra en /processing sin sesión ni email (guest con Yape). */
+  orderToken?: string;
 };
 
 // Cotización autoritativa del pedido (modelo híbrido): el checkout muestra al
