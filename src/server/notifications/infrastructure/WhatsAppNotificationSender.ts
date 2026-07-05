@@ -6,6 +6,7 @@ import type {
 import type { WhatsAppGateway } from "../ports/WhatsAppGateway";
 import { whatsAppGateway } from "./whatsapp";
 import { bodyComponent, urlButtonComponent } from "./whatsapp/components";
+import { humanizeName } from "../humanizeName";
 
 // Envía el QR del ticket (y avisos de transferencia) por WhatsApp. YA NO conoce
 // al proveedor: delega el transporte en un WhatsAppGateway (Kapso o Meta), que
@@ -16,8 +17,14 @@ import { bodyComponent, urlButtonComponent } from "./whatsapp/components";
 // que leemos primero las envs neutrales WA_* y caemos a las KAPSO_WA_* legacy
 // para no romper la config actual.
 
-const templateName = (): string | undefined =>
-  process.env.WA_TEMPLATE_NAME ?? process.env.KAPSO_WA_TEMPLATE_NAME;
+// Template v2 (con botón de URL). Env dedicada, independiente de la vieja
+// WA_TEMPLATE_NAME/KAPSO_WA_TEMPLATE_NAME (que apuntaban al template SIN botón):
+// un valor viejo en prod chocaría con el nuevo shape (body sin ticket_url +
+// componente de botón). Por eso su propio default.
+const templateName = (): string =>
+  process.env.WA_TEMPLATE_NAME_V2 ??
+  process.env.KAPSO_WA_TEMPLATE_NAME_V2 ??
+  "ticket_delivery_v2";
 
 const templateLang = (): string =>
   process.env.WA_TEMPLATE_LANG ?? process.env.KAPSO_WA_TEMPLATE_LANG ?? "es";
@@ -147,10 +154,9 @@ export class WhatsAppNotificationSender implements NotificationSender {
   }
 
   async sendTicketDelivery(input: TicketDeliveryInput): Promise<TicketDeliveryResult> {
-    const name = templateName();
-    if (!this.gateway.configured() || !name) {
+    if (!this.gateway.configured()) {
       console.warn(
-        "[WhatsAppNotificationSender] proveedor sin configurar o falta WA_TEMPLATE_NAME — skip WhatsApp",
+        "[WhatsAppNotificationSender] proveedor de WhatsApp sin configurar — skip WhatsApp",
       );
       return { emailSent: false, whatsappSent: false };
     }
@@ -158,18 +164,22 @@ export class WhatsAppNotificationSender implements NotificationSender {
       return { emailSent: false, whatsappSent: false };
     }
 
+    // El botón dinámico del template v2 apunta a `https://pasape.lat/order/{{1}}`,
+    // así que el parámetro es el sufijo tras "/order/" ("<orderId>/<firma>").
+    const buttonUrlSuffix = input.ticketUrl.split("/order/")[1] ?? input.ticketUrl;
+
     try {
       await this.gateway.sendTemplate({
         to: input.to.phone,
-        templateName: name,
+        templateName: templateName(),
         languageCode: templateLang(),
         components: [
           bodyComponent({
-            holder_name: input.holderName,
+            holder_name: humanizeName(input.holderName),
             event_title: input.eventTitle,
             event_starts_at: formatDateForTemplate(input.eventStartsAt),
-            ticket_url: input.ticketUrl,
           }),
+          urlButtonComponent(buttonUrlSuffix),
         ],
       });
       return { emailSent: false, whatsappSent: true };

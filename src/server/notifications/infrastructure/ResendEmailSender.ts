@@ -5,6 +5,7 @@ import type {
   TicketDeliveryResult,
 } from "../ports/NotificationSender";
 import { TicketDeliveryEmail } from "../emails/TicketDeliveryEmail";
+import { humanizeName } from "../humanizeName";
 
 // Adapter de email vía Resend. Si faltan `RESEND_API_KEY` o `RESEND_FROM_EMAIL`,
 // degrada a no-op + log para no romper el flujo de checkout. El SDK se importa
@@ -36,7 +37,7 @@ export class ResendEmailSender implements NotificationSender {
         return { emailSent: false, whatsappSent: false };
       }
       const emailProps = {
-        holderName: input.holderName,
+        holderName: humanizeName(input.holderName),
         eventTitle: input.eventTitle,
         eventStartsAt: input.eventStartsAt,
         eventVenue: input.eventVenue,
