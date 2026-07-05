@@ -76,7 +76,8 @@ export default function FriendJoinBoxPage({ params }: Props) {
       token,
       holderName: name,
       holderDni: dni,
-      holderPhone: `+51${phone}`,
+      // `phone` ya es E.164 (país + número) del PhoneField.
+      holderPhone: phone,
     });
     // Siempre usamos el link público `/t/[id]?k=...`. Funciona tanto para el
     // host logueado como para el invitado guest, y evita el caso borde de

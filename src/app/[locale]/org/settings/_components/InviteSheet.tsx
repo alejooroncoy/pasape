@@ -7,6 +7,7 @@ import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { useMyOrgs } from "@/lib/identity/organizations/hooks/useMyOrgs";
 import { useLegalEntities } from "@/lib/identity/organizations/hooks/useLegalEntities";
 import type { OrgInviteRole, InviteScopeType } from "@/server/identity/organizations/domain/Invite";
+import { PhoneField } from "@/components/design/PhoneField";
 
 type Props = { open: boolean; onClose: () => void };
 type Channel = "email" | "whatsapp";
@@ -205,18 +206,7 @@ export function InviteSheet({ open, onClose }: Props) {
                 ) : (
                   <label className="block">
                     <div className="mb-1.5 text-[12px] font-medium text-cart-ink-2">WhatsApp</div>
-                    <input
-                      type="tel"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      placeholder="+51 999 999 999"
-                      inputMode="tel"
-                      required
-                      className="block w-full rounded-xl border border-cart-line bg-cart-bg-elev-2 px-3.5 py-2.5 text-[14px] text-white placeholder:text-cart-ink-3 focus:border-cart-accent focus:outline-none"
-                    />
-                    <div className="mt-1 text-[11.5px] text-cart-ink-3">
-                      Con código de país. Ej: +51 para Perú.
-                    </div>
+                    <PhoneField value={phone} onChange={setPhone} />
                   </label>
                 )}
 

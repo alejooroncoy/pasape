@@ -6,9 +6,10 @@ import { after } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { err, ok, type Result } from "@/server/_shared/result";
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
-import { appBaseUrl, isPublicBaseUrl, buildOrderItems } from "../infrastructure/MercadoPagoClient";
+import { appBaseUrl, isPublicBaseUrl, buildOrderItems, mpPeruIdentification } from "../infrastructure/MercadoPagoClient";
 import { reportMpError } from "../infrastructure/reportMpError";
 import { dispatchTicketDelivery } from "@/server/notifications/application/DispatchTicketDelivery";
+import { parseE164 } from "@/lib/phone/countries";
 
 // Why: en prod, si MP_ACCESS_TOKEN no arranca con "APP_USR-" (o sea, parece
 // ser de sandbox tipo "TEST-...") cobraríamos con dinero real usando
@@ -99,6 +100,7 @@ export const payWithCard = async (
     fullName = fullName ?? profile?.full_name ?? null;
     phone = phone ?? profile?.phone ?? null;
   }
+  const phoneParsed = phone ? parseE164(phone) : null;
   if (!email) return err("payer_email_missing");
 
   const { data: event } = await db
@@ -137,14 +139,26 @@ export const payWithCard = async (
       email,
       first_name: firstName,
       last_name: lastName,
-      ...(dni ? { identification: { type: "DNI", number: dni } } : {}),
+      // DNI (8 díg) o C.E (9-12 díg); pasaporte alfanumérico → null → se omite
+      // (MP Perú no tiene tipo pasaporte; la identificación es opcional).
+      ...(mpPeruIdentification(dni) ? { identification: mpPeruIdentification(dni)! } : {}),
     },
     additional_info: {
       ...(items.length > 0 ? { items } : {}),
       payer: {
         first_name: firstName,
         last_name: lastName,
-        ...(phone ? { phone: { area_code: "51", number: phone } } : {}),
+        // El teléfono se guarda en E.164 (el comprador puede ser extranjero: la
+        // tarjeta acepta país). Lo partimos en area_code (código del país) +
+        // número nacional; legacy sin país cae a Perú (51).
+        ...(phoneParsed?.national
+          ? {
+              phone: {
+                area_code: phoneParsed.country?.dial ?? "51",
+                number: phoneParsed.national,
+              },
+            }
+          : {}),
       },
     },
   };

@@ -6,6 +6,7 @@ import { useEvent } from "@/lib/events/hooks/useEvents";
 import { useCourtesies, useSendCourtesy } from "@/lib/events/hooks/useCourtesies";
 import { formatMoney } from "@/lib/_shared/format";
 import { isBox, boxSeats, unitNoun, unitsRemaining } from "@/lib/events/ticketDisplay";
+import { PhoneField } from "@/components/design/PhoneField";
 import { EventShell } from "../_shell/EventShell";
 import { Sheet } from "../_shell/Sheet";
 import type { TicketType } from "@/server/events/domain/Event";
@@ -168,7 +169,7 @@ function CourtesyForm({ slug, ticketTypes }: { slug: string; ticketTypes: Ticket
         qty: effectiveQty,
         guest: {
           fullName: fullName.trim(),
-          phone: phone.trim() || null,
+          phone: phone || null, // E.164 con país (del PhoneField).
           email: email.trim() || null,
         },
       });
@@ -317,13 +318,7 @@ function CourtesyForm({ slug, ticketTypes }: { slug: string; ticketTypes: Ticket
             onChange={(e) => setFullName(e.target.value)}
             className="w-full rounded-xl border border-cart-line bg-cart-bg-elev-2 px-3 py-2.5 text-[13.5px] text-white placeholder-cart-ink-4 outline-none transition focus:border-cart-accent"
           />
-          <input
-            type="tel"
-            placeholder="WhatsApp (ej. 999 888 777)"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            className="w-full rounded-xl border border-cart-line bg-cart-bg-elev-2 px-3 py-2.5 text-[13.5px] text-white placeholder-cart-ink-4 outline-none transition focus:border-cart-accent"
-          />
+          <PhoneField value={phone} onChange={setPhone} />
           <input
             type="email"
             placeholder="Correo (opcional si pones WhatsApp)"
