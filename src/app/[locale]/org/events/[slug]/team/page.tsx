@@ -23,6 +23,11 @@ import {
   useUpdateAssignmentCommission,
   useUpdateEventPromoterScheme,
 } from "@/lib/promoters/hooks/useEventPromoters";
+import {
+  useGenerateInvite,
+  usePendingApplications,
+  useRealtimePromoterApplications,
+} from "@/lib/promoters/hooks/usePromoter";
 import type { EventPromoterAssignment } from "@/server/promoters/application/EventPromoterAssignment";
 import type { EventPromoterScheme } from "@/server/events/ports/EventRepository";
 import type {
@@ -317,6 +322,100 @@ function CoOrgPicker({
 // ============================================================
 // PROMOTERS SECTION (sin cambios funcionales — sigue editable)
 // ============================================================
+// Invitar por link de grupo: el organizador comparte UN link (/apply/{token}),
+// quien entra pide ser promotor y cae en "Solicitudes" para aprobación manual.
+// Reemplaza la vieja pantalla /invite ("Compártelo en stories"): mismo flujo,
+// ahora integrado en la pestaña Promotores y con el diseño nuevo.
+function EventInviteLinkCard({ slug }: { slug: string }) {
+  const generate = useGenerateInvite();
+  const pending = usePendingApplications(slug);
+  useRealtimePromoterApplications(slug);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    // El % ya no viaja acá: al aprobar, el promotor hereda el esquema del evento.
+    if (!generate.data && !generate.isPending) generate.mutate({ eventSlug: slug });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug]);
+
+  const fullUrl = generate.data
+    ? `${typeof window === "undefined" ? "" : window.location.origin}${generate.data.url}`
+    : "";
+  const pretty = fullUrl.replace(/^https?:\/\//, "");
+  const pendingCount = pending.data?.length ?? 0;
+
+  const onCopy = async () => {
+    if (!fullUrl) return;
+    try {
+      await navigator.clipboard?.writeText(fullUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {}
+  };
+  const onShare = async () => {
+    if (!fullUrl) return;
+    if (navigator.share) await navigator.share({ url: fullUrl, title: "Sé promotor" }).catch(() => {});
+    else onCopy();
+  };
+
+  return (
+    <section>
+      <SectionHeader
+        title="Invitar por link"
+        subtitle="Comparte un link en tu grupo. Quien entre pide ser promotor y tú lo apruebas."
+      />
+      <div className="rounded-2xl border border-cart-line bg-cart-bg-elev p-4 lg:p-5">
+        <button
+          type="button"
+          onClick={onCopy}
+          className="flex w-full items-center justify-between gap-3 rounded-xl border border-cart-line bg-cart-bg px-4 py-3 text-left font-mono text-[13px] font-medium text-cart-ink-2 transition hover:border-cart-line-strong"
+        >
+          <span className="truncate">
+            {generate.isPending ? "Generando…" : copied ? "¡Copiado!" : pretty || "—"}
+          </span>
+          <CopyGlyph />
+        </button>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={onShare}
+            className="inline-flex flex-1 items-center justify-center gap-2 rounded-full bg-cart-accent px-4 py-2.5 text-[13.5px] font-semibold text-white shadow-[0_8px_24px_-8px_var(--color-cart-accent-glow-strong)]"
+          >
+            Compartir el link
+          </button>
+          <Link
+            href={`/org/events/${slug}/promoters/requests` as never}
+            className="inline-flex items-center justify-center gap-2 rounded-full border border-cart-line px-4 py-2.5 text-[13.5px] font-semibold text-cart-ink-2 transition hover:border-cart-line-strong"
+          >
+            Solicitudes
+            {pendingCount > 0 && (
+              <span className="grid min-w-[20px] place-items-center rounded-full bg-cart-accent px-1.5 text-[11px] font-bold text-white">
+                {pendingCount}
+              </span>
+            )}
+          </Link>
+        </div>
+        <p className="mt-3 text-[11px] text-cart-ink-4">
+          Aprobación manual, uno por uno · el link vence al cerrar el evento.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function CopyGlyph() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" className="shrink-0 text-cart-accent">
+      <rect x="6" y="6" width="11" height="11" rx="2.5" stroke="currentColor" strokeWidth="1.6" />
+      <path
+        d="M13 6V4.5A1.5 1.5 0 0 0 11.5 3h-7A1.5 1.5 0 0 0 3 4.5v7A1.5 1.5 0 0 0 4.5 13H6"
+        stroke="currentColor"
+        strokeWidth="1.6"
+      />
+    </svg>
+  );
+}
+
 export function PromotersSection({ slug }: { slug: string }) {
   const event = useEvent(slug);
   // Ventas en vivo: el mismo Broadcast del dashboard invalida las queries de
@@ -344,6 +443,9 @@ export function PromotersSection({ slug }: { slug: string }) {
 
   return (
     <div id="promotores" className="flex flex-col gap-8 scroll-mt-24">
+      {/* 0 · Invitar por link de grupo (self-apply + solicitudes) */}
+      <EventInviteLinkCard slug={slug} />
+
       {/* 1 · Configuración para todos */}
       {assigned.length > 0 && (
         <section>
