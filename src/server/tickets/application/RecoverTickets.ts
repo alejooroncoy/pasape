@@ -2,6 +2,7 @@ import { supabaseAdmin } from "@/server/_shared/supabase/admin";
 import { err, ok, type Result } from "@/server/_shared/result";
 import type { WalletTicket } from "../domain/Ticket";
 import { supabaseTicketRepository } from "../infrastructure/repositories/SupabaseTicketRepository";
+import { signOrderLink } from "@/server/notifications/domain/OrderLinkToken";
 
 // Why: mock-OTP recovery flow for the pilot. We don't want to wire Firebase
 // signInWithPhone for a "recover my QR" UX since the user may have lost
@@ -68,9 +69,16 @@ export const startTicketRecovery = async (
 };
 
 export type VerifyRecoveryInput = { identifier: string; code: string };
+export type RecoveredOrderLink = { orderId: string; token: string };
 export type VerifyRecoveryResult = {
   profileId: string | null;
   tickets: WalletTicket[];
+  /** Un link firmado por cada orden distinta detrás de las entradas
+   *  recuperadas — misma ruta /order/[id]/[token] que usa la entrega por
+   *  WhatsApp/email. El profile del recovery es un guest sin sesión; el
+   *  frontend debe llevar al usuario ahí (login + claimOrder) en vez de a
+   *  /tickets, que exige una sesión que este flujo nunca crea. */
+  orderLinks: RecoveredOrderLink[];
 };
 
 export const verifyTicketRecovery = async (
@@ -117,10 +125,17 @@ export const verifyTicketRecovery = async (
     .update({ consumed_at: new Date().toISOString() })
     .eq("id", row.id);
 
-  if (!row.profile_id) return ok({ profileId: null, tickets: [] });
+  if (!row.profile_id) return ok({ profileId: null, tickets: [], orderLinks: [] });
 
   const tickets = await supabaseTicketRepository.listMine(row.profile_id);
   // Why: only surface usable tickets in the recovery flow.
   const active = tickets.filter((t) => t.status === "active");
-  return ok({ profileId: row.profile_id, tickets: active });
+
+  const orderIds = [...new Set(active.map((t) => t.orderId))];
+  const orderLinks: RecoveredOrderLink[] = orderIds.map((orderId) => ({
+    orderId,
+    token: signOrderLink(orderId),
+  }));
+
+  return ok({ profileId: row.profile_id, tickets: active, orderLinks });
 };

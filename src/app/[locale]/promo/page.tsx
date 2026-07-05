@@ -214,11 +214,10 @@ function ActiveEventPanel({ link }: { link: PromoterLink }) {
   const sold = home.data?.soldCount ?? 0;
   const attended = home.data?.attendedCount ?? 0;
   const validated = attended;
-  const generatedCents = useMemo(() => {
-    // Estimación: ventas × ticket promedio. Por ahora dejamos 0 hasta tener
-    // datos consolidados de la orden completa via API.
-    return 0;
-  }, []);
+  // Dato real del backend (computePromoterPayout): % del vendido + hitos cash
+  // conseguidos. Antes esta tarjeta quedaba fija en S/0 sin importar cuánto
+  // vendiera el promotor.
+  const generatedCents = home.data?.payoutCents ?? 0;
 
   const recent = home.data?.recent ?? [];
 

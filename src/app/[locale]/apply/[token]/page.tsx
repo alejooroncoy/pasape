@@ -36,7 +36,11 @@ export default function PromoApplyByLinkPage({ params }: Props) {
 
   const onApply = async () => {
     if (!resolved.data) return;
-    await apply.mutateAsync({ token, message: phone ? `WhatsApp: ${phone}` : null });
+    await apply.mutateAsync({
+      token,
+      message: phone ? `WhatsApp: ${phone}` : null,
+      fullName: name.trim() || null,
+    });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     router.push(`/apply/${token}/waiting` as any);
   };

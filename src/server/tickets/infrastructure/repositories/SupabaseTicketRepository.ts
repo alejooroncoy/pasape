@@ -1086,9 +1086,10 @@ export const supabaseTicketRepository: TicketRepository = {
     // Si otra cuenta ya la desbloqueó (y no eres tú, cubierto arriba) → bloqueado.
     if (order.claimed_at) return err("order_already_claimed");
 
-    // Solo se reclama una compra de INVITADO (guest_email presente). Evita que el
-    // link desbloquee la compra de alguien que sí compró logueado.
-    if (!order.guest_email || !guest) return err("order_not_claimable");
+    // Solo se reclama una compra de INVITADO (guest_email o guest_phone
+    // presente — un guest puede haber dado solo celular). Evita que el link
+    // desbloquee la compra de alguien que sí compró logueado.
+    if ((!order.guest_email && !order.guest_phone) || !guest) return err("order_not_claimable");
 
     // Ventana de 72h post-pago para desbloquear (decisión de producto).
     const CLAIM_WINDOW_MS = 72 * 60 * 60 * 1000;

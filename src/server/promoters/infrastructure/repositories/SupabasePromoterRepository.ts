@@ -175,18 +175,40 @@ export const supabasePromoterRepository: PromoterRepository = {
 
     const { data: orders } = await db
       .from("orders")
-      .select("created_at, buyer:profiles!inner(full_name)")
+      .select("created_at, total_cents, buyer:profiles!inner(full_name)")
       .eq("promoter_link_id", l.id)
       .eq("status", "paid")
       .gt("total_cents", 0)
       .order("created_at", { ascending: false })
       .limit(10);
 
-    type OrderRow = { created_at: string; buyer: { full_name: string | null } };
-    const recent = ((orders as unknown as OrderRow[] | null) ?? []).map((o) => ({
+    type OrderRow = { created_at: string; total_cents: number; buyer: { full_name: string | null } };
+    const orderRows = (orders as unknown as OrderRow[] | null) ?? [];
+    const recent = orderRows.slice(0, 10).map((o) => ({
       firstName: (o.buyer?.full_name ?? "Alguien").split(" ")[0] ?? "Alguien",
       createdAt: o.created_at,
     }));
+
+    // "Generado" del home: mismo cálculo que /r/[code]/state y getEarnings
+    // (% del vendido + hitos cash). El `limit(10)` de arriba es solo para
+    // "recent"; el gross para el payout necesita TODAS las órdenes pagadas.
+    const { data: grossOrders } = await db
+      .from("orders")
+      .select("total_cents")
+      .eq("promoter_link_id", l.id)
+      .eq("status", "paid")
+      .gt("total_cents", 0);
+    const grossCents = ((grossOrders as Array<{ total_cents: number }> | null) ?? []).reduce(
+      (a, o) => a + o.total_cents,
+      0,
+    );
+    const payoutCents = computePromoterPayout({
+      pct: scheme.pct,
+      config: scheme.config,
+      soldUnits: count ?? 0,
+      attendedUnits: attendedCount,
+      grossCents,
+    }).payoutCents;
 
     return {
       link: l,
@@ -196,6 +218,7 @@ export const supabasePromoterRepository: PromoterRepository = {
       commissionPct: scheme.pct,
       commissionConfig: scheme.config,
       schemeConfigured: scheme.configured,
+      payoutCents,
     };
   },
 
@@ -365,10 +388,18 @@ export const supabasePromoterRepository: PromoterRepository = {
     };
   },
 
-  async applyByToken({ token, applicantId, message }) {
+  async applyByToken({ token, applicantId, message, fullName }) {
     const db = supabaseAdmin();
     const resolved = await this.resolveInviteToken(token);
     if (!resolved) return err("invalid_token");
+
+    // Persistimos el nombre tecleado en el profile: es la fuente que lee
+    // listPendingApplications (applicantName ← profiles.full_name). Sin esto
+    // el campo requerido del form se pierde y el organizador ve "—".
+    const trimmedName = fullName?.trim();
+    if (trimmedName) {
+      await db.from("profiles").update({ full_name: trimmedName }).eq("id", applicantId);
+    }
 
     // Si ya existe link activo, devolver "approved" implícito vía status.
     const { data: link } = await db

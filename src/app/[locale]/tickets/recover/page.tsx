@@ -13,7 +13,15 @@ type StartResp = { identifierKind: "phone" | "email"; devCode?: string };
 type VerifyResp = {
   profileId: string | null;
   tickets: Array<{ id: string; event: { title: string } }>;
+  orderLinks: Array<{ orderId: string; token: string }>;
 };
+
+// Milisegundos de espera antes de llevar al usuario al link de la orden encontrada. El perfil que
+// resuelve el OTP es un guest sin sesión — por eso NO vamos a /tickets
+// (exige login y mostraría la wallet vacía de otra cuenta). En vez de eso,
+// aterrizamos en /order/[id]/[token]: la misma ruta que usa la entrega por
+// WhatsApp, que pide login y luego reclama la compra a la cuenta logueada.
+const REDIRECT_DELAY_MS = 1200;
 
 export default function TicketRecoverPage() {
   const router = useRouter();
@@ -48,11 +56,19 @@ export default function TicketRecoverPage() {
         code,
       });
       setResult(data);
-      if (data.tickets.length > 0) {
-        // Why: piloto — sin sesión real aquí; redirigimos a /tickets donde
-        // el usuario tendrá que loguearse para ver los QRs. Mostramos el
-        // resultado inline para feedback inmediato.
-        setTimeout(() => router.replace("/tickets"), 1200);
+      const firstLink = data.orderLinks[0];
+      if (firstLink) {
+        // Mostramos el resultado inline para feedback inmediato y luego
+        // llevamos a la orden encontrada: ahí el login SÍ reclama la compra
+        // (claimOrder) en vez de rebotar a una wallet vacía.
+        setTimeout(
+          () =>
+            router.replace(
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              `/order/${firstLink.orderId}/${firstLink.token}` as any,
+            ),
+          REDIRECT_DELAY_MS,
+        );
       }
     } catch (e) {
       setError((e as Error).message);
