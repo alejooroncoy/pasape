@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/_shared/api-client";
+import { PERSIST_GC_TIME_MS } from "@/lib/_shared/query-client-config";
 import type { User } from "@/server/identity/domain/User";
 
 export const currentUserKey = ["identity", "me"] as const;
@@ -10,7 +11,7 @@ export type MeResponse = { user: User; activeOrgSlug: string | null } | null;
 
 // gcTime largo (7 días): mantiene la sesión en cache para que el persister la
 // conserve (offline + sin parpadeo). Coincide con el maxAge del persister.
-const PERSIST_GC_TIME = 7 * 24 * 60 * 60 * 1000;
+const PERSIST_GC_TIME = PERSIST_GC_TIME_MS;
 
 export const useCurrentUser = () =>
   useQuery({

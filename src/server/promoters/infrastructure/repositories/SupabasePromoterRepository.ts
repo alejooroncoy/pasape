@@ -47,6 +47,10 @@ type SchemeRow = {
   } | null;
 };
 
+// Ventana simétrica alrededor de startsAt (antes y después) en la que el
+// evento se considera "live" para el status del link de promotor.
+const LIVE_WINDOW_MS = 6 * 60 * 60 * 1000;
+
 const computeEventStatus = (
   startsAt: string,
   status: string,
@@ -54,7 +58,7 @@ const computeEventStatus = (
 ): "live" | "upcoming" | "closed" => {
   if (status === "closed" || status === "cancelled") return "closed";
   const diffMs = new Date(startsAt).getTime() - now.getTime();
-  if (Math.abs(diffMs) <= 6 * 60 * 60 * 1000) return "live";
+  if (Math.abs(diffMs) <= LIVE_WINDOW_MS) return "live";
   return "upcoming";
 };
 

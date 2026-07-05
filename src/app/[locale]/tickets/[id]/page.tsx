@@ -24,6 +24,9 @@ import type { Box } from "@/server/boxes/domain/Box";
 
 type Props = { params: Promise<{ id: string }> };
 
+// Key local (no sync entre dispositivos) para no repetir el nudge educativo del box.
+const BOX_NUDGE_SEEN_KEY = "pasape:box_nudge_seen";
+
 // Transición direccional del carrusel de entradas: la nueva entra desde el lado
 // del gesto y la saliente sale hacia el opuesto. `dir` 1 = siguiente, -1 = anterior.
 const cardVariants = {
@@ -164,13 +167,13 @@ function TicketDetailInner({ id }: { id: string }) {
   const [boxNudgeSeen, setBoxNudgeSeen] = useState(false);
   useEffect(() => {
     try {
-      if (localStorage.getItem("pasape:box_nudge_seen")) setBoxNudgeSeen(true);
+      if (localStorage.getItem(BOX_NUDGE_SEEN_KEY)) setBoxNudgeSeen(true);
     } catch {}
   }, []);
   useEffect(() => {
     if (!panelInView) return;
     try {
-      localStorage.setItem("pasape:box_nudge_seen", "1");
+      localStorage.setItem(BOX_NUDGE_SEEN_KEY, "1");
     } catch {}
     setBoxNudgeSeen(true);
   }, [panelInView]);

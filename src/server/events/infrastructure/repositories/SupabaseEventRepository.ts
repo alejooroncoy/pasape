@@ -23,6 +23,11 @@ import {
 } from "@/server/promoters/application/CommissionResolver";
 import type { CommissionConfig } from "@/server/promoters/domain/OrgPromoter";
 
+// PostgREST corta a 1000 filas SIN error, así que cualquier paginado manual
+// sobre esta tabla tiene que avanzar en bloques de este tamaño o el resultado
+// queda incompleto en tablas grandes.
+const POSTGREST_PAGE_LIMIT = 1000;
+
 type EventRow = {
   id: string;
   slug: string;
@@ -689,7 +694,7 @@ export const supabaseEventRepository: EventRepository = {
 
     // Vendidas por tipo (pagadas, activas/usadas) para el desglose del reporte —
     // NO usamos `ticket_types.sold` porque incluye reservas pendientes.
-    const PAGE = 1000;
+    const PAGE = POSTGREST_PAGE_LIMIT;
     const paidTickets: Array<{ ticket_type_id: string; price_cents: number | null; status: string }> = [];
     for (let from = 0; ; from += PAGE) {
       const { data: page } = await db
@@ -874,21 +879,24 @@ export const supabaseEventRepository: EventRepository = {
     }
     // Calcular attendanceRate + flag de autoventa para cada promotor.
     // Reglas (ver EventRepository.byPromoter):
-    //   - sample < 5  → ok (estadística poco confiable)
+    //   - sample < MIN_SAMPLE_FOR_FLAG  → ok (estadística poco confiable)
     //   - evento futuro → ok (todavía no hubo oportunidad de validar)
-    //   - rate ≥ 0.7  → ok
-    //   - 0.3 ≤ rate < 0.7 → watch
-    //   - rate < 0.3  → suspect
+    //   - rate ≥ ATTENDANCE_OK_THRESHOLD  → ok
+    //   - ATTENDANCE_SUSPECT_THRESHOLD ≤ rate < ATTENDANCE_OK_THRESHOLD → watch
+    //   - rate < ATTENDANCE_SUSPECT_THRESHOLD  → suspect
+    const MIN_SAMPLE_FOR_FLAG = 5;
+    const ATTENDANCE_OK_THRESHOLD = 0.7;
+    const ATTENDANCE_SUSPECT_THRESHOLD = 0.3;
     const byPromoter = Array.from(promoterAgg.values())
       .map((p) => {
         const attendanceRate =
           p.ticketsSold > 0 ? p.ticketsValidated / p.ticketsSold : 0;
         let flag: "ok" | "watch" | "suspect" = "ok";
-        if (p.ticketsSold < 5 || !eventHasStarted) {
+        if (p.ticketsSold < MIN_SAMPLE_FOR_FLAG || !eventHasStarted) {
           flag = "ok";
-        } else if (attendanceRate >= 0.7) {
+        } else if (attendanceRate >= ATTENDANCE_OK_THRESHOLD) {
           flag = "ok";
-        } else if (attendanceRate >= 0.3) {
+        } else if (attendanceRate >= ATTENDANCE_SUSPECT_THRESHOLD) {
           flag = "watch";
         } else {
           flag = "suspect";
@@ -980,9 +988,9 @@ export const supabaseEventRepository: EventRepository = {
     // Tickets joined with ticket_type, order (+ buyer profile, promoter_link).
     // Solo entradas realmente válidas: orden pagada + ticket active/used (excluye
     // pending/expired/void/refunded — antes contaminaban la hoja Asistentes y no
-    // cuadraban con el Resumen). Paginado en bloques de 1000 porque PostgREST
-    // corta a 1000 filas SIN error → eventos grandes exportaban incompletos.
-    const PAGE = 1000;
+    // cuadraban con el Resumen). Paginado en bloques de POSTGREST_PAGE_LIMIT
+    // porque PostgREST corta a 1000 filas SIN error → eventos grandes exportaban incompletos.
+    const PAGE = POSTGREST_PAGE_LIMIT;
     const ticketRows: unknown[] = [];
     for (let from = 0; ; from += PAGE) {
       // OJO: orders tiene DOS FKs a profiles (buyer_id y claimed_by) — hay que

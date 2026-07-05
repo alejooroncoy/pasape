@@ -1,5 +1,10 @@
 export type EventStatus = "draft" | "published" | "closed" | "cancelled";
 
+// Ventana de gracia para vitrinas (org showcase, hub de marca): un evento que
+// ya empezó pero hace poco todavía se muestra como "próximo" en vez de
+// desaparecer de golpe al cruzar startsAt.
+export const SHOWCASE_RECENT_GRACE_MS = 6 * 3600 * 1000;
+
 export type PresaleTier = {
   id: string;
   ticketTypeId: string;

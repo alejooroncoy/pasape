@@ -1,6 +1,6 @@
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
 import { buyerUnitPriceCents } from "@/lib/tickets/serviceFee";
-import type { FeeMode } from "@/server/events/domain/Event";
+import { SHOWCASE_RECENT_GRACE_MS, type FeeMode } from "@/server/events/domain/Event";
 
 export type ShowcaseOrg = {
   id: string;
@@ -54,7 +54,7 @@ export const getEventOrgShowcase = async (
     }>();
   if (!org) return null;
 
-  const cutoff = new Date(Date.now() - 6 * 3600 * 1000).toISOString();
+  const cutoff = new Date(Date.now() - SHOWCASE_RECENT_GRACE_MS).toISOString();
   const { data: rawEvents } = await db
     .from("events")
     .select("id, slug, title, cover_url, starts_at, venue, fee_mode")

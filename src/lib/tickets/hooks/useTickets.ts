@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/_shared/api-client";
+import { PERSIST_GC_TIME_MS } from "@/lib/_shared/query-client-config";
 import { useSessionReady } from "@/lib/identity/hooks/useSessionReady";
 import { currentUserKey } from "@/lib/identity/hooks/useCurrentUser";
 import type { Order, OrderQuote, Ticket, TransferOutcome, WalletTicket } from "@/server/tickets/domain/Ticket";
@@ -27,7 +28,7 @@ export const fetchCarouselScope = (ticketId: string) =>
 // gcTime largo (7 días): mantiene la wallet en cache para que el persister la
 // conserve → disponible offline y sin parpadeo. Coincide con el maxAge del
 // persister (ver query-client.tsx).
-const PERSIST_GC_TIME = 7 * 24 * 60 * 60 * 1000;
+const PERSIST_GC_TIME = PERSIST_GC_TIME_MS;
 
 export const useMyTickets = () => {
   const { sessionReady, loggedIn } = useSessionReady();
