@@ -9,6 +9,9 @@ import type {
 } from "@/server/promoters/domain/Promoter";
 import { computePromoterPayout, resolveCommissionScheme } from "@/server/promoters/application/CommissionResolver";
 
+// Bytes de entropía del token opaco de invitación de promotor (LOW-4).
+const PROMOTER_APPLY_TOKEN_BYTES = 16;
+
 type LinkRow = {
   id: string;
   event_id: string;
@@ -319,16 +322,27 @@ export const supabasePromoterRepository: PromoterRepository = {
   },
 
   async generateInviteToken({ eventSlug, orgId }) {
-    // Token = base64url(eventSlug). El "comisión" se guarda como per-link al aprobar.
+    // Token opaco random persistido en events.promoter_apply_token (LOW-4):
+    // ya NO es derivable a partir del slug público. Idempotente — si el
+    // evento ya tiene un token vigente, lo reutilizamos.
     const db = supabaseAdmin();
     const { data: ev } = await db
       .from("events")
-      .select("id, organization_id")
+      .select("id, organization_id, promoter_apply_token")
       .eq("slug", eventSlug)
-      .maybeSingle<{ id: string; organization_id: string }>();
+      .maybeSingle<{ id: string; organization_id: string; promoter_apply_token: string | null }>();
     if (!ev) return err("event_not_found");
     if (ev.organization_id !== orgId) return err("forbidden");
-    const token = Buffer.from(eventSlug).toString("base64url");
+
+    let token = ev.promoter_apply_token;
+    if (!token) {
+      token = crypto.randomBytes(PROMOTER_APPLY_TOKEN_BYTES).toString("base64url");
+      const { error } = await db
+        .from("events")
+        .update({ promoter_apply_token: token })
+        .eq("id", ev.id);
+      if (error) return err(error.message);
+    }
     return ok({
       token,
       url: `/apply/${token}`,
@@ -337,19 +351,13 @@ export const supabasePromoterRepository: PromoterRepository = {
 
   async resolveInviteToken(token) {
     const db = supabaseAdmin();
-    let slug: string;
-    try {
-      slug = Buffer.from(token, "base64url").toString("utf8");
-    } catch {
-      return null;
-    }
     const { data: ev } = await db
       .from("events")
       .select(
         "id, slug, title, promoter_commission_pct, promoter_commission_config, " +
           "organization:organizations!inner(name, promoter_commission_pct, promoter_commission_config)",
       )
-      .eq("slug", slug)
+      .eq("promoter_apply_token", token)
       .maybeSingle();
     if (!ev) return null;
     type E = {

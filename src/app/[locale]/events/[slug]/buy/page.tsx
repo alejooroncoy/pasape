@@ -44,6 +44,20 @@ type Phase = "pick" | "data" | "pay";
 // backend (migración 20260608110000_event_stats_and_order_expiry.sql).
 const RESERVATION_MS = 30 * 60 * 1000;
 
+// Cookie que setea /r/[code]/route.ts (LOW-18): fallback cuando el comprador
+// llega sin ?promo ni localStorage del slug (p.ej. saltó por la vitrina de la
+// marca antes de aterrizar en el evento). No-httpOnly a propósito, para poder
+// leerla aquí.
+const PROMO_COOKIE_NAME = "pasape_promo";
+
+function readPromoCookie(): string | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(
+    new RegExp(`(?:^|; )${PROMO_COOKIE_NAME}=([^;]*)`),
+  );
+  return match ? decodeURIComponent(match[1]!) : null;
+}
+
 const BUY_ERRORS: Record<string, string> = {
   promoter_quota_exceeded: "El promotor ya agotó su cuota de entradas. Ingresa directo al evento.",
   self_purchase_blocked: "No puedes comprar con tu propio código de promotor.",
@@ -101,6 +115,12 @@ function BuyFlowInner({ params }: Props) {
   const [isForeigner, setIsForeigner] = useState(false);
   const [guestPhone, setGuestPhone] = useState("");
   const nameTouchedRef = useRef(false);
+  // LOW-8: guard sincrónico contra doble-tap. `buy.isPending` solo se vuelve
+  // true DESPUÉS del re-render que sigue a mutateAsync — dos taps síncronos
+  // (antes de ese re-render) igual disparan startPayment dos veces y crean
+  // dos órdenes con reserva de stock. Este ref se setea de forma inmediata,
+  // sin esperar al ciclo de render.
+  const paymentInFlightRef = useRef(false);
   const { lookup: dniLookup, pending: dniPending } = useDniLookup();
   const [dniHint, setDniHint] = useState<"idle" | "not_found">("idle");
 
@@ -149,7 +169,7 @@ function BuyFlowInner({ params }: Props) {
         next = fromUrl;
         window.localStorage.setItem(key, fromUrl);
       } else {
-        next = window.localStorage.getItem(key);
+        next = window.localStorage.getItem(key) ?? readPromoCookie();
       }
     } catch {}
     if (next) {
@@ -351,6 +371,8 @@ function BuyFlowInner({ params }: Props) {
   if (!data) return <PageLoader />;
 
   const startPayment = async () => {
+    if (paymentInFlightRef.current) return;
+    paymentInFlightRef.current = true;
     try {
       const attendee = {
         email: guestEmail.trim() || null,
@@ -440,6 +462,8 @@ function BuyFlowInner({ params }: Props) {
         buyerSubtotal === 0 ? "buy_failed" : (e as Error).message || "unknown",
       );
       router.replace(`/events/${slug}/pay-error?reason=${reason}`);
+    } finally {
+      paymentInFlightRef.current = false;
     }
   };
 
@@ -583,6 +607,7 @@ function BuyFlowInner({ params }: Props) {
                   payMethod={payMethod}
                   setPayMethod={setPayMethod}
                   orderId={orderId}
+                  slug={slug}
                 onExpired={() => setReservationExpired(true)}
                 totalCents={displayTotal}
                 isLogged={isLogged}
@@ -1604,6 +1629,7 @@ function PayPhase({
   payMethod,
   setPayMethod,
   orderId,
+  slug,
   totalCents,
   isLogged,
   userPhone,
@@ -1621,6 +1647,7 @@ function PayPhase({
   payMethod: "yape" | "mp";
   setPayMethod: (m: "yape" | "mp") => void;
   orderId: string | null;
+  slug: string;
   totalCents: number;
   isLogged: boolean;
   userPhone: string;
@@ -1644,6 +1671,8 @@ function PayPhase({
     return (
       <PaymentReviewScreen
         orderId={orderId}
+        guestEmail={!isLogged ? guestEmail.trim() : ""}
+        slug={slug}
         onRetry={() => setReview(false)}
         onPaid={onPaid}
       />
@@ -1764,10 +1793,14 @@ function PayPhase({
 // pago anterior en el backend antes de cobrar de nuevo) o esperar la confirmación.
 function PaymentReviewScreen({
   orderId,
+  guestEmail,
   onRetry,
+  slug,
   onPaid,
 }: {
   orderId: string;
+  guestEmail: string;
+  slug: string;
   onRetry: () => void;
   onPaid: () => void;
 }) {
@@ -1775,6 +1808,15 @@ function PaymentReviewScreen({
   const [busy, setBusy] = useState(false);
   const [waited, setWaited] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // LOW-19: para invitados, "Ir a Mis entradas" mandaba a /tickets — un
+  // LoginGate con wallet vacía, porque la orden guest en revisión aún no se
+  // reclamó (eso pasa recién al pagar, vía /order/[id]/[token]). En su lugar
+  // se manda a /processing con el email del invitado: esa página ya sabe
+  // esperar el status y, si aprueba, aterrizar en el link firmado de la orden
+  // sin exigir login.
+  const waitHref = guestEmail
+    ? `/events/${slug}/processing?order=${orderId}&email=${encodeURIComponent(guestEmail)}`
+    : "/tickets";
 
   const retry = async () => {
     setBusy(true);
@@ -1783,7 +1825,7 @@ function PaymentReviewScreen({
       const res = await fetch("/api/payments/retry", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId }),
+        body: JSON.stringify({ orderId, guestEmail: guestEmail || undefined }),
       });
       const body = (await res.json()) as { data?: { status: string }; error?: string };
       if (!res.ok || body.error) {
@@ -1819,7 +1861,8 @@ function PaymentReviewScreen({
         </p>
         <button
           type="button"
-          onClick={() => router.push("/tickets")}
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          onClick={() => router.push(waitHref as any)}
           className="mt-5 w-full rounded-full bg-cart-accent py-3.5 text-[14.5px] font-semibold text-cart-bg shadow-[0_8px_24px_-6px_var(--color-cart-accent-glow)] transition hover:brightness-110"
         >
           Ir a Mis entradas

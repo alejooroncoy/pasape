@@ -2359,6 +2359,7 @@ function BoxGroupEditor({
   presaleRow,
   onPresaleChange,
   feeMode,
+  dupKeys,
 }: {
   boxes: TicketRow[];
   canDelete: boolean;
@@ -2369,6 +2370,8 @@ function BoxGroupEditor({
   presaleRow: TicketRow;
   onPresaleChange: (patch: Partial<TicketRow>) => void;
   feeMode: FeeMode;
+  /** rowKeys con etiqueta de box repetida dentro de este mismo grupo (LOW-16). */
+  dupKeys: Set<string>;
 }) {
   const [advOpen, setAdvOpen] = useState(false);
   const first = boxes[0]!;
@@ -2441,10 +2444,14 @@ function BoxGroupEditor({
         <div className="flex flex-wrap gap-1.5">
           {boxes.map((b) => {
             const priceOverridden = b.priceSoles !== first.priceSoles;
+            const isDup = dupKeys.has(b.rowKey);
             return (
               <div
                 key={b.rowKey}
-                className="flex flex-col gap-0.5 rounded-lg border border-cart-line bg-cart-bg-elev px-2 py-1.5"
+                className={
+                  "flex flex-col gap-0.5 rounded-lg border bg-cart-bg-elev px-2 py-1.5 " +
+                  (isDup ? "border-rose-400/70" : "border-cart-line")
+                }
               >
                 <div className="flex items-center gap-1">
                   <input
@@ -2453,7 +2460,7 @@ function BoxGroupEditor({
                     maxLength={20}
                     className={
                       "w-[4.5rem] bg-transparent font-mono text-[12.5px] font-semibold outline-none " +
-                      (b.boxLabel.trim() ? "text-white" : "text-amber-300")
+                      (isDup ? "text-rose-300" : b.boxLabel.trim() ? "text-white" : "text-amber-300")
                     }
                   />
                   {canDelete && (
@@ -2498,6 +2505,11 @@ function BoxGroupEditor({
             Agregar
           </button>
         </div>
+        {boxes.some((b) => dupKeys.has(b.rowKey)) && (
+          <p className="mt-1.5 text-[11px] font-medium text-rose-300">
+            Dos {nounPlural.toLowerCase()} tienen la misma etiqueta — el portero no podrá distinguirlos. Ponles etiquetas distintas.
+          </p>
+        )}
       </div>
 
       {advOpen && (
@@ -2548,12 +2560,23 @@ function AdvancedToggle({ open, onToggle, hasContent }: { open: boolean; onToggl
 // cuentan como el mismo nombre.
 const normTicketName = (s: string): string => s.trim().replace(/\s+/g, " ").toLowerCase();
 
-// rowKeys de entradas (no-box) cuyo nombre se repite. Los boxes se distinguen
-// por su etiqueta, no aplica.
+// rowKeys de entradas (no-box) cuyo nombre se repite, MÁS rowKeys de boxes
+// cuya etiqueta (boxLabel) se repite dentro del mismo unitNoun ("box", "mesa"…)
+// (LOW-16). La etiqueta se imprime en el QR de cada invitado y la usa el
+// portero para distinguir boxes en la puerta — dos boxes con la misma
+// etiqueta son indistinguibles ahí, por eso también bloquea publicar.
 function duplicateTicketRowKeys(rows: TicketRow[]): Set<string> {
   const byName = new Map<string, string[]>();
+  const byBoxLabel = new Map<string, string[]>();
   for (const t of rows) {
-    if (t.kind === "box") continue;
+    if (t.kind === "box") {
+      const norm = normTicketName(`${t.unitNoun}:${t.boxLabel}`);
+      if (!t.boxLabel.trim()) continue;
+      const arr = byBoxLabel.get(norm) ?? [];
+      arr.push(t.rowKey);
+      byBoxLabel.set(norm, arr);
+      continue;
+    }
     const norm = normTicketName(t.name);
     if (!norm) continue;
     const arr = byName.get(norm) ?? [];
@@ -2562,6 +2585,7 @@ function duplicateTicketRowKeys(rows: TicketRow[]): Set<string> {
   }
   const dups = new Set<string>();
   for (const arr of byName.values()) if (arr.length > 1) arr.forEach((k) => dups.add(k));
+  for (const arr of byBoxLabel.values()) if (arr.length > 1) arr.forEach((k) => dups.add(k));
   return dups;
 }
 
@@ -2737,6 +2761,7 @@ function TicketsEditor({
               presaleRow={first}
               onPresaleChange={(patch) => updateAll(group.map((b) => b.rowKey), patch)}
               feeMode={feeMode}
+              dupKeys={dupKeys}
               onAddOne={() => {
                 const next = String.fromCharCode(65 + group.length);
                 const nounCap = first.unitNoun

@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, use, useEffect, useMemo, useState } from "react";
+import { Suspense, use, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useRouter } from "@/i18n/navigation";
 import { useEvent } from "@/lib/events/hooks/useEvents";
@@ -35,6 +35,10 @@ function Inner({ params }: Props) {
   const { loggedIn } = useSessionReady();
   const [startedAt] = useState(() => Date.now());
   const [paid, setPaid] = useState(false);
+  // Delay entre confirmar `paid` y navegar a la orden — le da tiempo al usuario
+  // de ver el check de éxito antes de saltar (LOW-10/LOW-20).
+  const SUCCESS_NAV_DELAY_MS = 1600;
+  const successNavTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!orderId || paid) return;
@@ -55,14 +59,14 @@ function Inner({ params }: Props) {
         if (res.status === "paid") {
           setPaid(true);
           await refetchTickets();
-          setTimeout(() => {
+          successNavTimer.current = setTimeout(() => {
             // /order es el único punto de decisión post-pago: reclama la orden
             // (o confirma que ya es tuya — claimOrder es idempotente para el
             // dueño) con el conteo REAL de entradas, y recién ahí bifurca a
             // /done o /tickets/[id]. No se decide acá con datos adivinados.
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             router.replace((res.orderUrl ?? "/tickets") as any);
-          }, 1600);
+          }, SUCCESS_NAV_DELAY_MS);
         } else if (res.status === "failed" || res.status === "expired") {
           router.replace(
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -78,6 +82,16 @@ function Inner({ params }: Props) {
       clearInterval(id);
     };
   }, [orderId, guestEmail, orderToken, router, slug, refetchTickets, paid, search]);
+
+  // Cleanup del salto a /order SOLO al desmontar de verdad (no en cada re-run
+  // del efecto de arriba, que se dispara también cuando `paid` cambia a true
+  // — justo cuando este timer recién se armó; cancelarlo ahí rompería la
+  // navegación de éxito). LOW-10/LOW-20.
+  useEffect(() => {
+    return () => {
+      if (successNavTimer.current) clearTimeout(successNavTimer.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (orderId) return;
@@ -99,7 +113,14 @@ function Inner({ params }: Props) {
     }
   }, [orderId, ticketData, slug, router, startedAt]);
 
+  const PROCESSING_TIMEOUT_MS = 60_000;
+
   useEffect(() => {
+    // Si el pago ya se confirmó (paid=true), NO armar el timeout duro: un
+    // pago aprobado en el último instante nunca debe poder disparar
+    // pay-error, así este efecto se re-arme por el cambio de `paid`
+    // (LOW-10/LOW-20).
+    if (paid) return;
     const t = setTimeout(() => {
       // Llegar acá a los 60s significa que NUNCA vimos un estado terminal: un
       // pago rechazado/expirado ya habría redirigido dentro del propio poll. Sea
@@ -111,9 +132,9 @@ function Inner({ params }: Props) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         `/events/${slug}/pay-error?reason=in_review` as any,
       );
-    }, 60_000);
+    }, PROCESSING_TIMEOUT_MS);
     return () => clearTimeout(t);
-  }, [router, slug]);
+  }, [router, slug, paid]);
 
   const summary = useMemo(() => {
     if (!eventData) return null;

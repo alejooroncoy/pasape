@@ -255,7 +255,10 @@ export const EventsController = {
   },
 
   async doorLink(slug: string): Promise<Result<DoorLink>> {
-    const guard = await guardEventMember(slug);
+    // Acuñar el link de puerta es una acción sensible (enrola porteros con
+    // acceso de escaneo), no una simple lectura de miembro: requiere rol de
+    // gestión igual que crear zonas o publicar (LOW-3).
+    const guard = await guardEventMember(slug, ["owner", "admin", "editor"]);
     if (!guard.ok) return err(guard.error);
     const origin = await resolveOriginFromHeaders();
     return ok(await generateDoorLink(guard.value.event, origin));
