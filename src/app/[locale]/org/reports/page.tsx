@@ -973,10 +973,16 @@ function displayMetric(r: BreakdownRow): { sold: number; total: number; unitLabe
   return { sold: r.sold, total: r.capacity, unitLabel: null };
 }
 
-/** "Box 1" → "Box"; "Mesa M1" → "Mesa"; "Box S.VIP 3" → "Box S.VIP"; "Preventa" → "Preventa". */
+/**
+ * "Box 1" → "Box"; "Mesa M1" → "Mesa"; "Box S.VIP 3" → "Box S.VIP";
+ * "Box A" → "Box" (esquema de etiqueta ALPHA, el default del composer);
+ * "Preventa" → "Preventa".
+ */
 function baseName(name: string): string {
-  // Quita sufijos numéricos finales con o sin letra previa: " 1", " 12", " M1", " A3".
-  const trimmed = name.trim().replace(/\s+[A-Za-z]?\d+\s*$/, "").trim();
+  // Quita sufijos finales de: dígitos con o sin letra previa (" 1", " 12",
+  // " M1", " A3") o UNA sola letra suelta (" A".." Z", el esquema alpha por
+  // defecto — LOW-15). No toca palabras de 2+ letras como "VIP"/"Alfa".
+  const trimmed = name.trim().replace(/\s+([A-Za-z]?\d+|[A-Za-z])\s*$/, "").trim();
   return trimmed.length > 0 ? trimmed : name.trim();
 }
 
