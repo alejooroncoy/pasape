@@ -25,6 +25,8 @@ export type CreateEventInput = {
   category?: EventCategory | null;
   totalCapacity: number | null;
   overbookPct: number;
+  /** Tope de entradas por persona (acumulado por DNI). null = sin límite. */
+  maxTicketsPerPerson?: number | null;
   transfersEnabled: boolean;
   transferDeadlineHours: number | null;
   transferMaxCount: number;
@@ -217,6 +219,8 @@ export type UpdateEventInput = {
   category?: EventCategory | null;
   totalCapacity?: number | null;
   overbookPct?: number;
+  /** Tope de entradas por persona (acumulado por DNI). null = sin límite. */
+  maxTicketsPerPerson?: number | null;
   transfersEnabled?: boolean;
   transferDeadlineHours?: number | null;
   transferMaxCount?: number;

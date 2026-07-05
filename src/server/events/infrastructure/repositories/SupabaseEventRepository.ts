@@ -47,6 +47,7 @@ type EventRow = {
   currency: string;
   total_capacity: number | null;
   overbook_pct: number;
+  max_tickets_per_person: number | null;
   transfers_enabled: boolean;
   transfer_deadline_hours: number | null;
   transfer_max_count: number;
@@ -144,6 +145,7 @@ const toEvent = (r: EventRow): Event => ({
     totalCapacity: r.total_capacity,
     overbookPct: r.overbook_pct,
   },
+  maxTicketsPerPerson: r.max_tickets_per_person,
   transferPolicy: {
     enabled: r.transfers_enabled,
     deadlineHours: r.transfer_deadline_hours,
@@ -328,6 +330,7 @@ export const supabaseEventRepository: EventRepository = {
         category: input.category ?? null,
         total_capacity: input.totalCapacity,
         overbook_pct: input.overbookPct,
+        max_tickets_per_person: input.maxTicketsPerPerson ?? null,
         transfers_enabled: input.transfersEnabled,
         transfer_deadline_hours: input.transferDeadlineHours,
         transfer_max_count: input.transferMaxCount,
@@ -408,6 +411,8 @@ export const supabaseEventRepository: EventRepository = {
     if (input.category !== undefined) patch.category = input.category;
     if (input.totalCapacity !== undefined) patch.total_capacity = input.totalCapacity;
     if (input.overbookPct !== undefined) patch.overbook_pct = input.overbookPct;
+    if (input.maxTicketsPerPerson !== undefined)
+      patch.max_tickets_per_person = input.maxTicketsPerPerson;
     if (input.transfersEnabled !== undefined) patch.transfers_enabled = input.transfersEnabled;
     if (input.transferDeadlineHours !== undefined)
       patch.transfer_deadline_hours = input.transferDeadlineHours;

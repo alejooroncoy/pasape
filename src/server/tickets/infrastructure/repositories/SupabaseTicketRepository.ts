@@ -17,7 +17,7 @@ import { resolveOrderFee } from "@/lib/tickets/serviceFee";
 import { createPreference } from "@/server/payments/application/CreatePreference";
 import { dispatchTicketDelivery } from "@/server/notifications/application/DispatchTicketDelivery";
 import { supabaseBoxRepository } from "@/server/boxes/infrastructure/repositories/SupabaseBoxRepository";
-import { encryptDni, dniLast4, normalizeDni } from "@/server/_shared/crypto/dni";
+import { encryptDni, dniLast4, decryptDni, normalizeDni } from "@/server/_shared/crypto/dni";
 import crypto from "node:crypto";
 import * as Sentry from "@sentry/nextjs";
 
@@ -133,9 +133,14 @@ const priceOrder = async (
   // organizador aún no lanzó. Cerrado/cancelado también bloqueado.
   const { data: evStatus } = await db
     .from("events")
-    .select("status, ends_at, fee_mode")
+    .select("status, ends_at, fee_mode, max_tickets_per_person")
     .eq("id", input.eventId)
-    .maybeSingle<{ status: string; ends_at: string | null; fee_mode: "buyer_pays_extra" | "included_in_price" }>();
+    .maybeSingle<{
+      status: string;
+      ends_at: string | null;
+      fee_mode: "buyer_pays_extra" | "included_in_price";
+      max_tickets_per_person: number | null;
+    }>();
   if (!evStatus) return err("event_not_found");
   if (evStatus.status !== "published") return err("event_not_published");
   if (evStatus.ends_at && new Date(evStatus.ends_at) < new Date()) return err("event_sales_closed");
@@ -149,6 +154,18 @@ const priceOrder = async (
     .in("id", ttIds);
   if (ttErr || !tts) return err(ttErr?.message ?? "ticket_types_lookup_failed");
   if (tts.some((t) => t.event_id !== input.eventId)) return err("event_mismatch");
+
+  // Tope de entradas por persona (por orden). El acumulado real entre compras se
+  // valida en buy() con el DNI; acá solo cortamos que una sola orden pida más del
+  // tope, para dar feedback en el checkout. Los boxes se venden enteros y no
+  // cuentan. Las cortesías del organizador quedan exentas.
+  if (!input.courtesy && evStatus.max_tickets_per_person != null) {
+    const admissionQty = input.items.reduce((sum, item) => {
+      const tt = tts.find((t) => t.id === item.ticketTypeId);
+      return tt && tt.kind !== "box" ? sum + item.qty : sum;
+    }, 0);
+    if (admissionQty > evStatus.max_tickets_per_person) return err("max_per_person_exceeded");
+  }
 
   // Promos activas del evento (2x1 / 3x2), aplicadas al total server-side.
   const { data: promoRows } = await db
@@ -373,6 +390,53 @@ export const supabaseTicketRepository: TicketRepository = {
     // propio código (sea como user logueado o como guest con su email).
     if (promoterId && promoterId === effectiveBuyerId) {
       return err("self_purchase_blocked");
+    }
+
+    // Tope acumulado de entradas por persona: si el organizador puso un máximo,
+    // sumamos lo que este DNI ya compró para el evento (tickets active/used de
+    // entradas individuales) más lo que pide ahora. Se identifica por DNI porque
+    // el profile de un guest es desechable y no persiste entre compras (ver el
+    // comentario de arriba). El DNI se guarda cifrado con IV aleatorio (no es
+    // consultable directo), así que filtramos por los últimos 4 dígitos y
+    // desambiguamos descifrando los candidatos. Las cortesías quedan exentas.
+    const maxPerPerson = priced.value.evStatus.max_tickets_per_person;
+    const capAttendee = input.guest ?? input.buyer ?? null;
+    const capDni = normalizeDni(capAttendee?.dni);
+    if (!input.courtesy && maxPerPerson != null && capDni) {
+      const newAdmissionQty = input.items.reduce((sum, item) => {
+        const tt = tts.find((t) => t.id === item.ticketTypeId);
+        return tt && !tt.box_label ? sum + item.qty : sum;
+      }, 0);
+      if (newAdmissionQty > 0) {
+        // Tipos de entrada individual del evento (box_label null); los tickets no
+        // llevan event_id, así que acotamos por sus ticket_type_id.
+        const { data: admissionTypes } = await db
+          .from("ticket_types")
+          .select("id")
+          .eq("event_id", input.eventId)
+          .is("box_label", null)
+          .returns<Array<{ id: string }>>();
+        const admissionTypeIds = (admissionTypes ?? []).map((t) => t.id);
+        let priorCount = 0;
+        if (admissionTypeIds.length > 0) {
+          const last4 = dniLast4(capDni);
+          const { data: candidates } = await db
+            .from("tickets")
+            .select("holder_dni_enc")
+            .in("ticket_type_id", admissionTypeIds)
+            .eq("holder_dni_last4", last4)
+            .in("status", ["active", "used"])
+            .returns<Array<{ holder_dni_enc: string | null }>>();
+          // last4 puede colisionar entre personas distintas → confirmamos por el
+          // DNI completo descifrado antes de contar.
+          priorCount = (candidates ?? []).filter(
+            (c) => decryptDni(c.holder_dni_enc) === capDni,
+          ).length;
+        }
+        if (priorCount + newAdmissionQty > maxPerPerson) {
+          return err("max_per_person_exceeded");
+        }
+      }
     }
 
     const { data: orderRow, error: orderErr } = await db

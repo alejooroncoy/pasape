@@ -388,6 +388,7 @@ export function EventComposer(props: EventComposerProps) {
       description: ev.description ?? "",
       category: ev.category ?? null,
       feeMode: ev.feeMode,
+      maxPerPerson: ev.maxTicketsPerPerson != null ? String(ev.maxTicketsPerPerson) : "",
       date,
       time,
       durationHours: durationHoursFromEdit > 0 ? String(durationHoursFromEdit) : "",
@@ -431,6 +432,10 @@ export function EventComposer(props: EventComposerProps) {
   // Quién absorbe la comisión de Pasape: el comprador la paga aparte
   // (default) o el organizador la incluye en el precio que puso.
   const [feeMode, setFeeMode] = useState<FeeMode>(seedFromEdit?.feeMode ?? "buyer_pays_extra");
+  // Tope de entradas por persona (acumulado por evento). "" = sin límite; es la
+  // representación como string para el input (como capacity). Solo cuenta
+  // entradas individuales, no boxes.
+  const [maxPerPerson, setMaxPerPerson] = useState<string>(seedFromEdit?.maxPerPerson ?? "");
   const [date, setDate] = useState(seedFromEdit?.date ?? "");
   const [time, setTime] = useState(seedFromEdit?.time ?? "");
   const [durationHours, setDurationHours] = useState(seedFromEdit?.durationHours ?? "");
@@ -705,6 +710,7 @@ export function EventComposer(props: EventComposerProps) {
         transfersEnabled: true,
         transferRequiresKyc: false,
         feeMode,
+        maxTicketsPerPerson: maxPerPerson.trim() ? Number(maxPerPerson) : null,
       });
       if (selectedPromoterIds.size > 0 && ev.slug) {
         try {
@@ -782,6 +788,9 @@ export function EventComposer(props: EventComposerProps) {
       if (nextDesc !== ev.description) patch.description = nextDesc;
       if (category !== (ev.category ?? null)) patch.category = category;
       if (feeMode !== ev.feeMode) patch.feeMode = feeMode;
+      const nextMaxPerPerson = maxPerPerson.trim() ? Number(maxPerPerson) : null;
+      if (nextMaxPerPerson !== (ev.maxTicketsPerPerson ?? null))
+        patch.maxTicketsPerPerson = nextMaxPerPerson;
       const nextVenueName = venue.name.trim() || null;
       if (nextVenueName !== ev.venue) patch.venue = nextVenueName;
       if (venue.lat !== ev.venueLat) patch.venueLat = venue.lat;
@@ -1333,6 +1342,48 @@ export function EventComposer(props: EventComposerProps) {
             required={validTickets.length === 0}
             highlight={highlight === "entradas"}
           />
+
+          {/* Máximo de entradas por persona: tope acumulado por evento (por DNI).
+              Va JUSTO DESPUÉS de Entradas porque es un límite sobre las entradas
+              recién definidas. Vacío = sin límite. No cuenta boxes. El backend lo
+              hace cumplir al comprar; acá el organizador solo lo configura. */}
+          <div className="rounded-2xl border border-cart-line bg-cart-bg-elev px-4 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">
+                  Máximo por persona
+                </span>
+                <p className="mt-0.5 text-[11px] text-cart-ink-3">
+                  Entradas que puede comprar una misma persona en total. Vacío = sin límite.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  step={1}
+                  value={maxPerPerson}
+                  onChange={(e) => {
+                    // Solo enteros positivos; vacío queda como "sin límite".
+                    const v = e.target.value.replace(/[^\d]/g, "");
+                    setMaxPerPerson(v);
+                  }}
+                  placeholder="∞"
+                  className="w-20 rounded-xl border border-cart-line bg-cart-bg-elev-2 px-3 py-2 text-center text-[15px] font-medium text-white outline-none placeholder:text-cart-ink-3 focus:border-cart-accent"
+                />
+                {maxPerPerson.trim() !== "" && (
+                  <button
+                    type="button"
+                    onClick={() => setMaxPerPerson("")}
+                    className="text-[11px] font-medium text-cart-ink-3 underline underline-offset-2 hover:text-white"
+                  >
+                    Sin límite
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
 
           {/* Promociones — 2x1 / 3x2. Solo en edit: requiere entradas con id. */}
           {isEdit && (

@@ -33,7 +33,10 @@ const buySchema = z.object({
     .array(
       z.object({
         ticketTypeId: z.string().uuid(),
-        qty: z.number().int().min(1).max(10),
+        // Techo duro de sanidad anti-abuso; el tope real por persona lo define el
+        // organizador por evento (events.max_tickets_per_person) y lo hace cumplir
+        // el repositorio (priceOrder/buy).
+        qty: z.number().int().min(1).max(50),
         holderName: z.string().nullable().optional(),
       }),
     )
@@ -88,7 +91,7 @@ const setHolderSchema = z.object({
 const quoteSchema = z.object({
   eventId: z.string().uuid(),
   items: z
-    .array(z.object({ ticketTypeId: z.string().uuid(), qty: z.number().int().min(1).max(10) }))
+    .array(z.object({ ticketTypeId: z.string().uuid(), qty: z.number().int().min(1).max(50) }))
     .min(1),
 });
 
