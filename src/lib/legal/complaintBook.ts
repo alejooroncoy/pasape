@@ -11,7 +11,7 @@
 // ⚠️ Completar con los datos reales de la razón social antes de producción.
 // El RUC y la dirección fiscal son obligatorios en la Hoja de Reclamación.
 export const PROVEEDOR = {
-  razonSocial: "Pasape S.A.C.",
+  razonSocial: "Alejandro Daniel Oroncoy Almeyda",
   nombreComercial: "Pasape",
   ruc: process.env.NEXT_PUBLIC_PASAPE_RUC ?? "20000000000",
   direccion: "Lima, Perú",
