@@ -6,7 +6,10 @@ const dsn = process.env.SENTRY_DSN ?? process.env.NEXT_PUBLIC_SENTRY_DSN;
 
 Sentry.init({
   dsn,
-  enabled: !!dsn,
+  // En `next dev` (NODE_ENV=development) NO enviar: los errores de local
+  // consumen la misma cuota del proyecto de producción. Solo reporta en
+  // Vercel (preview/prod), donde NODE_ENV=production.
+  enabled: !!dsn && process.env.NODE_ENV !== "development",
   // PII apagado: sin IP/cookies/headers de auth. Esta es una app de pagos —
   // enviar datos de tarjeta/DNI a Sentry sería violación PCI y de privacidad.
   sendDefaultPii: false,
