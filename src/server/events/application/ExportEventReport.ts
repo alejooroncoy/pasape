@@ -1,6 +1,7 @@
 import ExcelJS from "exceljs";
 import { Money } from "@/lib/_shared/money";
 import { byCode, countryFromE164, DEFAULT_COUNTRY } from "@/lib/phone/countries";
+import { documentType } from "@/lib/identity/document";
 import type { Event } from "../domain/Event";
 import type { EventRepository } from "../ports/EventRepository";
 
@@ -62,16 +63,6 @@ const phoneCountry = (raw: string | null): string => {
   return c ? `${c.flag} ${c.label}` : "";
 };
 
-// Tipo de documento del titular, deducido del formato (mismos criterios que el
-// pago): 8 díg = DNI; 9-12 díg = C.E (Carné de Extranjería); alfanumérico =
-// Pasaporte. El enmascarado viejo ("··1234") es un DNI de compras antiguas.
-const docType = (dni: string | null): string => {
-  if (!dni) return "";
-  if (dni.startsWith("··")) return "DNI";
-  if (/^\d{8}$/.test(dni)) return "DNI";
-  if (/^\d{9,12}$/.test(dni)) return "C.E";
-  return "Pasaporte";
-};
 
 // Fecha ISO (UTC) → Date con la hora de pared de Lima (UTC-5), para que Excel la
 // muestre en horario local y la trate como fecha real (con numFmt). El server
@@ -182,7 +173,7 @@ export const exportEventReport = async (
       holderDni: safeCell(
         a.holderDni?.startsWith("··") ? `Termina en ${a.holderDni.slice(2)}` : a.holderDni,
       ),
-      docType: docType(a.holderDni),
+      docType: documentType(a.holderDni) ?? "",
       ticketTypeName: safeCell(typeLabel(a)),
       kind: kindLabel(a),
       // Una cortesía nace con status 'active' (el constraint de tickets no admite

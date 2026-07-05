@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isValidDocument } from "@/lib/identity/document";
 import { err, type Result } from "@/server/_shared/result";
 import { getAuthContext } from "@/server/_shared/AuthContext";
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
@@ -72,12 +73,19 @@ const createSchema = z.object({
   capacity: z.number().int().min(2).max(20).default(6),
 });
 
-const joinSchema = z.object({
-  token: z.string().min(1),
-  holderName: z.string().min(1),
-  holderDni: z.string().nullable().optional(),
-  holderPhone: z.string().nullable().optional(),
-});
+const joinSchema = z
+  .object({
+    token: z.string().min(1),
+    holderName: z.string().min(1),
+    holderDni: z.string().trim().min(1).max(20).nullable().optional(),
+    holderPhone: z.string().nullable().optional(),
+    isForeigner: z.boolean().optional(),
+  })
+  // DNI estricto (8 díg) para el peruano; documento laxo (5-20) para el extranjero.
+  .refine((j) => j.holderDni == null || isValidDocument(j.holderDni, !!j.isForeigner), {
+    message: "invalid_document",
+    path: ["holderDni"],
+  });
 
 const removeMemberSchema = z.object({
   token: z.string().min(1),

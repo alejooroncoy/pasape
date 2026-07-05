@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isValidDocument } from "@/lib/identity/document";
 import { err, type Result } from "@/server/_shared/result";
 import { getAuthContext } from "@/server/_shared/AuthContext";
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
@@ -20,10 +21,14 @@ const guestSchema = z
     email: z.string().email().nullable().optional(),
     phone: z.string().min(6).nullable().optional(),
     fullName: z.string().min(2),
-    // DNI peruano (8 díg) o documento de extranjero (pasaporte/C.E, alfanumérico).
-    // El frontend guía el formato con el toggle "Soy extranjero"; acá solo un
-    // rango laxo para no bloquear al extranjero.
-    dni: z.string().trim().min(5).max(20),
+    // DNI (8 díg) o documento de extranjero (5-20). `isForeigner` decide la regla:
+    // estricta para el peruano, laxa para el extranjero (no frágil, no bloqueante).
+    dni: z.string().trim().min(1).max(20),
+    isForeigner: z.boolean().optional(),
+  })
+  .refine((g) => isValidDocument(g.dni, !!g.isForeigner), {
+    message: "invalid_document",
+    path: ["dni"],
   })
   .refine((g) => !!g.email || !!g.phone, {
     message: "guest_contact_required",
@@ -60,11 +65,11 @@ const claimSchema = z.object({
   // Identidad del holder real: se captura al reclamar (autorrellenada desde el
   // perfil del receptor si ya la tiene). Opcionales para no romper claims viejos.
   fullName: z.string().trim().min(2).max(120).nullable().optional(),
-  dni: z
-    .string()
-    .regex(/^\d{8}$/)
-    .nullable()
-    .optional(),
+  dni: z.string().trim().min(1).max(20).nullable().optional(),
+  isForeigner: z.boolean().optional(),
+}).refine((c) => c.dni == null || isValidDocument(c.dni, !!c.isForeigner), {
+  message: "invalid_document",
+  path: ["dni"],
 });
 
 // Desbloqueo de la propia compra: orderId + token de orden (HMAC) como llave.
@@ -79,11 +84,11 @@ const claimOrderSchema = z.object({
 const setHolderSchema = z.object({
   ticketId: z.string().uuid(),
   holderName: z.string().trim().min(1).max(120).nullable(),
-  dni: z
-    .string()
-    .regex(/^\d{8}$/)
-    .nullable()
-    .optional(),
+  dni: z.string().trim().min(1).max(20).nullable().optional(),
+  isForeigner: z.boolean().optional(),
+}).refine((s) => s.dni == null || isValidDocument(s.dni, !!s.isForeigner), {
+  message: "invalid_document",
+  path: ["dni"],
 });
 
 // Cotización del pedido (sin crear orden). Público: es el mismo precio que ya

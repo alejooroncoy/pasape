@@ -21,6 +21,7 @@ import { CardForm } from "@/components/payments/CardForm";
 import { YapeForm } from "@/components/payments/YapeForm";
 import { PhoneField } from "@/components/design/PhoneField";
 import { parseE164 } from "@/lib/phone/countries";
+import { isValidDocument } from "@/lib/identity/document";
 import { PresaleCountdown, shouldCountdown } from "@/components/ui/PresaleCountdown";
 import type { TicketType } from "@/server/events/domain/Event";
 import {
@@ -329,11 +330,9 @@ function BuyFlowInner({ params }: Props) {
   const phoneNational = parseE164(guestPhone).national;
   const phoneIsPeru = (parseE164(guestPhone).country?.code ?? "PE") === "PE";
   const phoneOk = phoneIsPeru ? phoneNational.length === 9 : phoneNational.length >= 6;
-  // El portero valida por documento. Peruano: DNI de 8 dígitos (con RENIEC).
-  // Extranjero: pasaporte/documento alfanumérico (≥5), sin RENIEC.
-  const docValid = isForeigner
-    ? guestDni.trim().length >= 5
-    : guestDni.trim().length === 8;
+  // El portero valida por documento. Regla compartida con el backend: peruano =
+  // 8 dígitos (con RENIEC); extranjero = pasaporte/documento alfanumérico, sin RENIEC.
+  const docValid = isValidDocument(guestDni, isForeigner);
   const guestValid = guestName.trim().length >= 2 && docValid && phoneOk;
   const orderValid = totalItems > 0 && guestValid;
 
@@ -347,6 +346,8 @@ function BuyFlowInner({ params }: Props) {
         dni: guestDni.trim(),
         // E.164 con país (fuente de verdad del contacto y del origen de la venta).
         phone: guestPhone || null,
+        // El backend valida el documento según esto (8 díg peruano vs laxo extranjero).
+        isForeigner,
       };
       const res = await buy.mutateAsync({
         eventId: data.event.id,

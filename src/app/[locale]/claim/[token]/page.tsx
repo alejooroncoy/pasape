@@ -4,6 +4,7 @@ import { use, useEffect, useState } from "react";
 import { motion } from "motion/react";
 import { useRouter } from "@/i18n/navigation";
 import { useClaimTransfer } from "@/lib/tickets/hooks/useTickets";
+import { isValidDocument } from "@/lib/identity/document";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { useGoogleSignIn } from "@/lib/identity/hooks/useFirebaseAuth";
 import { GoogleBtn } from "@/components/design";
@@ -31,6 +32,7 @@ export default function ClaimPage(props: Props) {
   // automático" — capturamos quién va a entrar antes de reclamar.
   const [name, setName] = useState("");
   const [dni, setDni] = useState("");
+  const [isForeigner, setIsForeigner] = useState(false);
   const [touched, setTouched] = useState(false);
 
   // Hidratar los campos con los datos del perfil una vez carga la sesión.
@@ -41,14 +43,14 @@ export default function ClaimPage(props: Props) {
   }, [isLogged, profileName, profileDni]);
 
   const nameValid = name.trim().length >= 2;
-  const dniValid = /^\d{8}$/.test(dni);
+  const dniValid = isValidDocument(dni, isForeigner);
   const canSubmit = isLogged && nameValid && dniValid && !claim.isPending;
 
   const submit = () => {
     setTouched(true);
     if (!canSubmit) return;
     claim
-      .mutateAsync({ token, fullName: name.trim(), dni })
+      .mutateAsync({ token, fullName: name.trim(), dni, isForeigner })
       .then((res) => setDone({ ticketId: res.ticketId }))
       .catch(() => {
         /* el error se muestra abajo */
@@ -159,19 +161,38 @@ export default function ClaimPage(props: Props) {
                 )}
               </label>
 
+              <label className="flex cursor-pointer items-center gap-2 text-[12px] text-cart-ink-2">
+                <input
+                  type="checkbox"
+                  checked={isForeigner}
+                  onChange={(e) => setIsForeigner(e.target.checked)}
+                  className="h-4 w-4 accent-cart-accent"
+                />
+                Soy extranjero (no tengo DNI)
+              </label>
               <label className="block">
-                <span className="mb-1 block text-[12px] font-medium text-cart-ink-3">DNI</span>
+                <span className="mb-1 block text-[12px] font-medium text-cart-ink-3">
+                  {isForeigner ? "Pasaporte / documento" : "DNI"}
+                </span>
                 <input
                   type="text"
-                  inputMode="numeric"
-                  maxLength={8}
+                  inputMode={isForeigner ? "text" : "numeric"}
+                  maxLength={isForeigner ? 20 : 8}
                   value={dni}
-                  onChange={(e) => setDni(e.target.value.replace(/\D/g, "").slice(0, 8))}
-                  placeholder="8 dígitos"
+                  onChange={(e) =>
+                    setDni(
+                      isForeigner
+                        ? e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 20)
+                        : e.target.value.replace(/\D/g, "").slice(0, 8),
+                    )
+                  }
+                  placeholder={isForeigner ? "AB123456" : "8 dígitos"}
                   className="w-full rounded-xl border border-white/10 bg-cart-bg-elev px-3.5 py-3 text-[14.5px] tracking-[0.08em] text-white placeholder:text-cart-ink-3 placeholder:tracking-normal focus:border-cart-accent focus:outline-none"
                 />
                 {touched && !dniValid && (
-                  <p className="mt-1 text-[11px] text-red-400">El DNI debe tener 8 dígitos.</p>
+                  <p className="mt-1 text-[11px] text-red-400">
+                    {isForeigner ? "Ingresa tu documento." : "El DNI debe tener 8 dígitos."}
+                  </p>
                 )}
               </label>
             </div>

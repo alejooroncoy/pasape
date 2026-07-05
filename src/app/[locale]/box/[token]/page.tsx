@@ -7,6 +7,7 @@ import { Btn, C, Field, FONT_DISPLAY, PhoneField } from "@/components/design";
 import { useBoxByToken, useJoinBox, useRealtimeBox } from "@/lib/boxes/hooks/useBoxes";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { useDniLookup } from "@/lib/identity/hooks/useDniLookup";
+import { isValidDocument } from "@/lib/identity/document";
 import { Logo } from "@/components/brand/Logo";
 import { formatDate } from "@/lib/_shared/format";
 
@@ -69,8 +70,8 @@ export default function FriendJoinBoxPage({ params }: Props) {
     ? b.members.find((m) => m.profileId === me.data?.user?.id)
     : null;
 
-  // Peruano: DNI de 8 dígitos. Extranjero: pasaporte/documento alfanumérico (≥5).
-  const dniOk = isForeigner ? dni.trim().length >= 5 : /^\d{8}$/.test(dni);
+  // Regla compartida: peruano = 8 dígitos; extranjero = documento laxo (5-20).
+  const dniOk = isValidDocument(dni, isForeigner);
   const phoneOk = phone.length >= 9;
   const canSubmit = dniOk && !!name && phoneOk && !join.isPending && remaining > 0;
 
@@ -81,6 +82,7 @@ export default function FriendJoinBoxPage({ params }: Props) {
       holderDni: dni,
       // `phone` ya es E.164 (país + número) del PhoneField.
       holderPhone: phone,
+      isForeigner,
     });
     // Siempre usamos el link público `/t/[id]?k=...`. Funciona tanto para el
     // host logueado como para el invitado guest, y evita el caso borde de
