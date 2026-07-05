@@ -75,7 +75,7 @@ export const useResolveInvite = (token: string) =>
 export const useApplyByLink = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { token: string; message?: string | null }) =>
+    mutationFn: (input: { token: string; message?: string | null; name?: string | null }) =>
       api.post<{ applicationId: string; eventSlug: string }>("/api/promoters/apply", input),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["promoters"] }),
   });

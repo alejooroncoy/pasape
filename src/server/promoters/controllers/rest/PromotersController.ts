@@ -29,6 +29,7 @@ const generateSchema = z.object({
 const applySchema = z.object({
   token: z.string().min(1),
   message: z.string().nullable().optional(),
+  name: z.string().nullable().optional(),
 });
 
 const decideSchema = z.object({
@@ -92,7 +93,12 @@ export const PromotersController = {
     if (!parsed.success) return err("invalid_input");
     return applyByLink(
       { repo },
-      { token: parsed.data.token, applicantId: auth.value.profileId, message: parsed.data.message ?? null },
+      {
+        token: parsed.data.token,
+        applicantId: auth.value.profileId,
+        message: parsed.data.message ?? null,
+        name: parsed.data.name ?? null,
+      },
     );
   },
 

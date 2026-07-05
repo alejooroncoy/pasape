@@ -32,7 +32,7 @@ export const resolveInviteToken = ({ repo }: Deps, token: string) =>
 
 export const applyByLink = (
   { repo }: Deps,
-  input: { token: string; applicantId: string; message: string | null },
+  input: { token: string; applicantId: string; message: string | null; name?: string | null },
 ) => repo.applyByToken(input);
 
 export const getApplicationStatus = (
