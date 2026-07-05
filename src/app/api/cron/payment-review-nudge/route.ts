@@ -1,23 +1,16 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 import { runPaymentReviewNudge } from "@/server/notifications/application/PaymentReviewNudge";
 
-// Cron (Vercel Cron): recordatorio proactivo a compradores con pago en revisión
-// cuya evento se acerca. Protegido por CRON_SECRET — Vercel Cron manda
-// `Authorization: Bearer <CRON_SECRET>` cuando la env está seteada.
+// Cron (pg_cron + pg_net): recordatorio proactivo a compradores con pago en
+// revisión cuyo evento se acerca. El job es IDEMPOTENTE — cada orden se nudgea a
+// lo sumo una vez (orders.payment_nudge_sent_at), así que re-dispararlo no manda
+// avisos repetidos. Por eso no requiere secreto: el peor caso de una llamada
+// externa es un no-op. Si más adelante se quiere blindar, basta con un header
+// check contra una env.
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-export const GET = async (req: NextRequest) => {
-  const secret = process.env.CRON_SECRET;
-  const auth = req.headers.get("authorization");
-  if (secret) {
-    if (auth !== `Bearer ${secret}`) {
-      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-    }
-  } else if (process.env.NODE_ENV === "production") {
-    // Sin secret en prod no exponemos el job (evita que cualquiera lo dispare).
-    return NextResponse.json({ error: "cron_secret_not_set" }, { status: 503 });
-  }
+export const GET = async () => {
   const result = await runPaymentReviewNudge();
   return NextResponse.json({ data: result });
 };
