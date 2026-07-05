@@ -7,18 +7,20 @@ import { PaymentReviewEmail, type PaymentReviewKind } from "../emails/PaymentRev
 
 // Avisa al comprador cuando su pago queda EN REVISIÓN (in_process) o es RECHAZADO,
 // para que reintente con otro medio o mande la captura del preautorizado. Correo
-// (Resend) + WhatsApp (plantilla). El WhatsApp es best-effort: si la plantilla no
-// está aprobada en Meta aún, igual sale el correo.
+// (Resend) + WhatsApp (plantilla con botón). El WhatsApp es best-effort: si la
+// plantilla no está aprobada en Meta aún, igual sale el correo.
 //
-// Anti-spam: MP puede disparar el mismo estado varias veces. Un claim atómico
-// sobre orders.payment_review_notified evita reenviar el MISMO tipo; un tipo
-// distinto (in_review → luego rejected) sí se envía.
+// Dos entradas:
+//  - dispatchPaymentReview: desde el webhook. Claim atómico sobre
+//    orders.payment_review_notified (no repite el MISMO tipo entre reintentos).
+//  - deliverPaymentReview: el envío puro (sin claim), reusable por el job de
+//    nudge proactivo, que trae su propio candado (orders.payment_nudge_sent_at).
 
 const APP_ORIGIN = (process.env.NEXT_PUBLIC_APP_URL || "https://pasape.lat").replace(/\/$/, "");
 
 type Deps = { db?: SupabaseClient };
 
-type OrderRow = {
+export type PaymentReviewOrder = {
   id: string;
   buyer_id: string | null;
   event_id: string;
@@ -27,24 +29,17 @@ type OrderRow = {
   guest_name: string | null;
 };
 
-export const dispatchPaymentReview = async (
-  deps: Deps,
-  orderId: string,
+type DeliverResult = { sent: boolean; emailSent: boolean; whatsappSent: boolean };
+
+const NONE: DeliverResult = { sent: false, emailSent: false, whatsappSent: false };
+
+// Envío puro (email + WhatsApp), sin claim anti-spam. El caller es responsable de
+// no llamarlo dos veces para lo mismo.
+export const deliverPaymentReview = async (
+  db: SupabaseClient,
+  order: PaymentReviewOrder,
   kind: PaymentReviewKind,
-): Promise<{ sent: boolean; emailSent: boolean; whatsappSent: boolean }> => {
-  const db = deps.db ?? supabaseAdmin();
-
-  // Claim atómico: solo enviamos si el último aviso enviado NO fue de este tipo.
-  const { data: claimed } = await db
-    .from("orders")
-    .update({ payment_review_notified: kind })
-    .eq("id", orderId)
-    .or(`payment_review_notified.is.null,payment_review_notified.neq.${kind}`)
-    .select("id, buyer_id, event_id, guest_email, guest_phone, guest_name")
-    .maybeSingle<OrderRow>();
-  if (!claimed) return { sent: false, emailSent: false, whatsappSent: false };
-  const order = claimed;
-
+): Promise<DeliverResult> => {
   // Contactos: guest (email/phone reales en la orden) o profile del buyer. El
   // email del profile de un guest es sintético, por eso se prefiere guest_email.
   let email = order.guest_email;
@@ -66,12 +61,14 @@ export const dispatchPaymentReview = async (
     .select("title, starts_at, slug")
     .eq("id", order.event_id)
     .maybeSingle<{ title: string; starts_at: string; slug: string }>();
-  if (!event) return { sent: false, emailSent: false, whatsappSent: false };
+  if (!event) return NONE;
 
-  const holderName = (name?.trim()?.split(" ")[0]) || "Hola";
-  const retryUrl = `${APP_ORIGIN}/es/events/${event.slug}/buy?order=${orderId}`;
+  const holderName = name?.trim()?.split(" ")[0] || "Hola";
+  // El correo usa la URL completa; el botón de WhatsApp usa solo el suffix (la
+  // URL base https://app.pasape.lat/ está fija en la plantilla de Meta).
+  const retryPath = `es/events/${event.slug}/buy?order=${order.id}`;
+  const retryUrl = `${APP_ORIGIN}/${retryPath}`;
 
-  // Correo (funciona ya). WhatsApp (best-effort, requiere plantilla aprobada).
   let emailSent = false;
   let whatsappSent = false;
 
@@ -102,7 +99,7 @@ export const dispatchPaymentReview = async (
           emailSent = true;
         }
       } catch (err) {
-        console.error("[dispatchPaymentReview] email falló:", (err as Error).message);
+        console.error("[deliverPaymentReview] email falló:", (err as Error).message);
       }
     }
   }
@@ -113,9 +110,29 @@ export const dispatchPaymentReview = async (
       kind,
       holderName,
       eventTitle: event.title,
-      retryUrl,
+      retryPath,
     });
   }
 
   return { sent: emailSent || whatsappSent, emailSent, whatsappSent };
+};
+
+export const dispatchPaymentReview = async (
+  deps: Deps,
+  orderId: string,
+  kind: PaymentReviewKind,
+): Promise<DeliverResult> => {
+  const db = deps.db ?? supabaseAdmin();
+
+  // Claim atómico: solo enviamos si el último aviso enviado NO fue de este tipo.
+  const { data: claimed } = await db
+    .from("orders")
+    .update({ payment_review_notified: kind })
+    .eq("id", orderId)
+    .or(`payment_review_notified.is.null,payment_review_notified.neq.${kind}`)
+    .select("id, buyer_id, event_id, guest_email, guest_phone, guest_name")
+    .maybeSingle<PaymentReviewOrder>();
+  if (!claimed) return NONE;
+
+  return deliverPaymentReview(db, claimed, kind);
 };

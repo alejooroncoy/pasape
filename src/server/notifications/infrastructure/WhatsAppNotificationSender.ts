@@ -5,7 +5,7 @@ import type {
 } from "../ports/NotificationSender";
 import type { WhatsAppGateway } from "../ports/WhatsAppGateway";
 import { whatsAppGateway } from "./whatsapp";
-import { bodyComponent } from "./whatsapp/components";
+import { bodyComponent, urlButtonComponent } from "./whatsapp/components";
 
 // Envía el QR del ticket (y avisos de transferencia) por WhatsApp. YA NO conoce
 // al proveedor: delega el transporte en un WhatsAppGateway (Kapso o Meta), que
@@ -114,12 +114,14 @@ export class WhatsAppNotificationSender implements NotificationSender {
   // plantilla por caso (aprobadas en Meta). El link de reintento va como param
   // del cuerpo. Best-effort: si la plantilla no está aprobada aún, devuelve false
   // y el correo (que sí funciona) cubre el aviso.
+  // `retryPath` es el suffix que va en el botón URL de la plantilla (la URL base
+  // https://app.pasape.lat/ está fija en Meta; el botón concatena este valor).
   async sendPaymentReview(input: {
     phone: string;
     kind: "in_review" | "rejected";
     holderName: string;
     eventTitle: string;
-    retryUrl: string;
+    retryPath: string;
   }): Promise<boolean> {
     const name =
       input.kind === "rejected" ? paymentRejectedTemplateName() : paymentReviewTemplateName();
@@ -133,8 +135,8 @@ export class WhatsAppNotificationSender implements NotificationSender {
           bodyComponent({
             holder_name: input.holderName,
             event_title: input.eventTitle,
-            retry_url: input.retryUrl,
           }),
+          urlButtonComponent(input.retryPath),
         ],
       });
       return true;
