@@ -20,6 +20,9 @@ export type PromoterRepository = {
     token: string;
     applicantId: string;
     message: string | null;
+    // Nombre editado en /apply (LOW-11): si viene, actualiza profiles.full_name
+    // del postulante — el organizador ve ese nombre en la lista de solicitudes.
+    name?: string | null;
   }): Promise<Result<{ applicationId: string; eventSlug: string }>>;
   getApplicationStatus(
     applicantId: string,
