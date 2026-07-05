@@ -176,7 +176,7 @@ function LivePanel({
             <div className="flex items-center justify-between px-4 pt-3 pb-3 lg:px-5">
               <h2 className="text-[15px] font-semibold tracking-[-0.01em]">Promotores</h2>
               <Link
-                href={`/org/events/${slug}/team` as never}
+                href={`/org/events/${slug}/promoters` as never}
                 className="rounded-full px-2.5 py-1 text-[11.5px] font-medium text-cart-ink-2 transition hover:bg-white/5 hover:text-white"
               >
                 Ver links →
@@ -438,7 +438,7 @@ function FinalReport({
               <p className="text-[11.5px] text-cart-ink-3">vendido · validado · recaudado</p>
             </div>
             <Link
-              href={`/org/events/${slug}/team` as never}
+              href={`/org/events/${slug}/promoters` as never}
               className="rounded-full px-2.5 py-1 text-[11.5px] font-medium text-cart-ink-2 transition hover:bg-white/5 hover:text-white"
             >
               Ver detalle →
@@ -929,7 +929,7 @@ function PromoterDetail({
           </div>
         ) : (
           <Link
-            href={`/org/events/${slug}/team` as never}
+            href={`/org/events/${slug}/promoters` as never}
             className="block rounded-xl border border-cart-line px-3.5 py-2.5 text-center text-[12.5px] font-medium text-cart-ink-2 transition hover:border-cart-line-strong hover:text-white"
           >
             Personalizar comisión →
@@ -1232,7 +1232,9 @@ function PartnerChip({ partner, onRemove }: { partner: EventPartner; onRemove: (
       <span className="text-[12.5px] font-medium text-cart-ink-2">{partner.name}</span>
       <button
         type="button"
-        onClick={onRemove}
+        onClick={() => {
+          if (confirm(`¿Quitar a ${partner.name} de este evento?`)) onRemove();
+        }}
         className="ml-0.5 grid size-4 place-items-center rounded-full text-cart-ink-4 opacity-0 transition hover:bg-white/10 hover:text-white group-hover:opacity-100"
         aria-label={`Quitar ${partner.name}`}
       >

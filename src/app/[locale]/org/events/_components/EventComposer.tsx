@@ -207,7 +207,10 @@ const freeReleasePayload = (t: TicketRow) => ({
 });
 
 // ── Helpers de grupos de espacios (boxes/mesas) ──────────────────────────────
-const spaceCount = (g: SpaceGroup) => Math.max(0, Math.min(60, Number(g.count) || 0));
+/** Tope de boxes que se pueden crear en un solo grupo (evita expansiones enormes de ticket_types). */
+const MAX_BOXES_PER_GROUP = 60;
+const spaceCount = (g: SpaceGroup) =>
+  Math.max(0, Math.min(MAX_BOXES_PER_GROUP, Number(g.count) || 0));
 const spaceSeats = (g: SpaceGroup) => Math.max(1, Number(g.seats) || 1);
 const spaceBoxLabel = (g: SpaceGroup, i: number) => {
   const auto = g.scheme === "alpha" ? String.fromCharCode(65 + (i % 26)) : String(i + 1);
@@ -2417,7 +2420,7 @@ function BoxGroupEditor({
           onChange={(v) => onUpdateAll({ priceSoles: v })}
         />
         <Stepper
-          label="Disponibles c/u"
+          label="Personas/box"
           value={first.capacity}
           onChange={(v) => onUpdateAll({ capacity: v })}
         />
@@ -2799,7 +2802,7 @@ function TicketsEditor({
             </div>
             <div className="mt-3 grid grid-cols-2 gap-2">
               <Stepper label="Precio" suffix="S/" value={t.priceSoles} onChange={(v) => update(t.rowKey, { priceSoles: v })} />
-              <Stepper label="Cupos" value={t.capacity} onChange={(v) => update(t.rowKey, { capacity: v })} />
+              <Stepper label="Personas/box" value={t.capacity} onChange={(v) => update(t.rowKey, { capacity: v })} />
             </div>
             <PriceFeeHint priceSoles={t.priceSoles} feeMode={feeMode} />
             <label className="mt-2 flex flex-col gap-1 rounded-xl bg-cart-bg-elev px-3 py-2">
@@ -3298,6 +3301,12 @@ function SpaceGroupCard({
         <Stepper label="Personas/box" value={group.seats} onChange={(v) => onChange({ seats: v })} />
         <Stepper label="Cuántos" value={group.count} onChange={(v) => onChange({ count: v })} />
       </div>
+      {(Number(group.count) || 0) > MAX_BOXES_PER_GROUP && (
+        <p className="mt-1.5 text-[11.5px] leading-[1.4] text-amber-300">
+          Máximo {MAX_BOXES_PER_GROUP} boxes por grupo — se crearán {MAX_BOXES_PER_GROUP}. Si
+          necesitas más, agrega otro grupo.
+        </p>
+      )}
       <PriceFeeHint priceSoles={group.priceSoles} feeMode={feeMode} />
 
       {/* Etiquetas de los boxes */}

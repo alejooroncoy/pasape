@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import { createContext, Suspense, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { AnimatePresence, motion, useMotionValue, useTransform, animate } from "motion/react";
@@ -1555,7 +1555,7 @@ function NoEventsEmpty() {
         </p>
       </div>
       <Link
-        href="/es/org/eventos/nuevo"
+        href={"/org/events/new" as never}
         className="relative mt-1 inline-flex items-center gap-2 rounded-full bg-cart-accent px-5 py-2.5 text-[13.5px] font-semibold text-cart-on-accent shadow-[0_0_30px_var(--color-cart-accent-glow)] transition-transform active:scale-95"
       >
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
