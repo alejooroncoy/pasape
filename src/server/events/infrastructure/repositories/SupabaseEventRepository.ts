@@ -18,6 +18,7 @@ import type { Event, EventCategory, FeeMode, Promo, PresaleTier, TicketType } fr
 import { buyerUnitPriceCents } from "@/lib/tickets/serviceFee";
 import {
   computePromoterPayout,
+  describePromoterMilestones,
   resolveCommissionScheme,
 } from "@/server/promoters/application/CommissionResolver";
 import type { CommissionConfig } from "@/server/promoters/domain/OrgPromoter";
@@ -896,6 +897,13 @@ export const supabaseEventRepository: EventRepository = {
           attendedUnits,
           grossCents: p.revenueCents,
         });
+        // Detalle de hitos (mismo criterio de desbloqueo que el payout) para el
+        // reporte del organizador: base, conteo, cada meta y su estado.
+        const milestonesView = describePromoterMilestones(
+          p.commissionConfig,
+          p.ticketsSold,
+          attendedUnits,
+        );
         return {
           promoterId: p.promoterId,
           promoterLinkId: p.promoterLinkId,
@@ -912,6 +920,10 @@ export const supabaseEventRepository: EventRepository = {
           hasMilestones: (p.commissionConfig?.milestones.length ?? 0) > 0,
           payoutCents: payout.payoutCents,
           unlockedRewards: payout.rewards,
+          milestoneBasis: milestonesView.basis,
+          milestoneCount: milestonesView.count,
+          milestoneCashCents: milestonesView.cashUnlockedCents,
+          milestones: milestonesView.milestones,
         };
       })
       .sort((a, b) => b.ticketsSold - a.ticketsSold);
@@ -1096,17 +1108,21 @@ export const supabaseEventRepository: EventRepository = {
     const summary = await this.getStats(eventId);
 
     // Use payoutCents already resolved by getStats (handles percentage/tiered/inkind).
+    // payout = comisión por venta + hitos cash → la parte de venta es la resta.
     const promoters: PromoterReportRow[] = summary.byPromoter.map((p) => ({
       name: p.name,
       code: p.code,
       ticketsSold: p.ticketsSold,
       ticketsValidated: p.ticketsValidated,
-      guestsInvited: p.guestsInvited,
-      guestsEntered: p.guestsEntered,
       revenueCents: p.revenueCents,
       commissionPct: p.commissionPct,
+      saleCommissionCents: p.payoutCents - p.milestoneCashCents,
+      milestoneCashCents: p.milestoneCashCents,
       commissionCalculatedCents: p.payoutCents,
       hasMilestones: p.hasMilestones,
+      milestoneBasis: p.milestoneBasis,
+      milestoneCount: p.milestoneCount,
+      milestones: p.milestones,
       unlockedRewards: p.unlockedRewards.map((r) => r.label),
     }));
 

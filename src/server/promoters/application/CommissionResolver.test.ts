@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   coerceCommissionConfig,
   computePromoterPayout,
+  describePromoterMilestones,
   resolveCommissionScheme,
 } from "./CommissionResolver";
 import type { CommissionConfig } from "../domain/OrgPromoter";
@@ -105,6 +106,49 @@ describe("computePromoterPayout — dos ejes combinables", () => {
     expect(
       computePromoterPayout({ pct: 0, config, soldUnits: 5, attendedUnits: 5, grossCents: 0 }),
     ).toEqual({ payoutCents: 3000, rewards: [{ label: "Botella" }] });
+  });
+});
+
+describe("describePromoterMilestones — desglose para el reporte", () => {
+  it("sin config: vacío", () => {
+    expect(describePromoterMilestones(null, 5, 3)).toEqual({
+      basis: null,
+      count: 0,
+      milestones: [],
+      cashUnlockedCents: 0,
+    });
+  });
+
+  it("ordena por umbral, marca desbloqueados y suma cash conseguido (base sold)", () => {
+    const config: CommissionConfig = {
+      basis: "sold",
+      milestones: [
+        { threshold: 10, rewardKind: "perk", amountCents: null, label: "Botella" },
+        { threshold: 3, rewardKind: "cash", amountCents: 5000, label: "" },
+      ],
+    };
+    // vendió 5: alcanza el de 3 (cash), no el de 10 (perk).
+    expect(describePromoterMilestones(config, 5, 2)).toEqual({
+      basis: "sold",
+      count: 5,
+      cashUnlockedCents: 5000,
+      milestones: [
+        { threshold: 3, rewardKind: "cash", amountCents: 5000, label: "", unlocked: true },
+        { threshold: 10, rewardKind: "perk", amountCents: null, label: "Botella", unlocked: false },
+      ],
+    });
+  });
+
+  it("base attended: cuenta la asistencia, no la venta", () => {
+    const config: CommissionConfig = {
+      basis: "attended",
+      milestones: [{ threshold: 3, rewardKind: "cash", amountCents: 5000, label: "" }],
+    };
+    // vendió 5 pero solo asistieron 2 → conteo 2, nada desbloqueado.
+    const view = describePromoterMilestones(config, 5, 2);
+    expect(view.count).toBe(2);
+    expect(view.cashUnlockedCents).toBe(0);
+    expect(view.milestones[0]?.unlocked).toBe(false);
   });
 });
 
