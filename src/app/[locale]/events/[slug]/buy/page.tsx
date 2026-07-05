@@ -1539,8 +1539,19 @@ function PayPhase({
   onPaid: () => void;
   onExpired: () => void;
 }) {
+  // El pago quedó en revisión (in_process): mostramos la pantalla de reintento.
+  const [review, setReview] = useState(false);
   if (!orderId) {
     return <p className="py-8 text-center text-[13px] text-cart-ink-3">Preparando el checkout…</p>;
+  }
+  if (review) {
+    return (
+      <PaymentReviewScreen
+        orderId={orderId}
+        onRetry={() => setReview(false)}
+        onPaid={onPaid}
+      />
+    );
   }
   return (
     <div className="flex flex-col gap-5">
@@ -1611,6 +1622,7 @@ function PayPhase({
             amount={totalCents / 100}
             initialPhone={isLogged ? userPhone : guestPhone}
             onPaid={onPaid}
+            onReview={() => setReview(true)}
             onError={(msg) => console.warn("yape error:", msg)}
           />
         ) : !isLogged && !emailOk ? (
@@ -1637,6 +1649,7 @@ function PayPhase({
             initialDni={isLogged ? "" : guestDni}
             initialEmail={isLogged ? userEmail : guestEmail}
             onPaid={onPaid}
+            onReview={() => setReview(true)}
             onError={(msg) => console.warn("card error:", msg)}
             onExpired={onExpired}
           />
@@ -1645,6 +1658,122 @@ function PayPhase({
 
       <p className="mt-2 text-center text-[12px] text-cart-ink-4">
         Tu QR llega apenas confirmemos el pago.
+      </p>
+    </div>
+  );
+}
+
+// Pago en revisión (in_process): MP no aprobó al instante. Guardamos el asiento
+// y le damos al comprador dos salidas — reintentar con otro medio (cancela el
+// pago anterior en el backend antes de cobrar de nuevo) o esperar la confirmación.
+function PaymentReviewScreen({
+  orderId,
+  onRetry,
+  onPaid,
+}: {
+  orderId: string;
+  onRetry: () => void;
+  onPaid: () => void;
+}) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [waited, setWaited] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const retry = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/payments/retry", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId }),
+      });
+      const body = (await res.json()) as { data?: { status: string }; error?: string };
+      if (!res.ok || body.error) {
+        setError("No pudimos preparar el reintento. Vuelve a intentar.");
+        return;
+      }
+      // El pago anterior ya se había confirmado: no hay que cobrar de nuevo.
+      if (body.data?.status === "already_paid") {
+        onPaid();
+        return;
+      }
+      // Listo para cobrar con otro medio: volvemos a la selección de método.
+      onRetry();
+    } catch {
+      setError("Falla de red. Vuelve a intentar.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (waited) {
+    return (
+      <div className="rounded-2xl border border-cart-line bg-cart-bg-elev p-6 text-center">
+        <span className="mx-auto grid size-11 place-items-center rounded-full bg-cart-accent-soft text-cart-accent">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </span>
+        <div className="mt-4 text-[17px] font-semibold tracking-[-0.01em]">Te avisaremos apenas se confirme</div>
+        <p className="mt-1.5 text-[13px] leading-relaxed text-cart-ink-3">
+          Tu banco está revisando el pago. Cuando lo apruebe, te llega tu QR por correo y WhatsApp,
+          y aparece en Mis entradas.
+        </p>
+        <button
+          type="button"
+          onClick={() => router.push("/tickets")}
+          className="mt-5 w-full rounded-full bg-cart-accent py-3.5 text-[14.5px] font-semibold text-cart-bg shadow-[0_8px_24px_-6px_var(--color-cart-accent-glow)] transition hover:brightness-110"
+        >
+          Ir a Mis entradas
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl border border-cart-line bg-cart-bg-elev p-6">
+      <div className="flex items-start gap-3">
+        <span className="mt-0.5 grid size-9 shrink-0 place-items-center rounded-full bg-amber-400/15 text-amber-300">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8" />
+            <path d="M12 7v5l3 2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </span>
+        <div className="min-w-0">
+          <div className="text-[16px] font-semibold tracking-[-0.01em]">Tu pago quedó en revisión</div>
+          <p className="mt-1 text-[12.5px] leading-relaxed text-cart-ink-3">
+            Tu banco no lo confirmó al instante (a veces pasa). Ya guardamos tu lugar. ¿Qué prefieres?
+          </p>
+        </div>
+      </div>
+
+      {error && (
+        <div className="mt-4 rounded-xl border border-rose-500/40 bg-rose-500/10 px-3.5 py-2.5 text-[12.5px] text-rose-200">
+          {error}
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={() => void retry()}
+        disabled={busy}
+        className="mt-5 w-full rounded-full bg-cart-accent py-3.5 text-[14.5px] font-semibold text-cart-bg shadow-[0_8px_24px_-6px_var(--color-cart-accent-glow)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {busy ? "Preparando…" : "Pagar con otra tarjeta o Yape"}
+      </button>
+      <button
+        type="button"
+        onClick={() => setWaited(true)}
+        disabled={busy}
+        className="mt-3 w-full rounded-full border border-cart-line bg-cart-bg-elev-2 py-3.5 text-[14px] font-semibold text-cart-ink-2 transition hover:border-cart-line-strong hover:text-white disabled:opacity-60"
+      >
+        Esperar la confirmación
+      </button>
+
+      <p className="mt-4 text-center text-[11px] text-cart-ink-4">
+        No se te cobró todavía · tu banco solo retuvo el monto
       </p>
     </div>
   );

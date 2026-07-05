@@ -1,5 +1,5 @@
 import "server-only";
-import { MercadoPagoConfig } from "mercadopago";
+import { MercadoPagoConfig, Payment, PaymentRefund } from "mercadopago";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { Money } from "@/lib/_shared/money";
 
@@ -28,6 +28,28 @@ export const mpClient = (opts?: { sellerAccessToken?: string | null }): MercadoP
     accessToken: token,
     options: { timeout: TIMEOUT_MS },
   });
+};
+
+// ── Operaciones sobre un pago existente ──────────────────────────────────────
+// Se usan cuando un pago quedó en revisión (in_process) y el comprador reintenta
+// con otro medio (cancelar el anterior antes de cobrar de nuevo), o cuando un
+// pago viejo se cuela tras haber cobrado otro (reembolso backstop anti-doble-cobro).
+
+export const getMpPayment = async (paymentId: string | number) => {
+  return new Payment(mpClient()).get({ id: paymentId });
+};
+
+// Cancela un pago que aún NO se acreditó (pending/in_process); libera la
+// retención en la tarjeta. MP rechaza cancelar un pago ya aprobado — para ese
+// caso se usa refundMpPayment.
+export const cancelMpPayment = async (paymentId: string | number) => {
+  return new Payment(mpClient()).cancel({ id: paymentId });
+};
+
+// Reembolso total de un pago aprobado (backstop: el comprador pagó con otro
+// medio y el pago viejo se aprobó igual → se le devuelve a la misma persona).
+export const refundMpPayment = async (paymentId: string | number) => {
+  return new PaymentRefund(mpClient()).create({ payment_id: paymentId });
 };
 
 export const mpWebhookSecret = (): string => {

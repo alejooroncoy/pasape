@@ -59,6 +59,11 @@ const REASON_MAP: Record<string, ReasonInfo> = {
     body: "Algo falló de nuestro lado. No se te cobró nada — intenta de nuevo en unos segundos.",
     note: null,
   },
+  in_review: {
+    title: "Tu pago está en revisión",
+    body: "Tu banco está validando el pago (a veces tarda un poco). Apenas lo confirme, te llega tu QR por correo y WhatsApp, y aparece en Mis entradas. No te preocupes: no se te cobró dos veces.",
+    note: null,
+  },
   unknown: {
     title: "No pudimos cobrarte",
     body: "Algo salió mal con el pago. Tu entrada no fue cobrada.",
