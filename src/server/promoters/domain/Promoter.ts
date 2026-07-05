@@ -54,6 +54,9 @@ export type PromoterHomeData = {
   commissionPct: number;
   /** Metas efectivas (efectivo/especie por umbral). null = sin metas. */
   commissionConfig: CommissionConfig;
+  /** false = el organizador aún no configuró NADA (ni %, ni metas, en ningún
+   *  nivel). La UI muestra "aún se está configurando", no "sin comisión". */
+  schemeConfigured: boolean;
 };
 
 export type PromoterApplication = {

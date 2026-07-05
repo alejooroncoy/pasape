@@ -153,11 +153,24 @@ export default function PromoGoalsPage() {
         </div>
       ) : milestones.length === 0 ? (
         <div className="rounded-2xl border border-cart-line bg-cart-bg-elev px-5 py-10 text-center">
-          <p className="text-[14px] font-medium text-white">Este evento aún no tiene hitos</p>
-          <p className="mt-1 text-[12.5px] text-cart-ink-3">
-            El organizador puede configurar bonos y premios por cantidad de entradas vendidas o
-            de asistentes que entran.
-          </p>
+          {home.data?.schemeConfigured === false ? (
+            <>
+              <p className="text-[14px] font-medium text-white">
+                El organizador aún está configurando este evento
+              </p>
+              <p className="mt-1 text-[12.5px] text-cart-ink-3">
+                Todavía no definió tus metas. Apenas las arme, aparecen acá.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-[14px] font-medium text-white">Este evento no tiene metas</p>
+              <p className="mt-1 text-[12.5px] text-cart-ink-3">
+                El organizador puede configurar bonos y premios por cantidad de entradas vendidas o
+                de asistentes que entran.
+              </p>
+            </>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">

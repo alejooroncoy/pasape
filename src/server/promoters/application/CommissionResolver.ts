@@ -97,15 +97,19 @@ export const resolveCommissionScheme = (input: {
   /** Default de la marca (organization): base para todos. */
   brandPct: number | null;
   brandConfig: unknown;
-}): { config: CommissionConfig; pct: number } => {
-  const pct =
-    input.linkPct ?? input.promoterPct ?? input.eventPct ?? input.brandPct ?? 0;
+}): { config: CommissionConfig; pct: number; configured: boolean } => {
+  const pctSource = input.linkPct ?? input.promoterPct ?? input.eventPct ?? input.brandPct;
+  const pct = pctSource ?? 0;
   const config =
     coerceCommissionConfig(input.linkConfigOverride) ??
     coerceCommissionConfig(input.promoterConfig) ??
     coerceCommissionConfig(input.eventConfig) ??
     coerceCommissionConfig(input.brandConfig);
-  return { config, pct };
+  // `configured` distingue "el organizador eligió 0%/sin metas a propósito" de
+  // "no configuró NADA en ningún nivel". Falso solo si TODO está en null → la UI
+  // del promotor muestra "aún se está configurando" en vez de "sin comisión".
+  const configured = pctSource != null || config != null;
+  return { config, pct, configured };
 };
 
 export type PayoutInput = {

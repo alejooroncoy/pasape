@@ -233,6 +233,7 @@ function ActiveEventPanel({ link }: { link: PromoterLink }) {
         config={home.data?.commissionConfig ?? null}
         sold={sold}
         attended={attended}
+        configured={home.data?.schemeConfigured ?? true}
         loading={home.isLoading}
       />
 
@@ -372,12 +373,15 @@ function PaySection({
   config,
   sold,
   attended,
+  configured,
   loading,
 }: {
   pct: number;
   config: CommissionConfig;
   sold: number;
   attended: number;
+  /** false = el organizador aún no configuró nada → estado "configurando". */
+  configured: boolean;
   loading: boolean;
 }) {
   if (loading) {
@@ -385,6 +389,33 @@ function PaySection({
       <section>
         <SectionTitle title="Cómo te pagan" />
         <div className="mt-2 h-24 animate-pulse rounded-2xl border border-cart-line bg-cart-bg-elev/50" />
+      </section>
+    );
+  }
+
+  // Nada configurado en ningún nivel: no digas "sin comisión" (parecería que no
+  // ganas nada), di que el organizador todavía lo está armando.
+  if (!configured) {
+    return (
+      <section>
+        <SectionTitle title="Cómo te pagan" />
+        <div className="mt-2 flex items-start gap-3 rounded-2xl border border-cart-line bg-cart-bg-elev px-4 py-4">
+          <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-full bg-cart-accent/15 text-cart-accent">
+            <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
+              <circle cx="10" cy="10" r="7.25" stroke="currentColor" strokeWidth="1.5" />
+              <path d="M10 6.5v4l2.5 1.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </span>
+          <div>
+            <div className="text-[14px] font-semibold text-white">
+              El organizador aún está configurando este evento
+            </div>
+            <p className="mt-0.5 text-[12.5px] leading-snug text-cart-ink-3">
+              Todavía no definió cómo te paga (comisión o metas). Comparte tu link igual — apenas
+              lo configure, aparece acá.
+            </p>
+          </div>
+        </div>
       </section>
     );
   }
@@ -462,7 +493,7 @@ function PayEmpty() {
     <section>
       <SectionTitle title="Cómo te pagan" />
       <div className="mt-2 rounded-2xl border border-dashed border-cart-line bg-cart-bg-elev px-4 py-6 text-center text-[13px] text-cart-ink-3">
-        El organizador todavía no definió cómo te paga.
+        Este evento no ofrece comisión ni metas. Ayudas al organizador difundiéndolo.
       </div>
     </section>
   );

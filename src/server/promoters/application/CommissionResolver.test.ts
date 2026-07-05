@@ -173,7 +173,23 @@ describe("resolveCommissionScheme — herencia link → promotor → evento → 
     expect(scheme.config?.milestones[0]?.threshold).toBe(50);
   });
 
-  it("sin nada configurado: pct 0, sin metas", () => {
-    expect(resolveCommissionScheme({ ...EMPTY })).toEqual({ pct: 0, config: null });
+  it("sin nada configurado: pct 0, sin metas, configured=false", () => {
+    expect(resolveCommissionScheme({ ...EMPTY })).toEqual({
+      pct: 0,
+      config: null,
+      configured: false,
+    });
+  });
+
+  it("configured=true si CUALQUIER nivel puso algo (incluso 0% a propósito)", () => {
+    // 0% explícito del evento = decisión → configured true (no es "pendiente").
+    expect(resolveCommissionScheme({ ...EMPTY, eventPct: 0 }).configured).toBe(true);
+    // solo metas de la marca → configured true.
+    expect(
+      resolveCommissionScheme({
+        ...EMPTY,
+        brandConfig: { basis: "sold", milestones: [{ threshold: 5, rewardKind: "perk", amountCents: null, label: "x" }] },
+      }).configured,
+    ).toBe(true);
   });
 });

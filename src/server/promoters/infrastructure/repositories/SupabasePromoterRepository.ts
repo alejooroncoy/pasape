@@ -191,6 +191,7 @@ export const supabasePromoterRepository: PromoterRepository = {
       recent,
       commissionPct: scheme.pct,
       commissionConfig: scheme.config,
+      schemeConfigured: scheme.configured,
     };
   },
 
