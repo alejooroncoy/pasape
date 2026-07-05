@@ -4,6 +4,7 @@ import { use, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Link, useRouter } from "@/i18n/navigation";
 import { OrgShell } from "@/app/[locale]/org/_shell/OrgShell";
+import { PhoneField } from "@/components/design/PhoneField";
 import {
   useOrgPromoterDetail,
   useUpdateOrgPromoter,
@@ -66,7 +67,11 @@ export default function OrgPromoterDetailPage({ params }: { params: Params }) {
               {promoter && (
                 <>
                   <span className="text-cart-ink-4">·</span>
-                  <span>{promoter.defaultCommissionPct}% comisión default</span>
+                  <span>
+                    {promoter.defaultCommissionPct == null
+                      ? "comisión: hereda de la marca"
+                      : `${promoter.defaultCommissionPct}% comisión default`}
+                  </span>
                 </>
               )}
               {promoter?.profileId && (
@@ -289,13 +294,14 @@ function PromoterEditForm({
   onSubmit: (payload: {
     name: string;
     whatsapp: string | null;
-    defaultCommissionPct: number;
+    defaultCommissionPct: number | null;
     notes?: string | null;
   }) => void;
 }) {
   const [name, setName] = useState(initial.name);
   const [whatsapp, setWhatsapp] = useState(initial.whatsapp ?? "");
-  const [pct, setPct] = useState(initial.defaultCommissionPct);
+  // null = hereda de la marca.
+  const [pct, setPct] = useState<number | null>(initial.defaultCommissionPct);
   const [notes, setNotes] = useState(initial.notes ?? "");
 
   const submit = () => {
@@ -311,10 +317,28 @@ function PromoterEditForm({
   return (
     <div className="flex flex-col gap-4 pb-4">
       <Field label="Nombre" value={name} onChange={setName} />
-      <Field label="WhatsApp" type="tel" mono value={whatsapp} onChange={setWhatsapp} />
+      <label className="flex flex-col gap-1.5">
+        <Label>WhatsApp</Label>
+        <PhoneField value={whatsapp} onChange={setWhatsapp} />
+      </label>
       <div>
         <Label>Comisión por defecto</Label>
-        <div className="mt-2 flex gap-2">
+        <p className="mt-1 text-[11.5px] leading-snug text-cart-ink-3">
+          Vacío = hereda las reglas de tu marca. Pon un número solo si cobra distinto.
+        </p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setPct(null)}
+            className={
+              "rounded-xl px-3 py-2 text-[13.5px] font-semibold transition " +
+              (pct == null
+                ? "bg-cart-accent text-white shadow-[0_8px_20px_-6px_var(--color-cart-accent-glow)]"
+                : "bg-cart-bg-elev text-cart-ink-2 hover:text-white")
+            }
+          >
+            Igual que la marca
+          </button>
           {[10, 15, 20].map((p) => (
             <button
               key={p}
@@ -334,8 +358,12 @@ function PromoterEditForm({
             type="number"
             min={0}
             max={100}
-            value={pct}
-            onChange={(e) => setPct(Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
+            value={pct ?? ""}
+            placeholder="—"
+            onChange={(e) => {
+              const raw = e.target.value;
+              setPct(raw.trim() === "" ? null : Math.max(0, Math.min(100, Number(raw) || 0)));
+            }}
             className="w-16 rounded-xl bg-cart-bg-elev px-2.5 py-2 text-center font-mono text-[13.5px] outline-none"
           />
         </div>

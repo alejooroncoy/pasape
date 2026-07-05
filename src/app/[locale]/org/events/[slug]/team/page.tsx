@@ -4,7 +4,9 @@ import { use, useEffect, useMemo, useRef, useState, type ReactNode } from "react
 import { AnimatePresence, motion } from "motion/react";
 import { Link } from "@/i18n/navigation";
 import { useDoorLink } from "@/lib/events/hooks/useDoorLink";
+import { useEvent } from "@/lib/events/hooks/useEvents";
 import { useEventStats } from "@/lib/events/hooks/useEventStats";
+import { useRealtimeEventStats } from "@/lib/events/hooks/useRealtimeEventStats";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { useOrgInvites } from "@/lib/identity/organizations/hooks/useOrgInvites";
 import {
@@ -12,7 +14,7 @@ import {
   useEventCoOrganizers,
   useRemoveEventCoOrganizer,
 } from "@/lib/events/hooks/useEventCoOrganizers";
-import { useOrgPromoters } from "@/lib/promoters/hooks/useOrgPromoters";
+import { useOrgPromoters, useOrgScheme } from "@/lib/promoters/hooks/useOrgPromoters";
 import {
   useAssignPromotersToEvent,
   useEventPromoters,
@@ -21,14 +23,16 @@ import {
   useUpdateAssignmentCommission,
   useUpdateEventPromoterScheme,
 } from "@/lib/promoters/hooks/useEventPromoters";
+import {
+  useDecideApplication,
+  useGenerateInvite,
+  usePendingApplications,
+  useRealtimePromoterApplications,
+} from "@/lib/promoters/hooks/usePromoter";
 import type { EventPromoterAssignment } from "@/server/promoters/application/EventPromoterAssignment";
 import type { EventPromoterScheme } from "@/server/events/ports/EventRepository";
-import type {
-  CommissionConfig,
-  CommissionReward,
-  CommissionTier,
-  CommissionType,
-} from "@/server/promoters/domain/OrgPromoter";
+import type { CommissionConfig } from "@/server/promoters/domain/OrgPromoter";
+import { CommissionSchemeEditor } from "@/components/promoters/CommissionSchemeEditor";
 import { EventShell } from "../_shell/EventShell";
 import { Sheet } from "../_shell/Sheet";
 
@@ -315,7 +319,183 @@ function CoOrgPicker({
 // ============================================================
 // PROMOTERS SECTION (sin cambios funcionales — sigue editable)
 // ============================================================
+// Invitar por link de grupo: el organizador comparte UN link (/apply/{token}),
+// quien entra pide ser promotor y cae en "Solicitudes" para aprobación manual.
+// Reemplaza la vieja pantalla /invite ("Compártelo en stories"): mismo flujo,
+// ahora integrado en la pestaña Promotores y con el diseño nuevo.
+function EventInviteLinkCard({ slug }: { slug: string }) {
+  const generate = useGenerateInvite();
+  const pending = usePendingApplications(slug);
+  useRealtimePromoterApplications(slug);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    // El % ya no viaja acá: al aprobar, el promotor hereda el esquema del evento.
+    if (!generate.data && !generate.isPending) generate.mutate({ eventSlug: slug });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug]);
+
+  const fullUrl = generate.data
+    ? `${typeof window === "undefined" ? "" : window.location.origin}${generate.data.url}`
+    : "";
+  const pretty = fullUrl.replace(/^https?:\/\//, "");
+  const pendingCount = pending.data?.length ?? 0;
+
+  const onCopy = async () => {
+    if (!fullUrl) return;
+    try {
+      await navigator.clipboard?.writeText(fullUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {}
+  };
+  const onShare = async () => {
+    if (!fullUrl) return;
+    if (navigator.share) await navigator.share({ url: fullUrl, title: "Sé promotor" }).catch(() => {});
+    else onCopy();
+  };
+
+  return (
+    <section>
+      <SectionHeader
+        title="Invitar por link"
+        subtitle="Comparte un link en tu grupo. Quien entre pide ser promotor y tú lo apruebas."
+      />
+      <div className="rounded-2xl border border-cart-line bg-cart-bg-elev p-4 lg:p-5">
+        <button
+          type="button"
+          onClick={onCopy}
+          className="flex w-full items-center justify-between gap-3 rounded-xl border border-cart-line bg-cart-bg px-4 py-3 text-left font-mono text-[13px] font-medium text-cart-ink-2 transition hover:border-cart-line-strong"
+        >
+          <span className="truncate">
+            {generate.isPending ? "Generando…" : copied ? "¡Copiado!" : pretty || "—"}
+          </span>
+          <CopyGlyph />
+        </button>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={onShare}
+            className="inline-flex flex-1 items-center justify-center gap-2 rounded-full bg-cart-accent px-4 py-2.5 text-[13.5px] font-semibold text-white shadow-[0_8px_24px_-8px_var(--color-cart-accent-glow-strong)]"
+          >
+            Compartir el link
+          </button>
+          {/* Soft-nav: la ruta se intercepta (@modal/(.)requests) y abre el
+              drawer sobre esta página, con la URL en /requests. En hard-nav /
+              refresh cae la página completa promoters/requests. */}
+          <Link
+            href={`/org/events/${slug}/promoters/requests` as never}
+            className="inline-flex items-center justify-center gap-2 rounded-full border border-cart-line px-4 py-2.5 text-[13.5px] font-semibold text-cart-ink-2 transition hover:border-cart-line-strong"
+          >
+            Solicitudes
+            {pendingCount > 0 && (
+              <span className="grid min-w-[20px] place-items-center rounded-full bg-cart-accent px-1.5 text-[11px] font-bold text-white">
+                {pendingCount}
+              </span>
+            )}
+          </Link>
+        </div>
+        <p className="mt-3 text-[11px] text-cart-ink-4">
+          Aprobación manual, uno por uno · el link vence al cerrar el evento.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+// Contenido de Solicitudes (postulaciones por link). Lo comparten la ruta
+// interceptora (drawer overlay, soft-nav) y la página completa (hard-nav).
+// Aprobar hace que el promotor herede el esquema de comisión del evento.
+export function RequestsSheet({ slug }: { slug: string }) {
+  const pending = usePendingApplications(slug);
+  useRealtimePromoterApplications(slug);
+  const decide = useDecideApplication(slug);
+  const list = pending.data ?? [];
+  const count = list.length;
+
+  return (
+    <div className="flex flex-col">
+      <h4 className="text-[17px] font-semibold leading-tight tracking-[-0.02em]">
+        {count === 0
+          ? "Sin solicitudes pendientes."
+          : `${count} ${count === 1 ? "persona quiere" : "personas quieren"} ser tus promotores.`}
+      </h4>
+      <p className="mt-2 text-[13px] leading-relaxed text-cart-ink-3">
+        Entraron por tu link. Acepta solo a los que conozcas — al aceptar heredan el esquema de
+        comisión del evento.
+      </p>
+
+      <div className="mt-5 flex flex-col gap-2.5">
+        {list.map((req) => {
+          const initial = req.applicantName[0]?.toUpperCase() ?? "?";
+          const busy = decide.isPending && decide.variables?.applicationId === req.id;
+          return (
+            <div key={req.id} className="rounded-2xl border border-cart-line bg-cart-bg p-4">
+              <div className="flex items-center gap-3">
+                <div className="grid size-11 place-items-center rounded-xl bg-cart-accent text-[17px] font-bold text-white">
+                  {initial}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[15px] font-semibold">{req.applicantName}</div>
+                  <div className="truncate text-[11.5px] text-cart-ink-3">
+                    {req.applicantHandle ?? "sin contacto"}
+                  </div>
+                </div>
+              </div>
+              {req.message && (
+                <div className="mt-3 rounded-lg bg-cart-bg-elev px-3 py-2 text-[11.5px] text-cart-ink-3">
+                  {req.message}
+                </div>
+              )}
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => decide.mutate({ applicationId: req.id, decision: "rejected" })}
+                  className="h-10 flex-1 rounded-xl bg-cart-bg-elev-2 text-[13px] font-semibold text-cart-ink-3 transition hover:text-white disabled:opacity-50"
+                >
+                  Rechazar
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => decide.mutate({ applicationId: req.id, decision: "approved" })}
+                  className="h-10 flex-1 rounded-xl bg-cart-accent text-[13px] font-semibold text-white shadow-[0_8px_20px_-4px_var(--color-cart-accent-glow-strong)] disabled:opacity-50"
+                >
+                  {busy ? "…" : "Aceptar"}
+                </button>
+              </div>
+            </div>
+          );
+        })}
+        {count === 0 && (
+          <div className="rounded-2xl border border-dashed border-cart-line px-4 py-8 text-center text-[13px] text-cart-ink-3">
+            Aún no hay solicitudes. Comparte tu link para que lleguen.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CopyGlyph() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" className="shrink-0 text-cart-accent">
+      <rect x="6" y="6" width="11" height="11" rx="2.5" stroke="currentColor" strokeWidth="1.6" />
+      <path
+        d="M13 6V4.5A1.5 1.5 0 0 0 11.5 3h-7A1.5 1.5 0 0 0 3 4.5v7A1.5 1.5 0 0 0 4.5 13H6"
+        stroke="currentColor"
+        strokeWidth="1.6"
+      />
+    </svg>
+  );
+}
+
 export function PromotersSection({ slug }: { slug: string }) {
+  const event = useEvent(slug);
+  // Ventas en vivo: el mismo Broadcast del dashboard invalida las queries de
+  // promotores — sin esto la pestaña solo se actualizaba al reenfocar.
+  useRealtimeEventStats(event.data?.event?.id, slug);
   const pool = useOrgPromoters();
   const assignments = useEventPromoters(slug);
   const assign = useAssignPromotersToEvent(slug);
@@ -338,6 +518,9 @@ export function PromotersSection({ slug }: { slug: string }) {
 
   return (
     <div id="promotores" className="flex flex-col gap-8 scroll-mt-24">
+      {/* 0 · Invitar por link de grupo (self-apply + solicitudes) */}
+      <EventInviteLinkCard slug={slug} />
+
       {/* 1 · Configuración para todos */}
       {assigned.length > 0 && (
         <section>
@@ -460,31 +643,6 @@ export function PromotersSection({ slug }: { slug: string }) {
 // herencia hace que los promotores sin valor propio lo tomen.
 // Indicador de auto-guardado: "Se guarda solo" → "Guardando…" → "✓ Guardado".
 // Hace evidente que no hay botón de guardar (es automático).
-function AutoSave({ saving }: { saving: boolean }) {
-  const [justSaved, setJustSaved] = useState(false);
-  const prev = useRef(saving);
-  useEffect(() => {
-    if (prev.current && !saving) {
-      setJustSaved(true);
-      const t = setTimeout(() => setJustSaved(false), 1800);
-      prev.current = saving;
-      return () => clearTimeout(t);
-    }
-    prev.current = saving;
-  }, [saving]);
-  return (
-    <span className="text-[11px] font-medium">
-      {saving ? (
-        <span className="text-cart-ink-3">Guardando…</span>
-      ) : justSaved ? (
-        <span className="text-emerald-300">✓ Guardado</span>
-      ) : (
-        <span className="text-cart-ink-4">Se guarda solo</span>
-      )}
-    </span>
-  );
-}
-
 // Confirmación inline, junto a lo que el organizador acaba de tocar (no arriba,
 // donde no está mirando). flash() la dispara tras cada guardado local.
 function useSavedFlash() {
@@ -526,61 +684,23 @@ function EventSchemeCard({
   onSave: (patch: Partial<EventPromoterScheme>) => void;
   saving: boolean;
 }) {
-  const type: CommissionType = scheme?.commissionType ?? "percentage";
-  const tabs: [CommissionType, string][] = [
-    ["percentage", "Comisión %"],
-    ["tiered", "Hitos"],
-    ["inkind", "Especie"],
-  ];
+  // Esquema "para todos": mismo editor unificado (dos ejes colapsables) + el
+  // cupo default del evento debajo. El % del evento en null hereda de la marca.
+  const brand = useOrgScheme();
   return (
-    <div className="rounded-2xl border border-cart-line bg-cart-bg-elev p-4 lg:p-5">
-      <div className="mb-3 flex items-center justify-between">
-        <div className="inline-flex gap-1 rounded-xl bg-cart-bg-elev-2 p-1">
-        {tabs.map(([t, lbl]) => (
-          <button
-            key={t}
-            type="button"
-            onClick={() => onSave({ commissionType: t })}
-            className={
-              "rounded-lg px-3.5 py-1.5 text-[13px] font-semibold transition " +
-              (type === t ? "bg-cart-accent text-white" : "text-cart-ink-3 hover:text-white")
-            }
-          >
-            {lbl}
-          </button>
-        ))}
-        </div>
-        <AutoSave saving={saving} />
-      </div>
+    <div className="flex flex-col gap-3">
+      <CommissionSchemeEditor
+        variant="page"
+        saving={saving}
+        pct={scheme?.commissionPct ?? null}
+        config={scheme?.commissionConfig}
+        onPctChange={(v) => onSave({ commissionPct: v })}
+        onConfigChange={(cfg) => onSave({ commissionConfig: cfg })}
+        inheritedPct={brand.data?.commissionPct ?? 0}
+        inheritLabel="tu marca"
+      />
 
-      <div className="mt-3">
-        {type === "percentage" && (
-          <PctRow
-            value={scheme?.commissionPct ?? 0}
-            onSave={(v) =>
-              onSave({ commissionType: "percentage", commissionPct: v, commissionConfig: null })
-            }
-          />
-        )}
-        {type === "tiered" && (
-          <TiersEditor
-            config={scheme?.commissionConfig}
-            onSave={(tiers) =>
-              onSave({ commissionType: "tiered", commissionConfig: { tiers } })
-            }
-          />
-        )}
-        {type === "inkind" && (
-          <RewardsEditor
-            config={scheme?.commissionConfig}
-            onSave={(rewards) =>
-              onSave({ commissionType: "inkind", commissionConfig: { rewards } })
-            }
-          />
-        )}
-      </div>
-
-      <div className="mt-4 border-t border-cart-line pt-4">
+      <div className="rounded-2xl border border-cart-line bg-cart-bg-elev px-4 py-3.5 lg:px-5">
         <SchemeCupo
           label="Cada uno vende"
           value={scheme?.defaultQuota ?? null}
@@ -667,125 +787,6 @@ function SchemeCupo({
 }
 
 // Hitos en efectivo del evento: lista editable de (ventas → S/). Guarda al editar.
-function TiersEditor({
-  config,
-  onSave,
-}: {
-  config: CommissionConfig | undefined;
-  onSave: (tiers: CommissionTier[]) => void;
-}) {
-  const initial = config && "tiers" in config ? config.tiers : [];
-  const [tiers, setTiers] = useState<CommissionTier[]>(initial);
-  const commit = (next: CommissionTier[]) => {
-    setTiers(next);
-    onSave(next);
-  };
-  return (
-    <div className="flex flex-col gap-2">
-      {tiers.map((t, i) => (
-        <div key={i} className="flex items-center gap-2 text-[13px]">
-          <input
-            type="number"
-            min={1}
-            value={t.salesCount || ""}
-            onChange={(e) =>
-              setTiers((p) => p.map((x, j) => (j === i ? { ...x, salesCount: Number(e.target.value) || 0 } : x)))
-            }
-            onBlur={() => onSave(tiers)}
-            className="w-16 rounded-lg bg-cart-bg-elev-2 px-2 py-1.5 text-center outline-none"
-          />
-          <span className="text-cart-ink-3">ventas →</span>
-          <span className="text-cart-ink-3">S/</span>
-          <input
-            type="number"
-            min={0}
-            value={t.payoutCents ? t.payoutCents / 100 : ""}
-            onChange={(e) =>
-              setTiers((p) =>
-                p.map((x, j) => (j === i ? { ...x, payoutCents: Math.round((Number(e.target.value) || 0) * 100) } : x)),
-              )
-            }
-            onBlur={() => onSave(tiers)}
-            className="w-20 rounded-lg bg-cart-bg-elev-2 px-2 py-1.5 text-center outline-none"
-          />
-          <button
-            type="button"
-            onClick={() => commit(tiers.filter((_, j) => j !== i))}
-            className="ml-auto text-cart-ink-4 hover:text-rose-300"
-          >
-            ✕
-          </button>
-        </div>
-      ))}
-      <button
-        type="button"
-        onClick={() => commit([...tiers, { salesCount: 0, payoutCents: 0 }])}
-        className="rounded-xl border border-dashed border-cart-line-strong py-2 text-[12.5px] font-medium text-cart-accent"
-      >
-        + Agregar hito
-      </button>
-    </div>
-  );
-}
-
-// Premios en especie del evento: lista de (ventas → premio).
-function RewardsEditor({
-  config,
-  onSave,
-}: {
-  config: CommissionConfig | undefined;
-  onSave: (rewards: CommissionReward[]) => void;
-}) {
-  const initial = config && "rewards" in config ? config.rewards : [];
-  const [rewards, setRewards] = useState<CommissionReward[]>(initial);
-  const commit = (next: CommissionReward[]) => {
-    setRewards(next);
-    onSave(next);
-  };
-  return (
-    <div className="flex flex-col gap-2">
-      {rewards.map((r, i) => (
-        <div key={i} className="flex items-center gap-2 text-[13px]">
-          <input
-            type="number"
-            min={1}
-            value={r.salesCount || ""}
-            onChange={(e) =>
-              setRewards((p) => p.map((x, j) => (j === i ? { ...x, salesCount: Number(e.target.value) || 0 } : x)))
-            }
-            onBlur={() => onSave(rewards)}
-            className="w-16 rounded-lg bg-cart-bg-elev-2 px-2 py-1.5 text-center outline-none"
-          />
-          <span className="text-cart-ink-3">ventas →</span>
-          <input
-            type="text"
-            value={r.label}
-            placeholder="Botella, entrada VIP…"
-            onChange={(e) =>
-              setRewards((p) => p.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))
-            }
-            onBlur={() => onSave(rewards)}
-            className="flex-1 rounded-lg bg-cart-bg-elev-2 px-2.5 py-1.5 outline-none"
-          />
-          <button
-            type="button"
-            onClick={() => commit(rewards.filter((_, j) => j !== i))}
-            className="text-cart-ink-4 hover:text-rose-300"
-          >
-            ✕
-          </button>
-        </div>
-      ))}
-      <button
-        type="button"
-        onClick={() => commit([...rewards, { salesCount: 0, label: "", icon: "🎁" }])}
-        className="rounded-xl border border-dashed border-cart-line-strong py-2 text-[12.5px] font-medium text-cart-accent"
-      >
-        + Agregar premio
-      </button>
-    </div>
-  );
-}
 
 // Fila LIMPIA: nombre + link + copiar/WhatsApp. Los cupos/comisión van como
 // números EFECTIVOS de referencia (un puntito • = personalizado). Tocar la fila
@@ -822,11 +823,7 @@ function AssignmentRow({
   };
   const inactive = !a.active;
   const commissionRef =
-    a.commissionType === "percentage"
-      ? `${a.effectiveCommissionPct}%`
-      : a.commissionType === "tiered"
-        ? "hitos"
-        : "especie";
+    `${a.effectiveCommissionPct}%${(a.effectiveConfig?.milestones.length ?? 0) > 0 ? " + metas" : ""}`;
   const quotaRef = a.effectiveQuota == null ? "sin tope" : String(a.effectiveQuota);
 
   return (
@@ -908,7 +905,6 @@ function RefBit({ custom, children }: { custom: boolean; children: ReactNode }) 
 // propio; nunca aparece la palabra "override". KPIs/ventas viven en otro lado.
 export type PayPatch = {
   commissionPct?: number | null;
-  commissionType?: CommissionType | null;
   commissionConfig?: CommissionConfig | null;
   quota?: number | null;
 };
@@ -929,11 +925,7 @@ export function PersonalizeSheet({
   const [payOpen, setPayOpen] = useState(false);
 
   const paySummary =
-    a.commissionType === "percentage"
-      ? `${a.effectiveCommissionPct}%`
-      : a.commissionType === "tiered"
-        ? "hitos"
-        : "especie";
+    `${a.effectiveCommissionPct}%${(a.effectiveConfig?.milestones.length ?? 0) > 0 ? " + metas" : ""}`;
 
   return (
     <div className="flex flex-col">
@@ -992,7 +984,7 @@ export function PersonalizeSheet({
                 className="overflow-hidden"
               >
                 <div className="pb-4">
-                  <PayEditor assignment={a} onSet={onSet} />
+                  <PayEditor assignment={a} onSet={onSet} saving={saving} />
                 </div>
               </motion.div>
             )}
@@ -1026,99 +1018,37 @@ export function PersonalizeSheet({
 function PayEditor({
   assignment,
   onSet,
+  saving,
 }: {
   assignment: EventPromoterAssignment;
   onSet: (patch: PayPatch) => void;
+  saving: boolean;
 }) {
   const a = assignment;
-  const type = a.ownCommissionType ?? a.commissionType;
-  const [saved, flash] = useSavedFlash();
-  const set = (patch: PayPatch) => {
-    onSet(patch);
-    flash();
-  };
-  const modes: [CommissionType, string][] = [
-    ["percentage", "Comisión %"],
-    ["tiered", "Hitos"],
-    ["inkind", "Especie"],
-  ];
+  // Mismo editor unificado que el evento/marca, en variante drawer (agrega
+  // hitos/premios inline, sin abrir otro drawer encima). Muestra el valor propio
+  // o, si no lo personalizó, el heredado del evento.
   return (
-    <div>
-      <div className="flex items-center gap-2">
-        <div className="inline-flex gap-1 rounded-xl bg-cart-bg-elev-2 p-1">
-          {modes.map(([t, lbl]) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => set({ commissionType: t })}
-              className={
-                "rounded-lg px-3.5 py-1.5 text-[13px] font-semibold transition " +
-                (type === t ? "bg-cart-accent text-white" : "text-cart-ink-3 hover:text-white")
-              }
-            >
-              {lbl}
-            </button>
-          ))}
-        </div>
-        <SavedFlash saved={saved} />
-      </div>
-      <div className="mt-3">
-        {type === "percentage" && (
-          <PctRow
-            value={a.ownCommissionPct ?? a.effectiveCommissionPct}
-            onSave={(v) =>
-              set({ commissionType: "percentage", commissionPct: v, commissionConfig: null })
-            }
-          />
-        )}
-        {type === "tiered" && (
-          <TiersEditor
-            config={a.ownCommissionConfig ?? undefined}
-            onSave={(tiers) => set({ commissionType: "tiered", commissionConfig: { tiers } })}
-          />
-        )}
-        {type === "inkind" && (
-          <RewardsEditor
-            config={a.ownCommissionConfig ?? undefined}
-            onSave={(rewards) => set({ commissionType: "inkind", commissionConfig: { rewards } })}
-          />
-        )}
-      </div>
+    <div className="flex flex-col gap-3">
+      <CommissionSchemeEditor
+        variant="drawer"
+        saving={saving}
+        pct={a.ownCommissionPct}
+        config={a.ownCommissionConfig ?? a.effectiveConfig}
+        onPctChange={(v) => onSet({ commissionPct: v })}
+        onConfigChange={(cfg) => onSet({ commissionConfig: cfg })}
+        inheritedPct={a.inheritedCommissionPct}
+        inheritLabel="el evento"
+      />
       {a.commissionCustom && (
         <button
           type="button"
-          onClick={() => set({ commissionType: null, commissionPct: null, commissionConfig: null })}
-          className="mt-3 rounded-full bg-cart-bg-elev-2 px-3 py-1.5 text-[12.5px] font-semibold text-cart-ink-2 ring-1 ring-cart-line-strong transition hover:text-white"
+          onClick={() => onSet({ commissionPct: null, commissionConfig: null })}
+          className="self-start rounded-full bg-cart-bg-elev-2 px-3 py-1.5 text-[12.5px] font-semibold text-cart-ink-2 ring-1 ring-cart-line-strong transition hover:text-white"
         >
           Usar el del evento
         </button>
       )}
-    </div>
-  );
-}
-
-// Input de % por venta. Guarda al salir del campo o con Enter.
-function PctRow({ value, onSave }: { value: number; onSave: (v: number) => void }) {
-  const [local, setLocal] = useState(String(value));
-  const commit = () => {
-    const n = parseInt(local, 10);
-    if (!isNaN(n) && n >= 0 && n <= 100) onSave(n);
-  };
-  return (
-    <div className="flex items-center gap-2">
-      <input
-        type="number"
-        min={0}
-        max={100}
-        value={local}
-        onChange={(e) => setLocal(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") commit();
-        }}
-        className="w-20 rounded-xl bg-cart-bg-elev-2 px-3 py-2 text-center text-[15px] font-semibold outline-none ring-1 ring-cart-line-strong focus:ring-cart-accent"
-      />
-      <span className="text-[13px] text-cart-ink-3">% por venta</span>
     </div>
   );
 }
@@ -1273,7 +1203,7 @@ function PoolPicker({
     id: string;
     name: string;
     whatsapp: string | null;
-    defaultCommissionPct: number;
+    defaultCommissionPct: number | null;
     profileId: string | null;
   }>;
   busy: boolean;
@@ -1340,7 +1270,7 @@ function PoolPicker({
                 )}
               </div>
               <span className="rounded-full bg-cart-accent-soft px-2 py-1 text-[11px] font-semibold text-cart-accent">
-                {p.defaultCommissionPct}%
+                {p.defaultCommissionPct == null ? "Igual que marca" : `${p.defaultCommissionPct}%`}
               </span>
               <span
                 className={

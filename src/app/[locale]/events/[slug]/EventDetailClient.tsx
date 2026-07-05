@@ -6,6 +6,7 @@ import { Link, useRouter } from "@/i18n/navigation";
 import { UserHeader } from "@/app/[locale]/_home/UserHeader";
 import { useEvent } from "@/lib/events/hooks/useEvents";
 import { useSaveEvent } from "@/lib/identity/hooks/useSaveEvent";
+import { usePromoterDisplayName } from "@/lib/promoters/hooks/usePromoter";
 import { useEventShowcase } from "@/lib/events/hooks/useEventShowcase";
 import { useEventPartners } from "@/lib/events/hooks/useEventPartners";
 import type { ShowcaseEvent, ShowcaseOrg } from "@/server/events/application/GetEventOrgShowcase";
@@ -788,8 +789,11 @@ function GroupCard({
             )}
           </span>
         </div>
-        {/* Contador +/- cuando hay onQtyChange y no está agotado */}
-        {!summary.isAllSoldOut && onQtyChange ? (
+        {/* Contador +/- solo para entradas individuales. Un box NO se cuenta:
+            se reserva por identidad (A/B/C) en el picker, no con un stepper —
+            un "box × 2" no dice CUÁLES dos. Los grupos de box caen al "Ver ›"
+            que abre el picker (onClick del card). */}
+        {!summary.isAllSoldOut && onQtyChange && !summary.isAllBoxes ? (
           <div className="mt-2 flex items-center gap-1.5">
             {qty > 0 ? (
               <>
@@ -1150,6 +1154,9 @@ function DatePill({
 }
 
 function PromoBanner({ promo }: { promo: string }) {
+  // Nombre real del promotor; el código queda como fallback mientras carga.
+  const { data: promoterInfo } = usePromoterDisplayName(promo);
+  const promoterLabel = promoterInfo?.name ?? promo;
   return (
     <div className="mt-5 flex items-center gap-3 rounded-2xl border border-cart-accent/30 bg-cart-accent-soft px-4 py-3">
       <span className="grid size-9 flex-shrink-0 place-items-center rounded-full bg-cart-accent/20 text-cart-accent">
@@ -1168,7 +1175,7 @@ function PromoBanner({ promo }: { promo: string }) {
           Comprando con código de promotor
         </div>
         <div className="truncate text-[11.5px] text-cart-ink-3">
-          Tu compra apoya al promotor que te compartió el link · <span className="font-mono text-cart-ink-2">{promo}</span>
+          Tu compra apoya a <span className="font-medium text-cart-ink-2">{promoterLabel}</span>, que te compartió el link
         </div>
       </div>
     </div>

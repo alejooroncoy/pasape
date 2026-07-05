@@ -25,6 +25,8 @@ export type CreateEventInput = {
   timezone?: string;
   totalCapacity?: number | null;
   overbookPct?: number;
+  /** Tope de entradas por persona (acumulado). null/omitido = sin límite. */
+  maxTicketsPerPerson?: number | null;
   transfersEnabled?: boolean;
   transferDeadlineHours?: number | null;
   transferMaxCount?: number;

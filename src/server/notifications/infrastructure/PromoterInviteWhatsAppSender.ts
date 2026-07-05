@@ -1,24 +1,32 @@
-// Envía invitación al promotor por WhatsApp via Kapso Meta Proxy.
+// Envía la invitación al promotor por WhatsApp. El transporte (Kapso/Meta) lo
+// resuelve el WhatsAppGateway; este sender solo arma el template.
 //
-// === Template requerido (registrado vía Kapso CLI, esperar aprobación Meta) ===
+// === Template requerido (registrar/aprobar en el dashboard del proveedor) ===
 //
-//   Nombre:   promoter_invite_v4    (override KAPSO_WA_PROMOTER_TEMPLATE_NAME)
-//   Idioma:   es                    (override KAPSO_WA_PROMOTER_TEMPLATE_LANG)
-//   Tipo:     UTILITY
+//   Nombre:   promoter_invite_v15   (override WA_PROMOTER_TEMPLATE_NAME)
+//   Idioma:   es                    (override WA_PROMOTER_TEMPLATE_LANG)
+//   Tipo:     UTILITY  ·  parameter_format: NAMED
 //
 //   BODY:
-//     "Hola {{promoter_name}}, {{org_name}} te agregó como promotor de
-//      {{event_title}}. Activa tu acceso en {{claim_url}} y abre tu panel."
+//     "Hola {{promoter_name}} 👋\n\nLa marca {{org_name}} te sumó como promotor
+//      para el evento {{event_title}}. 🎉\n\nToca el botón para activar tu
+//      acceso y abrir tu panel."
 //   FOOTER: "Pasape"
+//   BOTÓN URL: "Activar mi acceso" → https://pasape.lat/es/c/{{1}}  ({{1}} = token)
 //
-// Notas Meta:
+// Notas Meta (histórico de rechazos, ya resuelto):
 //   · v1 (con "Ganás X% comisión") fue recategorizado a MARKETING y rechazado.
-//   · v2, v3 con botón URL: Meta rechaza botones URL salvo dominios verificados;
-//     pasape.lat aún no está enlazado al WABA. Por eso pasamos la URL completa
-//     inline como variable {{claim_url}} — mismo patrón que ticket_delivery.
+//   · v2..v14 salían INVALID_FORMAT por 3 motivos de FORMATO (no de contenido):
+//     parameter_format POSITIONAL con variables nombradas, variables adosadas
+//     (sin texto entre ellas) y variable al final del body. v15 los corrige y
+//     usa botón URL (los botones a pasape.lat sí se aprueban en este WABA).
 //
 // Magic-link sin OTP: el token en sí es la prueba de posesión del canal
-// WhatsApp (el organizador tipeó el número, lo validamos al delivery).
+// WhatsApp (el organizador tipeó el número, lo validamos al delivery). El botón
+// del template ya trae la base https://pasape.lat/es/c/ — solo pasamos el token.
+
+import { whatsAppGateway } from "./whatsapp";
+import { bodyComponent, urlButtonComponent } from "./whatsapp/components";
 
 type PromoterInviteInput = {
   to: string; // phone E.164 (con o sin "+")
@@ -28,86 +36,39 @@ type PromoterInviteInput = {
   claimToken: string;
 };
 
-const KAPSO_BASE = "https://api.kapso.ai/meta/whatsapp/v24.0";
-const DEFAULT_CLAIM_BASE =
-  process.env.NEXT_PUBLIC_APP_URL?.replace(/\/+$/, "") ?? "https://app.pasape.lat";
-
-const formatPhone = (raw: string): string => {
-  let p = raw.trim();
-  if (p.startsWith("whatsapp:")) p = p.slice("whatsapp:".length);
-  if (p.startsWith("+")) p = p.slice(1);
-  return p.replace(/\D/g, "");
-};
-
 export class PromoterInviteWhatsAppSender {
-  /** Devuelve true si se envió. False = no-op (envs faltantes o error). */
+  /** Devuelve true si se envió. False = no-op (proveedor sin configurar o error). */
   async send(input: PromoterInviteInput): Promise<boolean> {
-    const apiKey = process.env.KAPSO_API_KEY;
-    const phoneNumberId =
-      process.env.KAPSO_WA_PHONE_NUMBER_ID ?? process.env.KAPSO_WA_NUMBER_ID;
+    const gateway = whatsAppGateway();
     const templateName =
-      process.env.KAPSO_WA_PROMOTER_TEMPLATE_NAME ?? "promoter_invite_v4";
+      process.env.WA_PROMOTER_TEMPLATE_NAME ??
+      process.env.KAPSO_WA_PROMOTER_TEMPLATE_NAME ??
+      "promoter_invite_v15";
     const templateLang =
-      process.env.KAPSO_WA_PROMOTER_TEMPLATE_LANG ?? "es";
+      process.env.WA_PROMOTER_TEMPLATE_LANG ??
+      process.env.KAPSO_WA_PROMOTER_TEMPLATE_LANG ??
+      "es";
 
-    if (!apiKey || !phoneNumberId) {
-      console.warn(
-        "[PromoterInviteWhatsAppSender] Faltan KAPSO_API_KEY / KAPSO_WA_PHONE_NUMBER_ID — skip",
-      );
+    if (!gateway.configured()) {
+      console.warn("[PromoterInviteWhatsAppSender] proveedor de WhatsApp sin configurar — skip");
       return false;
     }
 
-    const claimUrl = `${DEFAULT_CLAIM_BASE}/es/c/${input.claimToken}`;
-
     try {
-      const res = await fetch(`${KAPSO_BASE}/${phoneNumberId}/messages`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-API-Key": apiKey,
-        },
-        body: JSON.stringify({
-          messaging_product: "whatsapp",
-          recipient_type: "individual",
-          to: formatPhone(input.to),
-          type: "template",
-          template: {
-            name: templateName,
-            language: { code: templateLang },
-            components: [
-              {
-                type: "body",
-                parameters: [
-                  {
-                    type: "text",
-                    parameter_name: "promoter_name",
-                    text: input.promoterName.trim() || "Promotor",
-                  },
-                  {
-                    type: "text",
-                    parameter_name: "org_name",
-                    text: input.orgName.trim() || "Tu marca",
-                  },
-                  {
-                    type: "text",
-                    parameter_name: "event_title",
-                    text: input.eventTitle.trim() || "tu evento",
-                  },
-                  {
-                    type: "text",
-                    parameter_name: "claim_url",
-                    text: claimUrl,
-                  },
-                ],
-              },
-            ],
-          },
-        }),
+      await gateway.sendTemplate({
+        to: input.to,
+        templateName,
+        languageCode: templateLang,
+        components: [
+          bodyComponent({
+            promoter_name: input.promoterName.trim() || "Promotor",
+            org_name: input.orgName.trim() || "Tu marca",
+            event_title: input.eventTitle.trim() || "tu evento",
+          }),
+          // El botón del template apunta a https://pasape.lat/es/c/{{1}} → solo el token.
+          urlButtonComponent(input.claimToken),
+        ],
       });
-      if (!res.ok) {
-        const errText = await res.text().catch(() => "");
-        throw new Error(`kapso ${res.status}: ${errText.slice(0, 200)}`);
-      }
       return true;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

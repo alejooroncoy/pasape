@@ -9,10 +9,13 @@ type Props = {
   amount: number;
   initialPhone?: string;
   onPaid: () => void;
+  // MP dejó el pago en revisión (in_process): el padre muestra la pantalla de
+  // "pago en revisión" con la opción de reintentar o esperar.
+  onReview?: () => void;
   onError?: (message: string) => void;
 };
 
-export function YapeForm({ orderId, amount, initialPhone = "", onPaid, onError }: Props) {
+export function YapeForm({ orderId, amount, initialPhone = "", onPaid, onReview, onError }: Props) {
   const mp = useMpSdk(onError);
   const [phone, setPhone] = useState(initialPhone.replace(/\D/g, "").slice(0, 9));
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
@@ -64,6 +67,9 @@ export function YapeForm({ orderId, amount, initialPhone = "", onPaid, onError }
           orderId,
           token: tokenResp.id,
           phoneNumber: phoneDigits,
+          // Device fingerprint que el SDK v2 crea al cargar (antifraude +
+          // ítem "SDK de frontend" del checklist cuando la muestra es Yape).
+          deviceId: typeof window !== "undefined" ? window.MP_DEVICE_SESSION_ID ?? null : null,
         }),
       });
       // El backend usa el helper json() → respuesta `{data: ...}` en éxito o
@@ -84,8 +90,13 @@ export function YapeForm({ orderId, amount, initialPhone = "", onPaid, onError }
         onError?.("empty_response");
         return;
       }
-      if (value.status === "approved" || value.status === "in_process") {
+      if (value.status === "approved") {
         onPaid();
+      } else if (value.status === "in_process") {
+        // Yape casi siempre resuelve al instante, pero si MP lo deja en revisión
+        // no mandamos a "procesando" (caería en error a los 60s): el padre ofrece
+        // reintentar o esperar.
+        (onReview ?? onPaid)();
       } else {
         setLocalError(humanizeYapeError(value.message ?? "rejected"));
         onError?.(value.message ?? "rejected");

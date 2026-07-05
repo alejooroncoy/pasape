@@ -10,11 +10,22 @@ import type {
   PromoterHomeData,
   PromoterLink,
 } from "@/server/promoters/domain/Promoter";
+import type { CommissionConfig } from "@/server/promoters/domain/OrgPromoter";
 
 export const useMyPromoterLinks = () =>
   useQuery({
     queryKey: ["promoters", "links"],
     queryFn: () => api.get<PromoterLink[]>("/api/promoters/links"),
+  });
+
+/** Nombre público del promotor detrás de un código (chip del checkout / banner del evento). */
+export const usePromoterDisplayName = (code: string | null) =>
+  useQuery({
+    queryKey: ["promoters", "display-name", code],
+    queryFn: () => api.get<{ name: string }>(`/api/r/${encodeURIComponent(code!)}/name`),
+    enabled: !!code,
+    staleTime: 5 * 60_000,
+    retry: false,
   });
 
 export const usePromoterHome = (slug: string) =>
@@ -54,8 +65,9 @@ export const useResolveInvite = (token: string) =>
         eventId: string;
         eventSlug: string;
         eventTitle: string;
-        commissionPct: number;
         orgName: string;
+        commissionPct: number;
+        commissionConfig: CommissionConfig;
       }>(`/api/promoters/invite/${token}`),
     enabled: !!token,
   });

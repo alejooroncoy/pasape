@@ -14,10 +14,14 @@ import { useBuyTickets, useOrderQuote } from "@/lib/tickets/hooks/useTickets";
 import type { OrderQuote } from "@/server/tickets/domain/Ticket";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { useDniLookup } from "@/lib/identity/hooks/useDniLookup";
+import { usePromoterDisplayName } from "@/lib/promoters/hooks/usePromoter";
 import { formatMoney, formatPrice } from "@/lib/_shared/format";
 import { Price } from "@/components/ui/Price";
 import { CardForm } from "@/components/payments/CardForm";
 import { YapeForm } from "@/components/payments/YapeForm";
+import { PhoneField } from "@/components/design/PhoneField";
+import { parseE164 } from "@/lib/phone/countries";
+import { isValidDocument } from "@/lib/identity/document";
 import { PresaleCountdown, shouldCountdown } from "@/components/ui/PresaleCountdown";
 import type { TicketType } from "@/server/events/domain/Event";
 import {
@@ -44,7 +48,14 @@ const BUY_ERRORS: Record<string, string> = {
   promoter_quota_exceeded: "El promotor ya agotó su cuota de entradas. Ingresa directo al evento.",
   self_purchase_blocked: "No puedes comprar con tu propio código de promotor.",
 };
-const buyErrorMsg = (raw: string) => BUY_ERRORS[raw] ?? raw;
+const buyErrorMsg = (raw: string, maxPerPerson?: number | null) => {
+  if (raw === "max_per_person_exceeded") {
+    return maxPerPerson
+      ? `Alcanzaste el máximo de ${maxPerPerson} ${maxPerPerson === 1 ? "entrada" : "entradas"} por persona para este evento.`
+      : "Alcanzaste el máximo de entradas por persona para este evento.";
+  }
+  return BUY_ERRORS[raw] ?? raw;
+};
 
 export default function BuyFlowPage(props: Props) {
   return (
@@ -82,6 +93,9 @@ function BuyFlowInner({ params }: Props) {
   const [guestName, setGuestName] = useState("");
   const [guestEmail, setGuestEmail] = useState("");
   const [guestDni, setGuestDni] = useState("");
+  // Extranjero: no tiene DNI peruano → usa pasaporte/documento (alfanumérico,
+  // sin RENIEC). El tipo para Mercado Pago se deduce del formato en el server.
+  const [isForeigner, setIsForeigner] = useState(false);
   const [guestPhone, setGuestPhone] = useState("");
   const nameTouchedRef = useRef(false);
   const { lookup: dniLookup, pending: dniPending } = useDniLookup();
@@ -105,7 +119,8 @@ function BuyFlowInner({ params }: Props) {
   }, [me.data?.user]);
 
   useEffect(() => {
-    if (guestDni.length !== 8) {
+    // Pasaporte extranjero: no hay RENIEC (es un padrón peruano) → sin lookup.
+    if (isForeigner || guestDni.length !== 8) {
       setDniHint("idle");
       return;
     }
@@ -119,7 +134,7 @@ function BuyFlowInner({ params }: Props) {
       if (!nameTouchedRef.current) setGuestName(res.fullName);
     }, 600);
     return () => clearTimeout(t);
-  }, [guestDni, dniLookup]);
+  }, [guestDni, dniLookup, isForeigner]);
 
   useEffect(() => {
     const key = `pasape:promo:${slug}`;
@@ -317,13 +332,15 @@ function BuyFlowInner({ params }: Props) {
   // 2 pasos (pedido → datos) y se omite todo el lenguaje/paso de checkout.
   const isFreeOrder = buyerSubtotal === 0 && totalItems > 0;
   const emailOk = /.+@.+\..+/.test(guestEmail.trim());
-  const phoneOk = guestPhone.replace(/\D/g, "").length === 9;
-  // El portero valida por DNI — es obligatorio también para logueados. La
-  // diferencia es que a ellos les llega pre-llenado desde su cuenta.
-  const guestValid =
-    guestName.trim().length >= 2 &&
-    guestDni.trim().length === 8 &&
-    phoneOk;
+  // guestPhone ya es E.164 (país + número) del PhoneField. Perú exige 9 dígitos
+  // nacionales; extranjero, al menos 6 (longitudes varían por país).
+  const phoneNational = parseE164(guestPhone).national;
+  const phoneIsPeru = (parseE164(guestPhone).country?.code ?? "PE") === "PE";
+  const phoneOk = phoneIsPeru ? phoneNational.length === 9 : phoneNational.length >= 6;
+  // El portero valida por documento. Regla compartida con el backend: peruano =
+  // 8 dígitos (con RENIEC); extranjero = pasaporte/documento alfanumérico, sin RENIEC.
+  const docValid = isValidDocument(guestDni, isForeigner);
+  const guestValid = guestName.trim().length >= 2 && docValid && phoneOk;
   const orderValid = totalItems > 0 && guestValid;
 
   if (!data) return <PageLoader />;
@@ -334,7 +351,10 @@ function BuyFlowInner({ params }: Props) {
         email: guestEmail.trim() || null,
         fullName: guestName.trim(),
         dni: guestDni.trim(),
-        phone: guestPhone.replace(/\D/g, "") || null,
+        // E.164 con país (fuente de verdad del contacto y del origen de la venta).
+        phone: guestPhone || null,
+        // El backend valida el documento según esto (8 díg peruano vs laxo extranjero).
+        isForeigner,
       };
       const res = await buy.mutateAsync({
         eventId: data.event.id,
@@ -400,7 +420,7 @@ function BuyFlowInner({ params }: Props) {
             guestEmail: guestEmail.trim(),
             guestName: guestName.trim(),
             guestDni: guestDni.trim(),
-            guestPhone: guestPhone.replace(/\D/g, ""),
+            guestPhone, // E.164; el PhoneField lo re-parsea al restaurar.
           }),
         );
       } catch {}
@@ -512,15 +532,27 @@ function BuyFlowInner({ params }: Props) {
           {/* Main */}
           <main className="pt-6 lg:pb-12">
             {phase === "pick" ? (
-              <PickPhase ticketTypes={data.ticketTypes} qty={qty} setQty={setQty} />
+              <PickPhase
+                ticketTypes={data.ticketTypes}
+                qty={qty}
+                setQty={setQty}
+                maxTicketsPerPerson={data.event.maxTicketsPerPerson}
+              />
             ) : phase === "data" ? (
               <DataPhase
                 isLogged={isLogged}
                 userIdent={me.data?.user?.email ?? me.data?.user?.phone ?? null}
+                isForeigner={isForeigner}
+                setIsForeigner={setIsForeigner}
                 guestDni={guestDni}
                 setGuestDni={(v) => {
                   nameTouchedRef.current = false;
-                  setGuestDni(v.replace(/\D/g, "").slice(0, 8));
+                  // Extranjero: alfanumérico (pasaporte). Peruano: solo 8 dígitos.
+                  setGuestDni(
+                    isForeigner
+                      ? v.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 15)
+                      : v.replace(/\D/g, "").slice(0, 8),
+                  );
                 }}
                 guestName={guestName}
                 setGuestName={(v) => {
@@ -543,6 +575,7 @@ function BuyFlowInner({ params }: Props) {
                   payMethod={payMethod}
                   setPayMethod={setPayMethod}
                   orderId={orderId}
+                onExpired={() => setReservationExpired(true)}
                 totalCents={displayTotal}
                 isLogged={isLogged}
                 userPhone={me.data?.user?.phone ?? ""}
@@ -600,7 +633,7 @@ function BuyFlowInner({ params }: Props) {
               )}
               {buy.error && (
                 <p className="mt-3 text-center text-[12px] text-rose-300">
-                  {buyErrorMsg((buy.error as Error).message)}
+                  {buyErrorMsg((buy.error as Error).message, data.event.maxTicketsPerPerson)}
                 </p>
               )}
             </div>
@@ -643,7 +676,7 @@ function BuyFlowInner({ params }: Props) {
           <div className="mx-auto w-full max-w-[640px] px-5 pt-3">
             {buy.error && (
               <p className="mb-2 text-center text-[12px] text-rose-300">
-                {buyErrorMsg((buy.error as Error).message)}
+                {buyErrorMsg((buy.error as Error).message, data.event.maxTicketsPerPerson)}
               </p>
             )}
             <button
@@ -752,11 +785,24 @@ function PickPhase({
   ticketTypes,
   qty,
   setQty,
+  maxTicketsPerPerson,
 }: {
   ticketTypes: TicketType[];
   qty: Record<string, number>;
   setQty: (next: Record<string, number>) => void;
+  /** Tope de entradas individuales por persona (acumulado). null = sin límite. */
+  maxTicketsPerPerson: number | null;
 }) {
+  // Cuántas entradas individuales lleva ya el carrito — los boxes no cuentan
+  // contra el tope por persona (se venden enteros). Con esto acotamos cada
+  // stepper para que la suma no pase el máximo del organizador; el backend igual
+  // lo hace cumplir (incluye compras previas por DNI, que acá no vemos).
+  const admissionSelected = ticketTypes.reduce(
+    (a, tt) => a + (tt.kind === "box" ? 0 : (qty[tt.id] ?? 0)),
+    0,
+  );
+  const capLeft =
+    maxTicketsPerPerson == null ? null : Math.max(0, maxTicketsPerPerson - admissionSelected);
   // Entradas normales: cada tipo su card (su nombre las diferencia). Boxes
   // ("espacios"): agrupados por unit_noun en una grilla. Sin tabs de zona.
   const groups = useMemo<TicketGroup[]>(() => {
@@ -794,6 +840,7 @@ function PickPhase({
                       key={tt.id}
                       tt={tt}
                       value={qty[tt.id] ?? 0}
+                      capLeft={capLeft}
                       onChange={(v) => setQty({ ...qty, [tt.id]: v })}
                     />
                   ))
@@ -928,6 +975,8 @@ function Avatar({
 function DataPhase({
   isLogged,
   userIdent,
+  isForeigner,
+  setIsForeigner,
   guestDni,
   setGuestDni,
   guestName,
@@ -941,6 +990,8 @@ function DataPhase({
 }: {
   isLogged: boolean;
   userIdent: string | null;
+  isForeigner: boolean;
+  setIsForeigner: (v: boolean) => void;
   guestDni: string;
   setGuestDni: (v: string) => void;
   guestName: string;
@@ -974,18 +1025,29 @@ function DataPhase({
               </span>
             </div>
           )}
+          <label className="flex cursor-pointer items-center gap-2 text-[12.5px] text-cart-ink-2">
+            <input
+              type="checkbox"
+              checked={isForeigner}
+              onChange={(e) => setIsForeigner(e.target.checked)}
+              className="h-4 w-4 accent-cart-accent"
+            />
+            Soy extranjero (no tengo DNI)
+          </label>
           <Field
-            label="DNI"
+            label={isForeigner ? "Pasaporte / documento" : "DNI"}
             value={guestDni}
             onChange={setGuestDni}
-            placeholder="71234567"
+            placeholder={isForeigner ? "AB123456" : "71234567"}
             mono
             hint={
-              dniHint === "not_found"
-                ? "No te encontramos en RENIEC — escribe tu nombre abajo."
-                : isLogged && guestDni
-                  ? "Lo usa el portero para validar tu entrada."
-                  : "Lo buscamos en RENIEC y completamos tu nombre."
+              isForeigner
+                ? "Con lo que te identificas en la puerta. Escribe tu nombre abajo."
+                : dniHint === "not_found"
+                  ? "No te encontramos en RENIEC — escribe tu nombre abajo."
+                  : isLogged && guestDni
+                    ? "Lo usa el portero para validar tu entrada."
+                    : "Lo buscamos en RENIEC y completamos tu nombre."
             }
           />
           <Field
@@ -995,14 +1057,19 @@ function DataPhase({
             placeholder={dniPending ? "Buscando en RENIEC…" : "Juan Pérez García"}
             disabled={dniPending}
           />
-          <Field
-            label="WhatsApp"
-            value={guestPhone}
-            onChange={setGuestPhone}
-            placeholder="987 654 321"
-            mono
-            hint="Tu QR llega por aquí."
-          />
+          <label className="block">
+            <span className="text-[11.5px] font-semibold uppercase tracking-[0.12em] text-cart-ink-3">
+              WhatsApp
+            </span>
+            <div className="mt-1.5">
+              {/* Selector de país (default Perú): el comprador puede ser
+                  extranjero aunque el evento sea en Perú. Guarda E.164. */}
+              <PhoneField value={guestPhone} onChange={setGuestPhone} />
+            </div>
+            <span className="mt-1.5 block text-[11.5px] text-cart-ink-4">
+              Tu QR llega por aquí.
+            </span>
+          </label>
           <Field
             label="Email (opcional)"
             type="email"
@@ -1252,10 +1319,13 @@ function tileLabel(tt: TicketType): string {
 function TicketCard({
   tt,
   value,
+  capLeft,
   onChange,
 }: {
   tt: TicketType;
   value: number;
+  /** Entradas que aún puede sumar el carrito por el tope por persona. null = sin tope. */
+  capLeft?: number | null;
   onChange: (v: number) => void;
 }) {
   const status = ticketStatus(tt);
@@ -1263,7 +1333,16 @@ function TicketCard({
   const expired = status.kind === "expired";
   const unavailable = soldOut || expired;
   const isBox = tt.kind === "box";
-  const remaining = status.kind === "available" ? status.remaining : 0;
+  const stockRemaining = status.kind === "available" ? status.remaining : 0;
+  // El tope por persona limita el total de entradas individuales del carrito.
+  // `capLeft` ya descuenta lo elegido en otras cards; le sumamos el valor de
+  // ESTA card para obtener su techo propio. Los boxes no tienen tope.
+  const remaining =
+    capLeft == null || isBox
+      ? stockRemaining
+      : Math.min(stockRemaining, value + capLeft);
+  // El tope (no el stock) es lo que frena al comprador en esta card.
+  const cappedByLimit = capLeft != null && !isBox && remaining < stockRemaining;
   const selected = value > 0;
   const ap = activePricing(tt);
   // Solo aplica a entradas (no box); stockTotal() resuelve el cupo correcto.
@@ -1358,6 +1437,11 @@ function TicketCard({
           />
         )}
       </div>
+      {cappedByLimit && value >= remaining && remaining > 0 && (
+        <p className="mt-2 text-right text-[11px] text-cart-ink-3">
+          Máximo por persona alcanzado
+        </p>
+      )}
     </div>
   );
 }
@@ -1424,11 +1508,16 @@ function QtyControl({
     );
   }
   if (value === 0) {
+    // max < 1 con la card disponible = el tope por persona ya se llenó en otras
+    // entradas del carrito. "Agregar" salta 0→1 sin pasar por el stepper, así que
+    // hay que frenarlo acá o el comprador se pasaría del tope.
+    const noAllowance = max < 1;
     return (
       <button
         type="button"
         onClick={() => onChange(1)}
-        className="rounded-full bg-white px-4 py-1.5 text-[13px] font-semibold text-cart-bg transition hover:brightness-95"
+        disabled={noAllowance}
+        className="rounded-full bg-white px-4 py-1.5 text-[13px] font-semibold text-cart-bg transition hover:brightness-95 disabled:cursor-not-allowed disabled:bg-cart-bg-elev-2 disabled:text-cart-ink-3"
       >
         Agregar
       </button>
@@ -1518,6 +1607,7 @@ function PayPhase({
   guestDni,
   emailOk,
   onPaid,
+  onExpired,
 }: {
   payMethod: "yape" | "mp";
   setPayMethod: (m: "yape" | "mp") => void;
@@ -1534,9 +1624,21 @@ function PayPhase({
   guestDni: string;
   emailOk: boolean;
   onPaid: () => void;
+  onExpired: () => void;
 }) {
+  // El pago quedó en revisión (in_process): mostramos la pantalla de reintento.
+  const [review, setReview] = useState(false);
   if (!orderId) {
     return <p className="py-8 text-center text-[13px] text-cart-ink-3">Preparando el checkout…</p>;
+  }
+  if (review) {
+    return (
+      <PaymentReviewScreen
+        orderId={orderId}
+        onRetry={() => setReview(false)}
+        onPaid={onPaid}
+      />
+    );
   }
   return (
     <div className="flex flex-col gap-5">
@@ -1605,8 +1707,9 @@ function PayPhase({
           <YapeForm
             orderId={orderId}
             amount={totalCents / 100}
-            initialPhone={isLogged ? userPhone : guestPhone}
+            initialPhone={parseE164(isLogged ? userPhone : guestPhone).national}
             onPaid={onPaid}
+            onReview={() => setReview(true)}
             onError={(msg) => console.warn("yape error:", msg)}
           />
         ) : !isLogged && !emailOk ? (
@@ -1633,13 +1736,131 @@ function PayPhase({
             initialDni={isLogged ? "" : guestDni}
             initialEmail={isLogged ? userEmail : guestEmail}
             onPaid={onPaid}
+            onReview={() => setReview(true)}
             onError={(msg) => console.warn("card error:", msg)}
+            onExpired={onExpired}
           />
         )}
       </div>
 
       <p className="mt-2 text-center text-[12px] text-cart-ink-4">
         Tu QR llega apenas confirmemos el pago.
+      </p>
+    </div>
+  );
+}
+
+// Pago en revisión (in_process): MP no aprobó al instante. Guardamos el asiento
+// y le damos al comprador dos salidas — reintentar con otro medio (cancela el
+// pago anterior en el backend antes de cobrar de nuevo) o esperar la confirmación.
+function PaymentReviewScreen({
+  orderId,
+  onRetry,
+  onPaid,
+}: {
+  orderId: string;
+  onRetry: () => void;
+  onPaid: () => void;
+}) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [waited, setWaited] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const retry = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/payments/retry", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId }),
+      });
+      const body = (await res.json()) as { data?: { status: string }; error?: string };
+      if (!res.ok || body.error) {
+        setError("No pudimos preparar el reintento. Vuelve a intentar.");
+        return;
+      }
+      // El pago anterior ya se había confirmado: no hay que cobrar de nuevo.
+      if (body.data?.status === "already_paid") {
+        onPaid();
+        return;
+      }
+      // Listo para cobrar con otro medio: volvemos a la selección de método.
+      onRetry();
+    } catch {
+      setError("Falla de red. Vuelve a intentar.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (waited) {
+    return (
+      <div className="rounded-2xl border border-cart-line bg-cart-bg-elev p-6 text-center">
+        <span className="mx-auto grid size-11 place-items-center rounded-full bg-cart-accent-soft text-cart-accent">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </span>
+        <div className="mt-4 text-[17px] font-semibold tracking-[-0.01em]">Te avisaremos apenas se confirme</div>
+        <p className="mt-1.5 text-[13px] leading-relaxed text-cart-ink-3">
+          Tu banco está revisando el pago. Cuando lo apruebe, te llega tu QR por correo y WhatsApp,
+          y aparece en Mis entradas.
+        </p>
+        <button
+          type="button"
+          onClick={() => router.push("/tickets")}
+          className="mt-5 w-full rounded-full bg-cart-accent py-3.5 text-[14.5px] font-semibold text-cart-bg shadow-[0_8px_24px_-6px_var(--color-cart-accent-glow)] transition hover:brightness-110"
+        >
+          Ir a Mis entradas
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl border border-cart-line bg-cart-bg-elev p-6">
+      <div className="flex items-start gap-3">
+        <span className="mt-0.5 grid size-9 shrink-0 place-items-center rounded-full bg-amber-400/15 text-amber-300">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8" />
+            <path d="M12 7v5l3 2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </span>
+        <div className="min-w-0">
+          <div className="text-[16px] font-semibold tracking-[-0.01em]">Tu pago quedó en revisión</div>
+          <p className="mt-1 text-[12.5px] leading-relaxed text-cart-ink-3">
+            Tu banco no lo confirmó al instante (a veces pasa). Ya guardamos tu lugar. ¿Qué prefieres?
+          </p>
+        </div>
+      </div>
+
+      {error && (
+        <div className="mt-4 rounded-xl border border-rose-500/40 bg-rose-500/10 px-3.5 py-2.5 text-[12.5px] text-rose-200">
+          {error}
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={() => void retry()}
+        disabled={busy}
+        className="mt-5 w-full rounded-full bg-cart-accent py-3.5 text-[14.5px] font-semibold text-cart-bg shadow-[0_8px_24px_-6px_var(--color-cart-accent-glow)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {busy ? "Preparando…" : "Pagar con otra tarjeta o Yape"}
+      </button>
+      <button
+        type="button"
+        onClick={() => setWaited(true)}
+        disabled={busy}
+        className="mt-3 w-full rounded-full border border-cart-line bg-cart-bg-elev-2 py-3.5 text-[14px] font-semibold text-cart-ink-2 transition hover:border-cart-line-strong hover:text-white disabled:opacity-60"
+      >
+        Esperar la confirmación
+      </button>
+
+      <p className="mt-4 text-center text-[11px] text-cart-ink-4">
+        No se te cobró todavía · tu banco solo retuvo el monto
       </p>
     </div>
   );
@@ -1677,6 +1898,9 @@ function OrderSummary({
   showFee: boolean;
   promo: string | null;
 }) {
+  // Nombre real del promotor; el código queda como fallback mientras carga.
+  const { data: promoterInfo } = usePromoterDisplayName(promo);
+  const promoterLabel = promoterInfo?.name ?? promo;
   const lines = ticketTypes.filter((tt) => (qty[tt.id] ?? 0) > 0);
   const startsAt = new Date(event.startsAt);
   const dateLabel = new Intl.DateTimeFormat("es-PE", {
@@ -1726,14 +1950,6 @@ function OrderSummary({
               </span>
             </div>
           ))}
-          {showFee && (
-            <div className="flex items-baseline justify-between">
-              <span className="text-[12.5px] text-cart-ink-3">Servicio</span>
-              <span className="text-[13px] tabular-nums text-cart-ink-2">
-                {formatMoney(fee)}
-              </span>
-            </div>
-          )}
         </div>
       )}
 
@@ -1748,6 +1964,14 @@ function OrderSummary({
         </span>
       </div>
 
+      {/* Las líneas ya son precio "todo incluido" (buyerPriceCents): la comisión
+          se aclara como nota, no como fila que parezca sumarse otra vez. */}
+      {showFee && fee > 0 && (
+        <p className="mt-1 text-right text-[11px] text-cart-ink-4">
+          Incluye {formatMoney(fee)} de servicio
+        </p>
+      )}
+
       {promo && (
         <div className="mt-4 flex items-center gap-2 rounded-xl border border-cart-accent/30 bg-cart-accent-soft px-3 py-2">
           <span className="grid size-5 place-items-center rounded-full bg-cart-accent/30 text-cart-accent">
@@ -1756,7 +1980,7 @@ function OrderSummary({
             </svg>
           </span>
           <span className="truncate text-[11.5px] text-cart-ink-2">
-            Promotor: <span className="font-mono text-white">{promo}</span>
+            Promotor: <span className="font-medium text-white">{promoterLabel}</span>
           </span>
         </div>
       )}

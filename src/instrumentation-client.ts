@@ -6,7 +6,8 @@ const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN;
 
 Sentry.init({
   dsn,
-  enabled: !!dsn,
+  // No enviar desde local (`next dev`): consume la cuota de producción.
+  enabled: !!dsn && process.env.NODE_ENV !== "development",
   // PII apagado: no enviar IP ni datos del navegador que identifiquen al usuario.
   sendDefaultPii: false,
   // Separa prod/preview/dev en Sentry. En el cliente solo hay vars NEXT_PUBLIC_*;

@@ -62,6 +62,13 @@ export type Event = {
   /** Moneda del evento (ISO 4217). Default 'PEN'; preparado para multi-mercado. */
   currency: string;
   capacity: CapacityPolicy;
+  /**
+   * Tope de entradas individuales que UNA persona puede comprar en total para
+   * este evento (acumulado entre compras, identificado por DNI). null = sin
+   * límite. Los boxes se venden enteros y no cuentan contra este tope. El
+   * backend lo hace cumplir en la compra; el frontend solo lo muestra/limita.
+   */
+  maxTicketsPerPerson: number | null;
   transferPolicy: TransferPolicy;
   /** Quién absorbe la comisión de Pasape: el comprador (aparte, default) o
    *  el organizador (ya incluida en el precio que puso). */

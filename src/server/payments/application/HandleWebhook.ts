@@ -5,10 +5,10 @@ import { after } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { err, ok, type Result } from "@/server/_shared/result";
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
-import { supabaseCommissionTierRepository } from "@/server/promoters/tiers/infrastructure/repositories/SupabaseCommissionTierRepository";
 import { dispatchTicketDelivery } from "@/server/notifications/application/DispatchTicketDelivery";
+import { dispatchPaymentReview } from "@/server/notifications/application/DispatchPaymentReview";
 import { supabaseBoxRepository } from "@/server/boxes/infrastructure/repositories/SupabaseBoxRepository";
-import { mpClient, mpWebhookSecret } from "../infrastructure/MercadoPagoClient";
+import { mpClient, mpWebhookSecret, refundMpPayment } from "../infrastructure/MercadoPagoClient";
 import { Money } from "@/lib/_shared/money";
 
 // Why: en prod, si MP_ACCESS_TOKEN no arranca con "APP_USR-" (o sea, parece
@@ -183,6 +183,36 @@ export const handleMpWebhook = async (
   let orderRow: { id: string; status: string; promoter_link_id: string | null } | null = null;
 
   if (mapped === "paid") {
+    // Backstop anti-doble-cobro: si la orden ya se pagó con OTRO pago (el
+    // comprador reintentó con otra tarjeta/Yape y este pago viejo se aprobó
+    // igual), reembolsamos ESTE pago y no tocamos la orden. El guard `!== dataId`
+    // deja pasar el reintento del webhook del mismo pago (idempotente vía settle).
+    const { data: existingPaid } = await db
+      .from("orders")
+      .select("status, mp_payment_id")
+      .eq("id", orderId)
+      .maybeSingle<{ status: string; mp_payment_id: string | null }>();
+    if (
+      existingPaid?.status === "paid" &&
+      existingPaid.mp_payment_id &&
+      existingPaid.mp_payment_id !== dataId
+    ) {
+      try {
+        await refundMpPayment(dataId);
+        Sentry.captureMessage(
+          `duplicate_payment_refunded: orden ${orderId} ya pagada por ${existingPaid.mp_payment_id}, reembolsado ${dataId}`,
+          "info",
+        );
+      } catch (e) {
+        // Si el reembolso falla, hay que resolverlo a mano — lo dejamos visible.
+        Sentry.captureException(e, {
+          tags: { area: "mercadopago", mp_stage: "refund-duplicate", orderId },
+          extra: { stalePaymentId: dataId, paidWith: existingPaid.mp_payment_id },
+        });
+      }
+      return ok({ orderId, status: "duplicate_refunded" });
+    }
+
     // Liquidación atómica: marca la orden pagada Y reactiva los tickets que el
     // cron pudo anular al expirarla (pago aprobado tardío). Si el aforo ya se
     // revendió, la RPC aborta por el constraint de capacity y NO dejamos la orden
@@ -274,16 +304,24 @@ export const handleMpWebhook = async (
     );
   }
 
-  // Recalcular hitos de comisión si la venta vía promotor quedó aprobada.
-  if (mapped === "paid" && orderRow?.promoter_link_id) {
-    const { count: paidCount } = await db
-      .from("orders")
-      .select("id", { count: "exact", head: true })
-      .eq("promoter_link_id", orderRow.promoter_link_id)
-      .eq("status", "paid");
-    await supabaseCommissionTierRepository.recalcUnlocksForLink(
-      orderRow.promoter_link_id,
-      paidCount ?? 0,
+  // (Los hitos de comisión ya no se "desbloquean" persistiendo estado: se evalúan
+  // al vuelo con computePromoterPayout sobre las entradas vendidas, así que un
+  // pago aprobado no requiere recalcular nada — el payout sube solo en lectura.)
+
+  // Aviso al comprador (correo + WhatsApp) si su pago quedó en revisión real
+  // (in_process, NO el 3DS transitorio) o fue rechazado, para que reintente con
+  // otro medio o mande la captura del preautorizado. No bloquea el ack; el claim
+  // anti-spam vive dentro del dispatch. Solo en órdenes que siguen sin pagar.
+  if (orderRow && (status === "in_process" || mapped === "failed")) {
+    const notifyKind = status === "in_process" ? "in_review" : "rejected";
+    const notifyOrderId = orderRow.id;
+    after(() =>
+      dispatchPaymentReview({ db }, notifyOrderId, notifyKind).catch((e) => {
+        console.error("[mp-webhook] dispatchPaymentReview failed:", (e as Error).message);
+        Sentry.captureException(e, {
+          tags: { area: "payment-review-notify", orderId: notifyOrderId },
+        });
+      }),
     );
   }
 

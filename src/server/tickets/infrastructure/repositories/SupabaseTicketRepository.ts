@@ -4,19 +4,20 @@ import { err, ok, type Result } from "@/server/_shared/result";
 import type {
   BuyInput,
   BuyOutput,
+  CourtesyInput,
+  CourtesySummary,
   QuoteInput,
   ScannerRef,
   TicketRepository,
 } from "@/server/tickets/ports/TicketRepository";
-import type { Order, OrderQuote, Ticket, WalletTicket } from "@/server/tickets/domain/Ticket";
+import type { Order, OrderQuote, OrderStatus, Ticket, WalletTicket } from "@/server/tickets/domain/Ticket";
 import type { EventCategory, EventStatus, Promo } from "@/server/events/domain/Event";
 import { activePricing, applyPromos, type PromoLineInput } from "@/lib/events/pricing";
 import { resolveOrderFee } from "@/lib/tickets/serviceFee";
 import { createPreference } from "@/server/payments/application/CreatePreference";
 import { dispatchTicketDelivery } from "@/server/notifications/application/DispatchTicketDelivery";
-import { supabaseCommissionTierRepository } from "@/server/promoters/tiers/infrastructure/repositories/SupabaseCommissionTierRepository";
 import { supabaseBoxRepository } from "@/server/boxes/infrastructure/repositories/SupabaseBoxRepository";
-import { encryptDni, dniLast4, normalizeDni } from "@/server/_shared/crypto/dni";
+import { encryptDni, dniLast4, decryptDni, normalizeDni } from "@/server/_shared/crypto/dni";
 import crypto from "node:crypto";
 import * as Sentry from "@sentry/nextjs";
 
@@ -125,16 +126,21 @@ const loadTransferable = async (
 // Read-only: valida evento publicado, ventas abiertas y stock, sin reservar.
 const priceOrder = async (
   db: ReturnType<typeof supabaseAdmin>,
-  input: { eventId: string; items: Array<{ ticketTypeId: string; qty: number }> },
+  input: { eventId: string; items: Array<{ ticketTypeId: string; qty: number }>; courtesy?: boolean },
 ) => {
   // Why: bloquear compras a eventos no publicados (draft/closed/cancelled).
   // Sin esto, cualquiera con el slug podría comprar a un evento que el
   // organizador aún no lanzó. Cerrado/cancelado también bloqueado.
   const { data: evStatus } = await db
     .from("events")
-    .select("status, ends_at, fee_mode")
+    .select("status, ends_at, fee_mode, max_tickets_per_person")
     .eq("id", input.eventId)
-    .maybeSingle<{ status: string; ends_at: string | null; fee_mode: "buyer_pays_extra" | "included_in_price" }>();
+    .maybeSingle<{
+      status: string;
+      ends_at: string | null;
+      fee_mode: "buyer_pays_extra" | "included_in_price";
+      max_tickets_per_person: number | null;
+    }>();
   if (!evStatus) return err("event_not_found");
   if (evStatus.status !== "published") return err("event_not_published");
   if (evStatus.ends_at && new Date(evStatus.ends_at) < new Date()) return err("event_sales_closed");
@@ -148,6 +154,18 @@ const priceOrder = async (
     .in("id", ttIds);
   if (ttErr || !tts) return err(ttErr?.message ?? "ticket_types_lookup_failed");
   if (tts.some((t) => t.event_id !== input.eventId)) return err("event_mismatch");
+
+  // Tope de entradas por persona (por orden). El acumulado real entre compras se
+  // valida en buy() con el DNI; acá solo cortamos que una sola orden pida más del
+  // tope, para dar feedback en el checkout. Los boxes se venden enteros y no
+  // cuentan. Las cortesías del organizador quedan exentas.
+  if (!input.courtesy && evStatus.max_tickets_per_person != null) {
+    const admissionQty = input.items.reduce((sum, item) => {
+      const tt = tts.find((t) => t.id === item.ticketTypeId);
+      return tt && tt.kind !== "box" ? sum + item.qty : sum;
+    }, 0);
+    if (admissionQty > evStatus.max_tickets_per_person) return err("max_per_person_exceeded");
+  }
 
   // Promos activas del evento (2x1 / 3x2), aplicadas al total server-side.
   const { data: promoRows } = await db
@@ -170,7 +188,9 @@ const priceOrder = async (
   for (const item of input.items) {
     const tt = tts.find((t) => t.id === item.ticketTypeId);
     if (!tt) return err("ticket_type_missing");
-    if (tt.sale_ends_at && new Date(tt.sale_ends_at) < new Date()) return err("ticket_type_sales_closed");
+    // Cortesía: el organizador puede regalar aunque la venta del tipo ya cerró
+    // (comps del día del evento). El stock sí se respeta siempre.
+    if (!input.courtesy && tt.sale_ends_at && new Date(tt.sale_ends_at) < new Date()) return err("ticket_type_sales_closed");
     // Respeta el aforo de la entrada (no sobrevende el espacio). Se libera solo
     // al anular el ticket (el trigger recalcula sold).
     if (tt.sold + item.qty > tt.capacity) return err("sold_out");
@@ -192,7 +212,9 @@ const priceOrder = async (
       isFreeActive,
       freeUntilAt: tt.free_until_at,
     });
-    priceItems.push({ ticketTypeId: tt.id, qty: item.qty, unitPriceCents: ap.priceCents });
+    // Cortesía: precio efectivo 0 sin importar el precio del tipo. Subtotal 0
+    // → sin fee → total 0 → la rama de órdenes gratis hace el resto.
+    priceItems.push({ ticketTypeId: tt.id, qty: item.qty, unitPriceCents: input.courtesy ? 0 : ap.priceCents });
   }
   const promoResult = applyPromos(priceItems, promos);
   const subtotal = promoResult.totalCents;
@@ -370,6 +392,53 @@ export const supabaseTicketRepository: TicketRepository = {
       return err("self_purchase_blocked");
     }
 
+    // Tope acumulado de entradas por persona: si el organizador puso un máximo,
+    // sumamos lo que este DNI ya compró para el evento (tickets active/used de
+    // entradas individuales) más lo que pide ahora. Se identifica por DNI porque
+    // el profile de un guest es desechable y no persiste entre compras (ver el
+    // comentario de arriba). El DNI se guarda cifrado con IV aleatorio (no es
+    // consultable directo), así que filtramos por los últimos 4 dígitos y
+    // desambiguamos descifrando los candidatos. Las cortesías quedan exentas.
+    const maxPerPerson = priced.value.evStatus.max_tickets_per_person;
+    const capAttendee = input.guest ?? input.buyer ?? null;
+    const capDni = normalizeDni(capAttendee?.dni);
+    if (!input.courtesy && maxPerPerson != null && capDni) {
+      const newAdmissionQty = input.items.reduce((sum, item) => {
+        const tt = tts.find((t) => t.id === item.ticketTypeId);
+        return tt && !tt.box_label ? sum + item.qty : sum;
+      }, 0);
+      if (newAdmissionQty > 0) {
+        // Tipos de entrada individual del evento (box_label null); los tickets no
+        // llevan event_id, así que acotamos por sus ticket_type_id.
+        const { data: admissionTypes } = await db
+          .from("ticket_types")
+          .select("id")
+          .eq("event_id", input.eventId)
+          .is("box_label", null)
+          .returns<Array<{ id: string }>>();
+        const admissionTypeIds = (admissionTypes ?? []).map((t) => t.id);
+        let priorCount = 0;
+        if (admissionTypeIds.length > 0) {
+          const last4 = dniLast4(capDni);
+          const { data: candidates } = await db
+            .from("tickets")
+            .select("holder_dni_enc")
+            .in("ticket_type_id", admissionTypeIds)
+            .eq("holder_dni_last4", last4)
+            .in("status", ["active", "used"])
+            .returns<Array<{ holder_dni_enc: string | null }>>();
+          // last4 puede colisionar entre personas distintas → confirmamos por el
+          // DNI completo descifrado antes de contar.
+          priorCount = (candidates ?? []).filter(
+            (c) => decryptDni(c.holder_dni_enc) === capDni,
+          ).length;
+        }
+        if (priorCount + newAdmissionQty > maxPerPerson) {
+          return err("max_per_person_exceeded");
+        }
+      }
+    }
+
     const { data: orderRow, error: orderErr } = await db
       .from("orders")
       .insert({
@@ -388,7 +457,11 @@ export const supabaseTicketRepository: TicketRepository = {
         guest_email: input.guest?.email ?? null,
         guest_phone: input.guest?.phone ?? null,
         guest_name: input.guest?.fullName ?? null,
-        guest_dni: input.guest?.dni ?? null,
+        // || (no ??): la cortesía manda dni "" — se captura al reclamar el link.
+        guest_dni: input.guest?.dni || null,
+        // Solo en cortesías: así una compra normal no depende de la columna
+        // (el default false lo pone la DB).
+        ...(input.courtesy ? { is_courtesy: true } : {}),
       })
       .select("*")
       .single<OrderRow>();
@@ -508,17 +581,8 @@ export const supabaseTicketRepository: TicketRepository = {
         }),
       );
 
-      if (promoterLinkId) {
-        const { count: paidCount } = await db
-          .from("orders")
-          .select("id", { count: "exact", head: true })
-          .eq("promoter_link_id", promoterLinkId)
-          .eq("status", "paid");
-        await supabaseCommissionTierRepository.recalcUnlocksForLink(
-          promoterLinkId,
-          paidCount ?? 0,
-        );
-      }
+      // (Los hitos ya no persisten desbloqueo: el payout se evalúa al vuelo con
+      // computePromoterPayout sobre las entradas vendidas — nada que recalcular.)
 
       return ok({
         order: { ...toOrder(orderRow), status: "paid" as const },
@@ -526,9 +590,6 @@ export const supabaseTicketRepository: TicketRepository = {
         preference: { id: "", initPoint: "" },
       });
     }
-
-    // Why: la recalc de hitos vive en HandleWebhook ahora — al momento de
-    // crear la order, su status es 'pending', así que sumarla acá no aporta.
 
     // Lookup event slug/title for the MP preference back URLs.
     const { data: ev } = await db
@@ -594,6 +655,71 @@ export const supabaseTicketRepository: TicketRepository = {
     });
   },
 
+  async issueCourtesy(input: CourtesyInput): Promise<Result<BuyOutput>> {
+    // Misma tubería que una compra de guest, con `courtesy: true` (precio 0 →
+    // total 0 → paid inmediato + dispatch email/WhatsApp + box si aplica).
+    return supabaseTicketRepository.buy({
+      eventId: input.eventId,
+      items: [{ ticketTypeId: input.ticketTypeId, qty: input.qty }],
+      guest: {
+        email: input.guest.email?.trim() || null,
+        phone: input.guest.phone?.trim() || null,
+        fullName: input.guest.fullName.trim(),
+        // El DNI se captura cuando el invitado reclama su link (igual que en
+        // una transferencia): el organizador no lo conoce al emitir.
+        dni: "",
+      },
+      courtesy: true,
+    });
+  },
+
+  async listCourtesies(eventId: string): Promise<Result<CourtesySummary[]>> {
+    const db = supabaseAdmin();
+    const { data, error } = await db
+      .from("orders")
+      .select(
+        "id, created_at, guest_name, guest_email, guest_phone, tickets(id, status, box_host_ticket_id, ticket_type:ticket_types(name, kind, box_label))",
+      )
+      .eq("event_id", eventId)
+      .eq("is_courtesy", true)
+      .eq("status", "paid")
+      .order("created_at", { ascending: false });
+    if (error) return err(error.message);
+    type Row = {
+      id: string;
+      created_at: string;
+      guest_name: string | null;
+      guest_email: string | null;
+      guest_phone: string | null;
+      tickets: Array<{
+        id: string;
+        status: string;
+        box_host_ticket_id: string | null;
+        ticket_type: { name: string; kind: string; box_label: string | null } | null;
+      }>;
+    };
+    return ok(
+      ((data ?? []) as unknown as Row[]).map((o) => {
+        const first = o.tickets[0]?.ticket_type ?? null;
+        return {
+          orderId: o.id,
+          createdAt: o.created_at,
+          guestName: o.guest_name,
+          guestEmail: o.guest_email,
+          guestPhone: o.guest_phone,
+          ticketTypeName: first?.name ?? "Entrada",
+          kind: first?.kind ?? "general",
+          boxLabel: first?.box_label ?? null,
+          // Emitidas al beneficiario: excluye a los amigos que se suman al box
+          // por invite link (llevan box_host_ticket_id).
+          ticketCount: o.tickets.filter((t) => t.box_host_ticket_id == null).length,
+          // Ingresos reales: acá sí cuentan todos (host + invitados del box).
+          usedCount: o.tickets.filter((t) => t.status === "used").length,
+        };
+      }),
+    );
+  },
+
   async listMine(buyerId: string): Promise<WalletTicket[]> {
     const db = supabaseAdmin();
     // Solo entradas que existen para el usuario: active (válida) + used (historial
@@ -601,18 +727,19 @@ export const supabaseTicketRepository: TicketRepository = {
     // (carrito expirado, pago fallido) o se reembolsaron; no deben aparecer ni
     // contar en la cuenta. El resto de cálculos (sold, revenue, asistentes) ya
     // los excluye en sus views/queries.
-    // Filtro por orden PAGADA: los tickets se insertan `active` aunque la orden
-    // siga `pending` (el check constraint del schema no permite 'pending_payment'),
-    // así que una compra reservada-pero-nunca-pagada dejaría tickets activos. El
-    // wallet solo debe mostrar lo realmente pagado. Las órdenes gratis (total 0) se
-    // marcan `paid` al instante en BuyTickets, así que sí aparecen.
+    // Filtro por orden PAGADA o EN REVISIÓN: los tickets se insertan `active`
+    // aunque la orden siga `pending` (el check constraint del schema no permite
+    // 'pending_payment'). Mostramos lo pagado + las órdenes con pago vivo en
+    // revisión de MP (mp_status='in_process') como "Pago en revisión" — así el
+    // comprador ve su entrada mientras MP decide, sin QR hasta que se confirme.
+    // Una reserva abandonada (pending sin pago) NO aparece. El filtro fino va en
+    // JS abajo. Las órdenes gratis (total 0) nacen `paid`, así que sí aparecen.
     const { data } = await db
       .from("tickets")
       .select(
-        "*, order:orders!inner(status), ticket_type:ticket_types!inner(id,name,kind,event_id,event:events!inner(id,slug,title,starts_at,venue,timezone,status,cover_url,category))",
+        "*, order:orders!inner(status,mp_status), ticket_type:ticket_types!inner(id,name,kind,event_id,event:events!inner(id,slug,title,starts_at,venue,timezone,status,cover_url,category))",
       )
       .eq("current_holder", buyerId)
-      .eq("order.status", "paid")
       .in("status", ["active", "used"])
       .order("created_at", { ascending: false });
     if (!data) return [];
@@ -641,6 +768,7 @@ export const supabaseTicketRepository: TicketRepository = {
       (pend ?? []).map((p) => [p.ticket_id, p.to_contact]),
     );
     type Joined = TicketRow & {
+      order: { status: OrderStatus; mp_status: string | null };
       ticket_type: {
         id: string;
         name: string;
@@ -659,26 +787,35 @@ export const supabaseTicketRepository: TicketRepository = {
         };
       };
     };
-    return (rows as unknown as Joined[]).map((row) => ({
-      ...toTicket(row),
-      event: {
-        id: row.ticket_type.event.id,
-        slug: row.ticket_type.event.slug,
-        title: row.ticket_type.event.title,
-        startsAt: row.ticket_type.event.starts_at,
-        venue: row.ticket_type.event.venue,
-        timezone: row.ticket_type.event.timezone,
-        status: row.ticket_type.event.status,
-        coverUrl: row.ticket_type.event.cover_url,
-        category: row.ticket_type.event.category,
-      },
-      ticketType: {
-        id: row.ticket_type.id,
-        name: row.ticket_type.name,
-        kind: row.ticket_type.kind,
-      },
-      pendingTransferTo: pendMap.get(row.id) ?? null,
-    }));
+    return (rows as unknown as Joined[])
+      // Pagadas + en revisión (pending con pago vivo). Descarta reservas
+      // abandonadas (pending sin in_process).
+      .filter(
+        (row) =>
+          row.order.status === "paid" ||
+          (row.order.status === "pending" && row.order.mp_status === "in_process"),
+      )
+      .map((row) => ({
+        ...toTicket(row),
+        event: {
+          id: row.ticket_type.event.id,
+          slug: row.ticket_type.event.slug,
+          title: row.ticket_type.event.title,
+          startsAt: row.ticket_type.event.starts_at,
+          venue: row.ticket_type.event.venue,
+          timezone: row.ticket_type.event.timezone,
+          status: row.ticket_type.event.status,
+          coverUrl: row.ticket_type.event.cover_url,
+          category: row.ticket_type.event.category,
+        },
+        ticketType: {
+          id: row.ticket_type.id,
+          name: row.ticket_type.name,
+          kind: row.ticket_type.kind,
+        },
+        orderStatus: row.order.status,
+        pendingTransferTo: pendMap.get(row.id) ?? null,
+      }));
   },
 
   async getById(ticketId, buyerId) {
@@ -687,19 +824,19 @@ export const supabaseTicketRepository: TicketRepository = {
     // ticket (current_holder), puede abrir su detalle/QR aunque sea un QR de
     // acompañante que sostiene dentro de su box. La pertenencia ya la garantiza
     // current_holder = buyerId.
-    // Solo órdenes pagadas: igual que listMine, un ticket de orden `pending`
-    // (reserva nunca pagada) no debe abrirse ni mostrar un QR que ya no escana.
+    // Pagadas o en revisión (igual que listMine). Una reserva abandonada (pending
+    // sin pago vivo) no debe abrirse; el filtro fino va en JS abajo.
     const { data } = await db
       .from("tickets")
       .select(
-        "*, order:orders!inner(status), ticket_type:ticket_types!inner(id,name,kind,event_id,event:events!inner(id,slug,title,starts_at,venue,timezone,status,cover_url,category))",
+        "*, order:orders!inner(status,mp_status), ticket_type:ticket_types!inner(id,name,kind,event_id,event:events!inner(id,slug,title,starts_at,venue,timezone,status,cover_url,category))",
       )
       .eq("id", ticketId)
       .eq("current_holder", buyerId)
-      .eq("order.status", "paid")
       .maybeSingle();
     if (!data) return null;
     type Joined = TicketRow & {
+      order: { status: OrderStatus; mp_status: string | null };
       ticket_type: {
         id: string;
         name: string;
@@ -719,6 +856,11 @@ export const supabaseTicketRepository: TicketRepository = {
       };
     };
     const row = data as unknown as Joined;
+    // Descarta reservas abandonadas (pending sin pago vivo). Pagada o en revisión sí.
+    const visible =
+      row.order.status === "paid" ||
+      (row.order.status === "pending" && row.order.mp_status === "in_process");
+    if (!visible) return null;
     const { data: pend } = await db
       .from("ticket_transfers")
       .select("to_contact")
@@ -743,6 +885,7 @@ export const supabaseTicketRepository: TicketRepository = {
         name: row.ticket_type.name,
         kind: row.ticket_type.kind,
       },
+      orderStatus: row.order.status,
       pendingTransferTo: (pend as { to_contact: string | null } | null)?.to_contact ?? null,
     };
   },
@@ -898,13 +1041,15 @@ export const supabaseTicketRepository: TicketRepository = {
     const db = supabaseAdmin();
     const { data: order } = await db
       .from("orders")
-      .select("id, status, buyer_id, guest_email, paid_at, event_id, claimed_at")
+      .select("id, status, buyer_id, guest_email, guest_phone, guest_name, paid_at, event_id, claimed_at")
       .eq("id", input.orderId)
       .maybeSingle<{
         id: string;
         status: string;
         buyer_id: string | null;
         guest_email: string | null;
+        guest_phone: string | null;
+        guest_name: string | null;
         paid_at: string | null;
         event_id: string;
         claimed_at: string | null;
@@ -972,6 +1117,25 @@ export const supabaseTicketRepository: TicketRepository = {
         claimed_by: input.toProfile,
       })
       .eq("id", order.id);
+
+    // El comprador ya dejó su celular (y nombre) al pagar. Al reclamar con Google
+    // aterriza en un profile nuevo SIN teléfono (Google no lo comparte) → sin esto
+    // la pantalla post-claim se lo volvería a pedir. Lo copiamos de la orden, pero
+    // SOLO si el profile destino aún no lo tiene: nunca pisamos lo que el usuario
+    // ya guardó.
+    if (order.guest_phone || order.guest_name) {
+      const { data: dest } = await db
+        .from("profiles")
+        .select("phone, full_name")
+        .eq("id", input.toProfile)
+        .maybeSingle<{ phone: string | null; full_name: string | null }>();
+      const patch: { phone?: string; full_name?: string } = {};
+      if (order.guest_phone && !dest?.phone) patch.phone = order.guest_phone;
+      if (order.guest_name && !dest?.full_name) patch.full_name = order.guest_name;
+      if (Object.keys(patch).length > 0) {
+        await db.from("profiles").update(patch).eq("id", input.toProfile);
+      }
+    }
 
     return ok({
       ticketsClaimed: updatedIds.length,

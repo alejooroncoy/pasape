@@ -34,7 +34,9 @@ const applySchema = z.object({
 const decideSchema = z.object({
   applicationId: z.string().uuid(),
   decision: z.enum(["approved", "rejected"]),
-  commissionPct: z.number().int().min(0).max(100).default(15),
+  // Sin default: si no llega, el promotor hereda la comisión del evento. Solo
+  // se envía para overridear a alguien puntual (el "caso raro").
+  commissionPct: z.number().int().min(0).max(100).optional(),
 });
 
 const orgFromActive = async (profileId: string) => {

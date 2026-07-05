@@ -6,6 +6,7 @@ import { createSupabaseBrowserClient } from "@/server/_shared/supabase/client";
 import { api } from "@/lib/_shared/api-client";
 import { clearPersistedQueryCache } from "@/lib/_shared/query-persister";
 import { resetPrefetchWallet } from "@/lib/tickets/prefetchWallet";
+import { setOauthReturn } from "@/components/auth/PostLoginRedirect";
 import { currentUserKey } from "./useCurrentUser";
 
 export const useGoogleSignIn = (opts: { redirectTo?: string } = {}) => {
@@ -21,6 +22,11 @@ export const useGoogleSignIn = (opts: { redirectTo?: string } = {}) => {
       // página vuelve del login sin su llave secreta y da 404.
       const next =
         opts.redirectTo ?? window.location.pathname + window.location.search;
+      // Fallback SIEMPRE, para todo flujo de login: Supabase a veces ignora el
+      // /auth/callback y suelta la sesión en la Site URL (/es). PostLoginRedirect
+      // lee esto apenas hay sesión y te lleva a donde ibas (antes solo order/
+      // claim lo guardaban — el login de organizador te dejaba tirado en la home).
+      setOauthReturn(next);
       const callbackUrl = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
       const { error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: "google",

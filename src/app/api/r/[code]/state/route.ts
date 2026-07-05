@@ -5,7 +5,6 @@ import {
   computePromoterPayout,
   resolveCommissionScheme,
 } from "@/server/promoters/application/CommissionResolver";
-import type { CommissionType } from "@/server/promoters/domain/OrgPromoter";
 
 const resolveOrigin = async (req: NextRequest) => {
   const h = await headers();
@@ -30,7 +29,7 @@ export const GET = async (
   const { data: linkRow } = await db
     .from("promoter_links")
     .select(
-      "id, code, commission_pct, commission_type, commission_config_override, event:events!inner(id, slug, title, starts_at, venue, organization_id, promoter_commission_pct, promoter_commission_type, promoter_commission_config), profile:profiles(id, full_name), org_promoter:org_promoters(id, name, default_commission_pct, commission_type, commission_config)",
+      "id, code, commission_pct, commission_config_override, event:events!inner(id, slug, title, starts_at, venue, organization_id, promoter_commission_pct, promoter_commission_config, organization:organizations(promoter_commission_pct, promoter_commission_config)), profile:profiles(id, full_name), org_promoter:org_promoters(id, name, default_commission_pct, commission_config)",
     )
     .eq("code", code)
     .maybeSingle();
@@ -39,7 +38,6 @@ export const GET = async (
     id: string;
     code: string;
     commission_pct: number | null;
-    commission_type: CommissionType | null;
     commission_config_override: unknown;
     event: {
       id: string;
@@ -49,15 +47,17 @@ export const GET = async (
       venue: string | null;
       organization_id: string;
       promoter_commission_pct: number | null;
-      promoter_commission_type: CommissionType | null;
       promoter_commission_config: unknown;
+      organization: {
+        promoter_commission_pct: number | null;
+        promoter_commission_config: unknown;
+      } | null;
     };
     profile: { id: string; full_name: string | null } | null;
     org_promoter: {
       id: string;
       name: string;
-      default_commission_pct: number;
-      commission_type: CommissionType;
+      default_commission_pct: number | null;
       commission_config: unknown;
     } | null;
   };
@@ -68,21 +68,16 @@ export const GET = async (
   }
 
   // Esquema efectivo por herencia: promotor en el evento → esquema del evento →
-  // marca. "percentage" como fallback para links legacy sin org_promoter.
-  const {
-    type: commissionType,
-    config: commissionConfig,
-    pct: commissionPct,
-  } = resolveCommissionScheme({
-    linkType: link.commission_type,
+  // marca. Dos ejes independientes: % por venta y metas.
+  const { config: commissionConfig, pct: commissionPct } = resolveCommissionScheme({
     linkPct: link.commission_pct,
     linkConfigOverride: link.commission_config_override,
-    eventType: link.event.promoter_commission_type,
-    eventConfig: link.event.promoter_commission_config,
+    promoterPct: link.org_promoter?.default_commission_pct ?? null,
+    promoterConfig: link.org_promoter?.commission_config ?? null,
     eventPct: link.event.promoter_commission_pct,
-    orgType: link.org_promoter?.commission_type ?? null,
-    orgConfig: link.org_promoter?.commission_config ?? null,
-    orgPct: link.org_promoter?.default_commission_pct ?? null,
+    eventConfig: link.event.promoter_commission_config,
+    brandPct: link.event.organization?.promoter_commission_pct ?? null,
+    brandConfig: link.event.organization?.promoter_commission_config ?? null,
   });
 
   // Paid orders attributed to this link
@@ -109,11 +104,14 @@ export const GET = async (
     ticketsValidated = tRows.filter((t) => t.status === "used").length;
   }
 
+  // Conteos canónicos para el payout: vendidas (pago) y asistidas (validadas).
+  const { data: soldData } = await db.rpc("promoter_sold_units", { p_link_id: link.id });
+  const { data: attendedData } = await db.rpc("promoter_attended_units", { p_link_id: link.id });
   const payout = computePromoterPayout({
-    type: commissionType,
-    config: commissionConfig,
     pct: commissionPct,
-    ticketsSold,
+    config: commissionConfig,
+    soldUnits: (soldData as number | null) ?? 0,
+    attendedUnits: (attendedData as number | null) ?? 0,
     grossCents,
   });
 
@@ -143,7 +141,6 @@ export const GET = async (
     ticketsSold,
     ticketsValidated,
     grossCents,
-    commissionType,
     commissionConfig,
     commissionPct,
     payoutCents: payout.payoutCents,

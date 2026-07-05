@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, use, useEffect, useMemo, useState } from "react";
+import { Suspense, use, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useRouter } from "@/i18n/navigation";
 import { useEvent } from "@/lib/events/hooks/useEvents";
@@ -31,6 +31,9 @@ function Inner({ params }: Props) {
   const { loggedIn } = useSessionReady();
   const [startedAt] = useState(() => Date.now());
   const [paid, setPaid] = useState(false);
+  // Último status visto en el polling. Si al agotar el tiempo sigue 'pending', el
+  // pago quedó en revisión (in_process) — no es un error, va a la pantalla amable.
+  const lastStatus = useRef<string | null>(null);
 
   useEffect(() => {
     if (!orderId || paid) return;
@@ -45,6 +48,7 @@ function Inner({ params }: Props) {
           orderUrl: string | null;
         }>(`/api/tickets/order/${orderId}/status${qs}`);
         if (cancelled) return;
+        lastStatus.current = res.status;
         if (res.status === "paid") {
           setPaid(true);
           await refetchTickets();
@@ -94,9 +98,12 @@ function Inner({ params }: Props) {
 
   useEffect(() => {
     const t = setTimeout(() => {
+      // Si el pago sigue en revisión (pending/in_process) a los 60s, no es un
+      // error: MP puede tardar. Vamos a la pantalla amable de "en revisión".
+      const reason = lastStatus.current === "pending" ? "?reason=in_review" : "";
       router.replace(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        `/events/${slug}/pay-error` as any,
+        `/events/${slug}/pay-error${reason}` as any,
       );
     }, 60_000);
     return () => clearTimeout(t);
@@ -165,7 +172,7 @@ function Inner({ params }: Props) {
             className="mt-8 text-[28px] font-bold tracking-[-0.02em]"
             style={{ animation: "pasape-fade-in 420ms ease-out 360ms both" }}
           >
-            ¡Pago aprobado!
+            {summary?.price === "Gratis" ? "¡Entrada confirmada!" : "¡Pago aprobado!"}
           </h1>
           <p
             className="mt-2 text-[14px] text-cart-ink-2"

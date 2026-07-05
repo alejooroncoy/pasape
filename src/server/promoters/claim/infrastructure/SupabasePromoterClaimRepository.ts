@@ -11,7 +11,7 @@ type PromoterRow = {
   organization_id: string;
   name: string;
   whatsapp: string | null;
-  default_commission_pct: number;
+  default_commission_pct: number | null;
   profile_id: string | null;
   claim_token: string | null;
   claim_token_expires_at: string | null;

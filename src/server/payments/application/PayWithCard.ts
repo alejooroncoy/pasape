@@ -1,13 +1,15 @@
 import { Money } from "@/lib/_shared/money";
 import "server-only";
 import crypto from "node:crypto";
+import { MercadoPagoConfig, Payment } from "mercadopago";
 import { after } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { err, ok, type Result } from "@/server/_shared/result";
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
-import { appBaseUrl, isPublicBaseUrl, buildOrderItems } from "../infrastructure/MercadoPagoClient";
+import { appBaseUrl, isPublicBaseUrl, buildOrderItems, mpPeruIdentification } from "../infrastructure/MercadoPagoClient";
 import { reportMpError } from "../infrastructure/reportMpError";
 import { dispatchTicketDelivery } from "@/server/notifications/application/DispatchTicketDelivery";
+import { parseE164 } from "@/lib/phone/countries";
 
 // Why: en prod, si MP_ACCESS_TOKEN no arranca con "APP_USR-" (o sea, parece
 // ser de sandbox tipo "TEST-...") cobraríamos con dinero real usando
@@ -34,12 +36,20 @@ export type PayWithCardInput = {
   paymentMethodId: string; // "visa", "master", "amex", "debvisa", etc. — MP lo infiere del BIN
   installments: number; // 1 = pago único
   issuerId?: string | null;
+  // Device fingerprint de MP (window.MP_DEVICE_SESSION_ID, creado por el SDK v2).
+  // Mejora approval rate y antifraude — se envía como header X-meli-session-id.
+  deviceId?: string | null;
 };
 
+// Datos del challenge 3DS cuando el emisor pide autenticación. El frontend debe
+// renderizar el `externalResourceUrl` (POST del `creq`) en un iframe.
+export type ThreeDsInfo = { externalResourceUrl: string; creq: string };
+
 export type PayWithCardOutput = {
-  status: "approved" | "in_process" | "rejected";
+  status: "approved" | "in_process" | "rejected" | "challenge";
   paymentId: string;
   message?: string;
+  threeDsInfo?: ThreeDsInfo;
 };
 
 type OrderRow = {
@@ -90,6 +100,7 @@ export const payWithCard = async (
     fullName = fullName ?? profile?.full_name ?? null;
     phone = phone ?? profile?.phone ?? null;
   }
+  const phoneParsed = phone ? parseE164(phone) : null;
   if (!email) return err("payer_email_missing");
 
   const { data: event } = await db
@@ -119,18 +130,35 @@ export const payWithCard = async (
     external_reference: order.id,
     ...(isPublicUrl ? { notification_url: `${base}/api/webhook/mp` } : {}),
     statement_descriptor: "PASAPE",
+    // 3DS 2.0: "optional" = MP solo pide challenge cuando el emisor lo exige.
+    // Requiere capture automático (default true) y binary_mode desactivado
+    // (default false) — ambos ya se cumplen al no enviarlos. Ver manejo de
+    // `pending_challenge` abajo.
+    three_d_secure_mode: "optional",
     payer: {
       email,
       first_name: firstName,
       last_name: lastName,
-      ...(dni ? { identification: { type: "DNI", number: dni } } : {}),
+      // DNI (8 díg) o C.E (9-12 díg); pasaporte alfanumérico → null → se omite
+      // (MP Perú no tiene tipo pasaporte; la identificación es opcional).
+      ...(mpPeruIdentification(dni) ? { identification: mpPeruIdentification(dni)! } : {}),
     },
     additional_info: {
       ...(items.length > 0 ? { items } : {}),
       payer: {
         first_name: firstName,
         last_name: lastName,
-        ...(phone ? { phone: { area_code: "51", number: phone } } : {}),
+        // El teléfono se guarda en E.164 (el comprador puede ser extranjero: la
+        // tarjeta acepta país). Lo partimos en area_code (código del país) +
+        // número nacional; legacy sin país cae a Perú (51).
+        ...(phoneParsed?.national
+          ? {
+              phone: {
+                area_code: phoneParsed.country?.dial ?? "51",
+                number: phoneParsed.national,
+              },
+            }
+          : {}),
       },
     },
   };
@@ -171,47 +199,46 @@ export const payWithCard = async (
     .update(`card:${order.id}:${input.token}`)
     .digest("hex");
 
-  let mpRes: Response;
-  try {
-    mpRes = await fetch("https://api.mercadopago.com/v1/payments", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-        "X-Idempotency-Key": idempotencyKey,
-      },
-      body: JSON.stringify(body),
-    });
-  } catch (e) {
-    await revertLock();
-    return err(`mp_network_error: ${(e as Error).message}`);
-  }
-
   type MpPaymentResponse = {
     id?: number | string;
     status?: string;
     status_detail?: string;
     message?: string;
     error?: string;
+    three_ds_info?: { external_resource_url?: string; creq?: string };
   };
+  type CreateBody = Parameters<Payment["create"]>[0]["body"];
+
+  // SDK oficial de MP (checklist "SDK de backend", +5 pts): manda los headers de
+  // tracking (X-Product-Id / User-Agent) que MP reconoce como integración con
+  // SDK. Preservamos idempotencyKey y el device_id vía requestOptions — el SDK
+  // los mapea a X-Idempotency-Key y X-Meli-Session-Id, idénticos al flujo raw.
+  const client = new MercadoPagoConfig({ accessToken });
   let data: MpPaymentResponse;
   try {
-    data = (await mpRes.json()) as MpPaymentResponse;
-  } catch {
+    data = (await new Payment(client).create({
+      body: body as unknown as CreateBody,
+      requestOptions: {
+        idempotencyKey,
+        // Device fingerprint (antifraude / approval rate). MP lo ignora si es vacío.
+        ...(input.deviceId ? { meliSessionId: input.deviceId } : {}),
+      },
+    })) as MpPaymentResponse;
+  } catch (e) {
+    // El SDK lanza ante error de API (rechazo de request, auth) o de red. Los
+    // rechazos de tarjeta (fondos, CVV…) NO caen aquí: vuelven con status 2xx y
+    // status="rejected", y se tratan más abajo. El error de API trae `message`
+    // y, cuando aplica, `status`/`cause` con el detalle de MP.
     await revertLock();
-    return err(`mp_invalid_response: status ${mpRes.status}`);
-  }
-
-  if (!mpRes.ok) {
-    const message = data.message ?? data.error ?? `status ${mpRes.status}`;
+    const apiErr = e as { message?: string; status?: number; cause?: unknown };
+    const message = apiErr?.message ?? "mp_error";
     reportMpError(message, {
       stage: "payment",
       method: "card",
       orderId: order.id,
-      httpStatus: mpRes.status,
-      mpResponse: data,
+      httpStatus: apiErr?.status ?? 0,
+      mpResponse: apiErr,
     });
-    await revertLock();
     return err(`mp_payment_failed: ${message}`);
   }
 
@@ -241,6 +268,24 @@ export const payWithCard = async (
         Sentry.captureException(e, { tags: { area: "ticket-delivery", orderId: order.id } });
       }),
     );
+  }
+
+  // 3DS challenge: MP pide autenticar. La orden queda pending (el webhook la
+  // resolverá cuando el comprador complete el challenge). El frontend debe
+  // renderizar el challenge con `threeDsInfo` — arrancarlo en <30s (regla de MP).
+  const tds = data.three_ds_info;
+  if (
+    status === "pending" &&
+    data.status_detail === "pending_challenge" &&
+    tds?.external_resource_url &&
+    tds?.creq
+  ) {
+    return ok({
+      status: "challenge",
+      paymentId,
+      message: data.status_detail,
+      threeDsInfo: { externalResourceUrl: tds.external_resource_url, creq: tds.creq },
+    });
   }
 
   return ok({

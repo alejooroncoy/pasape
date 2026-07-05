@@ -15,7 +15,10 @@ import { getCachedClaim, saveClaim } from "@/lib/tickets/claimedOrderStore";
 
 // El token va en la RUTA (no en query): así sobrevive intacto al ida-y-vuelta del
 // OAuth de Google (un ?k= se perdía como query anidado en el redirect_to).
-type Props = { params: Promise<{ orderId: string; token: string }> };
+type Props = {
+  params: Promise<{ orderId: string; token: string }>;
+  searchParams: Promise<{ free?: string }>;
+};
 
 // Link durable a tu orden: decide a dónde mandarte según su estado. Ya
 // reclamada en este device → directo al ticket (offline-capable). Logueado
@@ -23,6 +26,11 @@ type Props = { params: Promise<{ orderId: string; token: string }> };
 // Sin sesión → "ya pagaste, entra para guardar tus entradas" con Google.
 export default function OrderPage(props: Props) {
   const { orderId, token } = use(props.params);
+  // Pedido gratis (total 0): no hubo cobro, así que el badge no debe decir "Pago
+  // confirmado". El flag llega en el link (lo ponen el status route y la entrega
+  // por email/WhatsApp cuando total_cents === 0). Se lee del prop `searchParams`
+  // —igual que `params`— para no depender de useSearchParams ni de un Suspense.
+  const isFreeOrder = use(props.searchParams).free === "1";
   const { me, sessionReady, loggedIn: isLogged } = useSessionReady();
   const { mutateAsync: claimOrder, isError: claimIsError, error: claimError } = useClaimOrder();
   const claimOrderRef = useRef(claimOrder);
@@ -63,11 +71,16 @@ export default function OrderPage(props: Props) {
   const [phone, setPhone] = useState("");
   const [phoneSkipped, setPhoneSkipped] = useState(false);
   const hasPhone = !!me.data?.user?.phone;
-  const needPhone = !!done && !hasPhone && !phoneSkipped;
+  // Tras el claim, `me` se refresca (el claim pudo copiar el teléfono de la orden
+  // al profile). Mientras ese refetch está en curso no decidimos pedir el número:
+  // evita el parpadeo de "Déjanos tu número" si en realidad ya lo tenemos.
+  const needPhone = !!done && !hasPhone && !phoneSkipped && !me.isFetching;
+  // `phone` ya viene en E.164 del PhoneField (país + número); el +51 se elige en
+  // el selector, no se hardcodea aquí.
   const phoneOk = phone.length >= 9;
   const savePhone = () => {
     if (!phoneOk) return;
-    update.mutate({ phone: `+51${phone}` }, { onSettled: goToWallet });
+    update.mutate({ phone }, { onSettled: goToWallet });
   };
 
   // Logueado → reclamar automáticamente. Si la orden sigue `pending` (carrera con
@@ -186,7 +199,7 @@ export default function OrderPage(props: Props) {
                 <path d="M5 12.5l4 4 10-10" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </div>
-            <p className="text-[12px] font-bold uppercase tracking-[0.16em] text-emerald-300">Pago confirmado</p>
+            <p className="text-[12px] font-bold uppercase tracking-[0.16em] text-emerald-300">{isFreeOrder ? "Entrada confirmada" : "Pago confirmado"}</p>
             <h1 className="mt-1 text-[26px] font-bold tracking-[-0.02em]">Entra para ver tus entradas</h1>
             <p className="mx-auto mt-2 max-w-[32ch] text-[13.5px] leading-snug text-cart-ink-3">
               Las guardamos en tu cuenta, con tu propio QR. Así las tienes siempre a la mano y puedes repartirlas.

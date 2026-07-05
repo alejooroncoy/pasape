@@ -45,6 +45,12 @@ import {
 } from "../../application/EventPartners";
 import { supabaseOrganizationRepository } from "@/server/identity/organizations/infrastructure/repositories/SupabaseOrganizationRepository";
 import { getOrCreateEventSigningKeys } from "@/server/tickets/application/EventSigningKeys";
+import {
+  issueCourtesy as issueCourtesyUc,
+  listCourtesies as listCourtesiesUc,
+} from "@/server/tickets/application/Courtesies";
+import { supabaseTicketRepository as ticketRepo } from "@/server/tickets/infrastructure/repositories/SupabaseTicketRepository";
+import type { CourtesySummary } from "@/server/tickets/ports/TicketRepository";
 import type { Event, EventCategory, Promo, TicketType } from "../../domain/Event";
 import type { EventStats, ScanFeedItem } from "../../ports/EventRepository";
 
@@ -115,6 +121,7 @@ const createSchema = z.object({
   category: z.enum(["conciertos","fiestas","festivales","comedia","cultura","deportes"]).nullable().optional(),
   totalCapacity: z.number().int().nullable().optional(),
   overbookPct: z.number().int().min(0).max(100).default(0),
+  maxTicketsPerPerson: z.number().int().positive().nullable().optional(),
   transfersEnabled: z.boolean().default(true),
   transferDeadlineHours: z.number().int().nullable().optional(),
   transferMaxCount: z.number().int().min(0).default(1),
@@ -204,6 +211,7 @@ export const EventsController = {
         category: parsed.data.category ?? null,
         totalCapacity: parsed.data.totalCapacity ?? null,
         overbookPct: parsed.data.overbookPct,
+        maxTicketsPerPerson: parsed.data.maxTicketsPerPerson ?? null,
         transfersEnabled: parsed.data.transfersEnabled,
         transferDeadlineHours: parsed.data.transferDeadlineHours ?? null,
         transferMaxCount: parsed.data.transferMaxCount,
@@ -492,6 +500,43 @@ export const EventsController = {
     return ok({ eventId: guard.value.eventId, publicKey: keys.publicJwk });
   },
 
+  async listCourtesies(slug: string): Promise<Result<CourtesySummary[]>> {
+    // Lectura restringida a miembros: expone contactos de invitados.
+    const guard = await guardEventMember(slug);
+    if (!guard.ok) return err(guard.error);
+    return listCourtesiesUc({ repo: ticketRepo }, guard.value.event.id);
+  },
+
+  async sendCourtesy(slug: string, input: unknown): Promise<Result<{ orderId: string }>> {
+    const guard = await guardEventMember(slug, ORG_WRITE_ROLES);
+    if (!guard.ok) return err(guard.error);
+    const parsed = z
+      .object({
+        ticketTypeId: z.string().uuid(),
+        qty: z.number().int().min(1).max(10).default(1),
+        guest: z
+          .object({
+            fullName: z.string().trim().min(2).max(120),
+            email: z.string().trim().email().nullable().optional(),
+            phone: z.string().trim().min(6).max(20).nullable().optional(),
+          })
+          .refine((g) => !!g.email || !!g.phone, { message: "contact_required" }),
+      })
+      .safeParse(input);
+    if (!parsed.success) return err("invalid_input");
+    // El tipo debe pertenecer a este evento — priceOrder lo re-valida igual
+    // (event_mismatch), acá solo damos un error temprano más claro.
+    if (!guard.value.ticketTypes.some((tt) => tt.id === parsed.data.ticketTypeId)) {
+      return err("ticket_type_missing");
+    }
+    const sent = await issueCourtesyUc(
+      { repo: ticketRepo },
+      { eventId: guard.value.event.id, ...parsed.data },
+    );
+    if (!sent.ok) return err(sent.error);
+    return ok({ orderId: sent.value.order.id });
+  },
+
   async listPartners(slug: string): Promise<Result<EventPartner[]>> {
     const found = await getEventBySlug({ repo }, slug);
     if (!found) return err("not_found");
@@ -611,6 +656,7 @@ const updateSchema = z.object({
   category: z.enum(["conciertos","fiestas","festivales","comedia","cultura","deportes"]).nullable().optional(),
   totalCapacity: z.number().int().nullable().optional(),
   overbookPct: z.number().int().min(0).max(100).optional(),
+  maxTicketsPerPerson: z.number().int().positive().nullable().optional(),
   transfersEnabled: z.boolean().optional(),
   transferDeadlineHours: z.number().int().nullable().optional(),
   transferMaxCount: z.number().int().min(0).optional(),

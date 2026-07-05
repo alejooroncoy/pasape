@@ -13,6 +13,7 @@ import {
   SettingsRow,
 } from "../org/settings/_components/SettingsCard";
 import { TextInput } from "../org/settings/_components/Field";
+import { PhoneField } from "@/components/design/PhoneField";
 import { Switch } from "../org/settings/_components/Toggle";
 import {
   SectionNav,
@@ -180,12 +181,7 @@ export default function AccountPage() {
               <TextInput value={user?.email ?? ""} readonly />
             </SettingsRow>
             <SettingsRow label="Teléfono" description="Para alertas urgentes por WhatsApp.">
-              <TextInput
-                value={accountPhone}
-                onChange={(e) => setAccountPhone(e.target.value)}
-                placeholder="+51 999 999 999"
-                inputMode="tel"
-              />
+              <PhoneField value={accountPhone} onChange={setAccountPhone} />
             </SettingsRow>
           </SettingsCard>
 

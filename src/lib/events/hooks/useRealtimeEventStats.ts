@@ -38,11 +38,16 @@ function useEventStatsBroadcast(
   }, [eventId]);
 }
 
-// KPIs del panel del organizador.
+// KPIs del panel del organizador. El mismo ping invalida también las queries
+// de la pestaña de promotores (asignaciones y drilldown de ventas por link):
+// una venta nueva llega por el mismo trigger y esas vistas deben moverse solas.
 export function useRealtimeEventStats(eventId: string | null | undefined, slug: string) {
   const qc = useQueryClient();
   useEventStatsBroadcast(eventId, () => {
-    if (slug) void qc.invalidateQueries({ queryKey: ["events", "stats", slug] });
+    if (slug) {
+      void qc.invalidateQueries({ queryKey: ["events", "stats", slug] });
+      void qc.invalidateQueries({ queryKey: ["promoters", "event", slug] });
+    }
   });
 }
 

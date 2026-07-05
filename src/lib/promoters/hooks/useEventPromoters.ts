@@ -5,7 +5,7 @@ import { api } from "@/lib/_shared/api-client";
 import type { EventPromoterAssignment } from "@/server/promoters/application/EventPromoterAssignment";
 import type { PromoterLinkSale } from "@/server/promoters/application/PromoterDetail";
 import type { EventPromoterScheme } from "@/server/events/ports/EventRepository";
-import type { CommissionConfig, CommissionType } from "@/server/promoters/domain/OrgPromoter";
+import type { CommissionConfig } from "@/server/promoters/domain/OrgPromoter";
 
 const key = (slug: string) => ["promoters", "event", slug] as const;
 const schemeKey = (slug: string) => ["promoters", "event", slug, "scheme"] as const;
@@ -19,7 +19,6 @@ export const useEventPromoterScheme = (slug: string) =>
 
 const EMPTY_SCHEME: EventPromoterScheme = {
   commissionPct: null,
-  commissionType: null,
   commissionConfig: null,
   defaultQuota: null,
 };
@@ -72,7 +71,6 @@ export const useAssignPromotersToEvent = (slug: string) => {
 type AssignmentEdit = {
   linkId: string;
   commissionPct?: number | null;
-  commissionType?: CommissionType | null;
   commissionConfig?: CommissionConfig | null;
   quota?: number | null;
 };
@@ -80,16 +78,9 @@ type AssignmentEdit = {
 export const useUpdateAssignmentCommission = (slug: string) => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({
-      linkId,
-      commissionPct,
-      commissionType,
-      commissionConfig,
-      quota,
-    }: AssignmentEdit) => {
+    mutationFn: ({ linkId, commissionPct, commissionConfig, quota }: AssignmentEdit) => {
       const body: Record<string, unknown> = {};
       if (commissionPct !== undefined) body.commissionPct = commissionPct;
-      if (commissionType !== undefined) body.commissionType = commissionType;
       if (commissionConfig !== undefined) body.commissionConfig = commissionConfig;
       if (quota !== undefined) body.quota = quota;
       return api.patch<true>(`/api/events/${slug}/promoters/${linkId}`, body);
@@ -107,18 +98,13 @@ export const useUpdateAssignmentCommission = (slug: string) => {
             next.ownCommissionPct = edit.commissionPct;
             if (edit.commissionPct != null) next.effectiveCommissionPct = edit.commissionPct;
           }
-          if (edit.commissionType !== undefined) {
-            next.ownCommissionType = edit.commissionType;
-            if (edit.commissionType != null) next.commissionType = edit.commissionType;
-          }
           if (edit.commissionConfig !== undefined) {
             next.ownCommissionConfig = edit.commissionConfig;
+            next.effectiveConfig = edit.commissionConfig;
           }
           // Comisión personalizada si tiene cualquier override propio.
           next.commissionCustom =
-            next.ownCommissionPct != null ||
-            next.ownCommissionType != null ||
-            next.ownCommissionConfig != null;
+            next.ownCommissionPct != null || next.ownCommissionConfig != null;
           if (edit.quota !== undefined) {
             next.ownQuota = edit.quota;
             next.quotaCustom = edit.quota != null;

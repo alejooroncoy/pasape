@@ -9,6 +9,7 @@ const schema = z.object({
   orderId: z.string().uuid(),
   token: z.string().min(8).max(200),
   phoneNumber: z.string().regex(/^\d{9}$/),
+  deviceId: z.string().max(1000).nullable().optional(),
 });
 
 // 10 req/min por IP: intentos de pago con Yape el día del evento.

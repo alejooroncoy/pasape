@@ -13,6 +13,7 @@ import {
 import { AnimatePresence, motion } from "motion/react";
 import { Money } from "@/lib/_shared/money";
 import { useRouter } from "@/i18n/navigation";
+import { PhoneField } from "@/components/design/PhoneField";
 import { useCreateEvent } from "@/lib/events/hooks/useCreateEvent";
 import { useUpdateEvent } from "@/lib/events/hooks/useUpdateEvent";
 import { useEvent } from "@/lib/events/hooks/useEvents";
@@ -387,6 +388,7 @@ export function EventComposer(props: EventComposerProps) {
       description: ev.description ?? "",
       category: ev.category ?? null,
       feeMode: ev.feeMode,
+      maxPerPerson: ev.maxTicketsPerPerson != null ? String(ev.maxTicketsPerPerson) : "",
       date,
       time,
       durationHours: durationHoursFromEdit > 0 ? String(durationHoursFromEdit) : "",
@@ -430,6 +432,10 @@ export function EventComposer(props: EventComposerProps) {
   // Quién absorbe la comisión de Pasape: el comprador la paga aparte
   // (default) o el organizador la incluye en el precio que puso.
   const [feeMode, setFeeMode] = useState<FeeMode>(seedFromEdit?.feeMode ?? "buyer_pays_extra");
+  // Tope de entradas por persona (acumulado por evento). "" = sin límite; es la
+  // representación como string para el input (como capacity). Solo cuenta
+  // entradas individuales, no boxes.
+  const [maxPerPerson, setMaxPerPerson] = useState<string>(seedFromEdit?.maxPerPerson ?? "");
   const [date, setDate] = useState(seedFromEdit?.date ?? "");
   const [time, setTime] = useState(seedFromEdit?.time ?? "");
   const [durationHours, setDurationHours] = useState(seedFromEdit?.durationHours ?? "");
@@ -704,6 +710,7 @@ export function EventComposer(props: EventComposerProps) {
         transfersEnabled: true,
         transferRequiresKyc: false,
         feeMode,
+        maxTicketsPerPerson: maxPerPerson.trim() ? Number(maxPerPerson) : null,
       });
       if (selectedPromoterIds.size > 0 && ev.slug) {
         try {
@@ -781,6 +788,9 @@ export function EventComposer(props: EventComposerProps) {
       if (nextDesc !== ev.description) patch.description = nextDesc;
       if (category !== (ev.category ?? null)) patch.category = category;
       if (feeMode !== ev.feeMode) patch.feeMode = feeMode;
+      const nextMaxPerPerson = maxPerPerson.trim() ? Number(maxPerPerson) : null;
+      if (nextMaxPerPerson !== (ev.maxTicketsPerPerson ?? null))
+        patch.maxTicketsPerPerson = nextMaxPerPerson;
       const nextVenueName = venue.name.trim() || null;
       if (nextVenueName !== ev.venue) patch.venue = nextVenueName;
       if (venue.lat !== ev.venueLat) patch.venueLat = venue.lat;
@@ -819,10 +829,14 @@ export function EventComposer(props: EventComposerProps) {
         tickets.filter((t) => t.id).map((t) => t.id as string),
       );
 
-      // Crear nuevos
+      // Crear nuevos. Apenas el backend confirma, escribimos el id devuelto en
+      // la fila local para que un reintento NO los vuelva a crear. Sin esto, si
+      // el guardado fallaba más abajo (p. ej. al borrar un box con ventas →
+      // has_sold_tickets) y el organizador reintentaba, estas filas seguían sin
+      // id y se recreaban: por eso los boxes se multiplicaban en cada intento.
       const toCreate = validTickets.filter((t) => !t.id);
       for (const t of toCreate) {
-        await createTT.mutateAsync({
+        const created = await createTT.mutateAsync({
           name: t.name,
           kind: t.kind,
           priceCents: toCents(t.priceSoles),
@@ -834,13 +848,36 @@ export function EventComposer(props: EventComposerProps) {
           ...presaleTiersPayload(t),
           ...freeReleasePayload(t),
         });
+        setTickets((prev) =>
+          prev.map((row) => (row.rowKey === t.rowKey ? { ...row, id: created.id } : row)),
+        );
       }
 
-      // Crear los boxes de cada grupo de espacios nuevo (se expanden aquí).
+      // Expandir cada grupo de espacios nuevo a N boxes. Se crean UNA sola vez:
+      // al terminar el grupo lo quitamos de spaceGroups y sus boxes ya creados
+      // pasan a ser filas con id — un reintento no los recrea.
       for (const g of spaceGroups) {
+        const createdRows: TicketRow[] = [];
         for (const box of expandSpaceGroup(g)) {
-          await createTT.mutateAsync(box);
+          const created = await createTT.mutateAsync(box);
+          createdRows.push({
+            id: created.id,
+            rowKey: created.id,
+            name: box.name,
+            kind: "box",
+            priceSoles: fromCents(box.priceCents),
+            capacity: String(box.capacity),
+            boxLabel: box.boxLabel ?? "",
+            unitNoun: box.unitNoun ?? "",
+            saleEndsAt: "",
+            description: "",
+            presaleTiers: [],
+            isFree: false,
+            freeUntilAt: "",
+          });
         }
+        setTickets((prev) => [...prev, ...createdRows]);
+        setSpaceGroups((prev) => prev.filter((x) => x.rowKey !== g.rowKey));
       }
 
       // Actualizar cambiados
@@ -878,10 +915,23 @@ export function EventComposer(props: EventComposerProps) {
         }
       }
 
-      // Borrar los que estaban antes y ya no están
+      // Borrar los que estaban antes y ya no están. Un box con ventas NO se
+      // puede borrar (has_sold_tickets): lo saltamos y avisamos, en vez de
+      // abortar TODO el guardado — abortar dejaba los boxes recién creados sin
+      // reflejar y disparaba el reintento que los multiplicaba.
+      const soldBlocked: string[] = [];
       for (const origId of originalTicketIds) {
         if (!currentIds.has(origId)) {
-          await deleteTT.mutateAsync(origId);
+          try {
+            await deleteTT.mutateAsync(origId);
+          } catch (e) {
+            if ((e as Error).message === "has_sold_tickets") {
+              const orig = originalTicketsById.get(origId);
+              soldBlocked.push(orig?.boxLabel || orig?.name || "una entrada");
+            } else {
+              throw e;
+            }
+          }
         }
       }
 
@@ -890,6 +940,15 @@ export function EventComposer(props: EventComposerProps) {
       await setPromosMut.mutateAsync(
         promos.filter((p) => validTicketIds.has(p.ticketTypeId)),
       );
+
+      // Si algún box con ventas no se pudo quitar, guardamos el resto pero
+      // dejamos el editor abierto con el aviso (no cerramos en silencio).
+      if (soldBlocked.length > 0) {
+        setSubmitError(
+          `Guardamos tus cambios, pero no pudimos quitar ${soldBlocked.join(", ")} porque ya tiene ventas.`,
+        );
+        return;
+      }
 
       props.onClose?.();
     } catch (e) {
@@ -938,8 +997,11 @@ export function EventComposer(props: EventComposerProps) {
     setLayoutPreview(URL.createObjectURL(file));
   };
 
-  // CTA inteligente
+  // CTA inteligente. `uploadingAssets` entra acá: mientras se suben las
+  // imágenes el CTA ya muestra "Subiendo imágenes…", pero si no deshabilita el
+  // botón se puede volver a clickear y disparar otro guardado/subida encima.
   const submitting =
+    uploadingAssets ||
     create.isPending ||
     update.isPending ||
     createTT.isPending ||
@@ -1280,6 +1342,48 @@ export function EventComposer(props: EventComposerProps) {
             required={validTickets.length === 0}
             highlight={highlight === "entradas"}
           />
+
+          {/* Máximo de entradas por persona: tope acumulado por evento (por DNI).
+              Va JUSTO DESPUÉS de Entradas porque es un límite sobre las entradas
+              recién definidas. Vacío = sin límite. No cuenta boxes. El backend lo
+              hace cumplir al comprar; acá el organizador solo lo configura. */}
+          <div className="rounded-2xl border border-cart-line bg-cart-bg-elev px-4 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">
+                  Máximo por persona
+                </span>
+                <p className="mt-0.5 text-[11px] text-cart-ink-3">
+                  Entradas que puede comprar una misma persona en total. Vacío = sin límite.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  step={1}
+                  value={maxPerPerson}
+                  onChange={(e) => {
+                    // Solo enteros positivos; vacío queda como "sin límite".
+                    const v = e.target.value.replace(/[^\d]/g, "");
+                    setMaxPerPerson(v);
+                  }}
+                  placeholder="∞"
+                  className="w-20 rounded-xl border border-cart-line bg-cart-bg-elev-2 px-3 py-2 text-center text-[15px] font-medium text-white outline-none placeholder:text-cart-ink-3 focus:border-cart-accent"
+                />
+                {maxPerPerson.trim() !== "" && (
+                  <button
+                    type="button"
+                    onClick={() => setMaxPerPerson("")}
+                    className="text-[11px] font-medium text-cart-ink-3 underline underline-offset-2 hover:text-white"
+                  >
+                    Sin límite
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
 
           {/* Promociones — 2x1 / 3x2. Solo en edit: requiere entradas con id. */}
           {isEdit && (
@@ -2279,20 +2383,29 @@ function BoxGroupEditor({
       className="rounded-2xl border border-cart-line bg-cart-bg-elev-2 p-3"
       style={{ boxShadow: `inset 0 0 0 1px ${TICKET_KIND_META.box.tint}` }}
     >
-      {/* Header */}
-      <div className="flex items-center gap-2">
-        <span className="flex-1 text-[15px] font-semibold tracking-[-0.01em] text-white">
-          {nounPlural}
-          <span className="ml-1.5 font-mono text-[12px] font-normal text-cart-ink-3">
-            ({boxes.length})
+      {/* Nombre del espacio · lo pone el organizador y define TODO: cómo se
+          agrupan los boxes y el copy que ve el comprador ("Cada <nombre> para N
+          personas", "3 <nombres> libres"). Antes había un selector Box/Mesa/
+          Lounge aparte — redundante: el noun sale directo de este nombre. */}
+      <div className="flex flex-col gap-0.5">
+        <span className="text-[9.5px] font-semibold uppercase tracking-[0.12em] text-cart-ink-4">
+          Nombre del espacio · tócalo para editar
+        </span>
+        <div className="flex items-center gap-2">
+          <svg width="12" height="12" viewBox="0 0 14 14" fill="none" className="shrink-0 text-cart-ink-3">
+            <path d="M9.5 2.5l2 2-7 7H2.5v-2l7-7z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+          </svg>
+          <input
+            value={first.unitNoun}
+            onChange={(e) => onUpdateAll({ unitNoun: e.target.value })}
+            placeholder="Box, Mesa, Lounge…"
+            maxLength={24}
+            className="min-w-0 flex-1 border-b border-white/20 bg-transparent pb-0.5 text-[15px] font-semibold tracking-[-0.01em] text-white outline-none transition-colors placeholder:text-cart-ink-3 focus:border-cart-accent"
+          />
+          <span className="shrink-0 font-mono text-[12px] font-normal text-cart-ink-3">
+            {nounPlural} ({boxes.length})
           </span>
-        </span>
-        <span
-          className="rounded-full px-2 py-0.5 text-[9.5px] font-semibold uppercase tracking-[0.12em]"
-          style={{ background: `${TICKET_KIND_META.box.tint}22`, color: TICKET_KIND_META.box.tint }}
-        >
-          Box
-        </span>
+        </div>
       </div>
 
       {/* Shared fields */}
@@ -2314,13 +2427,8 @@ function BoxGroupEditor({
       <AdvancedToggle
         open={advOpen}
         onToggle={() => setAdvOpen((v) => !v)}
-        hasContent={!!(first.unitNoun || first.description || presaleRow.presaleTiers.length > 0 || presaleRow.isFree)}
+        hasContent={!!(first.description || presaleRow.presaleTiers.length > 0 || presaleRow.isFree)}
       />
-      {advOpen && (
-        <div className="mt-2">
-          <UnitNounPicker value={first.unitNoun} onChange={(v) => onUpdateAll({ unitNoun: v })} />
-        </div>
-      )}
 
       {/* Individual labels + precio override */}
       <div className="mt-3 border-t border-cart-line pt-3">
@@ -2669,7 +2777,9 @@ function TicketsEditor({
                 </svg>
                 <input
                   value={t.name}
-                  onChange={(e) => update(t.rowKey, { name: e.target.value })}
+                  // El noun del espacio sale del nombre que pone el organizador
+                  // (agrupa y alimenta el copy del comprador) — sin selector aparte.
+                  onChange={(e) => update(t.rowKey, { name: e.target.value, unitNoun: e.target.value })}
                   className="flex-1 bg-transparent text-[15px] font-semibold tracking-[-0.01em] text-white outline-none placeholder:text-cart-ink-3 border-b border-white/20 pb-0.5 focus:border-cart-accent transition-colors"
                   placeholder="Nombre — ej. Box VIP, Mesa Premium"
                 />
@@ -2706,11 +2816,10 @@ function TicketsEditor({
             <AdvancedToggle
               open={advancedOpen.has(t.rowKey)}
               onToggle={() => toggleAdvanced(t.rowKey)}
-              hasContent={!!(t.unitNoun || t.description || t.presaleTiers.length > 0 || t.isFree)}
+              hasContent={!!(t.description || t.presaleTiers.length > 0 || t.isFree)}
             />
             {advancedOpen.has(t.rowKey) && (
               <>
-                <UnitNounPicker value={t.unitNoun} onChange={(v) => update(t.rowKey, { unitNoun: v })} />
                 <DescriptionField value={t.description} onChange={(v) => update(t.rowKey, { description: v })} />
                 {/* Preventa de un box: precio bajo + fecha (un box es 1 unidad) */}
                 <PresaleTiersEditor tiers={t.presaleTiers} base={t.priceSoles} onChange={(tiers) => update(t.rowKey, { presaleTiers: tiers })} />
@@ -2813,14 +2922,15 @@ function PromoterPoolPicker({
   onCreate: (payload: {
     name: string;
     whatsapp: string | null;
-    defaultCommissionPct: number;
+    defaultCommissionPct: number | null;
   }) => Promise<OrgPromoter>;
   creating: boolean;
 }) {
   const [adding, setAdding] = useState(pool.length === 0);
   const [name, setName] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
-  const [pct, setPct] = useState(15);
+  // null = hereda las reglas de la marca (default de un promotor nuevo).
+  const [pct, setPct] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const toggle = (id: string) => {
@@ -2841,7 +2951,7 @@ function PromoterPoolPicker({
       });
       setName("");
       setWhatsapp("");
-      setPct(15);
+      setPct(null);
       setAdding(false);
     } catch (e) {
       setError((e as Error).message ?? "No pudimos guardar");
@@ -2897,7 +3007,7 @@ function PromoterPoolPicker({
                     )}
                   </div>
                   <span className="rounded-full bg-cart-accent-soft px-2 py-1 text-[11px] font-semibold text-cart-accent">
-                    {p.defaultCommissionPct}%
+                    {p.defaultCommissionPct == null ? "Igual que marca" : `${p.defaultCommissionPct}%`}
                   </span>
                   <span
                     className={
@@ -2939,14 +3049,20 @@ function PromoterPoolPicker({
               placeholder="Nombre"
               className="rounded-xl bg-cart-bg-elev px-3 py-2.5 text-[14px] outline-none placeholder:text-cart-ink-4"
             />
-            <input
-              value={whatsapp}
-              onChange={(e) => setWhatsapp(e.target.value)}
-              placeholder="+51 9XX XXX XXX (opcional)"
-              inputMode="tel"
-              className="rounded-xl bg-cart-bg-elev px-3 py-2.5 font-mono text-[13.5px] outline-none placeholder:text-cart-ink-4"
-            />
-            <div className="flex gap-2">
+            <PhoneField value={whatsapp} onChange={setWhatsapp} />
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setPct(null)}
+                className={
+                  "rounded-xl px-3 py-2 text-[13px] font-semibold transition " +
+                  (pct == null
+                    ? "bg-cart-accent text-white shadow-[0_8px_20px_-6px_var(--color-cart-accent-glow)]"
+                    : "bg-cart-bg-elev text-cart-ink-2 hover:text-white")
+                }
+              >
+                Igual que la marca
+              </button>
               {[10, 15, 20].map((p) => (
                 <button
                   key={p}
@@ -3272,76 +3388,6 @@ function SpaceGroupCard({
     </div>
   );
 }
-
-// Selector compacto para elegir cómo el organizador llama a la unidad
-// reservable (box, mesa, lounge u otro). Se muestra dentro de cada row de
-// kind=box en el editor de tickets.
-function UnitNounPicker({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  const presets = ["box", "mesa", "lounge"];
-  const lower = value.trim().toLowerCase();
-  const isPreset = presets.includes(lower);
-  const isCustom = lower.length > 0 && !isPreset;
-  const [showCustom, setShowCustom] = useState(isCustom);
-
-  return (
-    <div className="mt-2 flex flex-col gap-1.5 rounded-xl bg-cart-bg-elev px-3 py-2">
-      <div className="flex flex-wrap gap-1.5">
-        {presets.map((p) => {
-          const active = lower === p;
-          return (
-            <button
-              key={p}
-              type="button"
-              onClick={() => {
-                onChange(p);
-                setShowCustom(false);
-              }}
-              className={
-                "rounded-full px-2.5 py-1 text-[11.5px] font-semibold transition " +
-                (active
-                  ? "bg-cart-accent text-cart-bg"
-                  : "border border-cart-line text-cart-ink-2 hover:border-white/40")
-              }
-            >
-              {p[0].toUpperCase() + p.slice(1)}
-            </button>
-          );
-        })}
-        <button
-          type="button"
-          onClick={() => {
-            setShowCustom(true);
-            if (isPreset) onChange("");
-          }}
-          className={
-            "rounded-full px-2.5 py-1 text-[11.5px] font-semibold transition " +
-            (isCustom || showCustom
-              ? "bg-cart-accent text-cart-bg"
-              : "border border-cart-line text-cart-ink-2 hover:border-white/40")
-          }
-        >
-          Otro
-        </button>
-      </div>
-      {(showCustom || isCustom) && (
-        <input
-          value={isPreset ? "" : value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder="Ej: Suite, Cabaña…"
-          maxLength={24}
-          className="mt-1 w-full bg-transparent text-[13px] text-white outline-none placeholder:text-cart-ink-4"
-        />
-      )}
-    </div>
-  );
-}
-
 
 // ============================================================
 // IconTag / PromosEditor — Promociones 2x1 / 3x2 (sección aparte de preventa).

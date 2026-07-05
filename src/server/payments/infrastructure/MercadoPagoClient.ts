@@ -1,5 +1,5 @@
 import "server-only";
-import { MercadoPagoConfig } from "mercadopago";
+import { MercadoPagoConfig, Payment, PaymentRefund } from "mercadopago";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { Money } from "@/lib/_shared/money";
 
@@ -30,6 +30,28 @@ export const mpClient = (opts?: { sellerAccessToken?: string | null }): MercadoP
   });
 };
 
+// ── Operaciones sobre un pago existente ──────────────────────────────────────
+// Se usan cuando un pago quedó en revisión (in_process) y el comprador reintenta
+// con otro medio (cancelar el anterior antes de cobrar de nuevo), o cuando un
+// pago viejo se cuela tras haber cobrado otro (reembolso backstop anti-doble-cobro).
+
+export const getMpPayment = async (paymentId: string | number) => {
+  return new Payment(mpClient()).get({ id: paymentId });
+};
+
+// Cancela un pago que aún NO se acreditó (pending/in_process); libera la
+// retención en la tarjeta. MP rechaza cancelar un pago ya aprobado — para ese
+// caso se usa refundMpPayment.
+export const cancelMpPayment = async (paymentId: string | number) => {
+  return new Payment(mpClient()).cancel({ id: paymentId });
+};
+
+// Reembolso total de un pago aprobado (backstop: el comprador pagó con otro
+// medio y el pago viejo se aprobó igual → se le devuelve a la misma persona).
+export const refundMpPayment = async (paymentId: string | number) => {
+  return new PaymentRefund(mpClient()).create({ payment_id: paymentId });
+};
+
 export const mpWebhookSecret = (): string => {
   const s = process.env.MP_WEBHOOK_SECRET || "";
   if (!s) throw new Error("missing_mp_webhook_secret");
@@ -57,9 +79,25 @@ export const isPublicBaseUrl = (base: string = appBaseUrl()): boolean => {
   return base.startsWith("https://") && !isPrivateHost;
 };
 
+// Identificación del pagador para MP Perú, deducida del formato del documento.
+// Tipos válidos verificados contra la cuenta: DNI (8 díg), C.E (8-12 díg),
+// RUC (11-12), Otro (5-20 díg) — TODOS numéricos, NO existe "PAS"/pasaporte.
+// Un DNI son 8 dígitos; un documento numérico de 9-12 se manda como C.E (Carné
+// de Extranjería). Un pasaporte alfanumérico no encaja en ningún tipo → se
+// devuelve null y se OMITE (la identificación es opcional; el pago procede).
+export const mpPeruIdentification = (
+  doc: string | null,
+): { type: string; number: string } | null => {
+  if (!doc) return null;
+  if (/^\d{8}$/.test(doc)) return { type: "DNI", number: doc };
+  if (/^\d{9,12}$/.test(doc)) return { type: "C.E", number: doc };
+  return null;
+};
+
 export type MpPaymentItem = {
   id: string;
   title: string;
+  description?: string;
   quantity: number;
   unit_price: number;
   category_id: string;
@@ -90,20 +128,25 @@ export const buildOrderItems = async (
   }
 
   const typeIds = [...byType.keys()];
-  const { data: types } = await db.from("ticket_types").select("id, name").in("id", typeIds);
-  const nameById = new Map(
-    ((types ?? []) as Array<{ id: string; name: string }>).map((t) => [t.id, t.name]),
+  const { data: types } = await db.from("ticket_types").select("id, name, description").in("id", typeIds);
+  const byId = new Map(
+    ((types ?? []) as Array<{ id: string; name: string; description: string | null }>).map((t) => [t.id, t]),
   );
 
   // Las líneas de entrada llevan su precio de cara (lo que recibe el
   // organizador). La parte de comisión que PAGA el comprador va como línea
   // aparte (abajo), no horneada en la entrada.
   const subtotalCents = rows.reduce((sum, r) => sum + (r.price_cents ?? 0), 0);
-  const items = typeIds.map((id) => {
+  const items: MpPaymentItem[] = typeIds.map((id) => {
     const { qty, totalCents } = byType.get(id)!;
+    const tt = byId.get(id);
+    const title = tt?.name ?? "Entrada";
     return {
       id,
-      title: nameById.get(id) ?? "Entrada",
+      title,
+      // `items.description` mejora el approval rate (checklist oficial de MP).
+      // Si el organizador no puso descripción, cae al nombre de la entrada.
+      description: (tt?.description?.trim() || title).slice(0, 256),
       quantity: qty,
       unit_price: Money.toSoles(Math.round(totalCents / qty)),
       category_id: "tickets",

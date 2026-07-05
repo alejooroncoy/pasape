@@ -3,7 +3,7 @@ import { supabaseAdmin } from "@/server/_shared/supabase/admin";
 import type { NotificationSender } from "../ports/NotificationSender";
 import { CompositeNotificationSender } from "../infrastructure/CompositeNotificationSender";
 import { ResendEmailSender } from "../infrastructure/ResendEmailSender";
-import { KapsoWhatsAppSender } from "../infrastructure/KapsoWhatsAppSender";
+import { WhatsAppNotificationSender } from "../infrastructure/WhatsAppNotificationSender";
 import { signOrderLink } from "../domain/OrderLinkToken";
 
 // Despacha el QR del ticket por email + WhatsApp tras un pago exitoso.
@@ -25,6 +25,7 @@ type OrderRow = {
   id: string;
   buyer_id: string | null;
   event_id: string;
+  total_cents: number;
   guest_email: string | null;
   guest_phone: string | null;
   guest_name: string | null;
@@ -52,7 +53,7 @@ type TicketRow = {
 };
 
 const defaultSender = (): NotificationSender =>
-  new CompositeNotificationSender([new ResendEmailSender(), new KapsoWhatsAppSender()]);
+  new CompositeNotificationSender([new ResendEmailSender(), new WhatsAppNotificationSender()]);
 
 const appBaseUrl = (): string =>
   process.env.APP_BASE_URL ?? process.env.NEXT_PUBLIC_APP_BASE_URL ?? "https://app.pasape.lat";
@@ -66,7 +67,7 @@ export const dispatchTicketDelivery = async (
 
   const { data: order, error: orderErr } = await db
     .from("orders")
-    .select("id, buyer_id, event_id, guest_email, guest_phone, guest_name")
+    .select("id, buyer_id, event_id, total_cents, guest_email, guest_phone, guest_name")
     .eq("id", orderId)
     .maybeSingle<OrderRow>();
   if (orderErr || !order) {
@@ -144,7 +145,7 @@ export const dispatchTicketDelivery = async (
     // decide solo si te manda al login+reclamo, o directo a tu ticket ya
     // reclamado (offline-capable incluido). (Reemplaza /t/?k= como vista de
     // QR y /auth/gate, que nunca existió.)
-    const orderUrl = `${appBaseUrl()}/order/${order.id}/${signOrderLink(order.id)}`;
+    const orderUrl = `${appBaseUrl()}/order/${order.id}/${signOrderLink(order.id)}${order.total_cents === 0 ? "?free=1" : ""}`;
     const ticketUrl = orderUrl;
     const walletSignupUrl = orderUrl;
 
