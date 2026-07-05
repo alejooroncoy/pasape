@@ -23,6 +23,7 @@ type TicketRow = {
   holder_dni_last2: string | null;
   ticket_type_id: string;
   ticket_types: { event_id: string; zone_id: string | null } | null;
+  order: { status: string } | null;
 };
 
 export const POST = async (
@@ -58,7 +59,7 @@ export const POST = async (
   const { data: ticket, error: ticketErr } = await db
     .from("tickets")
     .select(
-      "id, status, current_holder, holder_name, holder_dni_last2, ticket_type_id, ticket_types(event_id, zone_id)",
+      "id, status, current_holder, holder_name, holder_dni_last2, ticket_type_id, ticket_types(event_id, zone_id), order:orders(status)",
     )
     .eq("id", ticketId)
     .maybeSingle<TicketRow>();
@@ -76,6 +77,13 @@ export const POST = async (
   if (!ticket) return NextResponse.json({ error: "not_found" }, { status: 404 });
   if (ticket.status !== "active") {
     return NextResponse.json({ error: "ticket_inactive" }, { status: 410 });
+  }
+  // Frontera de acceso: el cert (que habilita generar QR) SOLO se emite si la
+  // orden está pagada. Un pago en revisión (in_process) no genera QR — el
+  // portero rechaza la firma incluso offline. Cubre también a los invitados de
+  // un box (comparten la orden del host): sin pago del host, no hay QR.
+  if (ticket.order?.status !== "paid") {
+    return NextResponse.json({ error: "payment_not_confirmed" }, { status: 402 });
   }
   if (!linkOk && auth?.ok && ticket.current_holder !== auth.value.profileId) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });

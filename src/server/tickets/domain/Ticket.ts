@@ -50,6 +50,10 @@ export type Ticket = {
 export type WalletTicket = Ticket & {
   event: { id: string; slug: string; title: string; startsAt: string; venue: string | null; timezone: string; status: EventStatus; coverUrl: string | null; category: EventCategory | null };
   ticketType: { id: string; name: string; kind: string };
+  /** Estado de la orden que pagó esta entrada. 'paid' = normal (con QR). 'pending'
+      = el pago quedó en revisión de MP (in_process): la wallet la muestra como
+      "Pago en revisión" y aún no hay QR (el cert se emite solo cuando está pagada). */
+  orderStatus: OrderStatus;
   /** Contacto (WhatsApp) al que se envió la entrada y aún no la reclama. Null
       si no hay transferencia pendiente. Mientras tanto el ticket sigue siendo
       del emisor (lo conserva hasta que el receptor reclame). */
