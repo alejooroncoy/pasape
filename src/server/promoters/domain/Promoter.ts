@@ -57,6 +57,9 @@ export type PromoterHomeData = {
   /** false = el organizador aún no configuró NADA (ni %, ni metas, en ningún
    *  nivel). La UI muestra "aún se está configurando", no "sin comisión". */
   schemeConfigured: boolean;
+  /** Dinero: % del vendido + hitos cash ya conseguidos (computePromoterPayout).
+   *  Mismo cálculo que /r/[code]/state y getEarnings — fuente única. */
+  payoutCents: number;
 };
 
 export type PromoterApplication = {

@@ -18,33 +18,30 @@ import type { Box } from "../../domain/Box";
 // Resuelve el current_holder del ticket cuando el caller solo tiene el link
 // público (`k`). Sin esto, comprar como guest y abrir el QR sin sesión no
 // puede generar/ver el box de invitaciones.
+//
+// Why NUNCA dedupe por contacto: reutilizar un profile existente por
+// phone/email permitiría que cualquiera con el token público del box
+// "regale" un asiento a la cuenta de otra persona con solo teclear su
+// teléfono — sin que esa persona lo pidiera ni probara ser su dueña (IDOR de
+// identidad). El mismo problema y la misma solución que en
+// SupabaseTicketRepository.buy(): cada guest es un profile placeholder
+// SIEMPRE nuevo, con email sintético garantizado único.
 async function resolveOrCreateGuestProfile(input: {
   phone: string;
   fullName: string;
 }): Promise<string | null> {
   const db = supabaseAdmin();
-  // Normalizamos a solo dígitos para que `+51987654321` y `987654321` matcheen
-  // al mismo profile y no dupliquen.
   const phoneNorm = input.phone.replace(/\D/g, "");
   if (!phoneNorm) return null;
 
-  const { data: existing } = await db
-    .from("profiles")
-    .select("id")
-    .eq("phone", phoneNorm)
-    .maybeSingle<{ id: string }>();
-  if (existing) return existing.id;
-
   // profiles.id es FK a auth.users(id) — no podemos insertar directo. Creamos
   // auth user (el trigger handle_new_user crea la row de profiles) y luego
-  // hidratamos phone + initial_role. Sintetizamos email para satisfacer
-  // createUser (Supabase exige email o phone con verificación).
-  const synthEmail = `guest+${phoneNorm}@pasape.app`;
+  // hidratamos phone + initial_role. El email es SIEMPRE sintético y único
+  // (nunca colisiona ni reutiliza un profile existente).
+  const synthEmail = `guest+${crypto.randomUUID()}@pasape.app`;
   const { data: authUser, error: authErr } = await db.auth.admin.createUser({
     email: synthEmail,
-    phone: phoneNorm,
     email_confirm: true,
-    phone_confirm: true,
     user_metadata: { full_name: input.fullName },
   });
   if (authErr || !authUser?.user) return null;

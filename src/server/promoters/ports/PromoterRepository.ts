@@ -20,6 +20,11 @@ export type PromoterRepository = {
     token: string;
     applicantId: string;
     message: string | null;
+    // Nombre tecleado en el formulario de postulación. El organizador lo ve
+    // en la lista de pendientes (applicantName) — sin esto se pierde y se
+    // muestra el full_name previo del profile (a menudo vacío para un
+    // postulante nuevo).
+    fullName: string | null;
   }): Promise<Result<{ applicationId: string; eventSlug: string }>>;
   getApplicationStatus(
     applicantId: string,

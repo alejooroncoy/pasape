@@ -1223,6 +1223,15 @@ function PartnersSection({ slug }: { slug: string }) {
 }
 
 function PartnerChip({ partner, onRemove }: { partner: EventPartner; onRemove: () => void }) {
+  // El logo se ve en la página pública del evento: quitarlo es una acción con
+  // efecto visible para el público, no un ajuste trivial de UI — pedimos
+  // confirmación en vez de borrar al primer toque/clic.
+  const handleRemove = () => {
+    if (window.confirm(`¿Quitar el logo de "${partner.name}"? Dejará de verse en la página pública.`)) {
+      onRemove();
+    }
+  };
+
   return (
     <div className="group flex items-center gap-2 rounded-xl border border-cart-line bg-cart-bg-elev px-2.5 py-1.5 transition hover:border-cart-line-strong">
       {partner.logoUrl && (
@@ -1232,8 +1241,10 @@ function PartnerChip({ partner, onRemove }: { partner: EventPartner; onRemove: (
       <span className="text-[12.5px] font-medium text-cart-ink-2">{partner.name}</span>
       <button
         type="button"
-        onClick={onRemove}
-        className="ml-0.5 grid size-4 place-items-center rounded-full text-cart-ink-4 opacity-0 transition hover:bg-white/10 hover:text-white group-hover:opacity-100"
+        onClick={handleRemove}
+        // Siempre visible: en táctil no existe hover persistente, así que
+        // depender de group-hover deja la X inalcanzable en móvil.
+        className="ml-0.5 grid size-4 place-items-center rounded-full text-cart-ink-4 opacity-70 transition hover:bg-white/10 hover:text-white hover:opacity-100"
         aria-label={`Quitar ${partner.name}`}
       >
         <svg width="8" height="8" viewBox="0 0 10 10" fill="none">
