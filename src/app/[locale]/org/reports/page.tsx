@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, Suspense, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { AnimatePresence, motion, useMotionValue, useTransform, animate } from "motion/react";
 import { useMyEvents } from "@/lib/events/hooks/useEvents";
@@ -15,6 +15,14 @@ import { OrgShell } from "../_shell/OrgShell";
 import type { Event, TicketTypeKind } from "@/server/events/domain/Event";
 
 type RangeKey = "today" | "7d" | "30d" | "all";
+
+// Estado de la vista compartido por varios componentes (tabla de promotores,
+// estados vacíos, etc.). En vez de prop-drilling de `isClosed`, todos lo leen de
+// aquí — un componente nuevo que lo necesite no obliga a reenviar props por la
+// cadena. `isClosed` = evento finalizado (vista de cierre) vs. en vivo/borrador.
+type ReportsView = { isClosed: boolean };
+const ReportsViewContext = createContext<ReportsView>({ isClosed: false });
+const useReportsView = (): ReportsView => useContext(ReportsViewContext);
 
 const RANGES: { key: RangeKey; label: string }[] = [
   { key: "today", label: "Hoy" },
@@ -104,7 +112,10 @@ function OrgReportsContent() {
   // Empty state when the org has zero events at all.
   const hasNoEvents = events.isFetched && (events.data?.length ?? 0) === 0;
 
+  const view = useMemo<ReportsView>(() => ({ isClosed }), [isClosed]);
+
   return (
+    <ReportsViewContext.Provider value={view}>
     <OrgShell>
       {/* Large title — iOS-style eyebrow + display */}
       <div className="mb-5 flex flex-wrap items-end justify-between gap-4 sm:mb-6">
@@ -198,8 +209,9 @@ function OrgReportsContent() {
                   Top promotores
                 </h2>
                 <p className="mt-0.5 text-[12.5px] text-cart-ink-3">
-                  Cada link de promotor trae su origen — aquí ves quién genera
-                  qué.
+                  {isClosed
+                    ? "Cada link de promotor trae su origen — aquí ves quién generó las ventas."
+                    : "Cada link de promotor trae su origen — aquí ves quién genera qué."}
                 </p>
               </div>
               <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-cart-ink-4">
@@ -209,7 +221,6 @@ function OrgReportsContent() {
             <PromotersTable
               loading={stats.isLoading}
               rows={data?.byPromoter ?? []}
-              showPayout={isClosed}
             />
           </section>
 
@@ -222,8 +233,12 @@ function OrgReportsContent() {
                 </h2>
                 <p className="mt-0.5 text-[12.5px] text-cart-ink-3">
                   {series.some((v) => v > 0)
-                    ? "Evolución de tickets vendidos"
-                    : "Aún sin ventas — los datos aparecerán aquí en vivo"}
+                    ? isClosed
+                      ? "Cómo se vendió a lo largo del evento"
+                      : "Evolución de tickets vendidos"
+                    : isClosed
+                      ? "Este evento no registró ventas"
+                      : "Aún sin ventas — los datos aparecerán aquí en vivo"}
                 </p>
               </div>
               <div className="hidden items-center gap-2 text-[11.5px] text-cart-ink-3 sm:flex">
@@ -278,6 +293,7 @@ function OrgReportsContent() {
       {/* iOS safe-area bottom inset */}
       <div className="h-[env(safe-area-inset-bottom)]" />
     </OrgShell>
+    </ReportsViewContext.Provider>
   );
 }
 
@@ -820,6 +836,7 @@ function buildXLabels(n: number, range: RangeKey): Array<{ i: number; label: str
 }
 
 function SalesEmptyState() {
+  const { isClosed } = useReportsView();
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.98 }}
@@ -859,10 +876,12 @@ function SalesEmptyState() {
         </svg>
       </motion.div>
       <div className="relative mt-4 font-sans text-[16px] font-semibold tracking-[-0.015em] text-white">
-        Sin ventas todavía
+        {isClosed ? "Sin ventas" : "Sin ventas todavía"}
       </div>
       <div className="relative mt-1 max-w-[36ch] text-[12.5px] leading-relaxed text-cart-ink-3">
-        Cuando empiecen las ventas verás el pulso en vivo, minuto a minuto.
+        {isClosed
+          ? "Este evento cerró sin registrar ventas."
+          : "Cuando empiecen las ventas verás el pulso en vivo, minuto a minuto."}
       </div>
     </motion.div>
   );
@@ -1255,13 +1274,12 @@ type PromoterStatRow = {
 function PromotersTable({
   loading,
   rows,
-  showPayout = false,
 }: {
   loading: boolean;
   rows: PromoterStatRow[];
-  /** Muestra "A pagar" (payout) en las cards móviles — solo en la vista de cierre. */
-  showPayout?: boolean;
 }) {
+  // Vista de cierre (evento finalizado): payout en móvil + copy en pasado.
+  const { isClosed } = useReportsView();
   if (loading) {
     return (
       <div className="flex flex-col gap-2">
@@ -1315,7 +1333,7 @@ function PromotersTable({
               <div className="grid grid-cols-3 gap-2 text-center">
                 <Stat label="Tickets" value={r.ticketsSold.toLocaleString("es-PE")} />
                 <Stat label="Recaudado" value={formatMoney(r.revenueCents)} />
-                {showPayout ? (
+                {isClosed ? (
                   <Stat label="A pagar" value={formatMoney(r.payoutCents)} />
                 ) : (
                   <Stat label="Ticket prom." value={formatMoney(avg)} />
@@ -1426,6 +1444,7 @@ function FlagBadge({ flag }: { flag: "ok" | "watch" | "suspect" }) {
 }
 
 function PromotersEmpty() {
+  const { isClosed } = useReportsView();
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.98 }}
@@ -1457,11 +1476,12 @@ function PromotersEmpty() {
         </svg>
       </motion.div>
       <div className="text-[15px] font-semibold tracking-[-0.01em] text-white">
-        Sin promotores con ventas aún
+        {isClosed ? "Ningún promotor con ventas" : "Sin promotores con ventas aún"}
       </div>
       <p className="max-w-[40ch] text-[12.5px] leading-[1.55] text-cart-ink-3">
-        Cuando un promotor venda con su link, aparecerá aquí con cuántas
-        personas ingresaron por él.
+        {isClosed
+          ? "En este evento nadie registró ventas con su link de promotor."
+          : "Cuando un promotor venda con su link, aparecerá aquí con cuántas personas ingresaron por él."}
       </p>
     </motion.div>
   );
