@@ -172,7 +172,7 @@ function Inner({ params }: Props) {
             className="mt-8 text-[28px] font-bold tracking-[-0.02em]"
             style={{ animation: "pasape-fade-in 420ms ease-out 360ms both" }}
           >
-            ¡Pago aprobado!
+            {summary?.price === "Gratis" ? "¡Entrada confirmada!" : "¡Pago aprobado!"}
           </h1>
           <p
             className="mt-2 text-[14px] text-cart-ink-2"
