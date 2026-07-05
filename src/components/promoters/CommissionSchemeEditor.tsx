@@ -93,7 +93,7 @@ export function CommissionSchemeEditor({
           {canInherit ? (
             <>
               Sin tocar nada, <b className="text-cart-ink-2">hereda {inheritLabel ?? "el default"}</b>.
-              Pon un número solo si este promotor cobra distinto.
+              Pon un número solo para cambiarlo aquí.
             </>
           ) : (
             <>

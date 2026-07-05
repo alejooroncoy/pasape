@@ -14,7 +14,7 @@ import {
   useEventCoOrganizers,
   useRemoveEventCoOrganizer,
 } from "@/lib/events/hooks/useEventCoOrganizers";
-import { useOrgPromoters } from "@/lib/promoters/hooks/useOrgPromoters";
+import { useOrgPromoters, useOrgScheme } from "@/lib/promoters/hooks/useOrgPromoters";
 import {
   useAssignPromotersToEvent,
   useEventPromoters,
@@ -685,16 +685,19 @@ function EventSchemeCard({
   saving: boolean;
 }) {
   // Esquema "para todos": mismo editor unificado (dos ejes colapsables) + el
-  // cupo default del evento debajo.
+  // cupo default del evento debajo. El % del evento en null hereda de la marca.
+  const brand = useOrgScheme();
   return (
     <div className="flex flex-col gap-3">
       <CommissionSchemeEditor
         variant="page"
         saving={saving}
-        pct={scheme?.commissionPct ?? 0}
+        pct={scheme?.commissionPct ?? null}
         config={scheme?.commissionConfig}
         onPctChange={(v) => onSave({ commissionPct: v })}
         onConfigChange={(cfg) => onSave({ commissionConfig: cfg })}
+        inheritedPct={brand.data?.commissionPct ?? 0}
+        inheritLabel="de la marca"
       />
 
       <div className="rounded-2xl border border-cart-line bg-cart-bg-elev px-4 py-3.5 lg:px-5">
@@ -1030,10 +1033,12 @@ function PayEditor({
       <CommissionSchemeEditor
         variant="drawer"
         saving={saving}
-        pct={a.ownCommissionPct ?? a.effectiveCommissionPct}
+        pct={a.ownCommissionPct}
         config={a.ownCommissionConfig ?? a.effectiveConfig}
         onPctChange={(v) => onSet({ commissionPct: v })}
         onConfigChange={(cfg) => onSet({ commissionConfig: cfg })}
+        inheritedPct={a.inheritedCommissionPct}
+        inheritLabel="del esquema"
       />
       {a.commissionCustom && (
         <button

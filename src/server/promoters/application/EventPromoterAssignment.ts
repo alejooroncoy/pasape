@@ -16,6 +16,9 @@ export type EventPromoterAssignment = {
   // ── Valores EFECTIVOS (lo que realmente aplica tras heredar evento/marca) ──
   /** % efectivo por venta (0 = sin comisión). Independiente de las metas. */
   effectiveCommissionPct: number;
+  /** % que APLICARÍA si el link no tuviera valor propio (promotor → evento →
+   *  marca). Para el label "Hereda X%" cuando ownCommissionPct es null. */
+  inheritedCommissionPct: number;
   /** Metas efectivas (heredadas). null = sin metas. */
   effectiveConfig: CommissionConfig;
   /** Cupo de ventas efectivo. null = sin tope. */
@@ -126,6 +129,9 @@ const buildAssignment = (
     url: `${origin.replace(/\/$/, "")}/r/${r.code}`,
     active: r.active,
     effectiveCommissionPct: resolved.pct,
+    // Lo que heredaría sin override propio: promotor general → evento → marca.
+    inheritedCommissionPct:
+      op.default_commission_pct ?? scheme.commissionPct ?? scheme.brandPct ?? 0,
     effectiveConfig: resolved.config,
     // -1 = personalizado a "sin tope" (no hereda el default); null = hereda.
     effectiveQuota: r.quota === -1 ? null : r.quota ?? scheme.defaultQuota,
