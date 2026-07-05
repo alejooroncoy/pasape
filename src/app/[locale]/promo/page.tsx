@@ -7,7 +7,8 @@ import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { useMyPromoterLinks, usePromoterHome } from "@/lib/promoters/hooks/usePromoter";
 import { useRealtimePromoterStats } from "@/lib/events/hooks/useRealtimeEventStats";
 import type { PromoterLink } from "@/server/promoters/domain/Promoter";
-import type { CommissionConfig, CommissionType } from "@/server/promoters/domain/OrgPromoter";
+import type { CommissionConfig } from "@/server/promoters/domain/OrgPromoter";
+import { milestoneIcon } from "@/lib/promoters/milestoneDisplay";
 import { PromoterShell } from "./_shell/PromoterShell";
 
 const buildShareUrl = (code: string) =>
@@ -211,7 +212,8 @@ function ActiveEventPanel({ link }: { link: PromoterLink }) {
   useRealtimePromoterStats(link.eventId, link.eventSlug);
 
   const sold = home.data?.soldCount ?? 0;
-  const validated = 0; // TODO: cuando tengamos el dato real
+  const attended = home.data?.attendedCount ?? 0;
+  const validated = attended;
   const generatedCents = useMemo(() => {
     // Estimación: ventas × ticket promedio. Por ahora dejamos 0 hasta tener
     // datos consolidados de la orden completa via API.
@@ -227,10 +229,10 @@ function ActiveEventPanel({ link }: { link: PromoterLink }) {
       <KpiRow sold={sold} validated={validated} generatedCents={generatedCents} />
 
       <PaySection
-        type={home.data?.commissionType ?? "percentage"}
         pct={home.data?.commissionPct ?? 0}
         config={home.data?.commissionConfig ?? null}
         sold={sold}
+        attended={attended}
         loading={home.isLoading}
       />
 
@@ -366,16 +368,16 @@ function Kpi({ label, value, mono }: { label: string; value: string; mono?: bool
 //   percentage → % por venta · tiered → hitos en efectivo · inkind → premios.
 // ============================================================
 function PaySection({
-  type,
   pct,
   config,
   sold,
+  attended,
   loading,
 }: {
-  type: CommissionType;
   pct: number;
   config: CommissionConfig;
   sold: number;
+  attended: number;
   loading: boolean;
 }) {
   if (loading) {
@@ -387,13 +389,23 @@ function PaySection({
     );
   }
 
-  // % por venta: una sola tarjeta, clara. Si no hay % configurado (0), es que
-  // el organizador todavía no definió nada → estado vacío en vez de "0%".
-  if (type === "percentage") {
-    if (pct <= 0) return <PayEmpty />;
-    return (
-      <section>
-        <SectionTitle title="Cómo te pagan" />
+  // Dos ejes independientes: % por venta y metas. Puede tener ambos.
+  // Las metas cuentan por ventas o por asistencia según el basis que eligió el
+  // organizador — usamos la unidad correcta y la nombramos explícito.
+  const byAttendance = config?.basis === "attended";
+  const metaProgress = byAttendance ? attended : sold;
+  const unitOne = byAttendance ? "asistencia" : "venta";
+  const unitMany = byAttendance ? "asistencias" : "ventas";
+  const milestones =
+    config && "milestones" in config
+      ? [...config.milestones].sort((a, b) => a.threshold - b.threshold)
+      : [];
+  if (pct <= 0 && milestones.length === 0) return <PayEmpty />;
+
+  return (
+    <section>
+      <SectionTitle title="Cómo te pagan" />
+      {pct > 0 && (
         <div
           className="mt-2 flex items-center gap-4 rounded-2xl border border-cart-line-strong p-4"
           style={{ background: "linear-gradient(135deg, rgba(184,124,255,0.14), rgba(184,124,255,0.02))" }}
@@ -405,54 +417,42 @@ function PaySection({
             de comisión por <b className="text-white">cada entrada</b> que vendas con tu link.
           </div>
         </div>
-      </section>
-    );
-  }
-
-  // Hitos en efectivo.
-  if (type === "tiered") {
-    const tiers = config && "tiers" in config ? [...config.tiers].sort((a, b) => a.salesCount - b.salesCount) : [];
-    if (tiers.length === 0) return <PayEmpty />;
-    return (
-      <section>
-        <SectionTitle title="Cómo te pagan" />
-        <p className="mb-2 mt-1 text-[12px] text-cart-ink-3">Ganas en efectivo al llegar a estas ventas.</p>
-        <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-2">
-          {tiers.map((t, i) => (
+      )}
+      {milestones.length > 0 && (
+        <>
+          <p className="mb-2 mt-3 text-[12px] text-cart-ink-3">
+            Además, ganas al llegar a estas metas.
+          </p>
+          <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-2">
+            {milestones.map((m, i) =>
+          m.rewardKind === "cash" ? (
             <MilestoneCard
               key={i}
-              headline={formatSoles(t.payoutCents)}
-              threshold={t.salesCount}
-              sold={sold}
+              headline={formatSoles(m.amountCents ?? 0)}
+              threshold={m.threshold}
+              sold={metaProgress}
+              unitOne={unitOne}
+              unitMany={unitMany}
               tag="Efectivo"
               accent="var(--color-cart-accent)"
             />
-          ))}
-        </div>
-      </section>
-    );
-  }
-
-  // Premios en especie.
-  const rewards = config && "rewards" in config ? [...config.rewards].sort((a, b) => a.salesCount - b.salesCount) : [];
-  if (rewards.length === 0) return <PayEmpty />;
-  return (
-    <section>
-      <SectionTitle title="Cómo te pagan" />
-      <p className="mb-2 mt-1 text-[12px] text-cart-ink-3">Te ganas estos premios al llegar a estas ventas.</p>
-      <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-2">
-        {rewards.map((r, i) => (
-          <MilestoneCard
-            key={i}
-            headline={r.label}
-            icon={r.icon}
-            threshold={r.salesCount}
-            sold={sold}
-            tag="Premio"
-            accent="#FFCE3B"
-          />
-        ))}
-      </div>
+          ) : (
+            <MilestoneCard
+              key={i}
+              headline={m.label}
+              icon={milestoneIcon(m.rewardKind)}
+              threshold={m.threshold}
+              sold={metaProgress}
+              unitOne={unitOne}
+              unitMany={unitMany}
+              tag="Premio"
+              accent="#FFCE3B"
+            />
+              ),
+            )}
+          </div>
+        </>
+      )}
     </section>
   );
 }
@@ -474,6 +474,8 @@ function MilestoneCard({
   icon,
   threshold,
   sold,
+  unitOne = "venta",
+  unitMany = "ventas",
   tag,
   accent,
 }: {
@@ -481,6 +483,9 @@ function MilestoneCard({
   icon?: string;
   threshold: number;
   sold: number;
+  /** Unidad del umbral según el basis de la meta: venta(s) o asistencia(s). */
+  unitOne?: string;
+  unitMany?: string;
   tag: string;
   accent: string;
 }) {
@@ -513,7 +518,7 @@ function MilestoneCard({
         <span className="truncate">{headline}</span>
       </div>
       <div className="mt-0.5 truncate text-[11.5px] text-cart-ink-3">
-        al llegar a {threshold} {threshold === 1 ? "venta" : "ventas"}
+        al llegar a {threshold} {threshold === 1 ? unitOne : unitMany}
       </div>
       {!reached && (
         <div className="mt-3">

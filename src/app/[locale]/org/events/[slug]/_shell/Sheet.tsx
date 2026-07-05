@@ -3,6 +3,10 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { motion } from "motion/react";
 
+// Nota: el Sheet SIEMPRE se monta client-only (picker/personalize por interacción,
+// y RequestsDrawer gatea con `mounted`), así que leer window aquí en el
+// inicializador es seguro — ningún camino SSR-ea el Sheet. Eso da el breakpoint
+// correcto desde el primer render (sin parpadeo móvil→desktop del drawer).
 export function useIsDesktop() {
   const [isDesktop, setIsDesktop] = useState(() => {
     if (typeof window === "undefined") return false;

@@ -1,4 +1,4 @@
-import type { CommissionConfig, CommissionType } from "./OrgPromoter";
+import type { CommissionConfig } from "./OrgPromoter";
 
 export type PromoterLink = {
   id: string;
@@ -26,9 +26,14 @@ export type PromoterEventEarning = {
   eventStartsAt: string;
   ticketsSold: number;
   grossCents: number;
+  /** % efectivo por venta (0 = sin comisión por venta). */
   commissionPct: number;
+  /** Dinero: % del vendido + hitos cash conseguidos. */
   commissionCents: number;
   payoutStatus: "pending" | "paid" | "void" | "none";
+  /** Hitos del esquema y cuántos ya se consiguieron (para "X/Y hitos"). */
+  totalMilestones: number;
+  unlockedMilestones: number;
 };
 
 export type RecentBuyer = {
@@ -38,14 +43,16 @@ export type RecentBuyer = {
 
 export type PromoterHomeData = {
   link: PromoterLink;
+  /** Entradas vendidas (pago). Unidad de las metas con basis "sold". */
   soldCount: number;
+  /** Entradas validadas en puerta (gratis+pago). Unidad de las metas con
+   *  basis "attended" — el promotor solo avanza cuando su gente entra. */
+  attendedCount: number;
   recent: RecentBuyer[];
-  // ── Cómo le pagan (resuelto: link → evento → marca) ──
-  /** Modalidad efectiva: % por venta, hitos en efectivo o premios en especie. */
-  commissionType: CommissionType;
-  /** % efectivo (relevante solo si commissionType === "percentage"). */
+  // ── Cómo le pagan (resuelto: link → evento → marca). Dos ejes: ──
+  /** % efectivo por venta (0 = sin comisión por venta). */
   commissionPct: number;
-  /** Config de hitos/especie efectiva (null si es %). */
+  /** Metas efectivas (efectivo/especie por umbral). null = sin metas. */
   commissionConfig: CommissionConfig;
 };
 

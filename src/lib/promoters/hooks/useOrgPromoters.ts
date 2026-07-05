@@ -2,14 +2,37 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/_shared/api-client";
-import type {
-  CommissionConfig,
-  CommissionType,
-  OrgPromoter,
-} from "@/server/promoters/domain/OrgPromoter";
+import type { CommissionConfig, OrgPromoter } from "@/server/promoters/domain/OrgPromoter";
 import type { PromoterDetail } from "@/server/promoters/application/PromoterDetail";
+import type { OrgScheme } from "@/server/promoters/controllers/rest/OrgPromotersController";
 
 const KEY = ["promoters", "org-pool"] as const;
+const SCHEME_KEY = ["promoters", "org-scheme"] as const;
+
+// Regla base de la marca: % + metas que heredan TODOS los promotores y eventos.
+export const useOrgScheme = () =>
+  useQuery({
+    queryKey: SCHEME_KEY,
+    queryFn: () => api.get<OrgScheme>("/api/org/promoters/scheme"),
+  });
+
+export type OrgSchemePatch = {
+  commissionPct?: number | null;
+  commissionConfig?: CommissionConfig | null;
+};
+
+export const useUpdateOrgScheme = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (patch: OrgSchemePatch) => api.patch<true>("/api/org/promoters/scheme", patch),
+    // El cambio de marca afecta la herencia en todos lados: invalida esquema +
+    // pool + cualquier detalle de promotor.
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: SCHEME_KEY });
+      qc.invalidateQueries({ queryKey: KEY });
+    },
+  });
+};
 
 export const useOrgPromoters = () =>
   useQuery({
@@ -20,10 +43,9 @@ export const useOrgPromoters = () =>
 export type CreatePromoterPayload = {
   name: string;
   whatsapp: string | null;
-  defaultCommissionPct: number;
-  /** Defaults server-side to "percentage" when omitted. */
-  commissionType?: CommissionType;
-  /** Required when `commissionType` is "tiered" or "inkind". */
+  /** % por venta. null = hereda de la marca; 0 = sin comisión. */
+  defaultCommissionPct: number | null;
+  /** Metas (efectivo/especie por umbral). Independiente del %. */
   commissionConfig?: CommissionConfig;
   notes?: string | null;
 };

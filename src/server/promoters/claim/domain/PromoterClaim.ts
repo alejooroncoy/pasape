@@ -9,7 +9,8 @@ export type PromoterClaimContext = {
   organizationName: string;
   promoterName: string;
   whatsapp: string; // E.164 sin "+"
-  defaultCommissionPct: number;
+  /** null = hereda de la marca. */
+  defaultCommissionPct: number | null;
   /** Slug del evento más reciente asignado al promotor (para redirect post-claim). */
   primaryEventSlug: string | null;
   primaryEventTitle: string | null;

@@ -5,18 +5,16 @@ import { useRouter } from "@/i18n/navigation";
 import { Btn, C, Field, FONT_DISPLAY, Phone } from "@/components/design";
 import { useApplyByLink, useResolveInvite } from "@/lib/promoters/hooks/usePromoter";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
-import type { CommissionConfig, CommissionType } from "@/server/promoters/domain/OrgPromoter";
+import type { CommissionConfig } from "@/server/promoters/domain/OrgPromoter";
 
-// Pitch de comisión según el esquema REAL del evento (heredado). Si el
-// organizador aún no definió nada, no inventamos un número: avisamos que está
-// por definir (mismo criterio que la vista del promotor).
-function commissionPitch(type: CommissionType, pct: number, config: CommissionConfig): string {
-  if (type === "percentage" && pct > 0) return `y gana ${pct}% por cada entrada que vendas.`;
-  if (type === "tiered" && config && "tiers" in config && config.tiers.length > 0)
-    return "y gana en efectivo al llegar a tus metas de venta.";
-  if (type === "inkind" && config && "rewards" in config && config.rewards.length > 0)
-    return "y gana premios al llegar a tus metas de venta.";
-  return "El organizador definirá los hitos y la comisión muy pronto.";
+// Pitch de comisión según el esquema REAL del evento (heredado). Dos ejes: % por
+// venta + metas, pueden coexistir. Si no hay nada definido, avisamos.
+function commissionPitch(pct: number, config: CommissionConfig): string {
+  const hasMetas = !!config && config.milestones.length > 0;
+  if (pct > 0 && hasMetas) return `y gana ${pct}% por venta y premios al llegar a tus metas.`;
+  if (pct > 0) return `y gana ${pct}% por cada entrada que vendas.`;
+  if (hasMetas) return "y gana premios al llegar a tus metas de venta.";
+  return "El organizador definirá la comisión muy pronto.";
 }
 
 const Dot = ({ color }: { color: string }) => (
@@ -82,7 +80,7 @@ export default function PromoApplyByLinkPage({ params }: Props) {
         <div style={{ fontFamily: FONT_DISPLAY, fontSize: 24, fontWeight: 700, letterSpacing: "-0.025em", lineHeight: 1 }}>
           Vende para <span style={{ color: C.purple }}>{resolved.data.orgName}</span>
           <br />
-          {commissionPitch(resolved.data.commissionType, resolved.data.commissionPct, resolved.data.commissionConfig)}
+          {commissionPitch(resolved.data.commissionPct, resolved.data.commissionConfig)}
         </div>
         <div style={{ fontSize: 13, color: C.dim, marginTop: 10, lineHeight: 1.4 }}>
           {resolved.data.eventTitle}

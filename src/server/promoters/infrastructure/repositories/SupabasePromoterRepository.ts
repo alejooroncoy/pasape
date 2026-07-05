@@ -7,8 +7,7 @@ import type {
   PromoterEventEarning,
   PromoterLink,
 } from "@/server/promoters/domain/Promoter";
-import type { CommissionType } from "@/server/promoters/domain/OrgPromoter";
-import { resolveCommissionScheme } from "@/server/promoters/application/CommissionResolver";
+import { computePromoterPayout, resolveCommissionScheme } from "@/server/promoters/application/CommissionResolver";
 
 type LinkRow = {
   id: string;
@@ -33,16 +32,17 @@ type LinkRow = {
 // Campos extra del esquema de comisión (evento + marca) que se suman al LinkRow
 // cuando queremos resolver el % efectivo heredado.
 type SchemeRow = {
-  commission_type: CommissionType | null;
   commission_config_override: unknown;
   event: {
     promoter_commission_pct: number | null;
-    promoter_commission_type: CommissionType | null;
     promoter_commission_config: unknown;
+    organization: {
+      promoter_commission_pct: number | null;
+      promoter_commission_config: unknown;
+    } | null;
   };
   org_promoter: {
     default_commission_pct: number | null;
-    commission_type: CommissionType | null;
     commission_config: unknown;
   } | null;
 };
@@ -90,8 +90,8 @@ export const supabasePromoterRepository: PromoterRepository = {
       .from("promoter_links")
       .select(
         "*, event:events!inner(id, slug, title, starts_at, venue, organization_id, status, " +
-          "promoter_commission_pct, promoter_commission_type, promoter_commission_config), " +
-          "org_promoter:org_promoters(default_commission_pct, commission_type, commission_config)",
+          "promoter_commission_pct, promoter_commission_config, organization:organizations(promoter_commission_pct, promoter_commission_config)), " +
+          "org_promoter:org_promoters(default_commission_pct, commission_config)",
       )
       .eq("promoter_id", promoterId)
       .order("created_at", { ascending: false });
@@ -101,15 +101,14 @@ export const supabasePromoterRepository: PromoterRepository = {
     // Mismo resolver de 3 niveles que earnings/home — una sola fuente de verdad.
     return rows.map((r) => {
       const scheme = resolveCommissionScheme({
-        linkType: r.commission_type ?? null,
         linkPct: r.commission_pct,
         linkConfigOverride: r.commission_config_override,
-        eventType: r.event.promoter_commission_type,
-        eventConfig: r.event.promoter_commission_config,
+        promoterPct: r.org_promoter?.default_commission_pct ?? null,
+        promoterConfig: r.org_promoter?.commission_config ?? null,
         eventPct: r.event.promoter_commission_pct,
-        orgType: r.org_promoter?.commission_type ?? null,
-        orgConfig: r.org_promoter?.commission_config ?? null,
-        orgPct: r.org_promoter?.default_commission_pct ?? null,
+        eventConfig: r.event.promoter_commission_config,
+        brandPct: r.event.organization?.promoter_commission_pct ?? null,
+        brandConfig: r.event.organization?.promoter_commission_config ?? null,
       });
       return { ...toLink(r), commissionPct: scheme.pct };
     });
@@ -121,8 +120,8 @@ export const supabasePromoterRepository: PromoterRepository = {
       .from("promoter_links")
       .select(
         "*, event:events!inner(id, slug, title, starts_at, venue, organization_id, status, " +
-          "promoter_commission_pct, promoter_commission_type, promoter_commission_config), " +
-          "org_promoter:org_promoters(default_commission_pct, commission_type, commission_config)",
+          "promoter_commission_pct, promoter_commission_config, organization:organizations(promoter_commission_pct, promoter_commission_config)), " +
+          "org_promoter:org_promoters(default_commission_pct, commission_config)",
       )
       .eq("promoter_id", promoterId)
       .eq("event.slug", slug)
@@ -133,41 +132,42 @@ export const supabasePromoterRepository: PromoterRepository = {
     // Cómo le pagan: mismo resolver de 3 niveles (link → evento → marca) que
     // usa el organizador y el route /r/[code]/state.
     const lr = link as unknown as {
-      commission_type: CommissionType | null;
       commission_pct: number | null;
       commission_config_override: unknown;
       event: {
-        promoter_commission_type: CommissionType | null;
         promoter_commission_config: unknown;
         promoter_commission_pct: number | null;
+        organization: {
+          promoter_commission_pct: number | null;
+          promoter_commission_config: unknown;
+        } | null;
       };
       org_promoter: {
-        commission_type: CommissionType | null;
         commission_config: unknown;
         default_commission_pct: number | null;
       } | null;
     };
     const scheme = resolveCommissionScheme({
-      linkType: lr.commission_type,
       linkPct: lr.commission_pct,
       linkConfigOverride: lr.commission_config_override,
-      eventType: lr.event.promoter_commission_type,
-      eventConfig: lr.event.promoter_commission_config,
+      promoterPct: lr.org_promoter?.default_commission_pct ?? null,
+      promoterConfig: lr.org_promoter?.commission_config ?? null,
       eventPct: lr.event.promoter_commission_pct,
-      orgType: lr.org_promoter?.commission_type ?? null,
-      orgConfig: lr.org_promoter?.commission_config ?? null,
-      orgPct: lr.org_promoter?.default_commission_pct ?? null,
+      eventConfig: lr.event.promoter_commission_config,
+      brandPct: lr.event.organization?.promoter_commission_pct ?? null,
+      brandConfig: lr.event.organization?.promoter_commission_config ?? null,
     });
 
-    // total_cents > 0 = venta real. Las órdenes gratis (S/0) también quedan
-    // 'paid', así que se excluyen para no inflar "Vendidas" ni aparecer como
-    // "compró" en la actividad.
-    const { count } = await db
-      .from("orders")
-      .select("id", { count: "exact", head: true })
-      .eq("promoter_link_id", l.id)
-      .eq("status", "paid")
-      .gt("total_cents", 0);
+    // "Vendidas" = ENTRADAS vendidas (canónico: promoter_sold_units), no compras.
+    // Una compra de 3 entradas cuenta 3 — así el progreso de un hito "10 entradas"
+    // coincide con su desbloqueo. Las gratis (S/0) no cuentan.
+    const { data: soldData } = await db.rpc("promoter_sold_units", { p_link_id: l.id });
+    const count = (soldData as number | null) ?? 0;
+
+    // "Asistidas" = validadas en puerta (gratis+pago). Unidad de las metas por
+    // asistencia — el progreso solo sube cuando su gente entra, no al vender.
+    const { data: attendedData } = await db.rpc("promoter_attended_units", { p_link_id: l.id });
+    const attendedCount = (attendedData as number | null) ?? 0;
 
     const { data: orders } = await db
       .from("orders")
@@ -187,8 +187,8 @@ export const supabasePromoterRepository: PromoterRepository = {
     return {
       link: l,
       soldCount: count ?? 0,
+      attendedCount,
       recent,
-      commissionType: scheme.type,
       commissionPct: scheme.pct,
       commissionConfig: scheme.config,
     };
@@ -199,13 +199,29 @@ export const supabasePromoterRepository: PromoterRepository = {
     const { data: links } = await db
       .from("promoter_links")
       .select(
-        "id, commission_pct, event:events!inner(id, slug, title, starts_at)",
+        "id, commission_pct, commission_config_override, event:events!inner(id, slug, title, starts_at, promoter_commission_pct, promoter_commission_config, organization:organizations(promoter_commission_pct, promoter_commission_config)), org_promoter:org_promoters(default_commission_pct, commission_config)",
       )
       .eq("promoter_id", promoterId);
     type LL = {
       id: string;
-      commission_pct: number;
-      event: { id: string; slug: string; title: string; starts_at: string };
+      commission_pct: number | null;
+      commission_config_override: unknown;
+      event: {
+        id: string;
+        slug: string;
+        title: string;
+        starts_at: string;
+        promoter_commission_pct: number | null;
+        promoter_commission_config: unknown;
+        organization: {
+          promoter_commission_pct: number | null;
+          promoter_commission_config: unknown;
+        } | null;
+      };
+      org_promoter: {
+        default_commission_pct: number | null;
+        commission_config: unknown;
+      } | null;
     };
     const list = ((links as unknown as LL[] | null) ?? []);
     const out: PromoterEventEarning[] = [];
@@ -214,23 +230,41 @@ export const supabasePromoterRepository: PromoterRepository = {
         .from("orders")
         .select("total_cents")
         .eq("promoter_link_id", l.id)
-        .eq("status", "paid");
+        .eq("status", "paid")
+        .gt("total_cents", 0);
       const orderRows = (orders as Array<{ total_cents: number }> | null) ?? [];
       const gross = orderRows.reduce((a, o) => a + o.total_cents, 0);
-      const sold = orderRows.length;
 
-      // Use unlocked tiers if they exist for this link; fall back to percentage.
-      const { data: tiers } = await db
-        .from("commission_tiers")
-        .select("reward_amount_cents, threshold_count")
-        .eq("promoter_link_id", l.id)
-        .not("unlocked_at", "is", null);
-      type TierRow = { reward_amount_cents: number | null; threshold_count: number };
-      const tierRows = (tiers as TierRow[] | null) ?? [];
-      const commission =
-        tierRows.length > 0
-          ? tierRows.reduce((a, t) => a + (t.reward_amount_cents ?? 0), 0)
-          : Math.round((gross * l.commission_pct) / 100);
+      // Conteos canónicos: vendidas (pago) y asistidas (validadas, gratis+pago).
+      const { data: soldData } = await db.rpc("promoter_sold_units", { p_link_id: l.id });
+      const sold = (soldData as number | null) ?? 0;
+      const { data: attendedData } = await db.rpc("promoter_attended_units", { p_link_id: l.id });
+      const attended = (attendedData as number | null) ?? 0;
+
+      // Esquema efectivo por herencia (link → evento → marca), evaluado al vuelo:
+      // % del vendido + hitos conseguidos (por venta o asistencia según basis).
+      const scheme = resolveCommissionScheme({
+        linkPct: l.commission_pct,
+        linkConfigOverride: l.commission_config_override,
+        promoterPct: l.org_promoter?.default_commission_pct ?? null,
+        promoterConfig: l.org_promoter?.commission_config ?? null,
+        eventPct: l.event.promoter_commission_pct,
+        eventConfig: l.event.promoter_commission_config,
+        brandPct: l.event.organization?.promoter_commission_pct ?? null,
+        brandConfig: l.event.organization?.promoter_commission_config ?? null,
+      });
+      const commission = computePromoterPayout({
+        pct: scheme.pct,
+        config: scheme.config,
+        soldUnits: sold,
+        attendedUnits: attended,
+        grossCents: gross,
+      }).payoutCents;
+
+      // Conteo de hitos para la fila del historial ("X/Y hitos"), según el basis.
+      const milestones = scheme.config ? scheme.config.milestones : [];
+      const basisCount = scheme.config?.basis === "attended" ? attended : sold;
+      const unlockedMilestones = milestones.filter((m) => basisCount >= m.threshold).length;
 
       const { data: payout } = await db
         .from("payouts")
@@ -246,9 +280,11 @@ export const supabasePromoterRepository: PromoterRepository = {
         eventStartsAt: l.event.starts_at,
         ticketsSold: sold,
         grossCents: gross,
-        commissionPct: l.commission_pct,
+        commissionPct: scheme.pct,
         commissionCents: commission,
         payoutStatus: payout?.status ?? "none",
+        totalMilestones: milestones.length,
+        unlockedMilestones,
       });
     }
     return out.sort((a, b) => b.eventStartsAt.localeCompare(a.eventStartsAt));
@@ -282,8 +318,8 @@ export const supabasePromoterRepository: PromoterRepository = {
     const { data: ev } = await db
       .from("events")
       .select(
-        "id, slug, title, promoter_commission_pct, promoter_commission_type, " +
-          "promoter_commission_config, organization:organizations!inner(name)",
+        "id, slug, title, promoter_commission_pct, promoter_commission_config, " +
+          "organization:organizations!inner(name, promoter_commission_pct, promoter_commission_config)",
       )
       .eq("slug", slug)
       .maybeSingle();
@@ -293,32 +329,32 @@ export const supabasePromoterRepository: PromoterRepository = {
       slug: string;
       title: string;
       promoter_commission_pct: number | null;
-      promoter_commission_type: CommissionType | null;
       promoter_commission_config: unknown;
-      organization: { name: string };
+      organization: {
+        name: string;
+        promoter_commission_pct: number | null;
+        promoter_commission_config: unknown;
+      };
     };
     const e = ev as unknown as E;
-    // Esquema que verá el candidato ANTES de unirse: aún no hay link ni override
-    // de marca, así que solo aplica el nivel EVENTO — mismo resolver que usa el
-    // resto (una sola fuente de verdad de la herencia). Si el organizador no
-    // definió nada, pct=0/config=null → la vista muestra "por definir".
+    // Esquema que verá el candidato ANTES de unirse: aún no hay link ni tarifa
+    // propia, así que aplican EVENTO → MARCA (mismo resolver que el resto). Si el
+    // organizador no definió nada, pct=0/config=null → la vista muestra "por definir".
     const scheme = resolveCommissionScheme({
-      linkType: null,
       linkPct: null,
       linkConfigOverride: null,
-      eventType: e.promoter_commission_type,
-      eventConfig: e.promoter_commission_config,
+      promoterPct: null,
+      promoterConfig: null,
       eventPct: e.promoter_commission_pct,
-      orgType: null,
-      orgConfig: null,
-      orgPct: null,
+      eventConfig: e.promoter_commission_config,
+      brandPct: e.organization.promoter_commission_pct,
+      brandConfig: e.organization.promoter_commission_config,
     });
     return {
       eventId: e.id,
       eventSlug: e.slug,
       eventTitle: e.title,
       orgName: e.organization.name,
-      commissionType: scheme.type,
       commissionPct: scheme.pct,
       commissionConfig: scheme.config,
     };

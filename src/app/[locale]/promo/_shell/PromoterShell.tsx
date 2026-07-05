@@ -5,7 +5,7 @@ import { Link } from "@/i18n/navigation";
 import { PromoterUserPill } from "./PromoterUserPill";
 import { Logo } from "@/components/brand/Logo";
 
-export type PromoTab = "home" | "earnings" | "profile";
+export type PromoTab = "home" | "goals" | "earnings" | "profile";
 
 const TABS: Array<{ key: PromoTab; label: string; href: string; icon: ReactNode }> = [
   {
@@ -20,6 +20,18 @@ const TABS: Array<{ key: PromoTab; label: string; href: string; icon: ReactNode 
           strokeWidth="1.6"
           strokeLinejoin="round"
         />
+      </svg>
+    ),
+  },
+  {
+    key: "goals",
+    label: "Metas",
+    href: "/promo/metas",
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
+        <circle cx="10" cy="10" r="7" stroke="currentColor" strokeWidth="1.6" />
+        <circle cx="10" cy="10" r="3" stroke="currentColor" strokeWidth="1.6" />
+        <circle cx="10" cy="10" r="0.5" fill="currentColor" stroke="currentColor" />
       </svg>
     ),
   },

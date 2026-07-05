@@ -1,8 +1,8 @@
 import crypto from "node:crypto";
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
 import { err, ok, type Result } from "@/server/_shared/result";
-import type { CommissionConfig, CommissionType } from "../domain/OrgPromoter";
-import { coerceCommissionConfig } from "./CommissionResolver";
+import type { CommissionConfig } from "../domain/OrgPromoter";
+import { coerceCommissionConfig, resolveCommissionScheme } from "./CommissionResolver";
 
 export type EventPromoterAssignment = {
   promoterLinkId: string;
@@ -14,20 +14,18 @@ export type EventPromoterAssignment = {
   url: string;
   active: boolean;
   // ── Valores EFECTIVOS (lo que realmente aplica tras heredar evento/marca) ──
-  /** Tipo de comisión efectivo: % simple, hitos en efectivo o especie. */
-  commissionType: CommissionType;
-  /** % efectivo (solo relevante si commissionType === "percentage"). */
+  /** % efectivo por venta (0 = sin comisión). Independiente de las metas. */
   effectiveCommissionPct: number;
+  /** Metas efectivas (heredadas). null = sin metas. */
+  effectiveConfig: CommissionConfig;
   /** Cupo de ventas efectivo. null = sin tope. */
   effectiveQuota: number | null;
   // ── Marcas de personalización (el promotor tiene valor propio, no hereda) ──
   commissionCustom: boolean;
   quotaCustom: boolean;
   // ── Valores propios del link (para el detalle: editar/limpiar a heredar) ──
-  /** Tipo de comisión propio del promotor (null = hereda). */
-  ownCommissionType: CommissionType | null;
   ownCommissionPct: number | null;
-  /** Config de hitos/especie propia del promotor (override). null = hereda. */
+  /** Metas propias del promotor (override). null = hereda. */
   ownCommissionConfig: CommissionConfig | null;
   ownQuota: number | null;
 };
@@ -42,13 +40,12 @@ const slugCode = (full: string) =>
     .slice(0, 30) || crypto.randomBytes(4).toString("hex");
 
 const LINK_SELECT =
-  "id, code, commission_pct, commission_type, commission_config_override, quota, active, org_promoter_id, promoter_id, org_promoter:org_promoters(id, name, whatsapp, default_commission_pct, commission_type, profile_id)";
+  "id, code, commission_pct, commission_config_override, quota, active, org_promoter_id, promoter_id, org_promoter:org_promoters(id, name, whatsapp, default_commission_pct, commission_config, profile_id)";
 
 type LinkRow = {
   id: string;
   code: string;
   commission_pct: number | null;
-  commission_type: CommissionType | null;
   commission_config_override: unknown;
   quota: number | null;
   active: boolean;
@@ -58,16 +55,19 @@ type LinkRow = {
     id: string;
     name: string;
     whatsapp: string | null;
-    default_commission_pct: number;
-    commission_type: CommissionType;
+    default_commission_pct: number | null;
+    commission_config: unknown;
     profile_id: string | null;
   } | null;
 };
 
 type EventScheme = {
-  commissionType: CommissionType | null;
   commissionPct: number | null;
+  commissionConfig: unknown;
   defaultQuota: number | null;
+  // Default de la MARCA (organización) — base de la cascada, se hereda al evento.
+  brandPct: number | null;
+  brandConfig: unknown;
 };
 
 const fetchEventScheme = async (
@@ -77,30 +77,45 @@ const fetchEventScheme = async (
   const { data } = await db
     .from("events")
     .select(
-      "promoter_commission_type, promoter_commission_pct, promoter_default_quota",
+      "promoter_commission_pct, promoter_commission_config, promoter_default_quota, organization:organizations(promoter_commission_pct, promoter_commission_config)",
     )
     .eq("id", eventId)
     .maybeSingle<{
-      promoter_commission_type: CommissionType | null;
       promoter_commission_pct: number | null;
+      promoter_commission_config: unknown;
       promoter_default_quota: number | null;
+      organization: {
+        promoter_commission_pct: number | null;
+        promoter_commission_config: unknown;
+      } | null;
     }>();
   return {
-    commissionType: data?.promoter_commission_type ?? null,
     commissionPct: data?.promoter_commission_pct ?? null,
+    commissionConfig: data?.promoter_commission_config ?? null,
     defaultQuota: data?.promoter_default_quota ?? null,
+    brandPct: data?.organization?.promoter_commission_pct ?? null,
+    brandConfig: data?.organization?.promoter_commission_config ?? null,
   };
 };
 
-// Construye el assignment resolviendo la herencia link → evento → marca.
+// Construye el assignment resolviendo la herencia link → evento → marca en los
+// DOS ejes (pct y metas), independientes.
 const buildAssignment = (
   r: LinkRow,
   scheme: EventScheme,
   origin: string,
 ): EventPromoterAssignment => {
   const op = r.org_promoter!;
-  // Tipo efectivo: propio del promotor → esquema del evento → marca.
-  const effectiveType = r.commission_type ?? scheme.commissionType ?? op.commission_type;
+  const resolved = resolveCommissionScheme({
+    linkPct: r.commission_pct,
+    linkConfigOverride: r.commission_config_override,
+    promoterPct: op.default_commission_pct,
+    promoterConfig: op.commission_config,
+    eventPct: scheme.commissionPct,
+    eventConfig: scheme.commissionConfig,
+    brandPct: scheme.brandPct,
+    brandConfig: scheme.brandConfig,
+  });
   return {
     promoterLinkId: r.id,
     orgPromoterId: r.org_promoter_id,
@@ -110,19 +125,14 @@ const buildAssignment = (
     code: r.code,
     url: `${origin.replace(/\/$/, "")}/r/${r.code}`,
     active: r.active,
-    commissionType: effectiveType,
-    effectiveCommissionPct: r.commission_pct ?? scheme.commissionPct ?? op.default_commission_pct,
+    effectiveCommissionPct: resolved.pct,
+    effectiveConfig: resolved.config,
     // -1 = personalizado a "sin tope" (no hereda el default); null = hereda.
     effectiveQuota: r.quota === -1 ? null : r.quota ?? scheme.defaultQuota,
-    commissionCustom:
-      r.commission_pct != null || r.commission_config_override != null || r.commission_type != null,
+    commissionCustom: r.commission_pct != null || r.commission_config_override != null,
     quotaCustom: r.quota != null,
-    ownCommissionType: r.commission_type,
     ownCommissionPct: r.commission_pct,
-    ownCommissionConfig: coerceCommissionConfig(
-      r.commission_type ?? effectiveType,
-      r.commission_config_override,
-    ),
+    ownCommissionConfig: coerceCommissionConfig(r.commission_config_override),
     ownQuota: r.quota,
   };
 };
@@ -155,15 +165,14 @@ export const assignOrgPromotersToEvent = async (
   // Cargo los promoters del pool para validar que sean de la org y obtener metadata.
   const { data: pool } = await db
     .from("org_promoters")
-    .select("id, name, default_commission_pct, commission_type, profile_id, organization_id")
+    .select("id, name, default_commission_pct, profile_id, organization_id")
     .in("id", orgPromoterIds)
     .is("deleted_at", null);
   const pooled =
     (pool as Array<{
       id: string;
       name: string;
-      default_commission_pct: number;
-      commission_type: CommissionType;
+      default_commission_pct: number | null;
       profile_id: string | null;
       organization_id: string;
     }> | null) ?? [];
@@ -241,7 +250,6 @@ export const updateAssignmentCommission = async (
   eventId: string,
   fields: {
     commissionPct?: number | null;
-    commissionType?: CommissionType | null;
     commissionConfig?: CommissionConfig | null;
     quota?: number | null;
   },
@@ -249,7 +257,6 @@ export const updateAssignmentCommission = async (
   const db = supabaseAdmin();
   const patch: Record<string, unknown> = {};
   if (fields.commissionPct !== undefined) patch.commission_pct = fields.commissionPct;
-  if (fields.commissionType !== undefined) patch.commission_type = fields.commissionType;
   if (fields.commissionConfig !== undefined)
     patch.commission_config_override = fields.commissionConfig;
   if (fields.quota !== undefined) patch.quota = fields.quota;

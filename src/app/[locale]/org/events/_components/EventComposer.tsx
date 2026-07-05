@@ -2813,14 +2813,15 @@ function PromoterPoolPicker({
   onCreate: (payload: {
     name: string;
     whatsapp: string | null;
-    defaultCommissionPct: number;
+    defaultCommissionPct: number | null;
   }) => Promise<OrgPromoter>;
   creating: boolean;
 }) {
   const [adding, setAdding] = useState(pool.length === 0);
   const [name, setName] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
-  const [pct, setPct] = useState(15);
+  // null = hereda las reglas de la marca (default de un promotor nuevo).
+  const [pct, setPct] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const toggle = (id: string) => {
@@ -2841,7 +2842,7 @@ function PromoterPoolPicker({
       });
       setName("");
       setWhatsapp("");
-      setPct(15);
+      setPct(null);
       setAdding(false);
     } catch (e) {
       setError((e as Error).message ?? "No pudimos guardar");
@@ -2897,7 +2898,7 @@ function PromoterPoolPicker({
                     )}
                   </div>
                   <span className="rounded-full bg-cart-accent-soft px-2 py-1 text-[11px] font-semibold text-cart-accent">
-                    {p.defaultCommissionPct}%
+                    {p.defaultCommissionPct == null ? "Hereda" : `${p.defaultCommissionPct}%`}
                   </span>
                   <span
                     className={
@@ -2946,7 +2947,19 @@ function PromoterPoolPicker({
               inputMode="tel"
               className="rounded-xl bg-cart-bg-elev px-3 py-2.5 font-mono text-[13.5px] outline-none placeholder:text-cart-ink-4"
             />
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setPct(null)}
+                className={
+                  "rounded-xl px-3 py-2 text-[13px] font-semibold transition " +
+                  (pct == null
+                    ? "bg-cart-accent text-white shadow-[0_8px_20px_-6px_var(--color-cart-accent-glow)]"
+                    : "bg-cart-bg-elev text-cart-ink-2 hover:text-white")
+                }
+              >
+                Hereda
+              </button>
               {[10, 15, 20].map((p) => (
                 <button
                   key={p}

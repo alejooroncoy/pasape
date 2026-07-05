@@ -14,6 +14,7 @@ import {
   type EventPromoterAssignment,
 } from "../../application/EventPromoterAssignment";
 import { listSalesForPromoterLink, type PromoterLinkSale } from "../../application/PromoterDetail";
+import { commissionConfigSchema } from "./commissionConfigSchema";
 
 const repo = supabaseEventRepository;
 
@@ -95,16 +96,10 @@ export const EventPromotersController = {
   ): Promise<Result<true>> {
     const g = await guard(slug);
     if (!g.ok) return err(g.error);
-    const tier = z.object({ salesCount: z.number().int().min(0), payoutCents: z.number().int().min(0) });
-    const reward = z.object({ salesCount: z.number().int().min(0), label: z.string(), icon: z.string() });
     const parsed = z
       .object({
         commissionPct: z.number().int().min(0).max(100).nullable().optional(),
-        commissionType: z.enum(["percentage", "tiered", "inkind"]).nullable().optional(),
-        commissionConfig: z
-          .union([z.object({ tiers: z.array(tier) }), z.object({ rewards: z.array(reward) })])
-          .nullable()
-          .optional(),
+        commissionConfig: commissionConfigSchema.optional(),
         quota: z.number().int().min(1).nullable().optional(),
       })
       .safeParse(input);
@@ -122,16 +117,10 @@ export const EventPromotersController = {
   async updateScheme(slug: string, input: unknown): Promise<Result<true>> {
     const g = await guard(slug);
     if (!g.ok) return err(g.error);
-    const tier = z.object({ salesCount: z.number().int().min(0), payoutCents: z.number().int().min(0) });
-    const reward = z.object({ salesCount: z.number().int().min(0), label: z.string(), icon: z.string() });
     const parsed = z
       .object({
         commissionPct: z.number().int().min(0).max(100).nullable().optional(),
-        commissionType: z.enum(["percentage", "tiered", "inkind"]).nullable().optional(),
-        commissionConfig: z
-          .union([z.object({ tiers: z.array(tier) }), z.object({ rewards: z.array(reward) })])
-          .nullable()
-          .optional(),
+        commissionConfig: commissionConfigSchema.optional(),
         defaultQuota: z.number().int().min(1).nullable().optional(),
       })
       .safeParse(input);

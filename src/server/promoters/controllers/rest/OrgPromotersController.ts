@@ -5,45 +5,26 @@ import { getAuthContext, resolveActiveOrgSlug } from "@/server/_shared/AuthConte
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
 import { supabaseOrganizationRepository } from "@/server/identity/organizations/infrastructure/repositories/SupabaseOrganizationRepository";
 import { supabaseOrgPromoterRepository as repo } from "../../infrastructure/repositories/SupabaseOrgPromoterRepository";
-import type {
-  CommissionConfig,
-  CommissionType,
-  OrgPromoter,
-} from "../../domain/OrgPromoter";
+import type { CommissionConfig, OrgPromoter } from "../../domain/OrgPromoter";
 import { getOrgPromoterDetail, type PromoterDetail } from "../../application/PromoterDetail";
+import { coerceCommissionConfig } from "../../application/CommissionResolver";
+import { commissionConfigSchema } from "./commissionConfigSchema";
 
-const tierSchema = z.object({
-  salesCount: z.number().int().min(1),
-  payoutCents: z.number().int().min(0),
-});
-const rewardSchema = z.object({
-  salesCount: z.number().int().min(1),
-  label: z.string().min(1).max(40),
-  icon: z.string().min(1).max(8),
-});
-// Raw commission_config wire shape. The discriminator (`commissionType`) lives
-// on the parent payload so the JSON sent to the DB matches the column shape.
-const commissionConfigInputSchema = z
-  .union([
-    z.null(),
-    z.object({ tiers: z.array(tierSchema).min(1) }),
-    z.object({ rewards: z.array(rewardSchema).min(1) }),
-  ])
-  .optional();
-const commissionTypeSchema = z.enum(["percentage", "tiered", "inkind"]);
+/** Regla base de la marca (organization): el 4º nivel de la cascada de comisión. */
+export type OrgScheme = {
+  commissionPct: number | null;
+  commissionConfig: CommissionConfig | null;
+};
 
-// Cross-field check: `commissionType` must agree with the shape of `commissionConfig`.
+const commissionConfigInputSchema = commissionConfigSchema.optional();
+
+// Las metas (config) son un eje INDEPENDIENTE del %. Si viene un config, debe
+// tener al menos un hito; null = sin metas (perfectamente válido).
 const normalizeCommission = (
-  type: CommissionType,
   config: CommissionConfig | undefined,
 ): Result<CommissionConfig> => {
-  if (type === "percentage") return ok(null);
-  if (config == null) return err("commission_config_required");
-  if (type === "tiered") {
-    if (!("tiers" in config)) return err("tiers_required");
-    return ok(config);
-  }
-  if (!("rewards" in config)) return err("rewards_required");
+  if (config == null) return ok(null);
+  if (config.milestones.length === 0) return err("commission_config_required");
   return ok(config);
 };
 
@@ -95,8 +76,8 @@ const resolveOrgCtx = async (allowedRoles?: string[]): Promise<Result<Ctx>> => {
 const createSchema = z.object({
   name: z.string().min(1).max(80),
   whatsapp: z.string().min(6).max(32).nullable().optional(),
-  defaultCommissionPct: z.number().int().min(0).max(100).default(15),
-  commissionType: commissionTypeSchema.default("percentage"),
+  // null = hereda de la marca (default de un promotor nuevo). Sin default 15.
+  defaultCommissionPct: z.number().int().min(0).max(100).nullable().default(null),
   commissionConfig: commissionConfigInputSchema,
   notes: z.string().max(500).nullable().optional(),
 });
@@ -104,8 +85,7 @@ const createSchema = z.object({
 const updateSchema = z.object({
   name: z.string().min(1).max(80).optional(),
   whatsapp: z.string().min(6).max(32).nullable().optional(),
-  defaultCommissionPct: z.number().int().min(0).max(100).optional(),
-  commissionType: commissionTypeSchema.optional(),
+  defaultCommissionPct: z.number().int().min(0).max(100).nullable().optional(),
   commissionConfig: commissionConfigInputSchema,
   notes: z.string().max(500).nullable().optional(),
 });
@@ -140,7 +120,7 @@ export const OrgPromotersController = {
     if (!ctx.ok) return err(ctx.error);
     const parsed = createSchema.safeParse(input);
     if (!parsed.success) return err(parsed.error.issues[0]?.message ?? "invalid_input");
-    const cfg = normalizeCommission(parsed.data.commissionType, parsed.data.commissionConfig);
+    const cfg = normalizeCommission(parsed.data.commissionConfig);
     if (!cfg.ok) return err(cfg.error);
     return repo.create({
       organizationId: ctx.value.orgId,
@@ -148,7 +128,6 @@ export const OrgPromotersController = {
       name: parsed.data.name.trim(),
       whatsapp: sanitizeWhatsapp(parsed.data.whatsapp ?? null),
       defaultCommissionPct: parsed.data.defaultCommissionPct,
-      commissionType: parsed.data.commissionType,
       commissionConfig: cfg.value,
       notes: parsed.data.notes ?? null,
     });
@@ -160,15 +139,10 @@ export const OrgPromotersController = {
     const parsed = updateSchema.safeParse(input);
     if (!parsed.success) return err(parsed.error.issues[0]?.message ?? "invalid_input");
 
-    // If commissionType is being changed, validate alignment with the config —
-    // either the one sent in this payload or the current persisted value.
+    // Metas (config) es un eje independiente: si viene, validá su forma.
     let commissionConfig: CommissionConfig | undefined = parsed.data.commissionConfig;
-    if (parsed.data.commissionType !== undefined) {
-      const effectiveConfig =
-        parsed.data.commissionConfig === undefined
-          ? guard.value.promoter.commissionConfig
-          : parsed.data.commissionConfig;
-      const cfg = normalizeCommission(parsed.data.commissionType, effectiveConfig);
+    if (parsed.data.commissionConfig !== undefined) {
+      const cfg = normalizeCommission(parsed.data.commissionConfig);
       if (!cfg.ok) return err(cfg.error);
       commissionConfig = cfg.value;
     }
@@ -176,7 +150,6 @@ export const OrgPromotersController = {
     return repo.update(id, guard.value.ctx.orgId, {
       name: parsed.data.name,
       defaultCommissionPct: parsed.data.defaultCommissionPct,
-      commissionType: parsed.data.commissionType,
       commissionConfig,
       notes: parsed.data.notes,
       whatsapp:
@@ -197,5 +170,43 @@ export const OrgPromotersController = {
     if (!guard.ok) return err(guard.error);
     const origin = await resolveOrigin();
     return ok(await getOrgPromoterDetail(guard.value.promoter, origin));
+  },
+
+  // Regla base de la marca (para todos los promotores y eventos). La leen todas
+  // las lecturas de comisión vía el resolver; aquí se ve/edita en un solo lugar.
+  async getScheme(): Promise<Result<OrgScheme>> {
+    const ctx = await resolveOrgCtx();
+    if (!ctx.ok) return err(ctx.error);
+    const { data } = await supabaseAdmin()
+      .from("organizations")
+      .select("promoter_commission_pct, promoter_commission_config")
+      .eq("id", ctx.value.orgId)
+      .maybeSingle<{ promoter_commission_pct: number | null; promoter_commission_config: unknown }>();
+    return ok({
+      commissionPct: data?.promoter_commission_pct ?? null,
+      commissionConfig: coerceCommissionConfig(data?.promoter_commission_config),
+    });
+  },
+
+  async updateScheme(input: unknown): Promise<Result<true>> {
+    const ctx = await resolveOrgCtx(ORG_WRITE_ROLES);
+    if (!ctx.ok) return err(ctx.error);
+    const parsed = z
+      .object({
+        commissionPct: z.number().int().min(0).max(100).nullable().optional(),
+        commissionConfig: commissionConfigSchema.optional(),
+      })
+      .safeParse(input);
+    if (!parsed.success) return err(parsed.error.issues[0]?.message ?? "invalid_input");
+    const row: Record<string, unknown> = {};
+    if ("commissionPct" in parsed.data) row.promoter_commission_pct = parsed.data.commissionPct;
+    if ("commissionConfig" in parsed.data) row.promoter_commission_config = parsed.data.commissionConfig;
+    if (Object.keys(row).length === 0) return ok(true);
+    const { error } = await supabaseAdmin()
+      .from("organizations")
+      .update(row)
+      .eq("id", ctx.value.orgId);
+    if (error) return err(error.message);
+    return ok(true);
   },
 };

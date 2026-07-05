@@ -10,7 +10,7 @@ import type {
   PromoterHomeData,
   PromoterLink,
 } from "@/server/promoters/domain/Promoter";
-import type { CommissionConfig, CommissionType } from "@/server/promoters/domain/OrgPromoter";
+import type { CommissionConfig } from "@/server/promoters/domain/OrgPromoter";
 
 export const useMyPromoterLinks = () =>
   useQuery({
@@ -66,7 +66,6 @@ export const useResolveInvite = (token: string) =>
         eventSlug: string;
         eventTitle: string;
         orgName: string;
-        commissionType: CommissionType;
         commissionPct: number;
         commissionConfig: CommissionConfig;
       }>(`/api/promoters/invite/${token}`),
