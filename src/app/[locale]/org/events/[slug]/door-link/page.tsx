@@ -1,126 +1,53 @@
 "use client";
 
 import { use, useState } from "react";
-import { C, Dot, FONT_DISPLAY, FONT_MONO, Phone } from "@/components/design";
 import { useEvent } from "@/lib/events/hooks/useEvents";
 import { useDoorLink } from "@/lib/events/hooks/useDoorLink";
-import { BackBtn } from "../_components";
+import { EventShell } from "../_shell/EventShell";
 
 type Params = Promise<{ slug: string; locale: string }>;
 
 export default function OrgDoorLinkPage({ params }: { params: Params }) {
   const { slug } = use(params);
-  const event = useEvent(slug);
+  useEvent(slug); // precarga para el header del shell
   const door = useDoorLink(slug);
   const [copied, setCopied] = useState(false);
 
-  const ev = event.data?.event;
   const url = door.data?.url ?? "";
   const code = door.data?.code ?? "";
+  const waHref = url
+    ? `https://wa.me/?text=${encodeURIComponent(`Link para escanear en la puerta: ${url}`)}`
+    : undefined;
 
   return (
-    <Phone>
-      <div
-        style={{
-          padding: "6px 22px 0",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}
-      >
-        <BackBtn />
-        <div style={{ fontSize: 12, color: C.dim, letterSpacing: "0.06em" }}>ACCESO PORTERO</div>
-        <div style={{ width: 38 }} />
-      </div>
+    <EventShell slug={slug} active="settings" hideTabs>
+      <div className="mx-auto mt-6 max-w-[560px]">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-cart-ink-4">
+          Acceso portero
+        </p>
+        <h1 className="mt-2 text-[26px] font-bold leading-tight tracking-[-0.03em]">
+          Link para tu portero
+        </h1>
+        <p className="mt-2 max-w-[46ch] text-[13.5px] leading-relaxed text-cart-ink-3">
+          Compártelo con quien va a escanear. Lo abre y ya tiene acceso — te avisamos por email
+          cuando alguien lo use. El acceso dura 24&nbsp;h en su dispositivo.
+        </p>
 
-      <div style={{ padding: "20px 22px 0", flex: 1, overflowY: "auto" }}>
-        <div
-          style={{
-            padding: "12px 14px",
-            borderRadius: 14,
-            marginBottom: 24,
-            background: "rgba(255,255,255,0.04)",
-            boxShadow: `0 0 0 1px ${C.line} inset`,
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-          }}
-        >
-          <div
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: 10,
-              background: "linear-gradient(135deg, #4B1F9A, #7C3AED)",
-              flexShrink: 0,
-            }}
-          />
-          <div>
-            <div style={{ fontFamily: FONT_DISPLAY, fontWeight: 700, fontSize: 14 }}>
-              {ev?.title ?? "—"}
-            </div>
-            <div style={{ fontSize: 11, color: C.dim }}>{ev?.venue ?? ""}</div>
+        <div className="mt-5 rounded-2xl border border-cart-accent/35 bg-cart-bg-elev p-4 lg:p-5">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.1em] text-cart-ink-4">
+            Link del portero
           </div>
-        </div>
-
-        <div
-          style={{
-            fontFamily: FONT_DISPLAY,
-            fontSize: 26,
-            fontWeight: 700,
-            letterSpacing: "-0.035em",
-            lineHeight: 1,
-            marginBottom: 6,
-          }}
-        >
-          Link para tu
-          <br />
-          portero.
-        </div>
-        <div style={{ fontSize: 13, color: C.dim, marginBottom: 22, lineHeight: 1.5 }}>
-          Comparte este link con quien va a escanear. Lo abre y ya tiene acceso. Te avisamos por
-          email cuando alguien lo use.
-        </div>
-
-        <div
-          style={{
-            borderRadius: 18,
-            padding: "16px 18px",
-            background: C.bg2,
-            boxShadow: "0 0 0 1px rgba(124,58,237,0.35) inset",
-          }}
-        >
-          <div
-            style={{
-              fontSize: 10,
-              color: C.dim,
-              letterSpacing: "0.08em",
-              marginBottom: 8,
-            }}
-          >
-            LINK DEL PORTERO
-          </div>
-          <div
-            style={{
-              fontFamily: FONT_MONO,
-              fontSize: 14,
-              fontWeight: 600,
-              color: "#fff",
-              letterSpacing: "0.02em",
-              wordBreak: "break-all",
-              lineHeight: 1.5,
-            }}
-          >
+          <div className="mt-2 break-all font-mono text-[14px] font-semibold leading-relaxed">
             {url ? (
               <>
                 {url.replace(code, "")}
-                <span style={{ color: C.purple }}>{code}</span>
+                <span className="text-cart-accent">{code}</span>
               </>
             ) : (
-              <span style={{ color: C.dim }}>Generando…</span>
+              <span className="text-cart-ink-3">Generando…</span>
             )}
           </div>
-          <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
+          <div className="mt-3 flex gap-2">
             <button
               type="button"
               disabled={!url}
@@ -129,75 +56,25 @@ export default function OrgDoorLinkPage({ params }: { params: Params }) {
                 setCopied(true);
                 setTimeout(() => setCopied(false), 1500);
               }}
-              style={{
-                flex: 1,
-                height: 38,
-                borderRadius: 10,
-                border: 0,
-                background: "rgba(255,255,255,0.08)",
-                color: "#fff",
-                fontFamily: FONT_DISPLAY,
-                fontWeight: 600,
-                fontSize: 12,
-                cursor: url ? "pointer" : "not-allowed",
-                boxShadow: "0 0 0 1px rgba(255,255,255,0.1) inset",
-              }}
+              className="flex-1 rounded-full border border-cart-line px-4 py-2.5 text-[13px] font-semibold text-cart-ink-2 transition hover:border-cart-line-strong disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {copied ? "Copiado" : "Copiar"}
+              {copied ? "✓ Copiado" : "Copiar"}
             </button>
             <a
-              href={
-                url
-                  ? `https://wa.me/?text=${encodeURIComponent(
-                      `Link para escanear en la puerta: ${url}`,
-                    )}`
-                  : undefined
-              }
+              href={waHref}
               target="_blank"
               rel="noreferrer"
-              style={{
-                flex: 1,
-                height: 38,
-                borderRadius: 10,
-                background: "rgba(37,211,102,0.14)",
-                color: "#25D366",
-                fontFamily: FONT_DISPLAY,
-                fontWeight: 600,
-                fontSize: 12,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 6,
-                textDecoration: "none",
-                boxShadow: "0 0 0 1px rgba(37,211,102,0.25) inset",
-                pointerEvents: url ? "auto" : "none",
-                opacity: url ? 1 : 0.5,
-              }}
+              className={
+                url
+                  ? "flex flex-1 items-center justify-center gap-2 rounded-full bg-[rgba(37,211,102,0.14)] px-4 py-2.5 text-[13px] font-semibold text-[#25D366] transition hover:bg-[rgba(37,211,102,0.22)]"
+                  : "pointer-events-none flex flex-1 items-center justify-center gap-2 rounded-full bg-cart-bg-elev px-4 py-2.5 text-[13px] font-semibold text-cart-ink-4 opacity-50"
+              }
             >
               WhatsApp
             </a>
           </div>
         </div>
-
-        <div
-          style={{
-            marginTop: 18,
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            padding: "10px 14px",
-            borderRadius: 14,
-            background: C.bg2,
-            boxShadow: `0 0 0 1px ${C.line} inset`,
-          }}
-        >
-          <Dot color={C.green} />
-          <div style={{ flex: 1, fontSize: 12, color: C.dim }}>
-            Quien abra el link entra con un toque. El acceso de cada portero dura
-            24 horas en su dispositivo.
-          </div>
-        </div>
       </div>
-    </Phone>
+    </EventShell>
   );
 }

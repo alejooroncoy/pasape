@@ -1,8 +1,12 @@
 "use client";
 
 import { use } from "react";
-import { BackBtn, C, FONT_DISPLAY, Phone } from "@/components/design";
-import { useDecideApplication, usePendingApplications, useRealtimePromoterApplications } from "@/lib/promoters/hooks/usePromoter";
+import {
+  useDecideApplication,
+  usePendingApplications,
+  useRealtimePromoterApplications,
+} from "@/lib/promoters/hooks/usePromoter";
+import { EventShell } from "../../_shell/EventShell";
 
 type Props = { params: Promise<{ slug: string }> };
 
@@ -11,152 +15,82 @@ export default function OrgPendingRequestsPage({ params }: Props) {
   const pending = usePendingApplications(slug);
   useRealtimePromoterApplications(slug);
   const decide = useDecideApplication(slug);
-  const count = pending.data?.length ?? 0;
+  const list = pending.data ?? [];
+  const count = list.length;
 
   return (
-    <Phone>
-      <div style={{ padding: "6px 22px 0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <BackBtn />
-        <div style={{ fontSize: 12, color: C.dim, letterSpacing: "0.06em" }}>SOLICITUDES</div>
-        <div
-          style={{
-            minWidth: 26,
-            height: 22,
-            padding: "0 6px",
-            borderRadius: 999,
-            background: C.red,
-            color: "#fff",
-            fontSize: 11,
-            fontWeight: 800,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          {count}
-        </div>
-      </div>
-      <div style={{ padding: "8px 22px 32px" }}>
-        <div style={{ fontFamily: FONT_DISPLAY, fontSize: 26, fontWeight: 700, letterSpacing: "-0.03em", lineHeight: 1 }}>
-          {count === 0 ? (
-            <>Sin solicitudes<br />pendientes.</>
-          ) : (
-            <>
-              {count} {count === 1 ? "persona quiere" : "personas quieren"}
-              <br />
-              ser tus <span style={{ color: C.purple }}>promotores.</span>
-            </>
+    <EventShell slug={slug} active="promoters" hideTabs>
+      <div className="mx-auto mt-6 max-w-[560px]">
+        <div className="flex items-center gap-3">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-cart-ink-4">
+            Solicitudes
+          </p>
+          {count > 0 && (
+            <span className="grid min-w-[22px] place-items-center rounded-full bg-cart-accent px-1.5 text-[11px] font-bold text-white">
+              {count}
+            </span>
           )}
         </div>
-        <div style={{ fontSize: 13, color: C.dim, marginTop: 10, lineHeight: 1.4 }}>
-          Entraron por tu link. Acepta solo a los que conozcas.
-        </div>
+        <h1 className="mt-2 text-[26px] font-bold leading-tight tracking-[-0.03em]">
+          {count === 0
+            ? "Sin solicitudes pendientes."
+            : `${count} ${count === 1 ? "persona quiere" : "personas quieren"} ser tus promotores.`}
+        </h1>
+        <p className="mt-2 max-w-[46ch] text-[13.5px] leading-relaxed text-cart-ink-3">
+          Entraron por tu link. Acepta solo a los que conozcas — al aceptar heredan el esquema de
+          comisión del evento.
+        </p>
 
-        <div style={{ marginTop: 22, display: "flex", flexDirection: "column", gap: 10 }}>
-          {pending.data?.map((req) => {
+        <div className="mt-5 flex flex-col gap-2.5">
+          {list.map((req) => {
             const initial = req.applicantName[0]?.toUpperCase() ?? "?";
-            const isPendingDecision = decide.isPending && decide.variables?.applicationId === req.id;
+            const busy = decide.isPending && decide.variables?.applicationId === req.id;
             return (
-              <div
-                key={req.id}
-                style={{
-                  padding: "14px 16px",
-                  borderRadius: 18,
-                  background: "rgba(255,255,255,0.03)",
-                  boxShadow: `0 0 0 1px ${C.line} inset`,
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
-                  <div
-                    style={{
-                      width: 44,
-                      height: 44,
-                      borderRadius: 14,
-                      background: C.purple,
-                      color: "#fff",
-                      fontFamily: FONT_DISPLAY,
-                      fontWeight: 700,
-                      fontSize: 18,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      boxShadow: "0 0 0 1px rgba(255,255,255,0.08)",
-                    }}
-                  >
+              <div key={req.id} className="rounded-2xl border border-cart-line bg-cart-bg-elev p-4">
+                <div className="flex items-center gap-3">
+                  <div className="grid size-11 place-items-center rounded-xl bg-cart-accent text-[17px] font-bold text-white">
                     {initial}
                   </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontFamily: FONT_DISPLAY, fontWeight: 600, fontSize: 15 }}>{req.applicantName}</div>
-                    <div style={{ fontSize: 11, color: C.dim, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[15px] font-semibold">{req.applicantName}</div>
+                    <div className="truncate text-[11.5px] text-cart-ink-3">
                       {req.applicantHandle ?? "sin contacto"}
                     </div>
                   </div>
                 </div>
                 {req.message && (
-                  <div
-                    style={{
-                      padding: "8px 12px",
-                      borderRadius: 10,
-                      background: "rgba(255,255,255,0.03)",
-                      fontSize: 11,
-                      color: C.dim,
-                      marginBottom: 10,
-                    }}
-                  >
+                  <div className="mt-3 rounded-lg bg-cart-bg px-3 py-2 text-[11.5px] text-cart-ink-3">
                     {req.message}
                   </div>
                 )}
-                <div style={{ display: "flex", gap: 8 }}>
+                <div className="mt-3 flex gap-2">
                   <button
                     type="button"
-                    disabled={isPendingDecision}
+                    disabled={busy}
                     onClick={() => decide.mutate({ applicationId: req.id, decision: "rejected" })}
-                    style={{
-                      flex: 1,
-                      height: 40,
-                      borderRadius: 12,
-                      border: 0,
-                      background: "rgba(255,255,255,0.06)",
-                      color: C.dim,
-                      fontFamily: FONT_DISPLAY,
-                      fontWeight: 600,
-                      fontSize: 13,
-                      cursor: "pointer",
-                    }}
+                    className="h-10 flex-1 rounded-xl bg-cart-bg text-[13px] font-semibold text-cart-ink-3 transition hover:text-white disabled:opacity-50"
                   >
                     Rechazar
                   </button>
                   <button
                     type="button"
-                    disabled={isPendingDecision}
-                    onClick={() =>
-                      decide.mutate({ applicationId: req.id, decision: "approved" })
-                    }
-                    style={{
-                      flex: 1,
-                      height: 40,
-                      borderRadius: 12,
-                      border: 0,
-                      background: C.purple,
-                      color: "#fff",
-                      fontFamily: FONT_DISPLAY,
-                      fontWeight: 700,
-                      fontSize: 13,
-                      boxShadow: "0 8px 20px -4px rgba(124,58,237,0.5)",
-                      cursor: "pointer",
-                    }}
+                    disabled={busy}
+                    onClick={() => decide.mutate({ applicationId: req.id, decision: "approved" })}
+                    className="h-10 flex-1 rounded-xl bg-cart-accent text-[13px] font-semibold text-white shadow-[0_8px_20px_-4px_var(--color-cart-accent-glow-strong)] disabled:opacity-50"
                   >
-                    {isPendingDecision ? "…" : "Aceptar"}
+                    {busy ? "…" : "Aceptar"}
                   </button>
                 </div>
               </div>
             );
           })}
-          {pending.data && pending.data.length === 0 && (
-            <div style={{ padding: 16, color: C.dim }}>Aún no hay solicitudes.</div>
+          {count === 0 && (
+            <div className="rounded-2xl border border-dashed border-cart-line px-4 py-8 text-center text-[13px] text-cart-ink-3">
+              Aún no hay solicitudes. Comparte tu link para que lleguen.
+            </div>
           )}
         </div>
       </div>
-    </Phone>
+    </EventShell>
   );
 }
