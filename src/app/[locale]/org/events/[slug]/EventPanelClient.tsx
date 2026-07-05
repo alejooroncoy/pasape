@@ -28,7 +28,7 @@ type PromoterStat = EventStatsPayload["byPromoter"][number];
 
 type Params = Promise<{ slug: string; locale: string }>;
 
-export default function OrgEventPanelPage({ params }: { params: Params }) {
+export function EventPanelClient({ params }: { params: Params }) {
   const { slug } = use(params);
   const event = useEvent(slug);
   const stats = useEventStats(slug);
@@ -460,10 +460,10 @@ function FinalReport({
           )}
         </section>
 
-        {/* Desglose por tipo de entrada */}
+        {/* Desglose por nombre de entrada */}
         <section className="rounded-2xl border border-cart-line bg-cart-bg-elev">
           <header className="border-b border-cart-line px-4 py-3 lg:px-5">
-            <h2 className="text-[15px] font-semibold tracking-[-0.01em]">Por tipo de entrada</h2>
+            <h2 className="text-[15px] font-semibold tracking-[-0.01em]">Por entrada</h2>
             <p className="text-[11.5px] text-cart-ink-3">vendidas · recaudado</p>
           </header>
           {stats?.ticketTypes?.length ? (

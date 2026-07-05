@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { AnimatePresence, motion, useMotionValue, useTransform, animate } from "motion/react";
 import { useMyEvents } from "@/lib/events/hooks/useEvents";
 import { useEventStats } from "@/lib/events/hooks/useEventStats";
@@ -46,9 +47,21 @@ function formatEventDate(iso: string | null | undefined): string {
   }
 }
 
+// El `?event=slug` de la URL (p. ej. el 307 desde un evento finalizado) fija el
+// evento inicial; useSearchParams obliga a un límite de Suspense en App Router.
 export default function OrgReportsPage() {
+  return (
+    <Suspense fallback={null}>
+      <OrgReportsContent />
+    </Suspense>
+  );
+}
+
+function OrgReportsContent() {
   const events = useMyEvents();
-  const [eventSlug, setEventSlug] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  // Inicial desde la URL (sin flash del default) — si no viene, se elige abajo.
+  const [eventSlug, setEventSlug] = useState<string | null>(() => searchParams.get("event"));
   const [range, setRange] = useState<RangeKey>("7d");
 
   // Default to most-recent published (or first draft) once events load.
@@ -231,7 +244,7 @@ export default function OrgReportsPage() {
                 <>
                   <div className="mb-4 flex items-center justify-between">
                     <h2 className="font-sans text-[15.5px] font-semibold tracking-[-0.01em] text-white">
-                      Por tipo de ticket
+                      Por entrada
                     </h2>
                     <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-cart-ink-4">
                       {grouped.length} {grouped.length === 1 ? "categoría" : "categorías"}
@@ -994,7 +1007,7 @@ function TicketBreakdown({ rows }: { rows: BreakdownRow[] }) {
         <table className="w-full border-separate border-spacing-y-1">
           <thead>
             <tr className="text-[11px] font-medium uppercase tracking-[0.1em] text-cart-ink-4">
-              <th className="px-2 pb-2 text-left font-medium">Tipo</th>
+              <th className="px-2 pb-2 text-left font-medium">Nombre de la entrada</th>
               <th className="px-2 pb-2 text-right font-medium">Precio</th>
               <th className="px-2 pb-2 text-right font-medium">Vendidos</th>
               <th className="px-2 pb-2 text-right font-medium">Total</th>
@@ -1066,7 +1079,7 @@ function TicketBreakdown({ rows }: { rows: BreakdownRow[] }) {
 function TicketTypesEmpty() {
   return (
     <div className="rounded-xl border border-dashed border-cart-line bg-cart-bg/40 px-4 py-6 text-center text-[12.5px] text-cart-ink-3">
-      Configura tipos de ticket en el evento para verlos desglosados aquí.
+      Configura las entradas del evento para verlas desglosadas aquí.
     </div>
   );
 }
