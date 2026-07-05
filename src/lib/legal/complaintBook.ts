@@ -13,7 +13,7 @@
 export const PROVEEDOR = {
   razonSocial: "Pasape S.A.C.",
   nombreComercial: "Pasape",
-  ruc: process.env.NEXT_PUBLIC_PASAPE_RUC ?? "10731724429",
+  ruc: process.env.NEXT_PUBLIC_PASAPE_RUC ?? "20000000000",
   direccion: "Lima, Perú",
   email: process.env.NEXT_PUBLIC_PASAPE_LEGAL_EMAIL ?? "reclamos@pasa.pe",
 } as const;
