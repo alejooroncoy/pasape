@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
 import type { OrgPromoter } from "../domain/OrgPromoter";
+import { computePromoterPayout, resolveCommissionScheme } from "./CommissionResolver";
 
 export type PromoterDetailEvent = {
   eventId: string;
@@ -42,16 +43,28 @@ export const getOrgPromoterDetail = async (
   const { data: links } = await db
     .from("promoter_links")
     .select(
-      "id, code, commission_pct, event_id, event:events!inner(id, slug, title, starts_at)",
+      "id, code, commission_pct, commission_config_override, event_id, event:events!inner(id, slug, title, starts_at, promoter_commission_pct, promoter_commission_config, organization:organizations(promoter_commission_pct, promoter_commission_config))",
     )
     .eq("org_promoter_id", promoter.id);
 
   type LinkRow = {
     id: string;
     code: string;
-    commission_pct: number;
+    commission_pct: number | null;
+    commission_config_override: unknown;
     event_id: string;
-    event: { id: string; slug: string; title: string; starts_at: string } | null;
+    event: {
+      id: string;
+      slug: string;
+      title: string;
+      starts_at: string;
+      promoter_commission_pct: number | null;
+      promoter_commission_config: unknown;
+      organization: {
+        promoter_commission_pct: number | null;
+        promoter_commission_config: unknown;
+      } | null;
+    } | null;
   };
   const linkRows = (links as unknown as LinkRow[] | null) ?? [];
 
@@ -119,30 +132,41 @@ export const getOrgPromoterDetail = async (
 
   const cleanOrigin = origin.replace(/\/$/, "");
 
-  // Fetch unlocked tiers for all links in one query.
-  const { data: allTiers } = await db
-    .from("commission_tiers")
-    .select("promoter_link_id, reward_amount_cents")
-    .in("promoter_link_id", linkIds)
-    .not("unlocked_at", "is", null);
-  type TierRow = { promoter_link_id: string; reward_amount_cents: number | null };
-  const tiersByLink = ((allTiers as TierRow[] | null) ?? []).reduce(
-    (acc, t) => {
-      acc.set(t.promoter_link_id, (acc.get(t.promoter_link_id) ?? 0) + (t.reward_amount_cents ?? 0));
-      return acc;
-    },
-    new Map<string, number>(),
-  );
+  // Conteos canónicos por link — la unidad de los hitos según su basis.
+  // Vendidas (pago) y asistidas (validadas, gratis+pago). Una query por link
+  // (detalle, baja frecuencia).
+  const soldByLink = new Map<string, number>();
+  const attendedByLink = new Map<string, number>();
+  for (const id of linkIds) {
+    const { data: soldData } = await db.rpc("promoter_sold_units", { p_link_id: id });
+    soldByLink.set(id, (soldData as number | null) ?? 0);
+    const { data: attendedData } = await db.rpc("promoter_attended_units", { p_link_id: id });
+    attendedByLink.set(id, (attendedData as number | null) ?? 0);
+  }
 
   const byEvent: PromoterDetailEvent[] = linkRows
     .filter((l) => l.event !== null)
     .map((l) => {
       const stats = perLink.get(l.id) ?? { ticketsSold: 0, ticketsValidated: 0, grossCents: 0 };
-      const unlockedTiersCents = tiersByLink.get(l.id);
-      const commissionCents =
-        unlockedTiersCents !== undefined
-          ? unlockedTiersCents
-          : Math.round((stats.grossCents * l.commission_pct) / 100);
+      // Esquema efectivo por herencia (link → evento → marca), evaluado al vuelo.
+      // Dos ejes: % por venta y metas (por venta o asistencia según basis).
+      const scheme = resolveCommissionScheme({
+        linkPct: l.commission_pct,
+        linkConfigOverride: l.commission_config_override,
+        promoterPct: promoter.defaultCommissionPct,
+        promoterConfig: promoter.commissionConfig,
+        eventPct: l.event!.promoter_commission_pct,
+        eventConfig: l.event!.promoter_commission_config,
+        brandPct: l.event!.organization?.promoter_commission_pct ?? null,
+        brandConfig: l.event!.organization?.promoter_commission_config ?? null,
+      });
+      const commissionCents = computePromoterPayout({
+        pct: scheme.pct,
+        config: scheme.config,
+        soldUnits: soldByLink.get(l.id) ?? 0,
+        attendedUnits: attendedByLink.get(l.id) ?? 0,
+        grossCents: stats.grossCents,
+      }).payoutCents;
       return {
         eventId: l.event!.id,
         eventSlug: l.event!.slug,
@@ -151,7 +175,7 @@ export const getOrgPromoterDetail = async (
         ticketsSold: stats.ticketsSold,
         ticketsValidated: stats.ticketsValidated,
         grossCents: stats.grossCents,
-        commissionPct: l.commission_pct,
+        commissionPct: scheme.pct,
         commissionCents,
         promoterLinkId: l.id,
         code: l.code,

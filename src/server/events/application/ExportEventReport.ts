@@ -40,6 +40,18 @@ const safeCell = (v: string | null | undefined): string => {
   return /^[=+\-@\t\r\n]/.test(s) ? `'${s}` : s;
 };
 
+// Los teléfonos se guardan en formatos mixtos: `guest_phone` es crudo (lo que
+// tecleó la persona, con o sin "+51"), mientras que el del perfil/transferencia
+// ya viene solo-dígitos. Los uniformamos a 9 dígitos locales (Perú) quitando el
+// prefijo de país cuando el resto queda como un móvil válido (9…). Así la
+// columna se ve pareja y sin el "'" que Excel antepone al "+".
+const displayPhone = (raw: string | null): string => {
+  let d = (raw ?? "").replace(/\D/g, "");
+  if (d.startsWith("0051")) d = d.slice(4);
+  if (d.length === 11 && d.startsWith("51") && d[2] === "9") d = d.slice(2);
+  return d;
+};
+
 // Fecha ISO (UTC) → Date con la hora de pared de Lima (UTC-5), para que Excel la
 // muestre en horario local y la trate como fecha real (con numFmt). El server
 // corre en UTC, así que construir el Date desde los componentes de Lima da el
@@ -75,20 +87,71 @@ export const exportEventReport = async (
   wb.created = new Date();
 
   // ---- Hoja Asistentes ----
+  // El nombre del titular por ticket, para resolver el anfitrión de un box
+  // ("Invitado por X") sin queries extra: los acompañantes ya vienen en la lista.
+  const nameByTicketId = new Map(attendees.map((a) => [a.ticketId, a.holderName]));
+
+  // Tipo de entrada. Para un box, `name`/`boxLabel` es solo la identidad ("A",
+  // "VIP Plus Ultra Genial A") y el sustantivo vive en `unitNoun` ("box",
+  // "mesa"): se arma "Noun + identidad" salvo que la identidad ya empiece con el
+  // sustantivo. Misma regla que boxDisplayLabel en la UI, para no divergir.
+  const typeLabel = (a: (typeof attendees)[number]): string => {
+    if (!a.boxLabel && !a.unitNoun) return a.ticketTypeName;
+    const raw = a.boxLabel ?? a.ticketTypeName;
+    if (!a.unitNoun) return raw;
+    const noun = a.unitNoun.charAt(0).toUpperCase() + a.unitNoun.slice(1);
+    return raw.toLowerCase().startsWith(a.unitNoun.toLowerCase()) ? raw : `${noun} ${raw}`;
+  };
+
+  // Tipo: qué ES la fila, no cómo se llama. Un box (tiene box_label) es un
+  // "Espacio" grupal (1 lugar para varios); el resto son "Entrada" individual
+  // (1 acceso = 1 persona). Misma distinción box/entrada individual del dominio.
+  const kindLabel = (a: (typeof attendees)[number]): string =>
+    a.boxLabel ? "Espacio" : "Entrada";
+
+  // Origen: de dónde salió esta entrada. Vacío en la compra normal (el 90% — sin
+  // ruido); solo se llena el caso que el organizador necesita entender.
+  const originLabel = (a: (typeof attendees)[number]): string => {
+    if (a.boxLabel && a.boxHostTicketId) {
+      const host = nameByTicketId.get(a.boxHostTicketId);
+      return host ? `Invitado por ${host}` : "Invitado al box";
+    }
+    if (a.boxLabel) return "Anfitrión";
+    if (a.transferFromName) return `Transferida de ${a.transferFromName}`;
+    if (a.isCourtesy) return "Cortesía";
+    return "";
+  };
+
+  // Orden de la hoja: por tipo, y dentro de un box sus miembros juntos (anfitrión
+  // primero); el resto por nombre. Así los espacios no salen mezclados por ID.
+  const boxGroup = (a: (typeof attendees)[number]): string =>
+    a.boxLabel ? (a.boxHostTicketId ?? a.ticketId) : "";
+  const hostRank = (a: (typeof attendees)[number]): number => (a.boxHostTicketId ? 1 : 0);
+  const sortedAttendees = [...attendees].sort(
+    (a, b) =>
+      // numeric: "Box 2" antes de "Box 10" — igual que la grilla de boxes.
+      typeLabel(a).localeCompare(typeLabel(b), "es", { numeric: true }) ||
+      boxGroup(a).localeCompare(boxGroup(b)) ||
+      hostRank(a) - hostRank(b) ||
+      (a.holderName ?? "").localeCompare(b.holderName ?? "", "es", { numeric: true }),
+  );
+
   const wsA = wb.addWorksheet("Asistentes");
   wsA.columns = [
     { header: "Ticket", key: "ticketId", width: 12 },
     { header: "Nombre del titular", key: "holderName", width: 28 },
     { header: "DNI", key: "holderDni", width: 16 },
-    { header: "Tipo de entrada", key: "ticketTypeName", width: 18 },
+    { header: "Nombre de la entrada", key: "ticketTypeName", width: 20 },
+    { header: "Tipo", key: "kind", width: 12 },
     { header: "Estado", key: "status", width: 14 },
     { header: "Ingresó", key: "usedAt", width: 22 },
-    { header: "Orden", key: "orderId", width: 12 },
-    { header: "Email comprador", key: "buyerEmail", width: 28 },
-    { header: "Teléfono comprador", key: "buyerPhone", width: 18 },
+    { header: "Contacto (WhatsApp)", key: "contactPhone", width: 18 },
+    { header: "Email", key: "contactEmail", width: 28 },
+    { header: "Origen", key: "origin", width: 24 },
     { header: "Promotor", key: "promoterCode", width: 18 },
+    { header: "Orden", key: "orderId", width: 12 },
   ];
-  for (const a of attendees) {
+  for (const a of sortedAttendees) {
     wsA.addRow({
       ticketId: shortId(a.ticketId),
       holderName: safeCell(a.holderName),
@@ -96,13 +159,22 @@ export const exportEventReport = async (
       holderDni: safeCell(
         a.holderDni?.startsWith("··") ? `Termina en ${a.holderDni.slice(2)}` : a.holderDni,
       ),
-      ticketTypeName: safeCell(a.ticketTypeName),
-      status: STATUS_LABEL[a.status] ?? a.status,
+      ticketTypeName: safeCell(typeLabel(a)),
+      kind: kindLabel(a),
+      // Una cortesía nace con status 'active' (el constraint de tickets no admite
+      // otro estado), pero conceptualmente está "Enviada" hasta que el invitado
+      // ingresa — mismo copy que el panel de cortesías. Cuando entra pasa a
+      // 'used' → "Usada".
+      status:
+        a.isCourtesy && a.status === "active"
+          ? "Enviada"
+          : (STATUS_LABEL[a.status] ?? a.status),
       usedAt: toLimaDate(a.usedAt) ?? "",
-      orderId: shortId(a.orderId),
-      buyerEmail: safeCell(displayEmail(a.buyerEmail)),
-      buyerPhone: safeCell(a.buyerPhone),
+      contactPhone: safeCell(displayPhone(a.contactPhone)),
+      contactEmail: safeCell(displayEmail(a.contactEmail)),
+      origin: safeCell(originLabel(a)),
       promoterCode: safeCell(a.promoterCode),
+      orderId: shortId(a.orderId),
     });
   }
   wsA.getColumn("usedAt").numFmt = "yyyy-mm-dd hh:mm";
@@ -122,7 +194,10 @@ export const exportEventReport = async (
     { header: "A pagar", key: "commission", width: 22 },
   ];
   for (const p of promoters) {
-    const inkind = p.commissionType === "inkind";
+    // Dos ejes: % por venta (siempre) + metas. "A pagar" = dinero (% + hitos
+    // cash) y, si hay, los premios en especie desbloqueados como texto.
+    const perks = p.unlockedRewards.length > 0 ? ` + En especie: ${p.unlockedRewards.join(", ")}` : "";
+    const soles = Money.toSoles(p.commissionCalculatedCents);
     wsP.addRow({
       name: safeCell(p.name),
       code: safeCell(p.code),
@@ -131,18 +206,8 @@ export const exportEventReport = async (
       guestsInvited: p.guestsInvited,
       guestsEntered: p.guestsEntered,
       revenue: Money.toSoles(p.revenueCents),
-      // En especie no tiene % ni monto: mostrarlo como texto evita el "0.00"
-      // que parecía "no se le debe nada". Por hitos tampoco es un % fijo.
-      commissionPct: inkind
-        ? "—"
-        : p.commissionType === "tiered"
-          ? "Por hitos"
-          : p.commissionPct / 100,
-      commission: inkind
-        ? p.unlockedRewards.length > 0
-          ? `En especie: ${p.unlockedRewards.join(", ")}`
-          : "En especie"
-        : Money.toSoles(p.commissionCalculatedCents),
+      commissionPct: p.commissionPct / 100,
+      commission: perks ? `S/ ${soles}${perks}` : soles,
     });
   }
   wsP.getColumn("revenue").numFmt = SOLES_FMT;

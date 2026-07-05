@@ -20,10 +20,7 @@ import {
   computePromoterPayout,
   resolveCommissionScheme,
 } from "@/server/promoters/application/CommissionResolver";
-import type {
-  CommissionConfig,
-  CommissionType,
-} from "@/server/promoters/domain/OrgPromoter";
+import type { CommissionConfig } from "@/server/promoters/domain/OrgPromoter";
 
 type EventRow = {
   id: string;
@@ -446,18 +443,16 @@ export const supabaseEventRepository: EventRepository = {
     const { data } = await db
       .from("events")
       .select(
-        "promoter_commission_pct, promoter_commission_type, promoter_commission_config, promoter_default_quota",
+        "promoter_commission_pct, promoter_commission_config, promoter_default_quota",
       )
       .eq("id", eventId)
       .maybeSingle<{
         promoter_commission_pct: number | null;
-        promoter_commission_type: CommissionType | null;
         promoter_commission_config: CommissionConfig | null;
         promoter_default_quota: number | null;
       }>();
     return {
       commissionPct: data?.promoter_commission_pct ?? null,
-      commissionType: data?.promoter_commission_type ?? null,
       commissionConfig: data?.promoter_commission_config ?? null,
       defaultQuota: data?.promoter_default_quota ?? null,
     };
@@ -466,8 +461,8 @@ export const supabaseEventRepository: EventRepository = {
   async updatePromoterScheme(eventId, patch): Promise<Result<true>> {
     const db = supabaseAdmin();
     const row: Record<string, unknown> = {};
+    // Dos ejes independientes: % por venta y metas. Coexisten.
     if ("commissionPct" in patch) row.promoter_commission_pct = patch.commissionPct;
-    if ("commissionType" in patch) row.promoter_commission_type = patch.commissionType;
     if ("commissionConfig" in patch) row.promoter_commission_config = patch.commissionConfig;
     if ("defaultQuota" in patch) row.promoter_default_quota = patch.defaultQuota;
     if (Object.keys(row).length === 0) return ok(true);
@@ -736,24 +731,27 @@ export const supabaseEventRepository: EventRepository = {
     const { data: schemeRow } = await db
       .from("events")
       .select(
-        "promoter_commission_pct, promoter_commission_type, promoter_commission_config",
+        "promoter_commission_pct, promoter_commission_config, organization:organizations(promoter_commission_pct, promoter_commission_config)",
       )
       .eq("id", eventId)
       .maybeSingle<{
         promoter_commission_pct: number | null;
-        promoter_commission_type: CommissionType | null;
         promoter_commission_config: unknown;
+        organization: {
+          promoter_commission_pct: number | null;
+          promoter_commission_config: unknown;
+        } | null;
       }>();
     const eventScheme = schemeRow ?? {
       promoter_commission_pct: null,
-      promoter_commission_type: null,
       promoter_commission_config: null,
+      organization: null,
     };
 
     const { data: promoterOrders } = await db
       .from("orders")
       .select(
-        "id, total_cents, promoter_link_id, promoter_link:promoter_links!inner(id, code, promoter_id, org_promoter_id, commission_pct, commission_type, commission_config_override, profile:profiles(id, full_name), org_promoter:org_promoters(id, name, default_commission_pct, commission_type, commission_config))",
+        "id, total_cents, promoter_link_id, promoter_link:promoter_links!inner(id, code, promoter_id, org_promoter_id, commission_pct, commission_config_override, profile:profiles(id, full_name), org_promoter:org_promoters(id, name, default_commission_pct, commission_config))",
       )
       .eq("event_id", eventId)
       .eq("status", "paid")
@@ -769,14 +767,12 @@ export const supabaseEventRepository: EventRepository = {
         promoter_id: string | null;
         org_promoter_id: string | null;
         commission_pct: number | null;
-        commission_type: CommissionType | null;
         commission_config_override: unknown;
         profile: { id: string; full_name: string | null } | null;
         org_promoter: {
           id: string;
           name: string;
-          default_commission_pct: number;
-          commission_type: "percentage" | "tiered" | "inkind";
+          default_commission_pct: number | null;
           commission_config: unknown;
         } | null;
       };
@@ -821,7 +817,6 @@ export const supabaseEventRepository: EventRepository = {
         guestsInvited: number;
         guestsEntered: number;
         revenueCents: number;
-        commissionType: CommissionType;
         commissionPct: number;
         commissionConfig: CommissionConfig;
       }
@@ -835,20 +830,15 @@ export const supabaseEventRepository: EventRepository = {
         o.promoter_link.code;
       // Esquema efectivo por herencia: link override → esquema del evento → marca.
       const op = o.promoter_link.org_promoter;
-      const {
-        type: commissionType,
-        config: commissionConfig,
-        pct: commissionPct,
-      } = resolveCommissionScheme({
-        linkType: o.promoter_link.commission_type,
+      const { config: commissionConfig, pct: commissionPct } = resolveCommissionScheme({
         linkPct: o.promoter_link.commission_pct,
         linkConfigOverride: o.promoter_link.commission_config_override,
-        eventType: eventScheme.promoter_commission_type,
-        eventConfig: eventScheme.promoter_commission_config,
+        promoterPct: op?.default_commission_pct ?? null,
+        promoterConfig: op?.commission_config ?? null,
         eventPct: eventScheme.promoter_commission_pct,
-        orgType: op?.commission_type ?? null,
-        orgConfig: op?.commission_config ?? null,
-        orgPct: op?.default_commission_pct ?? null,
+        eventConfig: eventScheme.promoter_commission_config,
+        brandPct: eventScheme.organization?.promoter_commission_pct ?? null,
+        brandConfig: eventScheme.organization?.promoter_commission_config ?? null,
       });
       const entry = promoterAgg.get(key) ?? {
         promoterId: o.promoter_link.promoter_id ?? o.promoter_link.org_promoter_id ?? o.promoter_link.id,
@@ -860,7 +850,6 @@ export const supabaseEventRepository: EventRepository = {
         guestsInvited: 0,
         guestsEntered: 0,
         revenueCents: 0,
-        commissionType,
         commissionPct,
         commissionConfig,
       };
@@ -898,11 +887,13 @@ export const supabaseEventRepository: EventRepository = {
         } else {
           flag = "suspect";
         }
+        // Asistidos = validados de pago + gratis que entraron (base attended).
+        const attendedUnits = p.ticketsValidated + p.guestsEntered;
         const payout = computePromoterPayout({
-          type: p.commissionType,
-          config: p.commissionConfig,
           pct: p.commissionPct,
-          ticketsSold: p.ticketsSold,
+          config: p.commissionConfig,
+          soldUnits: p.ticketsSold,
+          attendedUnits,
           grossCents: p.revenueCents,
         });
         return {
@@ -917,8 +908,8 @@ export const supabaseEventRepository: EventRepository = {
           revenueCents: p.revenueCents,
           attendanceRate,
           flag,
-          commissionType: p.commissionType,
           commissionPct: p.commissionPct,
+          hasMilestones: (p.commissionConfig?.milestones.length ?? 0) > 0,
           payoutCents: payout.payoutCents,
           unlockedRewards: payout.rewards,
         };
@@ -985,9 +976,12 @@ export const supabaseEventRepository: EventRepository = {
         .from("tickets")
         .select(
           `id, holder_name, holder_dni_enc, holder_dni_last4, status, used_at, order_id,
-           ticket_type:ticket_types!inner(id, name),
+           box_label, box_host_ticket_id, current_holder, transfer_count,
+           ticket_type:ticket_types!inner(id, name, unit_noun),
+           holder:profiles!tickets_current_holder_fkey(id, phone),
            order:orders!inner(
-             id, event_id, promoter_link_id, status,
+             id, event_id, promoter_link_id, status, is_courtesy,
+             guest_email, guest_phone,
              buyer:profiles!orders_buyer_id_fkey(id, email, phone),
              promoter_link:promoter_links(id, code)
            )`,
@@ -1011,18 +1005,72 @@ export const supabaseEventRepository: EventRepository = {
       status: AttendeeRow["status"];
       used_at: string | null;
       order_id: string;
-      ticket_type: { id: string; name: string };
+      box_label: string | null;
+      box_host_ticket_id: string | null;
+      current_holder: string;
+      transfer_count: number;
+      ticket_type: { id: string; name: string; unit_noun: string | null };
+      holder: { id: string; phone: string | null } | null;
       order: {
         id: string;
         event_id: string;
         promoter_link_id: string | null;
+        is_courtesy: boolean | null;
+        guest_email: string | null;
+        guest_phone: string | null;
         buyer: { id: string; email: string | null; phone: string | null };
         promoter_link: { id: string; code: string } | null;
       };
     };
 
-    const attendees: AttendeeRow[] =
-      ((ticketRows as unknown as TicketJoinRow[] | null) ?? []).map((t) => ({
+    const rows = (ticketRows as unknown as TicketJoinRow[] | null) ?? [];
+
+    // Transferencias completadas de estos tickets: el contacto de QUIEN PORTA la
+    // entrada transferida es el WhatsApp al que se envió (`to_contact`), y el
+    // Origen "Transferida de X" usa el nombre del emisor (from_profile). Una sola
+    // consulta batch (por bloques de IDs) — las transferencias son raras, casi
+    // siempre devuelve poco. Nos quedamos con la más reciente por ticket.
+    type TransferRow = {
+      ticket_id: string;
+      to_contact: string | null;
+      created_at: string;
+      from: { full_name: string | null } | null;
+    };
+    const transferByTicket = new Map<string, { toContact: string | null; fromName: string | null }>();
+    const transferredIds = rows.filter((t) => t.transfer_count > 0).map((t) => t.id);
+    for (let i = 0; i < transferredIds.length; i += PAGE) {
+      const chunk = transferredIds.slice(i, i + PAGE);
+      const { data: tr } = await db
+        .from("ticket_transfers")
+        .select("ticket_id, to_contact, created_at, from:profiles!ticket_transfers_from_profile_fkey(full_name)")
+        .in("ticket_id", chunk)
+        .eq("status", "completed")
+        .order("created_at", { ascending: false });
+      for (const row of (tr as unknown as TransferRow[] | null) ?? []) {
+        // El primero por ticket (ya viene desc por created_at) es el más reciente.
+        if (!transferByTicket.has(row.ticket_id)) {
+          transferByTicket.set(row.ticket_id, {
+            toContact: row.to_contact,
+            fromName: row.from?.full_name ?? null,
+          });
+        }
+      }
+    }
+
+    const attendees: AttendeeRow[] = rows.map((t) => {
+      const transfer = transferByTicket.get(t.id) ?? null;
+      // El que porta no es el comprador: transferencia recibida, o acompañante de
+      // box que se unió con su propia cuenta. En ambos su contacto es el del
+      // holder, no el del comprador.
+      const holderDiffersFromBuyer = t.current_holder !== t.order?.buyer?.id;
+      // Contacto de quien porta: si difiere del comprador, el WhatsApp del
+      // receptor (to_contact de la transferencia, o el phone de su cuenta). Si
+      // no, el del comprador/anfitrión (guest_* o su profile). Un acompañante de
+      // box sin cuenta (current_holder = anfitrión) cae al contacto del anfitrión.
+      const contactPhone = holderDiffersFromBuyer
+        ? (transfer?.toContact ?? t.holder?.phone ?? t.order?.guest_phone ?? t.order?.buyer?.phone ?? null)
+        : (t.order?.guest_phone ?? t.order?.buyer?.phone ?? t.holder?.phone ?? null);
+      return {
         ticketId: t.id,
         holderName: t.holder_name,
         // DNI completo descifrado para la hoja del organizador. Si no hay enc
@@ -1031,13 +1079,19 @@ export const supabaseEventRepository: EventRepository = {
           decryptDni(t.holder_dni_enc) ??
           (t.holder_dni_last4 ? `··${t.holder_dni_last4}` : null),
         ticketTypeName: t.ticket_type?.name ?? "",
+        boxLabel: t.box_label,
+        unitNoun: t.ticket_type?.unit_noun ?? null,
+        boxHostTicketId: t.box_host_ticket_id,
         status: t.status,
         usedAt: t.used_at,
         orderId: t.order_id,
-        buyerEmail: t.order?.buyer?.email ?? null,
-        buyerPhone: t.order?.buyer?.phone ?? null,
+        contactPhone,
+        contactEmail: t.order?.guest_email ?? t.order?.buyer?.email ?? null,
         promoterCode: t.order?.promoter_link?.code ?? null,
-      }));
+        isCourtesy: t.order?.is_courtesy ?? false,
+        transferFromName: transfer?.fromName ?? null,
+      };
+    });
 
     const summary = await this.getStats(eventId);
 
@@ -1052,7 +1106,7 @@ export const supabaseEventRepository: EventRepository = {
       revenueCents: p.revenueCents,
       commissionPct: p.commissionPct,
       commissionCalculatedCents: p.payoutCents,
-      commissionType: p.commissionType,
+      hasMilestones: p.hasMilestones,
       unlockedRewards: p.unlockedRewards.map((r) => r.label),
     }));
 

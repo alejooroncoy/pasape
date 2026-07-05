@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import { Link } from "@/i18n/navigation";
 import { OrgShell } from "@/app/[locale]/org/_shell/OrgShell";
+import { PhoneField } from "@/components/design/PhoneField";
 import { useOrgInvites } from "@/lib/identity/organizations/hooks/useOrgInvites";
 import { useCreateInvite } from "@/lib/identity/organizations/hooks/useCreateInvite";
 import { useMyOrgs } from "@/lib/identity/organizations/hooks/useMyOrgs";
@@ -15,15 +16,12 @@ import {
   useCreateOrgPromoter,
   useDeleteOrgPromoter,
   useOrgPromoters,
+  useOrgScheme,
   useUpdateOrgPromoter,
+  useUpdateOrgScheme,
 } from "@/lib/promoters/hooks/useOrgPromoters";
-import type {
-  CommissionConfig,
-  CommissionReward,
-  CommissionTier,
-  CommissionType,
-  OrgPromoter,
-} from "@/server/promoters/domain/OrgPromoter";
+import type { CommissionConfig, OrgPromoter } from "@/server/promoters/domain/OrgPromoter";
+import { CommissionSchemeEditor } from "@/components/promoters/CommissionSchemeEditor";
 
 type Tab = "coorg" | "promoters";
 
@@ -343,14 +341,10 @@ function CoorgInviteForm({
           placeholder="mafer@nocturno.pe"
         />
       ) : (
-        <FieldInput
-          label="WhatsApp"
-          type="tel"
-          value={phone}
-          onChange={setPhone}
-          placeholder="+51 9XX XXX XXX"
-          mono
-        />
+        <label className="flex flex-col gap-1.5">
+          <Label>WhatsApp</Label>
+          <PhoneField value={phone} onChange={setPhone} />
+        </label>
       )}
 
       {/* Rol */}
@@ -441,6 +435,8 @@ function PromotersTab() {
         </button>
       </div>
 
+      <BrandSchemeCard />
+
       <Section title="Pool" count={promoters.data?.length ?? 0}>
         {promoters.isLoading ? (
           <EmptyCell label="Cargando…" />
@@ -524,7 +520,7 @@ function PromoterRow({
         </div>
       </div>
       <span className="rounded-full bg-cart-accent-soft px-2.5 py-1 text-[11.5px] font-semibold text-cart-accent">
-        {promoter.defaultCommissionPct}%
+        {promoter.defaultCommissionPct == null ? "Igual que marca" : `${promoter.defaultCommissionPct}%`}
       </span>
       <div className="flex items-center gap-1">
         <button
@@ -632,6 +628,34 @@ function RewardIcon({ name, size = 18 }: { name: string; size?: number }) {
   }
 }
 
+// Regla base de la marca: el default que heredan TODOS los promotores y eventos.
+// Mismo editor unificado, autoguardado. Vive arriba del pool.
+function BrandSchemeCard() {
+  const scheme = useOrgScheme();
+  const update = useUpdateOrgScheme();
+  return (
+    <section className="rounded-2xl border border-cart-line bg-cart-bg-elev p-4 lg:p-5">
+      <div className="mb-4">
+        <h2 className="text-[15px] font-semibold tracking-[-0.01em] text-white">
+          Reglas para todos tus promotores
+        </h2>
+        <p className="mt-1 text-[12.5px] leading-snug text-cart-ink-3">
+          El default de tu marca: aplica a todos tus eventos. Lo puedes cambiar por evento, o por
+          promotor (su tarifa propia manda sobre el default del evento).
+        </p>
+      </div>
+      <CommissionSchemeEditor
+        variant="page"
+        saving={update.isPending}
+        pct={scheme.data?.commissionPct ?? 0}
+        config={scheme.data?.commissionConfig}
+        onPctChange={(v) => update.mutate({ commissionPct: v })}
+        onConfigChange={(cfg) => update.mutate({ commissionConfig: cfg })}
+      />
+    </section>
+  );
+}
+
 function PromoterForm({
   initial,
   isPending,
@@ -642,57 +666,39 @@ function PromoterForm({
   onSubmit: (payload: {
     name: string;
     whatsapp: string | null;
-    defaultCommissionPct: number;
-    commissionType: CommissionType;
+    defaultCommissionPct: number | null;
     commissionConfig: CommissionConfig;
     notes?: string | null;
   }) => void;
 }) {
+  const brand = useOrgScheme();
   const [name, setName] = useState(initial?.name ?? "");
   const [whatsapp, setWhatsapp] = useState(initial?.whatsapp ?? "");
-  const [pct, setPct] = useState(initial?.defaultCommissionPct ?? 15);
+  // null = hereda de la marca (default de un promotor nuevo). El editor lo muestra.
+  const [pct, setPct] = useState<number | null>(initial?.defaultCommissionPct ?? null);
   const [notes, setNotes] = useState(initial?.notes ?? "");
-  const [type, setType] = useState<CommissionType>(initial?.commissionType ?? "percentage");
-
-  // Tier/reward state is kept independent from `type` so toggling between
-  // schemes doesn't blow away in-progress edits.
-  const initialTiers: CommissionTier[] =
-    initial?.commissionType === "tiered" &&
-    initial.commissionConfig &&
-    "tiers" in initial.commissionConfig
-      ? initial.commissionConfig.tiers
-      : [{ salesCount: 50, payoutCents: 10000 }];
-  const initialRewards: CommissionReward[] =
-    initial?.commissionType === "inkind" &&
-    initial.commissionConfig &&
-    "rewards" in initial.commissionConfig
-      ? initial.commissionConfig.rewards
-      : [{ salesCount: 40, label: "Botella", icon: "bottle" }];
-  const [tiers, setTiers] = useState<CommissionTier[]>(initialTiers);
-  const [rewards, setRewards] = useState<CommissionReward[]>(initialRewards);
+  // Dos ejes independientes: % (pct) + metas (config). El editor maneja el config.
+  const [config, setConfig] = useState<CommissionConfig>(
+    initial?.commissionConfig && "milestones" in initial.commissionConfig
+      ? initial.commissionConfig
+      : null,
+  );
 
   const submit = () => {
     if (!name.trim()) return;
+    // Limpia metas: solo hitos válidos; si no queda ninguno → sin metas (null).
     let commissionConfig: CommissionConfig = null;
-    if (type === "tiered") {
-      const clean = tiers
-        .filter((t) => t.salesCount > 0)
-        .sort((a, b) => a.salesCount - b.salesCount);
-      if (clean.length === 0) return;
-      commissionConfig = { tiers: clean };
-    } else if (type === "inkind") {
-      const clean = rewards
-        .filter((r) => r.salesCount > 0 && r.label.trim() && r.icon)
-        .map((r) => ({ ...r, label: r.label.trim() }))
-        .sort((a, b) => a.salesCount - b.salesCount);
-      if (clean.length === 0) return;
-      commissionConfig = { rewards: clean };
+    if (config) {
+      const clean = config.milestones
+        .filter((m) => m.threshold > 0 && (m.rewardKind === "cash" ? (m.amountCents ?? 0) > 0 : m.label.trim()))
+        .map((m) => ({ ...m, label: m.label.trim() }))
+        .sort((a, b) => a.threshold - b.threshold);
+      if (clean.length > 0) commissionConfig = { basis: config.basis, milestones: clean };
     }
     onSubmit({
       name: name.trim(),
       whatsapp: whatsapp.trim() ? whatsapp.trim() : null,
       defaultCommissionPct: pct,
-      commissionType: type,
       commissionConfig,
       notes: notes.trim() ? notes.trim() : null,
     });
@@ -701,301 +707,29 @@ function PromoterForm({
   return (
     <div className="flex flex-col gap-4 pb-4">
       <FieldInput label="Nombre" value={name} onChange={setName} placeholder="Lucho" />
-      <FieldInput
-        label="WhatsApp"
-        type="tel"
-        value={whatsapp}
-        onChange={setWhatsapp}
-        placeholder="+51 9XX XXX XXX"
-        mono
-      />
+      <label className="flex flex-col gap-1.5">
+        <Label>WhatsApp</Label>
+        <PhoneField value={whatsapp} onChange={setWhatsapp} />
+      </label>
 
       <div>
-        <Label>Tipo de comisión</Label>
-        <div className="mt-2 grid grid-cols-3 gap-2">
-          <CommissionTypeChip active={type === "percentage"} onClick={() => setType("percentage")} label="%" sub="Porcentaje" />
-          <CommissionTypeChip active={type === "tiered"} onClick={() => setType("tiered")} label="Hitos" sub="Por escalón" />
-          <CommissionTypeChip active={type === "inkind"} onClick={() => setType("inkind")} label="Especie" sub="Premio" />
+        <Label>Cómo le pagas</Label>
+        <p className="mt-1 text-[11.5px] leading-snug text-cart-ink-3">
+          Por defecto usa las reglas de tu marca. Cámbialo solo si este promotor cobra distinto.
+        </p>
+        <div className="mt-2.5">
+          <CommissionSchemeEditor
+            variant="drawer"
+            autoSave={false}
+            pct={pct}
+            config={config}
+            onPctChange={setPct}
+            onConfigChange={setConfig}
+            inheritedPct={brand.data?.commissionPct ?? 0}
+            inheritLabel="tu marca"
+          />
         </div>
       </div>
-
-      {type === "percentage" && (
-        <div>
-          <Label>Comisión por defecto</Label>
-          <div className="mt-2 flex gap-2">
-            {[10, 15, 20].map((p) => (
-              <button
-                key={p}
-                type="button"
-                onClick={() => setPct(p)}
-                className={
-                  "flex-1 rounded-xl px-3 py-2 text-[13.5px] font-semibold transition " +
-                  (pct === p
-                    ? "bg-cart-accent text-white shadow-[0_8px_20px_-6px_var(--color-cart-accent-glow)]"
-                    : "bg-cart-bg-elev text-cart-ink-2 hover:text-white")
-                }
-              >
-                {p}%
-              </button>
-            ))}
-            <input
-              type="number"
-              min={0}
-              max={100}
-              value={pct}
-              onChange={(e) => setPct(Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
-              className="w-16 rounded-xl bg-cart-bg-elev px-2.5 py-2 text-center font-mono text-[13.5px] outline-none"
-            />
-          </div>
-          <p className="mt-1.5 text-[11.5px] text-cart-ink-3">
-            Puedes cambiarla por evento si necesitas.
-          </p>
-        </div>
-      )}
-
-      {type === "tiered" && (
-        <div>
-          <Label>Hitos</Label>
-          <p className="mt-1 text-[11.5px] leading-snug text-cart-ink-3">
-            Bonus extra cuando el promotor cruza cada meta de ventas.
-          </p>
-
-          {/* Tabla estilo Square — header de columnas + rows */}
-          <div className="mt-2.5 overflow-hidden rounded-2xl border border-cart-line bg-cart-bg-elev/40">
-            <div className="grid grid-cols-[40px_1fr_1fr_36px] items-center gap-2 border-b border-cart-line bg-cart-bg-elev/80 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-cart-ink-3">
-              <span>#</span>
-              <span>Al cumplir</span>
-              <span>Bonus</span>
-              <span aria-hidden />
-            </div>
-            {tiers
-              .slice()
-              .sort((a, b) => a.salesCount - b.salesCount)
-              .map((t, sortedIdx) => {
-                // Como ordenamos por display pero editamos por índice real,
-                // resuelvo el índice original con identidad por referencia.
-                const i = tiers.indexOf(t);
-                return (
-                  <div
-                    key={i}
-                    className={
-                      "grid grid-cols-[40px_1fr_1fr_36px] items-center gap-2 px-3 py-2.5 " +
-                      (sortedIdx % 2 === 0 ? "bg-transparent" : "bg-cart-bg-elev/30") +
-                      " " +
-                      (sortedIdx < tiers.length - 1 ? "border-b border-cart-line" : "")
-                    }
-                  >
-                    <div className="grid size-7 place-items-center rounded-full bg-cart-accent-soft font-mono text-[11.5px] font-semibold text-cart-accent">
-                      {sortedIdx + 1}
-                    </div>
-                    <div className="flex items-center gap-1.5 rounded-lg bg-cart-bg/60 px-2.5 py-1.5 font-mono text-[13px]">
-                      <input
-                        type="number"
-                        min={1}
-                        value={t.salesCount}
-                        onChange={(e) =>
-                          setTiers((prev) =>
-                            prev.map((row, idx) =>
-                              idx === i
-                                ? { ...row, salesCount: Math.max(1, Math.trunc(Number(e.target.value) || 0)) }
-                                : row,
-                            ),
-                          )
-                        }
-                        className="w-full bg-transparent outline-none"
-                      />
-                      <span className="shrink-0 text-[10.5px] text-cart-ink-3">ventas</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 rounded-lg bg-cart-bg/60 px-2.5 py-1.5 font-mono text-[13px]">
-                      <span className="text-cart-ink-3">S/</span>
-                      <input
-                        type="number"
-                        min={0}
-                        value={Money.toSoles(t.payoutCents)}
-                        onChange={(e) => {
-                          const soles = Math.max(0, Number(e.target.value) || 0);
-                          setTiers((prev) =>
-                            prev.map((row, idx) =>
-                              idx === i ? { ...row, payoutCents: Money.toCents(soles) } : row,
-                            ),
-                          );
-                        }}
-                        className="w-full bg-transparent outline-none"
-                      />
-                    </div>
-                    {tiers.length > 1 ? (
-                      <button
-                        type="button"
-                        onClick={() => setTiers((prev) => prev.filter((_, idx) => idx !== i))}
-                        aria-label="Eliminar hito"
-                        className="grid size-7 place-items-center rounded-full text-cart-ink-3 transition hover:bg-red-500/10 hover:text-red-300"
-                      >
-                        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                          <path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                        </svg>
-                      </button>
-                    ) : (
-                      <span />
-                    )}
-                  </div>
-                );
-              })}
-            <button
-              type="button"
-              onClick={() =>
-                setTiers((prev) => {
-                  const last = prev[prev.length - 1];
-                  const nextSales = last ? Math.max(last.salesCount + 50, last.salesCount + 1) : 50;
-                  const nextPayout = last ? last.payoutCents + 15000 : 10000;
-                  return [...prev, { salesCount: nextSales, payoutCents: nextPayout }];
-                })
-              }
-              className="flex w-full items-center justify-center gap-1.5 border-t border-cart-line bg-cart-bg-elev/40 py-2.5 text-[12.5px] font-semibold text-cart-accent transition hover:bg-cart-bg-elev/70"
-            >
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                <path d="M6 2v8M2 6h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-              </svg>
-              Agregar hito
-            </button>
-          </div>
-        </div>
-      )}
-
-      {type === "inkind" && (
-        <div>
-          <Label>Premios por nivel</Label>
-          <p className="mt-1 text-[11.5px] leading-snug text-cart-ink-3">
-            Premios físicos o pases que el promotor desbloquea al cumplir metas.
-          </p>
-
-          {/* Cards paralelas estilo Upwork pricing tiers — scroll horizontal en mobile, grid en desktop */}
-          <div className="mt-2.5 -mx-1 flex snap-x snap-mandatory gap-2.5 overflow-x-auto px-1 pb-2 lg:grid lg:grid-cols-2 lg:overflow-visible lg:px-0">
-            {rewards
-              .slice()
-              .sort((a, b) => a.salesCount - b.salesCount)
-              .map((r, sortedIdx) => {
-                const i = rewards.indexOf(r);
-                return (
-                  <div
-                    key={i}
-                    className="relative flex w-[240px] shrink-0 snap-start flex-col rounded-2xl border border-cart-line bg-cart-bg-elev/60 p-3 lg:w-full"
-                  >
-                    {/* Header del nivel */}
-                    <div className="flex items-center justify-between">
-                      <span className="inline-flex items-center gap-1 rounded-full bg-cart-accent-soft px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-cart-accent">
-                        Nivel {sortedIdx + 1}
-                      </span>
-                      {rewards.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => setRewards((prev) => prev.filter((_, idx) => idx !== i))}
-                          aria-label="Eliminar premio"
-                          className="grid size-6 place-items-center rounded-full text-cart-ink-3 transition hover:bg-red-500/10 hover:text-red-300"
-                        >
-                          <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
-                            <path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                          </svg>
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Trigger: al cumplir X ventas */}
-                    <div className="mt-3">
-                      <div className="text-[10.5px] font-semibold uppercase tracking-[0.1em] text-cart-ink-3">
-                        Al cumplir
-                      </div>
-                      <div className="mt-1 flex items-baseline gap-1.5 rounded-lg bg-cart-bg/60 px-2.5 py-1.5 font-mono text-[13px]">
-                        <input
-                          type="number"
-                          min={1}
-                          value={r.salesCount}
-                          onChange={(e) =>
-                            setRewards((prev) =>
-                              prev.map((row, idx) =>
-                                idx === i
-                                  ? { ...row, salesCount: Math.max(1, Math.trunc(Number(e.target.value) || 0)) }
-                                  : row,
-                              ),
-                            )
-                          }
-                          className="w-full bg-transparent outline-none"
-                        />
-                        <span className="shrink-0 text-[10.5px] text-cart-ink-3">ventas</span>
-                      </div>
-                    </div>
-
-                    {/* Premio */}
-                    <div className="mt-3">
-                      <div className="text-[10.5px] font-semibold uppercase tracking-[0.1em] text-cart-ink-3">
-                        Premio
-                      </div>
-                      <div className="mt-1 flex items-center gap-2">
-                        <IconPicker
-                          value={r.icon}
-                          onChange={(icon) =>
-                            setRewards((prev) =>
-                              prev.map((row, idx) => (idx === i ? { ...row, icon } : row)),
-                            )
-                          }
-                        />
-                        <input
-                          value={r.label}
-                          onChange={(e) =>
-                            setRewards((prev) =>
-                              prev.map((row, idx) => (idx === i ? { ...row, label: e.target.value } : row)),
-                            )
-                          }
-                          placeholder="Botella"
-                          className="flex-1 rounded-lg bg-cart-bg/60 px-2.5 py-1.5 text-[13px] outline-none"
-                        />
-                      </div>
-                      {/* Quick presets */}
-                      <div className="mt-2 flex flex-wrap gap-1">
-                        {REWARD_PRESETS.map((p) => (
-                          <button
-                            key={p.label}
-                            type="button"
-                            onClick={() =>
-                              setRewards((prev) =>
-                                prev.map((row, idx) =>
-                                  idx === i ? { ...row, label: p.label, icon: p.icon } : row,
-                                ),
-                              )
-                            }
-                            className="inline-flex items-center gap-1 rounded-full bg-cart-bg-elev px-2 py-0.5 text-[10.5px] font-medium text-cart-ink-2 transition hover:bg-cart-bg-elev-2 hover:text-white"
-                          >
-                            <RewardIcon name={p.icon} size={12} />
-                            {p.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-
-            {/* Card "+ Agregar nivel" — mismo size que las demás */}
-            <button
-              type="button"
-              onClick={() =>
-                setRewards((prev) => {
-                  const last = prev[prev.length - 1];
-                  const nextSales = last ? Math.max(last.salesCount + 30, last.salesCount + 1) : 40;
-                  return [...prev, { salesCount: nextSales, label: "Pase VIP", icon: "crown" }];
-                })
-              }
-              className="flex w-[240px] shrink-0 snap-start flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-cart-line py-8 text-cart-accent transition hover:border-cart-accent hover:bg-cart-accent-soft/40 lg:w-full lg:py-4"
-            >
-              <span className="grid size-10 place-items-center rounded-full bg-cart-accent-soft">
-                <svg width="14" height="14" viewBox="0 0 12 12" fill="none">
-                  <path d="M6 2v8M2 6h8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                </svg>
-              </span>
-              <span className="text-[12.5px] font-semibold">Agregar nivel</span>
-            </button>
-          </div>
-        </div>
-      )}
 
       <FieldInput label="Notas (opcional)" value={notes} onChange={setNotes} placeholder="Vende mejor los jueves" />
 
@@ -1009,34 +743,6 @@ function PromoterForm({
         {isPending ? "Guardando…" : initial ? "Guardar cambios" : "Agregar al pool"}
       </button>
     </div>
-  );
-}
-
-function CommissionTypeChip({
-  active,
-  onClick,
-  label,
-  sub,
-}: {
-  active: boolean;
-  onClick: () => void;
-  label: string;
-  sub: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={
-        "flex flex-col items-center rounded-xl px-2 py-2.5 text-[13px] font-semibold transition " +
-        (active
-          ? "bg-cart-accent text-white shadow-[0_8px_20px_-6px_var(--color-cart-accent-glow)]"
-          : "bg-cart-bg-elev text-cart-ink-2 hover:text-white")
-      }
-    >
-      <span>{label}</span>
-      <span className={"mt-0.5 text-[10px] font-medium " + (active ? "text-white/80" : "text-cart-ink-3")}>{sub}</span>
-    </button>
   );
 }
 

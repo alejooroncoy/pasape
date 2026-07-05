@@ -1,6 +1,6 @@
 import type { Event, EventCategory, EventStatus, FeeMode, Promo, PromoKind, PresaleTier, TicketType } from "../domain/Event";
 import type { Result } from "@/server/_shared/result";
-import type { CommissionConfig, CommissionType } from "@/server/promoters/domain/OrgPromoter";
+import type { CommissionConfig } from "@/server/promoters/domain/OrgPromoter";
 
 export type CreateEventInput = {
   organizationId: string;
@@ -96,20 +96,17 @@ export type EventStats = {
      *   - `suspect`: asistencia < 30% (posible autoventa de promotor).
      */
     flag: "ok" | "watch" | "suspect";
-    /**
-     * Commission scheme of the promoter at the moment stats were computed,
-     * resolved from `org_promoters` with an optional per-event override.
-     */
-    commissionType: "percentage" | "tiered" | "inkind";
-    /** Effective percent — only meaningful for `commissionType === "percentage"`. */
+    /** % efectivo por venta (0 = sin comisión por venta). */
     commissionPct: number;
+    /** True si el promotor tiene metas configuradas (efectivo/especie por umbral). */
+    hasMilestones: boolean;
     /**
-     * Money owed to the promoter for this event. For inkind this is 0;
-     * see `unlockedRewards`.
+     * Dinero a pagar: % del vendido + hitos cash conseguidos. Los premios en
+     * especie salen aparte en `unlockedRewards`.
      */
     payoutCents: number;
-    /** Unlocked in-kind rewards (empty for percentage/tiered). */
-    unlockedRewards: Array<{ label: string; icon: string }>;
+    /** Premios en especie desbloqueados. */
+    unlockedRewards: Array<{ label: string }>;
   }>;
 };
 
@@ -187,8 +184,9 @@ export type UpdateTicketTypeInput = {
  * cualquier campo = usa el default de la marca / sin tope.
  */
 export type EventPromoterScheme = {
+  /** % por venta default (null = usa el de la marca). */
   commissionPct: number | null;
-  commissionType: CommissionType | null;
+  /** Metas default (null = usa las de la marca). Independiente del %. */
   commissionConfig: CommissionConfig | null;
   /** Cupo de ventas default por promotor. null = sin tope. */
   defaultQuota: number | null;
@@ -233,12 +231,36 @@ export type AttendeeRow = {
       organizador; nunca viaja al celular del portero). Null si no se capturó. */
   holderDni: string | null;
   ticketTypeName: string;
+  /** Etiqueta del box/espacio (A, B, VIP-1) tal como la nombró el organizador.
+      null si no es un box. Sirve para agrupar a los miembros de un mismo box en
+      la hoja y para el label del "Tipo". */
+  boxLabel: string | null;
+  /** Sustantivo del box ("box", "mesa", "lounge"), separado de la etiqueta. El
+      "Tipo" de un box se arma "Noun + etiqueta" ("Box A") — misma regla que
+      boxDisplayLabel en la UI. null si no es box. */
+  unitNoun: string | null;
+  /** Ticket del anfitrión del box al que pertenece este ticket (los acompañantes
+      lo llevan; el anfitrión lo tiene en null). Agrupa el box en la hoja. */
+  boxHostTicketId: string | null;
   status: "active" | "used" | "void" | "refunded";
   usedAt: string | null;
   orderId: string;
-  buyerEmail: string | null;
-  buyerPhone: string | null;
+  /** Contacto de QUIEN PORTA la entrada (el que va a entrar), no del pagador:
+      en una transferencia es el WhatsApp del receptor; en una compra/box normal
+      es el del comprador/anfitrión. Fuente de verdad para llegar al asistente. */
+  contactPhone: string | null;
+  /** Email de la compra (comprador/invitado). Secundario; el canal real es el
+      WhatsApp. Sintético → se enmascara al renderizar. */
+  contactEmail: string | null;
   promoterCode: string | null;
+  /** La orden es una cortesía del organizador (orders.is_courtesy). Cambia el
+      label de estado: una cortesía active se muestra "Enviada" (aún no ingresó),
+      igual que el panel de cortesías, no "Activa". */
+  isCourtesy: boolean;
+  /** Nombre de quien transfirió esta entrada (from_profile de la transferencia
+      completada más reciente). null si nunca se transfirió. Alimenta el Origen
+      "Transferida de X". */
+  transferFromName: string | null;
 };
 
 export type PromoterReportRow = {
@@ -250,11 +272,11 @@ export type PromoterReportRow = {
   guestsEntered: number;
   revenueCents: number;
   commissionPct: number;
+  /** Dinero: % del vendido + hitos cash conseguidos. */
   commissionCalculatedCents: number;
-  /** Esquema de comisión — "inkind" se muestra como "En especie" en el Excel
-      (su payout en soles es 0 y confundía: parecía que no se le debía nada). */
-  commissionType: string;
-  /** Hitos/premios desbloqueados (solo esquemas por hitos). */
+  /** True si el promotor tiene metas configuradas (efectivo/especie por umbral). */
+  hasMilestones: boolean;
+  /** Premios en especie desbloqueados. */
   unlockedRewards: string[];
 };
 

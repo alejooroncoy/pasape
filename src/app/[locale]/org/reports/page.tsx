@@ -1083,7 +1083,7 @@ type PromoterStatRow = {
   ticketsValidated: number;
   revenueCents: number;
   payoutCents: number;
-  commissionType: "percentage" | "tiered" | "inkind";
+  hasMilestones: boolean;
   attendanceRate: number;
   flag: "ok" | "watch" | "suspect";
 };
@@ -1204,7 +1204,9 @@ function PromotersTable({
                     {formatMoney(r.revenueCents)}
                   </td>
                   <td className="bg-cart-bg-elev-2/70 px-3 py-3 text-right text-[13px] font-semibold tabular-nums text-cart-accent">
-                    {r.commissionType === "inkind" ? "En especie" : formatMoney(r.payoutCents)}
+                    {r.hasMilestones && r.payoutCents === 0
+                      ? "En especie"
+                      : formatMoney(r.payoutCents)}
                   </td>
                   <td className="bg-cart-bg-elev-2/70 px-3 py-3 text-right text-[13px] tabular-nums text-cart-ink-2">
                     {formatMoney(avg)}

@@ -13,6 +13,7 @@ import {
 import { AnimatePresence, motion } from "motion/react";
 import { Money } from "@/lib/_shared/money";
 import { useRouter } from "@/i18n/navigation";
+import { PhoneField } from "@/components/design/PhoneField";
 import { useCreateEvent } from "@/lib/events/hooks/useCreateEvent";
 import { useUpdateEvent } from "@/lib/events/hooks/useUpdateEvent";
 import { useEvent } from "@/lib/events/hooks/useEvents";
@@ -2870,14 +2871,15 @@ function PromoterPoolPicker({
   onCreate: (payload: {
     name: string;
     whatsapp: string | null;
-    defaultCommissionPct: number;
+    defaultCommissionPct: number | null;
   }) => Promise<OrgPromoter>;
   creating: boolean;
 }) {
   const [adding, setAdding] = useState(pool.length === 0);
   const [name, setName] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
-  const [pct, setPct] = useState(15);
+  // null = hereda las reglas de la marca (default de un promotor nuevo).
+  const [pct, setPct] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const toggle = (id: string) => {
@@ -2898,7 +2900,7 @@ function PromoterPoolPicker({
       });
       setName("");
       setWhatsapp("");
-      setPct(15);
+      setPct(null);
       setAdding(false);
     } catch (e) {
       setError((e as Error).message ?? "No pudimos guardar");
@@ -2954,7 +2956,7 @@ function PromoterPoolPicker({
                     )}
                   </div>
                   <span className="rounded-full bg-cart-accent-soft px-2 py-1 text-[11px] font-semibold text-cart-accent">
-                    {p.defaultCommissionPct}%
+                    {p.defaultCommissionPct == null ? "Igual que marca" : `${p.defaultCommissionPct}%`}
                   </span>
                   <span
                     className={
@@ -2996,14 +2998,20 @@ function PromoterPoolPicker({
               placeholder="Nombre"
               className="rounded-xl bg-cart-bg-elev px-3 py-2.5 text-[14px] outline-none placeholder:text-cart-ink-4"
             />
-            <input
-              value={whatsapp}
-              onChange={(e) => setWhatsapp(e.target.value)}
-              placeholder="+51 9XX XXX XXX (opcional)"
-              inputMode="tel"
-              className="rounded-xl bg-cart-bg-elev px-3 py-2.5 font-mono text-[13.5px] outline-none placeholder:text-cart-ink-4"
-            />
-            <div className="flex gap-2">
+            <PhoneField value={whatsapp} onChange={setWhatsapp} />
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setPct(null)}
+                className={
+                  "rounded-xl px-3 py-2 text-[13px] font-semibold transition " +
+                  (pct == null
+                    ? "bg-cart-accent text-white shadow-[0_8px_20px_-6px_var(--color-cart-accent-glow)]"
+                    : "bg-cart-bg-elev text-cart-ink-2 hover:text-white")
+                }
+              >
+                Igual que la marca
+              </button>
               {[10, 15, 20].map((p) => (
                 <button
                   key={p}

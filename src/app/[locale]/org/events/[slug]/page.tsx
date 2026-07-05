@@ -18,6 +18,7 @@ import {
   useRemoveAssignment,
   useUpdateAssignmentCommission,
 } from "@/lib/promoters/hooks/useEventPromoters";
+import { milestoneIcon } from "@/lib/promoters/milestoneDisplay";
 import { PersonalizeSheet, type PayPatch } from "./team/page";
 import type { EventStatsPayload } from "@/lib/events/hooks/useEventStats";
 import type { EventPartner } from "@/server/events/application/EventPartners";
@@ -786,11 +787,7 @@ function PromoterDetail({
           };
 
   const commissionLabel =
-    promoter.commissionType === "percentage"
-      ? `${promoter.commissionPct}% por venta`
-      : promoter.commissionType === "tiered"
-        ? "Por niveles"
-        : "En especie";
+    `${promoter.commissionPct}% por venta` + (promoter.hasMilestones ? " + metas" : "");
 
   return (
     <div className="flex flex-col gap-5">
@@ -876,7 +873,7 @@ function PromoterDetail({
                 key={r.label}
                 className="inline-flex items-center gap-1 rounded-full bg-cart-accent-soft px-2.5 py-1 text-[11px] font-medium text-cart-accent"
               >
-                {r.icon} {r.label}
+                🎁 {r.label}
               </span>
             ))}
           </div>
@@ -938,12 +935,12 @@ function PromoterDetail({
             Personalizar comisión →
           </Link>
         )}
-        {promoter.commissionType === "tiered" && (
+        {promoter.hasMilestones && (
           <Link
             href={`/org/events/${slug}/promoters/${promoter.promoterLinkId}/tiers` as never}
             className="block rounded-xl border border-cart-line px-3.5 py-2.5 text-center text-[12.5px] font-medium text-cart-ink-2 transition hover:border-cart-line-strong hover:text-white"
           >
-            Ver niveles →
+            Ver hitos →
           </Link>
         )}
       </div>
