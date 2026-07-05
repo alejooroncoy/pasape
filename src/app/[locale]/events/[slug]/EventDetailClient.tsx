@@ -789,8 +789,11 @@ function GroupCard({
             )}
           </span>
         </div>
-        {/* Contador +/- cuando hay onQtyChange y no está agotado */}
-        {!summary.isAllSoldOut && onQtyChange ? (
+        {/* Contador +/- solo para entradas individuales. Un box NO se cuenta:
+            se reserva por identidad (A/B/C) en el picker, no con un stepper —
+            un "box × 2" no dice CUÁLES dos. Los grupos de box caen al "Ver ›"
+            que abre el picker (onClick del card). */}
+        {!summary.isAllSoldOut && onQtyChange && !summary.isAllBoxes ? (
           <div className="mt-2 flex items-center gap-1.5">
             {qty > 0 ? (
               <>

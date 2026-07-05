@@ -10,7 +10,7 @@ import type {
   ScannerRef,
   TicketRepository,
 } from "@/server/tickets/ports/TicketRepository";
-import type { Order, OrderQuote, Ticket, WalletTicket } from "@/server/tickets/domain/Ticket";
+import type { Order, OrderQuote, OrderStatus, Ticket, WalletTicket } from "@/server/tickets/domain/Ticket";
 import type { EventCategory, EventStatus, Promo } from "@/server/events/domain/Event";
 import { activePricing, applyPromos, type PromoLineInput } from "@/lib/events/pricing";
 import { resolveOrderFee } from "@/lib/tickets/serviceFee";
@@ -663,18 +663,19 @@ export const supabaseTicketRepository: TicketRepository = {
     // (carrito expirado, pago fallido) o se reembolsaron; no deben aparecer ni
     // contar en la cuenta. El resto de cálculos (sold, revenue, asistentes) ya
     // los excluye en sus views/queries.
-    // Filtro por orden PAGADA: los tickets se insertan `active` aunque la orden
-    // siga `pending` (el check constraint del schema no permite 'pending_payment'),
-    // así que una compra reservada-pero-nunca-pagada dejaría tickets activos. El
-    // wallet solo debe mostrar lo realmente pagado. Las órdenes gratis (total 0) se
-    // marcan `paid` al instante en BuyTickets, así que sí aparecen.
+    // Filtro por orden PAGADA o EN REVISIÓN: los tickets se insertan `active`
+    // aunque la orden siga `pending` (el check constraint del schema no permite
+    // 'pending_payment'). Mostramos lo pagado + las órdenes con pago vivo en
+    // revisión de MP (mp_status='in_process') como "Pago en revisión" — así el
+    // comprador ve su entrada mientras MP decide, sin QR hasta que se confirme.
+    // Una reserva abandonada (pending sin pago) NO aparece. El filtro fino va en
+    // JS abajo. Las órdenes gratis (total 0) nacen `paid`, así que sí aparecen.
     const { data } = await db
       .from("tickets")
       .select(
-        "*, order:orders!inner(status), ticket_type:ticket_types!inner(id,name,kind,event_id,event:events!inner(id,slug,title,starts_at,venue,timezone,status,cover_url,category))",
+        "*, order:orders!inner(status,mp_status), ticket_type:ticket_types!inner(id,name,kind,event_id,event:events!inner(id,slug,title,starts_at,venue,timezone,status,cover_url,category))",
       )
       .eq("current_holder", buyerId)
-      .eq("order.status", "paid")
       .in("status", ["active", "used"])
       .order("created_at", { ascending: false });
     if (!data) return [];
@@ -703,6 +704,7 @@ export const supabaseTicketRepository: TicketRepository = {
       (pend ?? []).map((p) => [p.ticket_id, p.to_contact]),
     );
     type Joined = TicketRow & {
+      order: { status: OrderStatus; mp_status: string | null };
       ticket_type: {
         id: string;
         name: string;
@@ -721,26 +723,35 @@ export const supabaseTicketRepository: TicketRepository = {
         };
       };
     };
-    return (rows as unknown as Joined[]).map((row) => ({
-      ...toTicket(row),
-      event: {
-        id: row.ticket_type.event.id,
-        slug: row.ticket_type.event.slug,
-        title: row.ticket_type.event.title,
-        startsAt: row.ticket_type.event.starts_at,
-        venue: row.ticket_type.event.venue,
-        timezone: row.ticket_type.event.timezone,
-        status: row.ticket_type.event.status,
-        coverUrl: row.ticket_type.event.cover_url,
-        category: row.ticket_type.event.category,
-      },
-      ticketType: {
-        id: row.ticket_type.id,
-        name: row.ticket_type.name,
-        kind: row.ticket_type.kind,
-      },
-      pendingTransferTo: pendMap.get(row.id) ?? null,
-    }));
+    return (rows as unknown as Joined[])
+      // Pagadas + en revisión (pending con pago vivo). Descarta reservas
+      // abandonadas (pending sin in_process).
+      .filter(
+        (row) =>
+          row.order.status === "paid" ||
+          (row.order.status === "pending" && row.order.mp_status === "in_process"),
+      )
+      .map((row) => ({
+        ...toTicket(row),
+        event: {
+          id: row.ticket_type.event.id,
+          slug: row.ticket_type.event.slug,
+          title: row.ticket_type.event.title,
+          startsAt: row.ticket_type.event.starts_at,
+          venue: row.ticket_type.event.venue,
+          timezone: row.ticket_type.event.timezone,
+          status: row.ticket_type.event.status,
+          coverUrl: row.ticket_type.event.cover_url,
+          category: row.ticket_type.event.category,
+        },
+        ticketType: {
+          id: row.ticket_type.id,
+          name: row.ticket_type.name,
+          kind: row.ticket_type.kind,
+        },
+        orderStatus: row.order.status,
+        pendingTransferTo: pendMap.get(row.id) ?? null,
+      }));
   },
 
   async getById(ticketId, buyerId) {
@@ -749,19 +760,19 @@ export const supabaseTicketRepository: TicketRepository = {
     // ticket (current_holder), puede abrir su detalle/QR aunque sea un QR de
     // acompañante que sostiene dentro de su box. La pertenencia ya la garantiza
     // current_holder = buyerId.
-    // Solo órdenes pagadas: igual que listMine, un ticket de orden `pending`
-    // (reserva nunca pagada) no debe abrirse ni mostrar un QR que ya no escana.
+    // Pagadas o en revisión (igual que listMine). Una reserva abandonada (pending
+    // sin pago vivo) no debe abrirse; el filtro fino va en JS abajo.
     const { data } = await db
       .from("tickets")
       .select(
-        "*, order:orders!inner(status), ticket_type:ticket_types!inner(id,name,kind,event_id,event:events!inner(id,slug,title,starts_at,venue,timezone,status,cover_url,category))",
+        "*, order:orders!inner(status,mp_status), ticket_type:ticket_types!inner(id,name,kind,event_id,event:events!inner(id,slug,title,starts_at,venue,timezone,status,cover_url,category))",
       )
       .eq("id", ticketId)
       .eq("current_holder", buyerId)
-      .eq("order.status", "paid")
       .maybeSingle();
     if (!data) return null;
     type Joined = TicketRow & {
+      order: { status: OrderStatus; mp_status: string | null };
       ticket_type: {
         id: string;
         name: string;
@@ -781,6 +792,11 @@ export const supabaseTicketRepository: TicketRepository = {
       };
     };
     const row = data as unknown as Joined;
+    // Descarta reservas abandonadas (pending sin pago vivo). Pagada o en revisión sí.
+    const visible =
+      row.order.status === "paid" ||
+      (row.order.status === "pending" && row.order.mp_status === "in_process");
+    if (!visible) return null;
     const { data: pend } = await db
       .from("ticket_transfers")
       .select("to_contact")
@@ -805,6 +821,7 @@ export const supabaseTicketRepository: TicketRepository = {
         name: row.ticket_type.name,
         kind: row.ticket_type.kind,
       },
+      orderStatus: row.order.status,
       pendingTransferTo: (pend as { to_contact: string | null } | null)?.to_contact ?? null,
     };
   },

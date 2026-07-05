@@ -128,7 +128,10 @@ function TicketDetailInner({ id }: { id: string }) {
   }, [action, data?.status, data?.pendingTransferTo]);
 
 
-  const activeTicketId = data && data.status === "active" ? activeId : null;
+  // No pedimos cert/QR si la orden aún está en revisión (in_process): el server
+  // no lo emite hasta que esté pagada, así que evitamos el fetch fallido.
+  const activeTicketId =
+    data && data.status === "active" && data.orderStatus !== "pending" ? activeId : null;
   const rotating = useLocalRotatingQr(activeTicketId);
   const isBoxTicket = !!data?.boxLabel;
   const isHost = isBoxTicket && !data?.boxHostTicketId;
@@ -333,7 +336,24 @@ function TicketDetailInner({ id }: { id: string }) {
               </div>
             )}
             <div className="relative mx-auto grid size-[240px] place-items-center">
-              {data.status === "used" ? (
+              {data.orderStatus === "pending" ? (
+                // Pago en revisión (in_process): el banco aún no confirma. Sin QR
+                // hasta que se apruebe (el cert se emite solo con la orden pagada).
+                <div className="grid size-[240px] place-items-center gap-3 px-6 text-center">
+                  <div className="grid size-[88px] place-items-center rounded-full bg-amber-400/15 ring-1 ring-amber-400/30">
+                    <svg width="42" height="42" viewBox="0 0 24 24" fill="none">
+                      <circle cx="12" cy="12" r="9" stroke="#d97706" strokeWidth="2" />
+                      <path d="M12 7.5v5l3 2" stroke="#d97706" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </div>
+                  <div>
+                    <div className="text-[18px] font-bold tracking-[-0.01em] text-neutral-900">Pago en revisión</div>
+                    <div className="mt-1 text-[12.5px] leading-relaxed text-neutral-500">
+                      Tu banco está confirmando el pago. Apenas lo apruebe, aquí aparece tu QR.
+                    </div>
+                  </div>
+                </div>
+              ) : data.status === "used" ? (
                 // Ya ingresó: estampa clara y bonita en vez del QR (que ya no sirve).
                 <div className="grid size-[240px] place-items-center gap-3 px-6 text-center">
                   <div className="grid size-[88px] place-items-center rounded-full bg-emerald-500/10 ring-1 ring-emerald-500/25">

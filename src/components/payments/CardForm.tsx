@@ -15,6 +15,10 @@ type Props = {
   initialDni?: string;
   initialEmail?: string;
   onPaid: () => void;
+  // MP dejó el pago en revisión (in_process): no se aprobó al instante. El padre
+  // muestra la pantalla de "pago en revisión" con la opción de reintentar con
+  // otro medio o esperar la confirmación.
+  onReview?: () => void;
   onError?: (message: string) => void;
   // La orden expiró (pasaron los 30 min de reserva y pg_cron la cerró): hay que
   // re-reservar. El padre muestra el modal de "reserva vencida" para reintentar.
@@ -47,6 +51,7 @@ export function CardForm({
   initialDni,
   initialEmail: _initialEmail,
   onPaid,
+  onReview,
   onError,
   onExpired,
 }: Props) {
@@ -190,8 +195,13 @@ export function CardForm({
         // 3DS: el emisor pide autenticar. Mostramos el challenge del banco; el
         // resultado se resuelve por webhook + polling en /processing tras COMPLETE.
         setChallenge(value.threeDsInfo);
-      } else if (value.status === "approved" || value.status === "in_process") {
+      } else if (value.status === "approved") {
         onPaid();
+      } else if (value.status === "in_process") {
+        // MP no aprobó al instante: quedó en revisión. No mandamos al comprador a
+        // "procesando" (caería en error a los 60s) — el padre ofrece reintentar
+        // con otro medio o esperar la confirmación.
+        (onReview ?? onPaid)();
       } else {
         setError(humanizeCardError(value.message ?? "rejected"));
         onError?.(value.message ?? "rejected");
