@@ -33,6 +33,25 @@ const admitSchema = z.object({
   eventSlug: z.string().min(1),
 });
 
+// offlineScannedAt lo reporta el dispositivo del portero sin firmar: acotarlo
+// evita que un cliente falsee used_at (auditoría/dup_offline) mandando una
+// fecha arbitraria pasada o futura. Ventanas generosas porque un portero
+// puede quedarse offline varios días antes de sincronizar.
+const OFFLINE_SCAN_MAX_FUTURE_SKEW_MS = 5 * 60 * 1000; // 5 min de tolerancia de reloj
+const OFFLINE_SCAN_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 días
+
+// Si offlineScannedAt es inválido, futuro, o demasiado antiguo, se descarta
+// (undefined) y el repositorio cae a su default: now() del servidor.
+function resolveOfflineScannedAt(raw: string | undefined): Date | undefined {
+  if (!raw) return undefined;
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return undefined;
+  const now = Date.now();
+  if (parsed.getTime() > now + OFFLINE_SCAN_MAX_FUTURE_SKEW_MS) return undefined;
+  if (parsed.getTime() < now - OFFLINE_SCAN_MAX_AGE_MS) return undefined;
+  return parsed;
+}
+
 export const ScanningController = {
   async scan(
     input: unknown,
@@ -56,7 +75,7 @@ export const ScanningController = {
       {
         qrCode:    parsed.data.qrCode,
         scanner:   { profileId: access.value.profileId, sessionId: access.value.sessionId },
-        usedAt:    context?.offlineScannedAt ? new Date(context.offlineScannedAt) : undefined,
+        usedAt:    resolveOfflineScannedAt(context?.offlineScannedAt),
         // Validación de puerta solo en el scan en vivo: en el sync offline la
         // decisión ya se tomó en la puerta (y el ticket pudo marcarse local).
         zoneId:    context?.offlineScannedAt ? undefined : access.value.zoneId,
@@ -87,7 +106,7 @@ export const ScanningController = {
       {
         ticketId:  parsed.data.ticketId,
         scanner:   { profileId: access.value.profileId, sessionId: access.value.sessionId },
-        usedAt:    context?.offlineScannedAt ? new Date(context.offlineScannedAt) : undefined,
+        usedAt:    resolveOfflineScannedAt(context?.offlineScannedAt),
         // El ticket debe pertenecer al evento de esta sesión (anti cross-event).
         expectedEventId: access.value.eventId,
       },
