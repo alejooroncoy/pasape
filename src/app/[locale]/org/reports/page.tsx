@@ -6,7 +6,10 @@ import { useSearchParams } from "next/navigation";
 import { AnimatePresence, motion, useMotionValue, useTransform, animate } from "motion/react";
 import { useMyEvents } from "@/lib/events/hooks/useEvents";
 import { useEventStats } from "@/lib/events/hooks/useEventStats";
+import type { EventStatsPayload } from "@/lib/events/hooks/useEventStats";
 import { useRealtimeEventStats } from "@/lib/events/hooks/useRealtimeEventStats";
+import { useEventCoOrganizers } from "@/lib/events/hooks/useEventCoOrganizers";
+import { useCourtesies } from "@/lib/events/hooks/useCourtesies";
 import { formatMoney } from "@/lib/_shared/format";
 import { OrgShell } from "../_shell/OrgShell";
 import type { Event, TicketTypeKind } from "@/server/events/domain/Event";
@@ -73,6 +76,10 @@ function OrgReportsContent() {
 
   const selectedEvent =
     events.data?.find((e) => e.slug === eventSlug) ?? null;
+  // Vista de cierre: solo un evento finalizado ('closed', fuente de verdad del
+  // backend) muestra los bloques para decisiones finales (plata que queda,
+  // equipo, cortesías). En vivo/borrador seguimos con la analítica normal.
+  const isClosed = selectedEvent?.status === "closed";
 
   const stats = useEventStats(eventSlug ?? "");
   const data = stats.data;
@@ -175,6 +182,11 @@ function OrgReportsContent() {
             />
           </section>
 
+          {/* Vista de cierre — solo cuando el evento terminó (status closed) */}
+          {isClosed && data && (
+            <ClosingReport slug={eventSlug ?? ""} data={data} />
+          )}
+
           {/* Top promoters — protagonist section (feature 1) */}
           <section className="mb-5 rounded-2xl border border-cart-line bg-cart-bg-elev p-4 sm:mb-6 sm:p-6">
             <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
@@ -197,6 +209,7 @@ function OrgReportsContent() {
             <PromotersTable
               loading={stats.isLoading}
               rows={data?.byPromoter ?? []}
+              showPayout={isClosed}
             />
           </section>
 
@@ -1085,6 +1098,144 @@ function TicketTypesEmpty() {
 }
 
 /* ──────────────────────────────────────────────────────────────────────── */
+/* Vista de cierre — bloques que solo aparecen cuando el evento terminó      */
+/* ──────────────────────────────────────────────────────────────────────── */
+
+// Renderizado SOLO para eventos 'closed' (el padre lo condiciona), así los hooks
+// de equipo/cortesías solo hacen fetch cuando de verdad hacen falta.
+function ClosingReport({ slug, data }: { slug: string; data: EventStatsPayload }) {
+  const coOrganizers = useEventCoOrganizers(slug);
+  const courtesies = useCourtesies(slug);
+
+  // "Pagos a promotores" = solo dinero (payoutCents). Los premios en especie no
+  // son plata, salen aparte del cálculo de lo que le queda al organizador.
+  const totalPayoutCents = (data.byPromoter ?? []).reduce((s, p) => s + (p.payoutCents ?? 0), 0);
+  const leftoverCents = data.netCents - totalPayoutCents;
+
+  const cRows = courtesies.data ?? [];
+  const courtesyIssued = cRows.reduce((s, c) => s + (c.ticketCount ?? 0), 0);
+  const courtesyEntered = cRows.reduce((s, c) => s + (c.usedCount ?? 0), 0);
+
+  const team = coOrganizers.data ?? [];
+
+  return (
+    <section className="mb-5 flex flex-col gap-2.5 sm:mb-6 sm:gap-3">
+      {/* Cierre financiero — la línea de fondo del dinero */}
+      <div className="rounded-2xl border border-cart-line bg-cart-bg-elev p-4 sm:p-6">
+        <div className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-cart-accent">
+          Cierre del evento
+        </div>
+        <h2 className="mt-1 font-sans text-[18px] font-semibold tracking-[-0.015em] text-white">
+          Cuánto te queda
+        </h2>
+        <dl className="mt-4 flex flex-col gap-2.5">
+          <FinRow label="Recaudado" value={formatMoney(data.revenueCents)} />
+          <FinRow label="Servicio Pasape" value={`− ${formatMoney(data.serviceFeeCents)}`} muted />
+          <FinRow label="Neto para ti" value={formatMoney(data.netCents)} divider />
+          <FinRow label="Pagos a promotores" value={`− ${formatMoney(totalPayoutCents)}`} muted />
+          <FinRow label="Te queda" value={formatMoney(leftoverCents)} strong />
+        </dl>
+        <p className="mt-3 text-[11px] text-cart-ink-4">
+          Los pagos a promotores son solo en efectivo; los premios en especie van aparte.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 sm:gap-3">
+        {/* Equipo / co-organizadores */}
+        <div className="rounded-2xl border border-cart-line bg-cart-bg-elev p-4 sm:p-6">
+          <h3 className="font-sans text-[15px] font-semibold tracking-[-0.01em] text-white">
+            Equipo
+          </h3>
+          <p className="mt-0.5 text-[12px] text-cart-ink-3">
+            Co-organizadores con acceso a este evento
+          </p>
+          {coOrganizers.isLoading ? (
+            <div className="mt-3 h-10 animate-pulse rounded-xl bg-cart-bg-elev-2/60" />
+          ) : team.length === 0 ? (
+            <p className="mt-3 text-[12.5px] text-cart-ink-4">
+              Solo tú — sin co-organizadores asignados a este evento.
+            </p>
+          ) : (
+            <ul className="mt-3 flex flex-col gap-2">
+              {team.map((m) => (
+                <li key={m.profileId} className="flex items-center gap-2.5">
+                  <span className="grid size-8 flex-shrink-0 place-items-center rounded-full bg-cart-accent-soft text-[11px] font-bold uppercase text-cart-accent">
+                    {(m.fullName || m.email || "?").slice(0, 2)}
+                  </span>
+                  <div className="min-w-0">
+                    <div className="truncate text-[13.5px] font-medium text-white">
+                      {m.fullName || m.email || "Sin nombre"}
+                    </div>
+                    {m.email && (
+                      <div className="truncate text-[11.5px] text-cart-ink-4">{m.email}</div>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {/* Cortesías */}
+        <div className="rounded-2xl border border-cart-line bg-cart-bg-elev p-4 sm:p-6">
+          <h3 className="font-sans text-[15px] font-semibold tracking-[-0.01em] text-white">
+            Cortesías
+          </h3>
+          <p className="mt-0.5 text-[12px] text-cart-ink-3">Entradas de invitación que diste</p>
+          {courtesies.isLoading ? (
+            <div className="mt-3 h-10 animate-pulse rounded-xl bg-cart-bg-elev-2/60" />
+          ) : courtesyIssued === 0 ? (
+            <p className="mt-3 text-[12.5px] text-cart-ink-4">Sin cortesías en este evento.</p>
+          ) : (
+            <div className="mt-3 grid grid-cols-2 gap-2 text-center">
+              <Stat label="Emitidas" value={courtesyIssued.toLocaleString("es-PE")} />
+              <Stat label="Ingresaron" value={courtesyEntered.toLocaleString("es-PE")} />
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function FinRow({
+  label,
+  value,
+  muted = false,
+  strong = false,
+  divider = false,
+}: {
+  label: string;
+  value: string;
+  muted?: boolean;
+  strong?: boolean;
+  divider?: boolean;
+}) {
+  return (
+    <div
+      className={`flex items-baseline justify-between gap-3 ${
+        divider ? "border-t border-cart-line pt-2.5" : ""
+      }`}
+    >
+      <dt className={`text-[13.5px] ${strong ? "font-semibold text-white" : "text-cart-ink-3"}`}>
+        {label}
+      </dt>
+      <dd
+        className={`tabular-nums ${
+          strong
+            ? "text-[19px] font-bold text-cart-accent"
+            : muted
+              ? "text-[13.5px] text-cart-ink-3"
+              : "text-[14px] font-medium text-white"
+        }`}
+      >
+        {value}
+      </dd>
+    </div>
+  );
+}
+
+/* ──────────────────────────────────────────────────────────────────────── */
 /* Promoters table — Feature 1 wired                                        */
 /* ──────────────────────────────────────────────────────────────────────── */
 
@@ -1104,9 +1255,12 @@ type PromoterStatRow = {
 function PromotersTable({
   loading,
   rows,
+  showPayout = false,
 }: {
   loading: boolean;
   rows: PromoterStatRow[];
+  /** Muestra "A pagar" (payout) en las cards móviles — solo en la vista de cierre. */
+  showPayout?: boolean;
 }) {
   if (loading) {
     return (
@@ -1161,7 +1315,11 @@ function PromotersTable({
               <div className="grid grid-cols-3 gap-2 text-center">
                 <Stat label="Tickets" value={r.ticketsSold.toLocaleString("es-PE")} />
                 <Stat label="Recaudado" value={formatMoney(r.revenueCents)} />
-                <Stat label="Ticket prom." value={formatMoney(avg)} />
+                {showPayout ? (
+                  <Stat label="A pagar" value={formatMoney(r.payoutCents)} />
+                ) : (
+                  <Stat label="Ticket prom." value={formatMoney(avg)} />
+                )}
               </div>
             </motion.div>
           );
