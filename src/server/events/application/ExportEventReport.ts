@@ -1,5 +1,6 @@
 import ExcelJS from "exceljs";
 import { Money } from "@/lib/_shared/money";
+import { byCode, countryFromE164, DEFAULT_COUNTRY } from "@/lib/phone/countries";
 import type { Event } from "../domain/Event";
 import type { EventRepository } from "../ports/EventRepository";
 
@@ -50,6 +51,26 @@ const displayPhone = (raw: string | null): string => {
   if (d.startsWith("0051")) d = d.slice(4);
   if (d.length === 11 && d.startsWith("51") && d[2] === "9") d = d.slice(2);
   return d;
+};
+
+// País del teléfono, derivado del código de marcación del E.164 (+57 → Colombia).
+// Los números locales viejos (9 díg sin país) se asumen del país por defecto
+// (Perú, el venue del piloto). Vacío si no hay teléfono.
+const phoneCountry = (raw: string | null): string => {
+  if (!raw || !raw.replace(/\D/g, "")) return "";
+  const c = countryFromE164(raw) ?? byCode(DEFAULT_COUNTRY);
+  return c ? `${c.flag} ${c.label}` : "";
+};
+
+// Tipo de documento del titular, deducido del formato (mismos criterios que el
+// pago): 8 díg = DNI; 9-12 díg = C.E (Carné de Extranjería); alfanumérico =
+// Pasaporte. El enmascarado viejo ("··1234") es un DNI de compras antiguas.
+const docType = (dni: string | null): string => {
+  if (!dni) return "";
+  if (dni.startsWith("··")) return "DNI";
+  if (/^\d{8}$/.test(dni)) return "DNI";
+  if (/^\d{9,12}$/.test(dni)) return "C.E";
+  return "Pasaporte";
 };
 
 // Fecha ISO (UTC) → Date con la hora de pared de Lima (UTC-5), para que Excel la
@@ -140,12 +161,14 @@ export const exportEventReport = async (
   wsA.columns = [
     { header: "Ticket", key: "ticketId", width: 12 },
     { header: "Nombre del titular", key: "holderName", width: 28 },
-    { header: "DNI", key: "holderDni", width: 16 },
+    { header: "Documento", key: "holderDni", width: 16 },
+    { header: "Tipo doc", key: "docType", width: 11 },
     { header: "Nombre de la entrada", key: "ticketTypeName", width: 20 },
     { header: "Tipo", key: "kind", width: 12 },
     { header: "Estado", key: "status", width: 14 },
     { header: "Ingresó", key: "usedAt", width: 22 },
     { header: "Contacto (WhatsApp)", key: "contactPhone", width: 18 },
+    { header: "País de Teléfono", key: "phoneCountry", width: 18 },
     { header: "Email", key: "contactEmail", width: 28 },
     { header: "Origen", key: "origin", width: 24 },
     { header: "Promotor", key: "promoterCode", width: 18 },
@@ -159,6 +182,7 @@ export const exportEventReport = async (
       holderDni: safeCell(
         a.holderDni?.startsWith("··") ? `Termina en ${a.holderDni.slice(2)}` : a.holderDni,
       ),
+      docType: docType(a.holderDni),
       ticketTypeName: safeCell(typeLabel(a)),
       kind: kindLabel(a),
       // Una cortesía nace con status 'active' (el constraint de tickets no admite
@@ -171,6 +195,7 @@ export const exportEventReport = async (
           : (STATUS_LABEL[a.status] ?? a.status),
       usedAt: toLimaDate(a.usedAt) ?? "",
       contactPhone: safeCell(displayPhone(a.contactPhone)),
+      phoneCountry: phoneCountry(a.contactPhone),
       contactEmail: safeCell(displayEmail(a.contactEmail)),
       origin: safeCell(originLabel(a)),
       promoterCode: safeCell(a.promoterCode),
