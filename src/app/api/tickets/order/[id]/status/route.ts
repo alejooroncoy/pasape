@@ -17,12 +17,13 @@ export const GET = async (req: NextRequest, ctx: { params: Promise<{ id: string 
   const db = supabaseAdmin();
   const { data: row, error } = await db
     .from("orders")
-    .select("id, status, paid_at, buyer_id, guest_email, claimed_at")
+    .select("id, status, paid_at, total_cents, buyer_id, guest_email, claimed_at")
     .eq("id", id)
     .maybeSingle<{
       id: string;
       status: string;
       paid_at: string | null;
+      total_cents: number;
       buyer_id: string;
       guest_email: string | null;
       claimed_at: string | null;
@@ -71,7 +72,7 @@ export const GET = async (req: NextRequest, ctx: { params: Promise<{ id: string 
     // en claimOrder) y recién ahí bifurca a /done o /tickets/[id]. Se devuelve
     // para todos — invitado y dueño logueado — para que nadie decida el destino
     // con datos adivinados.
-    orderUrl = `/order/${id}/${signOrderLink(id)}`;
+    orderUrl = `/order/${id}/${signOrderLink(id)}${row.total_cents === 0 ? "?free=1" : ""}`;
   }
 
   return NextResponse.json({
