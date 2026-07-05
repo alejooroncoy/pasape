@@ -45,7 +45,14 @@ const BUY_ERRORS: Record<string, string> = {
   promoter_quota_exceeded: "El promotor ya agotó su cuota de entradas. Ingresa directo al evento.",
   self_purchase_blocked: "No puedes comprar con tu propio código de promotor.",
 };
-const buyErrorMsg = (raw: string) => BUY_ERRORS[raw] ?? raw;
+const buyErrorMsg = (raw: string, maxPerPerson?: number | null) => {
+  if (raw === "max_per_person_exceeded") {
+    return maxPerPerson
+      ? `Alcanzaste el máximo de ${maxPerPerson} ${maxPerPerson === 1 ? "entrada" : "entradas"} por persona para este evento.`
+      : "Alcanzaste el máximo de entradas por persona para este evento.";
+  }
+  return BUY_ERRORS[raw] ?? raw;
+};
 
 export default function BuyFlowPage(props: Props) {
   return (
@@ -513,7 +520,12 @@ function BuyFlowInner({ params }: Props) {
           {/* Main */}
           <main className="pt-6 lg:pb-12">
             {phase === "pick" ? (
-              <PickPhase ticketTypes={data.ticketTypes} qty={qty} setQty={setQty} />
+              <PickPhase
+                ticketTypes={data.ticketTypes}
+                qty={qty}
+                setQty={setQty}
+                maxTicketsPerPerson={data.event.maxTicketsPerPerson}
+              />
             ) : phase === "data" ? (
               <DataPhase
                 isLogged={isLogged}
@@ -602,7 +614,7 @@ function BuyFlowInner({ params }: Props) {
               )}
               {buy.error && (
                 <p className="mt-3 text-center text-[12px] text-rose-300">
-                  {buyErrorMsg((buy.error as Error).message)}
+                  {buyErrorMsg((buy.error as Error).message, data.event.maxTicketsPerPerson)}
                 </p>
               )}
             </div>
@@ -645,7 +657,7 @@ function BuyFlowInner({ params }: Props) {
           <div className="mx-auto w-full max-w-[640px] px-5 pt-3">
             {buy.error && (
               <p className="mb-2 text-center text-[12px] text-rose-300">
-                {buyErrorMsg((buy.error as Error).message)}
+                {buyErrorMsg((buy.error as Error).message, data.event.maxTicketsPerPerson)}
               </p>
             )}
             <button
@@ -754,11 +766,24 @@ function PickPhase({
   ticketTypes,
   qty,
   setQty,
+  maxTicketsPerPerson,
 }: {
   ticketTypes: TicketType[];
   qty: Record<string, number>;
   setQty: (next: Record<string, number>) => void;
+  /** Tope de entradas individuales por persona (acumulado). null = sin límite. */
+  maxTicketsPerPerson: number | null;
 }) {
+  // Cuántas entradas individuales lleva ya el carrito — los boxes no cuentan
+  // contra el tope por persona (se venden enteros). Con esto acotamos cada
+  // stepper para que la suma no pase el máximo del organizador; el backend igual
+  // lo hace cumplir (incluye compras previas por DNI, que acá no vemos).
+  const admissionSelected = ticketTypes.reduce(
+    (a, tt) => a + (tt.kind === "box" ? 0 : (qty[tt.id] ?? 0)),
+    0,
+  );
+  const capLeft =
+    maxTicketsPerPerson == null ? null : Math.max(0, maxTicketsPerPerson - admissionSelected);
   // Entradas normales: cada tipo su card (su nombre las diferencia). Boxes
   // ("espacios"): agrupados por unit_noun en una grilla. Sin tabs de zona.
   const groups = useMemo<TicketGroup[]>(() => {
@@ -796,6 +821,7 @@ function PickPhase({
                       key={tt.id}
                       tt={tt}
                       value={qty[tt.id] ?? 0}
+                      capLeft={capLeft}
                       onChange={(v) => setQty({ ...qty, [tt.id]: v })}
                     />
                   ))
@@ -1254,10 +1280,13 @@ function tileLabel(tt: TicketType): string {
 function TicketCard({
   tt,
   value,
+  capLeft,
   onChange,
 }: {
   tt: TicketType;
   value: number;
+  /** Entradas que aún puede sumar el carrito por el tope por persona. null = sin tope. */
+  capLeft?: number | null;
   onChange: (v: number) => void;
 }) {
   const status = ticketStatus(tt);
@@ -1265,7 +1294,16 @@ function TicketCard({
   const expired = status.kind === "expired";
   const unavailable = soldOut || expired;
   const isBox = tt.kind === "box";
-  const remaining = status.kind === "available" ? status.remaining : 0;
+  const stockRemaining = status.kind === "available" ? status.remaining : 0;
+  // El tope por persona limita el total de entradas individuales del carrito.
+  // `capLeft` ya descuenta lo elegido en otras cards; le sumamos el valor de
+  // ESTA card para obtener su techo propio. Los boxes no tienen tope.
+  const remaining =
+    capLeft == null || isBox
+      ? stockRemaining
+      : Math.min(stockRemaining, value + capLeft);
+  // El tope (no el stock) es lo que frena al comprador en esta card.
+  const cappedByLimit = capLeft != null && !isBox && remaining < stockRemaining;
   const selected = value > 0;
   const ap = activePricing(tt);
   // Solo aplica a entradas (no box); stockTotal() resuelve el cupo correcto.
@@ -1360,6 +1398,11 @@ function TicketCard({
           />
         )}
       </div>
+      {cappedByLimit && value >= remaining && remaining > 0 && (
+        <p className="mt-2 text-right text-[11px] text-cart-ink-3">
+          Máximo por persona alcanzado
+        </p>
+      )}
     </div>
   );
 }
@@ -1426,11 +1469,16 @@ function QtyControl({
     );
   }
   if (value === 0) {
+    // max < 1 con la card disponible = el tope por persona ya se llenó en otras
+    // entradas del carrito. "Agregar" salta 0→1 sin pasar por el stepper, así que
+    // hay que frenarlo acá o el comprador se pasaría del tope.
+    const noAllowance = max < 1;
     return (
       <button
         type="button"
         onClick={() => onChange(1)}
-        className="rounded-full bg-white px-4 py-1.5 text-[13px] font-semibold text-cart-bg transition hover:brightness-95"
+        disabled={noAllowance}
+        className="rounded-full bg-white px-4 py-1.5 text-[13px] font-semibold text-cart-bg transition hover:brightness-95 disabled:cursor-not-allowed disabled:bg-cart-bg-elev-2 disabled:text-cart-ink-3"
       >
         Agregar
       </button>
