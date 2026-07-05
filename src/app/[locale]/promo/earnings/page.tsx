@@ -29,9 +29,15 @@ export default function PromoEarningsPage() {
 
   const totals = useMemo(() => {
     const arr = data ?? [];
-    const totalCommission = arr.reduce((a, e) => a + e.commissionCents, 0);
-    const pending = arr.filter((e) => e.payoutStatus === "pending").reduce((a, e) => a + e.commissionCents, 0);
-    const paid = arr.filter((e) => e.payoutStatus === "paid").reduce((a, e) => a + e.commissionCents, 0);
+    // LOW-17: commissionCents se computa en vivo desde órdenes pagadas,
+    // independientemente del estado del payout — una fila con payoutStatus
+    // "void" (evento anulado: fraude/cancelación/no-show) mantiene su
+    // commissionCents > 0 aunque ese dinero nunca se le pague. Se excluyen
+    // del total y de "por cobrar" para que el hero no prometa plata anulada.
+    const collectable = arr.filter((e) => e.payoutStatus !== "void");
+    const totalCommission = collectable.reduce((a, e) => a + e.commissionCents, 0);
+    const pending = collectable.filter((e) => e.payoutStatus === "pending").reduce((a, e) => a + e.commissionCents, 0);
+    const paid = collectable.filter((e) => e.payoutStatus === "paid").reduce((a, e) => a + e.commissionCents, 0);
     const ticketsTotal = arr.reduce((a, e) => a + e.ticketsSold, 0);
     // Por cobrar = lo ganado que aún no te pagaron (lo que el promotor más mira).
     const toCollect = Math.max(0, totalCommission - paid);
