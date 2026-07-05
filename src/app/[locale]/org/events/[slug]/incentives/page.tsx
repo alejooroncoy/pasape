@@ -96,7 +96,7 @@ export default function OrgIncentivesListPage({ params }: { params: Params }) {
                     color: C.purple,
                   }}
                 >
-                  {it.audience === "promoter" ? "PR" : "C"}
+                  PR
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontFamily: FONT_DISPLAY, fontWeight: 600, fontSize: 15 }}>
@@ -108,9 +108,7 @@ export default function OrgIncentivesListPage({ params }: { params: Params }) {
                       ? "ventas"
                       : it.goalKind === "revenue_cents"
                         ? "cents"
-                        : it.goalKind === "tickets_bought"
-                          ? "compras"
-                          : "referidos"}
+                        : "referidos"}
                   </div>
                 </div>
                 <div style={{ textAlign: "right" }}>

@@ -1,9 +1,7 @@
-export type IncentiveAudience = "promoter" | "buyer";
-export type IncentiveGoalKind =
-  | "tickets_sold"
-  | "revenue_cents"
-  | "tickets_bought"
-  | "referrals";
+// Solo promotor: los incentivos al COMPRADOR se descartaron (no salen en esta
+// versión). tickets_bought era la única meta buyer-only, también fuera.
+export type IncentiveAudience = "promoter";
+export type IncentiveGoalKind = "tickets_sold" | "revenue_cents" | "referrals";
 
 export type Incentive = {
   id: string;

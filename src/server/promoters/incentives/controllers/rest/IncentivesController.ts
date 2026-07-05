@@ -10,11 +10,9 @@ import { createIncentive } from "../../application/CreateIncentive";
 import type { Incentive } from "../../domain/Incentive";
 
 const createSchema = z.object({
-  audience: z.enum(["promoter", "buyer"]).default("promoter"),
+  audience: z.literal("promoter").default("promoter"),
   name: z.string().min(1),
-  goalKind: z
-    .enum(["tickets_sold", "revenue_cents", "tickets_bought", "referrals"])
-    .default("tickets_sold"),
+  goalKind: z.enum(["tickets_sold", "revenue_cents", "referrals"]).default("tickets_sold"),
   goalValue: z.number().int().positive(),
   reward: z.string().min(1),
 });
