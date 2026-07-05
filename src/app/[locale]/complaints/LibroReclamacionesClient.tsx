@@ -325,9 +325,25 @@ function ConstanciaView({ constancia }: { constancia: Constancia }) {
           <div className="mt-3 border-t border-cart-line pt-3 text-[13px] text-cart-ink-3">{fecha}</div>
         </div>
 
-        <p className="mt-5 text-xs leading-relaxed text-cart-ink-4">
-          {PROVEEDOR.razonSocial} responderá en un plazo máximo de {PLAZO_RESPUESTA_DIAS_HABILES} días hábiles.
-        </p>
+        {/* Timeline de estado: deja claro qué sigue */}
+        <div className="mt-4 rounded-3xl border border-cart-line bg-cart-bg-elev p-6 text-left">
+          <TimelineStep
+            state="done"
+            title="Recibido"
+            detail="Registramos tu solicitud y te enviamos la constancia por correo."
+          />
+          <TimelineStep
+            state="current"
+            title="En revisión"
+            detail={`${PROVEEDOR.nombreComercial} está evaluando tu ${TIPO_RECLAMACION_LABEL[tipo].toLowerCase()}.`}
+          />
+          <TimelineStep
+            state="pending"
+            title="Respuesta"
+            detail={`Te responderemos en un máximo de ${PLAZO_RESPUESTA_DIAS_HABILES} días hábiles.`}
+            last
+          />
+        </div>
 
         <Link
           href="/"
@@ -386,6 +402,52 @@ function Meta({ label, value }: { label: string; value: string }) {
     <div className="flex flex-col">
       <dt className="text-[12px] text-cart-ink-4">{label}</dt>
       <dd className="text-cart-ink-2">{value}</dd>
+    </div>
+  );
+}
+
+function TimelineStep({
+  state,
+  title,
+  detail,
+  last,
+}: {
+  state: "done" | "current" | "pending";
+  title: string;
+  detail: string;
+  last?: boolean;
+}) {
+  const done = state === "done";
+  const current = state === "current";
+  return (
+    <div className="flex gap-3">
+      <div className="flex flex-col items-center">
+        <span
+          className={cn(
+            "grid size-6 shrink-0 place-items-center rounded-full border-2",
+            done
+              ? "border-emerald-500 bg-emerald-500"
+              : current
+                ? "border-(--color-accent)"
+                : "border-cart-line-strong",
+          )}
+        >
+          {done ? (
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden>
+              <path d="M20 6L9 17l-5-5" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          ) : current ? (
+            <span className="size-2 rounded-full bg-(--color-accent)" />
+          ) : null}
+        </span>
+        {!last && <span className="my-1 w-0.5 flex-1 rounded-full bg-cart-line" />}
+      </div>
+      <div className={cn("pb-5", last && "pb-0")}>
+        <div className={cn("text-sm font-semibold", done || current ? "text-white" : "text-cart-ink-3")}>
+          {title}
+        </div>
+        <div className="mt-0.5 text-[13px] leading-snug text-cart-ink-3">{detail}</div>
+      </div>
     </div>
   );
 }
