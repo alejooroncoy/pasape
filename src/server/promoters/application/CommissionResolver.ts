@@ -160,3 +160,56 @@ export const computePromoterPayout = ({
   }
   return { payoutCents, rewards };
 };
+
+/** Un hito con su estado actual, para el read-model del reporte. */
+export type MilestoneProgress = {
+  threshold: number;
+  rewardKind: MilestoneRewardKind;
+  /** Monto en céntimos si es cash; null si es premio en especie. */
+  amountCents: number | null;
+  label: string;
+  /** True si el conteo actual ya alcanzó el umbral. */
+  unlocked: boolean;
+};
+
+export type MilestonesView = {
+  /** Base de conteo de los hitos ('sold'/'attended'); null si no hay hitos. */
+  basis: MilestoneBasis | null;
+  /** Conteo actual contra el que se miden (ventas o asistencia según basis). */
+  count: number;
+  /** Hitos ordenados por umbral asc, con su estado de desbloqueo. */
+  milestones: MilestoneProgress[];
+  /** Suma de hitos cash ya desbloqueados (céntimos). */
+  cashUnlockedCents: number;
+};
+
+/**
+ * Desglose informativo de los hitos de un promotor: mismo criterio de desbloqueo
+ * que `computePromoterPayout` (conteo por `basis`, umbral alcanzado), pero
+ * exponiendo cada hito y el conteo para el reporte del organizador. No decide
+ * dinero (eso lo hace el payout); solo describe el estado para mostrarlo.
+ */
+export const describePromoterMilestones = (
+  config: CommissionConfig,
+  soldUnits: number,
+  attendedUnits: number,
+): MilestonesView => {
+  if (!config || config.milestones.length === 0) {
+    return { basis: null, count: 0, milestones: [], cashUnlockedCents: 0 };
+  }
+  const count = config.basis === "attended" ? attendedUnits : soldUnits;
+  const milestones: MilestoneProgress[] = [...config.milestones]
+    .sort((a, b) => a.threshold - b.threshold)
+    .map((m) => ({
+      threshold: m.threshold,
+      rewardKind: m.rewardKind,
+      amountCents: m.amountCents,
+      label: m.label,
+      unlocked: count >= m.threshold,
+    }));
+  const cashUnlockedCents = milestones.reduce(
+    (sum, m) => (m.unlocked && m.rewardKind === "cash" ? sum + (m.amountCents ?? 0) : sum),
+    0,
+  );
+  return { basis: config.basis, count, milestones, cashUnlockedCents };
+};

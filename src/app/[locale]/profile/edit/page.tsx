@@ -5,6 +5,7 @@ import { useRouter } from "@/i18n/navigation";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { useUpdateProfile } from "@/lib/identity/hooks/useUpdateProfile";
 import { PageShell, BackLink, PageTitle } from "../_components/PageShell";
+import { PhoneField } from "@/components/design/PhoneField";
 
 const initialsOf = (name: string | null | undefined) => {
   if (!name) return "·";
@@ -110,7 +111,10 @@ export default function BuyerProfileEditPage() {
         <div className="flex flex-col gap-3.5">
           <Field label="Nombre completo" value={fullName} onChange={setFullNameDraft} placeholder="Juan Pérez García" />
           <Field label="Email" value={email} onChange={setEmailDraft} placeholder="juan@gmail.com" type="email" inputMode="email" />
-          <Field label="WhatsApp" value={phone} onChange={setPhoneDraft} placeholder="987 654 321" mono inputMode="tel" />
+          <label className="block">
+            <span className="mb-1.5 block text-[12px] font-medium text-white/55">WhatsApp</span>
+            <PhoneField value={phone} onChange={setPhoneDraft} />
+          </label>
           <Field label="DNI" value={dni} onChange={setDni} placeholder="71234567" mono inputMode="numeric" />
 
           {mutation.error && (

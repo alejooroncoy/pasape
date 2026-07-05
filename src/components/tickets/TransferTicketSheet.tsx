@@ -5,7 +5,8 @@ import { AnimatePresence, motion } from "motion/react";
 import { useTransferTicket } from "@/lib/tickets/hooks/useTickets";
 import { useProfileLookup } from "@/lib/identity/hooks/useProfileLookup";
 import { formatPhone, transferErrorCopy } from "@/lib/tickets/phoneFormat";
-import { focusOnDesktop } from "@/lib/_shared/focusOnDesktop";
+import { PhoneField } from "@/components/design/PhoneField";
+import { parseE164 } from "@/lib/phone/countries";
 import { TicketActionSurface } from "./TicketActionSurface";
 
 export function TransferTicketSheet({
@@ -22,9 +23,13 @@ export function TransferTicketSheet({
   anchorRef?: RefObject<HTMLElement | null>;
 }) {
   const transfer = useTransferTicket();
+  // recipient en E.164 (país + número) del PhoneField.
   const [recipient, setRecipient] = useState("");
-  const recipientDigits = recipient.replace(/\D/g, "");
-  const recipientLookup = useProfileLookup(recipient);
+  const parsedRecipient = parseE164(recipient);
+  const recipientDigits = parsedRecipient.national;
+  const recipientIsPeru = (parsedRecipient.country?.code ?? "PE") === "PE";
+  const recipientValid = recipientIsPeru ? recipientDigits.length === 9 : recipientDigits.length >= 6;
+  const recipientLookup = useProfileLookup(recipientDigits);
 
   const close = () => {
     setRecipient("");
@@ -51,24 +56,20 @@ export function TransferTicketSheet({
         <span className="text-[11.5px] font-semibold uppercase tracking-[0.12em] text-cart-ink-3">
           WhatsApp del receptor
         </span>
-        <input
-          type="tel"
-          inputMode="numeric"
-          value={recipient}
-          onChange={(e) => setRecipient(e.target.value.replace(/[^\d\s]/g, "").slice(0, 11))}
-          placeholder="987 654 321"
-          // autoFocus nativo en iOS enfoca sin abrir teclado ("doble tap"):
-          // enfocamos solo en desktop.
-          ref={online ? focusOnDesktop : undefined}
-          disabled={!online}
-          className="mt-1.5 block w-full rounded-2xl border border-cart-line bg-cart-bg-elev-2 px-4 py-3.5 font-mono text-[15px] tracking-[0.04em] text-white outline-none transition focus:border-cart-accent focus:shadow-[0_0_0_3px_var(--color-cart-accent-soft)] disabled:opacity-50"
-        />
+        <div className="mt-1.5">
+          <PhoneField
+            value={recipient}
+            onChange={setRecipient}
+            autoFocus={online}
+            disabled={!online}
+          />
+        </div>
       </label>
 
       <div className="mt-2 min-h-[20px] text-[12.5px]">
         {!online ? (
           <span className="text-amber-300">Necesitas conexión para enviar.</span>
-        ) : recipientDigits.length > 0 && recipientDigits.length < 9 ? (
+        ) : recipientIsPeru && recipientDigits.length > 0 && recipientDigits.length < 9 ? (
           <span className="text-cart-ink-4">Faltan {9 - recipientDigits.length} dígitos</span>
         ) : recipientDigits.length === 9 && recipientLookup.loading ? (
           <span className="text-cart-ink-3">Buscando…</span>
@@ -91,13 +92,13 @@ export function TransferTicketSheet({
         whileTap={{ scale: 0.97 }}
         onClick={async () => {
           try {
-            await transfer.mutateAsync({ ticketId, toPhone: recipientDigits });
+            await transfer.mutateAsync({ ticketId, toPhone: recipient });
             close();
           } catch {
             /* error abajo */
           }
         }}
-        disabled={!online || transfer.isPending || recipientDigits.length !== 9}
+        disabled={!online || transfer.isPending || !recipientValid}
         className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-cart-accent py-3.5 text-[14.5px] font-semibold text-cart-bg shadow-[0_8px_24px_-6px_var(--color-cart-accent-glow)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:bg-cart-bg-elev-2 disabled:text-cart-ink-3 disabled:shadow-none"
       >
         {transfer.isPending && (

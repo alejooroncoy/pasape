@@ -79,6 +79,21 @@ export const isPublicBaseUrl = (base: string = appBaseUrl()): boolean => {
   return base.startsWith("https://") && !isPrivateHost;
 };
 
+// Identificación del pagador para MP Perú, deducida del formato del documento.
+// Tipos válidos verificados contra la cuenta: DNI (8 díg), C.E (8-12 díg),
+// RUC (11-12), Otro (5-20 díg) — TODOS numéricos, NO existe "PAS"/pasaporte.
+// Un DNI son 8 dígitos; un documento numérico de 9-12 se manda como C.E (Carné
+// de Extranjería). Un pasaporte alfanumérico no encaja en ningún tipo → se
+// devuelve null y se OMITE (la identificación es opcional; el pago procede).
+export const mpPeruIdentification = (
+  doc: string | null,
+): { type: string; number: string } | null => {
+  if (!doc) return null;
+  if (/^\d{8}$/.test(doc)) return { type: "DNI", number: doc };
+  if (/^\d{9,12}$/.test(doc)) return { type: "C.E", number: doc };
+  return null;
+};
+
 export type MpPaymentItem = {
   id: string;
   title: string;

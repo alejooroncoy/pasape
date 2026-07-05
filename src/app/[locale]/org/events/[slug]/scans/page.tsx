@@ -3,7 +3,7 @@
 import { use } from "react";
 import { useEventScans } from "@/lib/events/hooks/useEventScans";
 import { EventShell } from "../_shell/EventShell";
-import { EmptyRow, ScanRow } from "../page";
+import { EmptyRow, ScanRow } from "../EventPanelClient";
 
 type Params = Promise<{ slug: string; locale: string }>;
 

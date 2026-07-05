@@ -19,6 +19,9 @@ import { formatMoney, formatPrice } from "@/lib/_shared/format";
 import { Price } from "@/components/ui/Price";
 import { CardForm } from "@/components/payments/CardForm";
 import { YapeForm } from "@/components/payments/YapeForm";
+import { PhoneField } from "@/components/design/PhoneField";
+import { parseE164 } from "@/lib/phone/countries";
+import { isValidDocument } from "@/lib/identity/document";
 import { PresaleCountdown, shouldCountdown } from "@/components/ui/PresaleCountdown";
 import type { TicketType } from "@/server/events/domain/Event";
 import {
@@ -90,6 +93,9 @@ function BuyFlowInner({ params }: Props) {
   const [guestName, setGuestName] = useState("");
   const [guestEmail, setGuestEmail] = useState("");
   const [guestDni, setGuestDni] = useState("");
+  // Extranjero: no tiene DNI peruano → usa pasaporte/documento (alfanumérico,
+  // sin RENIEC). El tipo para Mercado Pago se deduce del formato en el server.
+  const [isForeigner, setIsForeigner] = useState(false);
   const [guestPhone, setGuestPhone] = useState("");
   const nameTouchedRef = useRef(false);
   const { lookup: dniLookup, pending: dniPending } = useDniLookup();
@@ -113,7 +119,8 @@ function BuyFlowInner({ params }: Props) {
   }, [me.data?.user]);
 
   useEffect(() => {
-    if (guestDni.length !== 8) {
+    // Pasaporte extranjero: no hay RENIEC (es un padrón peruano) → sin lookup.
+    if (isForeigner || guestDni.length !== 8) {
       setDniHint("idle");
       return;
     }
@@ -127,7 +134,7 @@ function BuyFlowInner({ params }: Props) {
       if (!nameTouchedRef.current) setGuestName(res.fullName);
     }, 600);
     return () => clearTimeout(t);
-  }, [guestDni, dniLookup]);
+  }, [guestDni, dniLookup, isForeigner]);
 
   useEffect(() => {
     const key = `pasape:promo:${slug}`;
@@ -325,13 +332,15 @@ function BuyFlowInner({ params }: Props) {
   // 2 pasos (pedido → datos) y se omite todo el lenguaje/paso de checkout.
   const isFreeOrder = buyerSubtotal === 0 && totalItems > 0;
   const emailOk = /.+@.+\..+/.test(guestEmail.trim());
-  const phoneOk = guestPhone.replace(/\D/g, "").length === 9;
-  // El portero valida por DNI — es obligatorio también para logueados. La
-  // diferencia es que a ellos les llega pre-llenado desde su cuenta.
-  const guestValid =
-    guestName.trim().length >= 2 &&
-    guestDni.trim().length === 8 &&
-    phoneOk;
+  // guestPhone ya es E.164 (país + número) del PhoneField. Perú exige 9 dígitos
+  // nacionales; extranjero, al menos 6 (longitudes varían por país).
+  const phoneNational = parseE164(guestPhone).national;
+  const phoneIsPeru = (parseE164(guestPhone).country?.code ?? "PE") === "PE";
+  const phoneOk = phoneIsPeru ? phoneNational.length === 9 : phoneNational.length >= 6;
+  // El portero valida por documento. Regla compartida con el backend: peruano =
+  // 8 dígitos (con RENIEC); extranjero = pasaporte/documento alfanumérico, sin RENIEC.
+  const docValid = isValidDocument(guestDni, isForeigner);
+  const guestValid = guestName.trim().length >= 2 && docValid && phoneOk;
   const orderValid = totalItems > 0 && guestValid;
 
   if (!data) return <PageLoader />;
@@ -342,7 +351,10 @@ function BuyFlowInner({ params }: Props) {
         email: guestEmail.trim() || null,
         fullName: guestName.trim(),
         dni: guestDni.trim(),
-        phone: guestPhone.replace(/\D/g, "") || null,
+        // E.164 con país (fuente de verdad del contacto y del origen de la venta).
+        phone: guestPhone || null,
+        // El backend valida el documento según esto (8 díg peruano vs laxo extranjero).
+        isForeigner,
       };
       const res = await buy.mutateAsync({
         eventId: data.event.id,
@@ -408,7 +420,7 @@ function BuyFlowInner({ params }: Props) {
             guestEmail: guestEmail.trim(),
             guestName: guestName.trim(),
             guestDni: guestDni.trim(),
-            guestPhone: guestPhone.replace(/\D/g, ""),
+            guestPhone, // E.164; el PhoneField lo re-parsea al restaurar.
           }),
         );
       } catch {}
@@ -530,10 +542,17 @@ function BuyFlowInner({ params }: Props) {
               <DataPhase
                 isLogged={isLogged}
                 userIdent={me.data?.user?.email ?? me.data?.user?.phone ?? null}
+                isForeigner={isForeigner}
+                setIsForeigner={setIsForeigner}
                 guestDni={guestDni}
                 setGuestDni={(v) => {
                   nameTouchedRef.current = false;
-                  setGuestDni(v.replace(/\D/g, "").slice(0, 8));
+                  // Extranjero: alfanumérico (pasaporte). Peruano: solo 8 dígitos.
+                  setGuestDni(
+                    isForeigner
+                      ? v.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 15)
+                      : v.replace(/\D/g, "").slice(0, 8),
+                  );
                 }}
                 guestName={guestName}
                 setGuestName={(v) => {
@@ -956,6 +975,8 @@ function Avatar({
 function DataPhase({
   isLogged,
   userIdent,
+  isForeigner,
+  setIsForeigner,
   guestDni,
   setGuestDni,
   guestName,
@@ -969,6 +990,8 @@ function DataPhase({
 }: {
   isLogged: boolean;
   userIdent: string | null;
+  isForeigner: boolean;
+  setIsForeigner: (v: boolean) => void;
   guestDni: string;
   setGuestDni: (v: string) => void;
   guestName: string;
@@ -1002,18 +1025,29 @@ function DataPhase({
               </span>
             </div>
           )}
+          <label className="flex cursor-pointer items-center gap-2 text-[12.5px] text-cart-ink-2">
+            <input
+              type="checkbox"
+              checked={isForeigner}
+              onChange={(e) => setIsForeigner(e.target.checked)}
+              className="h-4 w-4 accent-cart-accent"
+            />
+            Soy extranjero (no tengo DNI)
+          </label>
           <Field
-            label="DNI"
+            label={isForeigner ? "Pasaporte / documento" : "DNI"}
             value={guestDni}
             onChange={setGuestDni}
-            placeholder="71234567"
+            placeholder={isForeigner ? "AB123456" : "71234567"}
             mono
             hint={
-              dniHint === "not_found"
-                ? "No te encontramos en RENIEC — escribe tu nombre abajo."
-                : isLogged && guestDni
-                  ? "Lo usa el portero para validar tu entrada."
-                  : "Lo buscamos en RENIEC y completamos tu nombre."
+              isForeigner
+                ? "Con lo que te identificas en la puerta. Escribe tu nombre abajo."
+                : dniHint === "not_found"
+                  ? "No te encontramos en RENIEC — escribe tu nombre abajo."
+                  : isLogged && guestDni
+                    ? "Lo usa el portero para validar tu entrada."
+                    : "Lo buscamos en RENIEC y completamos tu nombre."
             }
           />
           <Field
@@ -1023,14 +1057,19 @@ function DataPhase({
             placeholder={dniPending ? "Buscando en RENIEC…" : "Juan Pérez García"}
             disabled={dniPending}
           />
-          <Field
-            label="WhatsApp"
-            value={guestPhone}
-            onChange={setGuestPhone}
-            placeholder="987 654 321"
-            mono
-            hint="Tu QR llega por aquí."
-          />
+          <label className="block">
+            <span className="text-[11.5px] font-semibold uppercase tracking-[0.12em] text-cart-ink-3">
+              WhatsApp
+            </span>
+            <div className="mt-1.5">
+              {/* Selector de país (default Perú): el comprador puede ser
+                  extranjero aunque el evento sea en Perú. Guarda E.164. */}
+              <PhoneField value={guestPhone} onChange={setGuestPhone} />
+            </div>
+            <span className="mt-1.5 block text-[11.5px] text-cart-ink-4">
+              Tu QR llega por aquí.
+            </span>
+          </label>
           <Field
             label="Email (opcional)"
             type="email"
@@ -1668,7 +1707,7 @@ function PayPhase({
           <YapeForm
             orderId={orderId}
             amount={totalCents / 100}
-            initialPhone={isLogged ? userPhone : guestPhone}
+            initialPhone={parseE164(isLogged ? userPhone : guestPhone).national}
             onPaid={onPaid}
             onReview={() => setReview(true)}
             onError={(msg) => console.warn("yape error:", msg)}

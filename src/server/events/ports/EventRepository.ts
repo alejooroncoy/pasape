@@ -1,6 +1,7 @@
 import type { Event, EventCategory, EventStatus, FeeMode, Promo, PromoKind, PresaleTier, TicketType } from "../domain/Event";
 import type { Result } from "@/server/_shared/result";
 import type { CommissionConfig } from "@/server/promoters/domain/OrgPromoter";
+import type { MilestoneProgress } from "@/server/promoters/application/CommissionResolver";
 
 export type CreateEventInput = {
   organizationId: string;
@@ -109,6 +110,14 @@ export type EventStats = {
     payoutCents: number;
     /** Premios en especie desbloqueados. */
     unlockedRewards: Array<{ label: string }>;
+    /** Base de conteo de los hitos ('sold'/'attended'); null si no hay hitos. */
+    milestoneBasis: "sold" | "attended" | null;
+    /** Conteo actual contra el que se miden los hitos (según basis). */
+    milestoneCount: number;
+    /** Hitos cash desbloqueados (céntimos) — la parte de `payoutCents` por metas. */
+    milestoneCashCents: number;
+    /** Todos los hitos con su estado de desbloqueo, para el reporte del organizador. */
+    milestones: MilestoneProgress[];
   }>;
 };
 
@@ -272,14 +281,22 @@ export type PromoterReportRow = {
   code: string;
   ticketsSold: number;
   ticketsValidated: number;
-  guestsInvited: number;
-  guestsEntered: number;
   revenueCents: number;
   commissionPct: number;
-  /** Dinero: % del vendido + hitos cash conseguidos. */
+  /** Comisión por venta: round(gross * pct/100), la parte del % (sin hitos). */
+  saleCommissionCents: number;
+  /** Hitos cash desbloqueados (céntimos). */
+  milestoneCashCents: number;
+  /** Dinero total: comisión por venta + hitos cash conseguidos. */
   commissionCalculatedCents: number;
   /** True si el promotor tiene metas configuradas (efectivo/especie por umbral). */
   hasMilestones: boolean;
+  /** Base de conteo de los hitos ('sold'/'attended'); null si no hay hitos. */
+  milestoneBasis: "sold" | "attended" | null;
+  /** Conteo actual contra el que se miden los hitos (según basis). */
+  milestoneCount: number;
+  /** Todos los hitos con su estado de desbloqueo. */
+  milestones: MilestoneProgress[];
   /** Premios en especie desbloqueados. */
   unlockedRewards: string[];
 };

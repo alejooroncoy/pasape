@@ -75,10 +75,12 @@ export default function OrderPage(props: Props) {
   // al profile). Mientras ese refetch está en curso no decidimos pedir el número:
   // evita el parpadeo de "Déjanos tu número" si en realidad ya lo tenemos.
   const needPhone = !!done && !hasPhone && !phoneSkipped && !me.isFetching;
+  // `phone` ya viene en E.164 del PhoneField (país + número); el +51 se elige en
+  // el selector, no se hardcodea aquí.
   const phoneOk = phone.length >= 9;
   const savePhone = () => {
     if (!phoneOk) return;
-    update.mutate({ phone: `+51${phone}` }, { onSettled: goToWallet });
+    update.mutate({ phone }, { onSettled: goToWallet });
   };
 
   // Logueado → reclamar automáticamente. Si la orden sigue `pending` (carrera con

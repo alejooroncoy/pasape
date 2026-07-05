@@ -138,7 +138,7 @@ export const useCancelTransfer = () => {
 export const useSetHolder = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { ticketId: string; holderName: string | null; dni?: string | null }) =>
+    mutationFn: (input: { ticketId: string; holderName: string | null; dni?: string | null; isForeigner?: boolean }) =>
       api.post<Ticket>("/api/tickets/set-holder", input),
     onSuccess: () => qc.invalidateQueries({ queryKey: ticketsRoot }),
   });
@@ -160,7 +160,7 @@ export const useCarouselScope = (ticketId: string) =>
 export const useClaimTransfer = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { token: string; fullName?: string | null; dni?: string | null }) =>
+    mutationFn: (input: { token: string; fullName?: string | null; dni?: string | null; isForeigner?: boolean }) =>
       api.post<{ ticketId: string; eventSlug: string }>("/api/tickets/claim", input),
     onSuccess: () => qc.invalidateQueries({ queryKey: ticketsRoot }),
   });

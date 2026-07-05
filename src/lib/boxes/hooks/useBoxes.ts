@@ -86,6 +86,7 @@ export const useJoinBox = () => {
       holderName: string;
       holderDni?: string | null;
       holderPhone?: string | null;
+      isForeigner?: boolean;
     }) =>
       api.post<Box & { joinedTicket: { id: string; k: string } | null }>(
         "/api/boxes/join",

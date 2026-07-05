@@ -6,7 +6,7 @@ import { after } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { err, ok, type Result } from "@/server/_shared/result";
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
-import { appBaseUrl, isPublicBaseUrl, buildOrderItems } from "../infrastructure/MercadoPagoClient";
+import { appBaseUrl, isPublicBaseUrl, buildOrderItems, mpPeruIdentification } from "../infrastructure/MercadoPagoClient";
 import { reportMpError } from "../infrastructure/reportMpError";
 import { dispatchTicketDelivery } from "@/server/notifications/application/DispatchTicketDelivery";
 
@@ -139,9 +139,9 @@ export const payWithYape = async (
       email,
       first_name: firstName,
       last_name: lastName,
-      ...(dni
-        ? { identification: { type: "DNI", number: dni } }
-        : {}),
+      // DNI/C.E deducido del formato (Yape es Perú, casi siempre DNI); si no
+      // encaja se omite (identificación opcional).
+      ...(mpPeruIdentification(dni) ? { identification: mpPeruIdentification(dni)! } : {}),
     },
     additional_info: {
       ...(items.length > 0 ? { items } : {}),
