@@ -71,16 +71,24 @@ export default function OrgReportsPage() {
 function OrgReportsContent() {
   const events = useMyEvents();
   const searchParams = useSearchParams();
-  // Inicial desde la URL (sin flash del default) — si no viene, se elige abajo.
-  const [eventSlug, setEventSlug] = useState<string | null>(() => searchParams.get("event"));
+  // Arranca en null: el server y el cliente renderizan igual en el primer paso
+  // (sin hydration mismatch). El effect lo fija ya montado — leer searchParams en
+  // el render divergiría (vacío en server, poblado en cliente).
+  const [eventSlug, setEventSlug] = useState<string | null>(null);
   const [range, setRange] = useState<RangeKey>("7d");
 
-  // Default to most-recent published (or first draft) once events load.
+  // Evento inicial: ?event= de la URL (p. ej. el 307 del evento cerrado) tiene
+  // prioridad; si no viene, el más reciente publicado / primer borrador.
   useEffect(() => {
     if (eventSlug) return;
+    const urlEvent = searchParams.get("event");
+    if (urlEvent) {
+      setEventSlug(urlEvent);
+      return;
+    }
     const def = pickDefaultEvent(events.data);
     if (def) setEventSlug(def.slug);
-  }, [events.data, eventSlug]);
+  }, [events.data, eventSlug, searchParams]);
 
   const selectedEvent =
     events.data?.find((e) => e.slug === eventSlug) ?? null;
