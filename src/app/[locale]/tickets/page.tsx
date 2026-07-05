@@ -279,7 +279,8 @@ function TicketSelectScreen({
           </p>
           <div className="flex flex-col gap-2">
             {singles.map((t, i) => {
-              const unassigned = !past && t.status === "active" && !t.holderName && !t.pendingTransferTo;
+              const inReview = t.orderStatus === "pending";
+              const unassigned = !past && t.status === "active" && !inReview && !t.holderName && !t.pendingTransferTo;
               const isFrom = t.id === highlightId;
               return (
                 <div
@@ -309,11 +310,13 @@ function TicketSelectScreen({
                         <span
                           className={
                             "size-1.5 rounded-full " +
-                            (past ? "bg-white/30" : t.status === "active" ? "bg-emerald-400 shadow-[0_0_5px_rgba(52,211,153,0.7)]" : "bg-amber-400")
+                            (past ? "bg-white/30" : inReview ? "bg-amber-400" : t.status === "active" ? "bg-emerald-400 shadow-[0_0_5px_rgba(52,211,153,0.7)]" : "bg-amber-400")
                           }
                         />
                         <span className="text-[12px] text-white/40">
-                          {t.pendingTransferTo
+                          {inReview
+                            ? "Pago en revisión"
+                            : t.pendingTransferTo
                             ? "Enviada · esperando"
                             : past
                               ? t.status === "used"

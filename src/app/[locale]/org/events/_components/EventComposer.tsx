@@ -819,10 +819,14 @@ export function EventComposer(props: EventComposerProps) {
         tickets.filter((t) => t.id).map((t) => t.id as string),
       );
 
-      // Crear nuevos
+      // Crear nuevos. Apenas el backend confirma, escribimos el id devuelto en
+      // la fila local para que un reintento NO los vuelva a crear. Sin esto, si
+      // el guardado fallaba más abajo (p. ej. al borrar un box con ventas →
+      // has_sold_tickets) y el organizador reintentaba, estas filas seguían sin
+      // id y se recreaban: por eso los boxes se multiplicaban en cada intento.
       const toCreate = validTickets.filter((t) => !t.id);
       for (const t of toCreate) {
-        await createTT.mutateAsync({
+        const created = await createTT.mutateAsync({
           name: t.name,
           kind: t.kind,
           priceCents: toCents(t.priceSoles),
@@ -834,13 +838,36 @@ export function EventComposer(props: EventComposerProps) {
           ...presaleTiersPayload(t),
           ...freeReleasePayload(t),
         });
+        setTickets((prev) =>
+          prev.map((row) => (row.rowKey === t.rowKey ? { ...row, id: created.id } : row)),
+        );
       }
 
-      // Crear los boxes de cada grupo de espacios nuevo (se expanden aquí).
+      // Expandir cada grupo de espacios nuevo a N boxes. Se crean UNA sola vez:
+      // al terminar el grupo lo quitamos de spaceGroups y sus boxes ya creados
+      // pasan a ser filas con id — un reintento no los recrea.
       for (const g of spaceGroups) {
+        const createdRows: TicketRow[] = [];
         for (const box of expandSpaceGroup(g)) {
-          await createTT.mutateAsync(box);
+          const created = await createTT.mutateAsync(box);
+          createdRows.push({
+            id: created.id,
+            rowKey: created.id,
+            name: box.name,
+            kind: "box",
+            priceSoles: fromCents(box.priceCents),
+            capacity: String(box.capacity),
+            boxLabel: box.boxLabel ?? "",
+            unitNoun: box.unitNoun ?? "",
+            saleEndsAt: "",
+            description: "",
+            presaleTiers: [],
+            isFree: false,
+            freeUntilAt: "",
+          });
         }
+        setTickets((prev) => [...prev, ...createdRows]);
+        setSpaceGroups((prev) => prev.filter((x) => x.rowKey !== g.rowKey));
       }
 
       // Actualizar cambiados
@@ -878,10 +905,23 @@ export function EventComposer(props: EventComposerProps) {
         }
       }
 
-      // Borrar los que estaban antes y ya no están
+      // Borrar los que estaban antes y ya no están. Un box con ventas NO se
+      // puede borrar (has_sold_tickets): lo saltamos y avisamos, en vez de
+      // abortar TODO el guardado — abortar dejaba los boxes recién creados sin
+      // reflejar y disparaba el reintento que los multiplicaba.
+      const soldBlocked: string[] = [];
       for (const origId of originalTicketIds) {
         if (!currentIds.has(origId)) {
-          await deleteTT.mutateAsync(origId);
+          try {
+            await deleteTT.mutateAsync(origId);
+          } catch (e) {
+            if ((e as Error).message === "has_sold_tickets") {
+              const orig = originalTicketsById.get(origId);
+              soldBlocked.push(orig?.boxLabel || orig?.name || "una entrada");
+            } else {
+              throw e;
+            }
+          }
         }
       }
 
@@ -890,6 +930,15 @@ export function EventComposer(props: EventComposerProps) {
       await setPromosMut.mutateAsync(
         promos.filter((p) => validTicketIds.has(p.ticketTypeId)),
       );
+
+      // Si algún box con ventas no se pudo quitar, guardamos el resto pero
+      // dejamos el editor abierto con el aviso (no cerramos en silencio).
+      if (soldBlocked.length > 0) {
+        setSubmitError(
+          `Guardamos tus cambios, pero no pudimos quitar ${soldBlocked.join(", ")} porque ya tiene ventas.`,
+        );
+        return;
+      }
 
       props.onClose?.();
     } catch (e) {
@@ -938,8 +987,11 @@ export function EventComposer(props: EventComposerProps) {
     setLayoutPreview(URL.createObjectURL(file));
   };
 
-  // CTA inteligente
+  // CTA inteligente. `uploadingAssets` entra acá: mientras se suben las
+  // imágenes el CTA ya muestra "Subiendo imágenes…", pero si no deshabilita el
+  // botón se puede volver a clickear y disparar otro guardado/subida encima.
   const submitting =
+    uploadingAssets ||
     create.isPending ||
     update.isPending ||
     createTT.isPending ||
@@ -2279,20 +2331,29 @@ function BoxGroupEditor({
       className="rounded-2xl border border-cart-line bg-cart-bg-elev-2 p-3"
       style={{ boxShadow: `inset 0 0 0 1px ${TICKET_KIND_META.box.tint}` }}
     >
-      {/* Header */}
-      <div className="flex items-center gap-2">
-        <span className="flex-1 text-[15px] font-semibold tracking-[-0.01em] text-white">
-          {nounPlural}
-          <span className="ml-1.5 font-mono text-[12px] font-normal text-cart-ink-3">
-            ({boxes.length})
+      {/* Nombre del espacio · lo pone el organizador y define TODO: cómo se
+          agrupan los boxes y el copy que ve el comprador ("Cada <nombre> para N
+          personas", "3 <nombres> libres"). Antes había un selector Box/Mesa/
+          Lounge aparte — redundante: el noun sale directo de este nombre. */}
+      <div className="flex flex-col gap-0.5">
+        <span className="text-[9.5px] font-semibold uppercase tracking-[0.12em] text-cart-ink-4">
+          Nombre del espacio · tócalo para editar
+        </span>
+        <div className="flex items-center gap-2">
+          <svg width="12" height="12" viewBox="0 0 14 14" fill="none" className="shrink-0 text-cart-ink-3">
+            <path d="M9.5 2.5l2 2-7 7H2.5v-2l7-7z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+          </svg>
+          <input
+            value={first.unitNoun}
+            onChange={(e) => onUpdateAll({ unitNoun: e.target.value })}
+            placeholder="Box, Mesa, Lounge…"
+            maxLength={24}
+            className="min-w-0 flex-1 border-b border-white/20 bg-transparent pb-0.5 text-[15px] font-semibold tracking-[-0.01em] text-white outline-none transition-colors placeholder:text-cart-ink-3 focus:border-cart-accent"
+          />
+          <span className="shrink-0 font-mono text-[12px] font-normal text-cart-ink-3">
+            {nounPlural} ({boxes.length})
           </span>
-        </span>
-        <span
-          className="rounded-full px-2 py-0.5 text-[9.5px] font-semibold uppercase tracking-[0.12em]"
-          style={{ background: `${TICKET_KIND_META.box.tint}22`, color: TICKET_KIND_META.box.tint }}
-        >
-          Box
-        </span>
+        </div>
       </div>
 
       {/* Shared fields */}
@@ -2314,13 +2375,8 @@ function BoxGroupEditor({
       <AdvancedToggle
         open={advOpen}
         onToggle={() => setAdvOpen((v) => !v)}
-        hasContent={!!(first.unitNoun || first.description || presaleRow.presaleTiers.length > 0 || presaleRow.isFree)}
+        hasContent={!!(first.description || presaleRow.presaleTiers.length > 0 || presaleRow.isFree)}
       />
-      {advOpen && (
-        <div className="mt-2">
-          <UnitNounPicker value={first.unitNoun} onChange={(v) => onUpdateAll({ unitNoun: v })} />
-        </div>
-      )}
 
       {/* Individual labels + precio override */}
       <div className="mt-3 border-t border-cart-line pt-3">
@@ -2669,7 +2725,9 @@ function TicketsEditor({
                 </svg>
                 <input
                   value={t.name}
-                  onChange={(e) => update(t.rowKey, { name: e.target.value })}
+                  // El noun del espacio sale del nombre que pone el organizador
+                  // (agrupa y alimenta el copy del comprador) — sin selector aparte.
+                  onChange={(e) => update(t.rowKey, { name: e.target.value, unitNoun: e.target.value })}
                   className="flex-1 bg-transparent text-[15px] font-semibold tracking-[-0.01em] text-white outline-none placeholder:text-cart-ink-3 border-b border-white/20 pb-0.5 focus:border-cart-accent transition-colors"
                   placeholder="Nombre — ej. Box VIP, Mesa Premium"
                 />
@@ -2706,11 +2764,10 @@ function TicketsEditor({
             <AdvancedToggle
               open={advancedOpen.has(t.rowKey)}
               onToggle={() => toggleAdvanced(t.rowKey)}
-              hasContent={!!(t.unitNoun || t.description || t.presaleTiers.length > 0 || t.isFree)}
+              hasContent={!!(t.description || t.presaleTiers.length > 0 || t.isFree)}
             />
             {advancedOpen.has(t.rowKey) && (
               <>
-                <UnitNounPicker value={t.unitNoun} onChange={(v) => update(t.rowKey, { unitNoun: v })} />
                 <DescriptionField value={t.description} onChange={(v) => update(t.rowKey, { description: v })} />
                 {/* Preventa de un box: precio bajo + fecha (un box es 1 unidad) */}
                 <PresaleTiersEditor tiers={t.presaleTiers} base={t.priceSoles} onChange={(tiers) => update(t.rowKey, { presaleTiers: tiers })} />
@@ -3272,76 +3329,6 @@ function SpaceGroupCard({
     </div>
   );
 }
-
-// Selector compacto para elegir cómo el organizador llama a la unidad
-// reservable (box, mesa, lounge u otro). Se muestra dentro de cada row de
-// kind=box en el editor de tickets.
-function UnitNounPicker({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  const presets = ["box", "mesa", "lounge"];
-  const lower = value.trim().toLowerCase();
-  const isPreset = presets.includes(lower);
-  const isCustom = lower.length > 0 && !isPreset;
-  const [showCustom, setShowCustom] = useState(isCustom);
-
-  return (
-    <div className="mt-2 flex flex-col gap-1.5 rounded-xl bg-cart-bg-elev px-3 py-2">
-      <div className="flex flex-wrap gap-1.5">
-        {presets.map((p) => {
-          const active = lower === p;
-          return (
-            <button
-              key={p}
-              type="button"
-              onClick={() => {
-                onChange(p);
-                setShowCustom(false);
-              }}
-              className={
-                "rounded-full px-2.5 py-1 text-[11.5px] font-semibold transition " +
-                (active
-                  ? "bg-cart-accent text-cart-bg"
-                  : "border border-cart-line text-cart-ink-2 hover:border-white/40")
-              }
-            >
-              {p[0].toUpperCase() + p.slice(1)}
-            </button>
-          );
-        })}
-        <button
-          type="button"
-          onClick={() => {
-            setShowCustom(true);
-            if (isPreset) onChange("");
-          }}
-          className={
-            "rounded-full px-2.5 py-1 text-[11.5px] font-semibold transition " +
-            (isCustom || showCustom
-              ? "bg-cart-accent text-cart-bg"
-              : "border border-cart-line text-cart-ink-2 hover:border-white/40")
-          }
-        >
-          Otro
-        </button>
-      </div>
-      {(showCustom || isCustom) && (
-        <input
-          value={isPreset ? "" : value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder="Ej: Suite, Cabaña…"
-          maxLength={24}
-          className="mt-1 w-full bg-transparent text-[13px] text-white outline-none placeholder:text-cart-ink-4"
-        />
-      )}
-    </div>
-  );
-}
-
 
 // ============================================================
 // IconTag / PromosEditor — Promociones 2x1 / 3x2 (sección aparte de preventa).

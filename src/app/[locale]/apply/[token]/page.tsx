@@ -5,6 +5,19 @@ import { useRouter } from "@/i18n/navigation";
 import { Btn, C, Field, FONT_DISPLAY, Phone } from "@/components/design";
 import { useApplyByLink, useResolveInvite } from "@/lib/promoters/hooks/usePromoter";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
+import type { CommissionConfig, CommissionType } from "@/server/promoters/domain/OrgPromoter";
+
+// Pitch de comisión según el esquema REAL del evento (heredado). Si el
+// organizador aún no definió nada, no inventamos un número: avisamos que está
+// por definir (mismo criterio que la vista del promotor).
+function commissionPitch(type: CommissionType, pct: number, config: CommissionConfig): string {
+  if (type === "percentage" && pct > 0) return `y gana ${pct}% por cada entrada que vendas.`;
+  if (type === "tiered" && config && "tiers" in config && config.tiers.length > 0)
+    return "y gana en efectivo al llegar a tus metas de venta.";
+  if (type === "inkind" && config && "rewards" in config && config.rewards.length > 0)
+    return "y gana premios al llegar a tus metas de venta.";
+  return "El organizador definirá los hitos y la comisión muy pronto.";
+}
 
 const Dot = ({ color }: { color: string }) => (
   <span style={{ width: 10, height: 10, borderRadius: 999, background: color, boxShadow: `0 0 10px ${color}`, display: "inline-block" }} />
@@ -68,7 +81,8 @@ export default function PromoApplyByLinkPage({ params }: Props) {
         </div>
         <div style={{ fontFamily: FONT_DISPLAY, fontSize: 24, fontWeight: 700, letterSpacing: "-0.025em", lineHeight: 1 }}>
           Vende para <span style={{ color: C.purple }}>{resolved.data.orgName}</span>
-          <br />y gana {resolved.data.commissionPct}% por entrada.
+          <br />
+          {commissionPitch(resolved.data.commissionType, resolved.data.commissionPct, resolved.data.commissionConfig)}
         </div>
         <div style={{ fontSize: 13, color: C.dim, marginTop: 10, lineHeight: 1.4 }}>
           {resolved.data.eventTitle}

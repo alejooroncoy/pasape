@@ -31,6 +31,9 @@ export type PromoterRepository = {
     decidedBy: string;
     orgId: string;
     decision: "approved" | "rejected";
-    commissionPct: number;
+    // Opcional: si se omite, el link se crea SIN % propio y hereda el esquema
+    // del evento (ver resolveCommissionScheme). Solo se pasa para overridear a
+    // un promotor puntual.
+    commissionPct?: number | null;
   }): Promise<Result<{ link: PromoterLink | null }>>;
 };

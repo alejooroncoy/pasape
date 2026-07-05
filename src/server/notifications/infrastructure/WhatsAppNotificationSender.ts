@@ -39,6 +39,12 @@ const claimFallbackTemplateName = (): string =>
   process.env.KAPSO_WA_CLAIM_FALLBACK_TEMPLATE_NAME ??
   "ticket_transferred_in_v7";
 
+const paymentReviewTemplateName = (): string =>
+  process.env.WA_PAYMENT_REVIEW_TEMPLATE_NAME ?? "payment_in_review_v1";
+
+const paymentRejectedTemplateName = (): string =>
+  process.env.WA_PAYMENT_REJECTED_TEMPLATE_NAME ?? "payment_rejected_v1";
+
 const formatDateForTemplate = (iso: string): string => {
   try {
     return new Intl.DateTimeFormat("es-PE", {
@@ -107,6 +113,42 @@ export class WhatsAppNotificationSender implements NotificationSender {
       return true;
     } catch (err) {
       console.error("[WhatsAppNotificationSender] aviso de transferencia falló:", err);
+      return false;
+    }
+  }
+
+  // Aviso de estado de pago: "en revisión" (in_process) o "rechazado". Usa una
+  // plantilla por caso (aprobadas en Meta). El link de reintento va como param
+  // del cuerpo. Best-effort: si la plantilla no está aprobada aún, devuelve false
+  // y el correo (que sí funciona) cubre el aviso.
+  // `retryPath` es el suffix que va en el botón URL de la plantilla (la URL base
+  // https://app.pasape.lat/ está fija en Meta; el botón concatena este valor).
+  async sendPaymentReview(input: {
+    phone: string;
+    kind: "in_review" | "rejected";
+    holderName: string;
+    eventTitle: string;
+    retryPath: string;
+  }): Promise<boolean> {
+    const name =
+      input.kind === "rejected" ? paymentRejectedTemplateName() : paymentReviewTemplateName();
+    if (!this.gateway.configured() || !name || !input.phone) return false;
+    try {
+      await this.gateway.sendTemplate({
+        to: input.phone,
+        templateName: name,
+        languageCode: templateLang(),
+        components: [
+          bodyComponent({
+            holder_name: input.holderName,
+            event_title: input.eventTitle,
+          }),
+          urlButtonComponent(input.retryPath),
+        ],
+      });
+      return true;
+    } catch (err) {
+      console.warn("[WhatsAppNotificationSender] aviso de pago falló (plantilla no aprobada?):", err);
       return false;
     }
   }
