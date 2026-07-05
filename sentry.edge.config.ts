@@ -6,7 +6,8 @@ const dsn = process.env.SENTRY_DSN ?? process.env.NEXT_PUBLIC_SENTRY_DSN;
 
 Sentry.init({
   dsn,
-  enabled: !!dsn,
+  // No enviar desde local (`next dev`): consume la cuota de producción.
+  enabled: !!dsn && process.env.NODE_ENV !== "development",
   // PII apagado: sin IP/cookies/headers de auth (ver nota en sentry.server.config).
   sendDefaultPii: false,
   // Separa prod/preview/dev en Sentry (VERCEL_ENV: "production" | "preview" | "development").
