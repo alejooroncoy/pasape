@@ -247,7 +247,7 @@ export const EventsController = {
   },
 
   async update(slug: string, input: unknown): Promise<Result<Event>> {
-    const guard = await guardEventMember(slug);
+    const guard = await guardEventMember(slug, ORG_WRITE_ROLES);
     if (!guard.ok) return err(guard.error);
     const parsed = updateSchema.safeParse(input);
     if (!parsed.success) return err(parsed.error.issues[0]?.message ?? "invalid_input");

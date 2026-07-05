@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, use, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, use, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useRouter } from "@/i18n/navigation";
 import { useEvent } from "@/lib/events/hooks/useEvents";
@@ -25,22 +25,26 @@ function Inner({ params }: Props) {
   const search = useSearchParams();
   const orderId = search.get("order");
   const guestEmail = search.get("email");
+  // Llave firmada de la orden: autoriza el polling de estado del guest que pagó
+  // sin sesión ni email (Yape). Sin ella, el poll daba 403 y el guest terminaba
+  // en una pantalla de "no pudimos cobrarte" pese al pago aprobado.
+  const orderToken = search.get("k");
   const payMethod = search.get("method") ?? "yape";
   const { data: eventData } = useEvent(slug);
   const { data: ticketData, refetch: refetchTickets } = useMyTickets();
   const { loggedIn } = useSessionReady();
   const [startedAt] = useState(() => Date.now());
   const [paid, setPaid] = useState(false);
-  // Último status visto en el polling. Si al agotar el tiempo sigue 'pending', el
-  // pago quedó en revisión (in_process) — no es un error, va a la pantalla amable.
-  const lastStatus = useRef<string | null>(null);
 
   useEffect(() => {
     if (!orderId || paid) return;
     let cancelled = false;
     const tick = async () => {
       try {
-        const qs = guestEmail ? `?email=${encodeURIComponent(guestEmail)}` : "";
+        const params = new URLSearchParams();
+        if (guestEmail) params.set("email", guestEmail);
+        if (orderToken) params.set("k", orderToken);
+        const qs = params.toString() ? `?${params.toString()}` : "";
         const res = await api.get<{
           status: string;
           paidAt: string | null;
@@ -48,7 +52,6 @@ function Inner({ params }: Props) {
           orderUrl: string | null;
         }>(`/api/tickets/order/${orderId}/status${qs}`);
         if (cancelled) return;
-        lastStatus.current = res.status;
         if (res.status === "paid") {
           setPaid(true);
           await refetchTickets();
@@ -74,7 +77,7 @@ function Inner({ params }: Props) {
       cancelled = true;
       clearInterval(id);
     };
-  }, [orderId, guestEmail, router, slug, refetchTickets, paid, search]);
+  }, [orderId, guestEmail, orderToken, router, slug, refetchTickets, paid, search]);
 
   useEffect(() => {
     if (orderId) return;
@@ -98,12 +101,15 @@ function Inner({ params }: Props) {
 
   useEffect(() => {
     const t = setTimeout(() => {
-      // Si el pago sigue en revisión (pending/in_process) a los 60s, no es un
-      // error: MP puede tardar. Vamos a la pantalla amable de "en revisión".
-      const reason = lastStatus.current === "pending" ? "?reason=in_review" : "";
+      // Llegar acá a los 60s significa que NUNCA vimos un estado terminal: un
+      // pago rechazado/expirado ya habría redirigido dentro del propio poll. Sea
+      // porque sigue 'pending' (MP tarda) o porque jamás pudimos leer el estado,
+      // la verdad honesta es "en revisión" — nunca "no pudimos cobrarte", que
+      // afirmaría un fallo que no confirmamos (y confundiría a un guest cuyo Yape
+      // SÍ se aprobó). No inferimos "pagado": solo evitamos el falso negativo.
       router.replace(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        `/events/${slug}/pay-error${reason}` as any,
+        `/events/${slug}/pay-error?reason=in_review` as any,
       );
     }, 60_000);
     return () => clearTimeout(t);
