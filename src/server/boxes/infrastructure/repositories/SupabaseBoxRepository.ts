@@ -107,7 +107,7 @@ export const supabaseBoxRepository: BoxRepository = {
     const { data: ticket } = await db
       .from("tickets")
       .select(
-        "id, order_id, ticket_type_id, current_holder, ticket_type:ticket_types!inner(kind, capacity, event:events!inner(id, starts_at))",
+        "id, order_id, ticket_type_id, current_holder, order:orders!inner(status), ticket_type:ticket_types!inner(kind, capacity, event:events!inner(id, starts_at))",
       )
       .eq("id", ticketId)
       .maybeSingle();
@@ -117,10 +117,16 @@ export const supabaseBoxRepository: BoxRepository = {
       order_id: string;
       ticket_type_id: string;
       current_holder: string;
+      order: { status: string };
       ticket_type: { kind: string; capacity: number; event: { id: string; starts_at: string } };
     };
     const t = ticket as unknown as T;
     if (t.current_holder !== ownerId) return err("not_owner");
+    // Un box nace solo con el pago del host confirmado. Si la orden está en
+    // revisión (in_process) u otro estado no pagado, no se crea ni se puede
+    // invitar — así ningún acompañante entra antes de que el host pague.
+    // ensureForOrder solo corre en 'paid', así que ahí este check es no-op.
+    if (t.order.status !== "paid") return err("order_not_paid");
     // La capacidad REAL del box la define el ticket_type (asientos del espacio),
     // no el cliente. El parámetro `capacity` queda como fallback si faltara.
     const boxCapacity = t.ticket_type.capacity > 0 ? t.ticket_type.capacity : capacity;

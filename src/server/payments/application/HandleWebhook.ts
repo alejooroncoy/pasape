@@ -7,6 +7,7 @@ import { err, ok, type Result } from "@/server/_shared/result";
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
 import { supabaseCommissionTierRepository } from "@/server/promoters/tiers/infrastructure/repositories/SupabaseCommissionTierRepository";
 import { dispatchTicketDelivery } from "@/server/notifications/application/DispatchTicketDelivery";
+import { dispatchPaymentReview } from "@/server/notifications/application/DispatchPaymentReview";
 import { supabaseBoxRepository } from "@/server/boxes/infrastructure/repositories/SupabaseBoxRepository";
 import { mpClient, mpWebhookSecret, refundMpPayment } from "../infrastructure/MercadoPagoClient";
 import { Money } from "@/lib/_shared/money";
@@ -314,6 +315,23 @@ export const handleMpWebhook = async (
     await supabaseCommissionTierRepository.recalcUnlocksForLink(
       orderRow.promoter_link_id,
       paidCount ?? 0,
+    );
+  }
+
+  // Aviso al comprador (correo + WhatsApp) si su pago quedó en revisión real
+  // (in_process, NO el 3DS transitorio) o fue rechazado, para que reintente con
+  // otro medio o mande la captura del preautorizado. No bloquea el ack; el claim
+  // anti-spam vive dentro del dispatch. Solo en órdenes que siguen sin pagar.
+  if (orderRow && (status === "in_process" || mapped === "failed")) {
+    const notifyKind = status === "in_process" ? "in_review" : "rejected";
+    const notifyOrderId = orderRow.id;
+    after(() =>
+      dispatchPaymentReview({ db }, notifyOrderId, notifyKind).catch((e) => {
+        console.error("[mp-webhook] dispatchPaymentReview failed:", (e as Error).message);
+        Sentry.captureException(e, {
+          tags: { area: "payment-review-notify", orderId: notifyOrderId },
+        });
+      }),
     );
   }
 
