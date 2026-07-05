@@ -20,7 +20,10 @@ const guestSchema = z
     email: z.string().email().nullable().optional(),
     phone: z.string().min(6).nullable().optional(),
     fullName: z.string().min(2),
-    dni: z.string().min(8).max(8),
+    // DNI peruano (8 díg) o documento de extranjero (pasaporte/C.E, alfanumérico).
+    // El frontend guía el formato con el toggle "Soy extranjero"; acá solo un
+    // rango laxo para no bloquear al extranjero.
+    dni: z.string().trim().min(5).max(20),
   })
   .refine((g) => !!g.email || !!g.phone, {
     message: "guest_contact_required",

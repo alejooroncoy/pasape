@@ -106,7 +106,7 @@ function titleFor(r: ScanResult): string {
 }
 function subtitleFor(r: ScanResult): string {
   if (r.kind === "valid")
-    return [r.typeName, r.boxLabel ? `Box ${r.boxLabel}` : null, r.dniLast4 ? `DNI ··${r.dniLast4}` : null].filter(Boolean).join("  ·  ");
+    return [r.typeName, r.boxLabel ? `Box ${r.boxLabel}` : null, r.dniLast4 ? `Doc ··${r.dniLast4}` : null].filter(Boolean).join("  ·  ");
   if (r.kind === "already_used") return r.holderName ?? "";
   if (r.kind === "wrong_zone") return r.typeName ? `${r.typeName} · valídala en su puerta` : "Esta entrada no es de tu puerta";
   return r.typeName ?? "QR no pertenece a este evento";
@@ -861,7 +861,7 @@ function Inner() {
           {/* Info secundaria */}
           <div style={{ fontSize: 15, color: "rgba(255,255,255,0.5)", textAlign: "center", lineHeight: 1.5 }}>
             {result.kind === "valid"
-              ? [result.typeName, result.dniLast4 ? `DNI ··${result.dniLast4}` : null].filter(Boolean).join("  ·  ")
+              ? [result.typeName, result.dniLast4 ? `Doc ··${result.dniLast4}` : null].filter(Boolean).join("  ·  ")
               : result.kind === "already_used"
               ? [result.holderName, result.scannedAt ? `Entró ${fmtTime(result.scannedAt)}` : null].filter(Boolean).join("  ·  ")
               : result.kind === "wrong_zone"

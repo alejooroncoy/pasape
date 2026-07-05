@@ -21,6 +21,7 @@ export default function FriendJoinBoxPage({ params }: Props) {
   const router = useRouter();
 
   const [dni, setDni] = useState("");
+  const [isForeigner, setIsForeigner] = useState(false);
   const [nameDraft, setNameDraft] = useState<string | null>(null);
   const [phone, setPhone] = useState("");
   const nameTouchedRef = useRef(false);
@@ -30,7 +31,8 @@ export default function FriendJoinBoxPage({ params }: Props) {
   const name = nameDraft ?? me.data?.user?.fullName ?? "";
 
   useEffect(() => {
-    if (dni.length !== 8) {
+    // Pasaporte extranjero: no hay RENIEC (padrón peruano) → sin lookup.
+    if (isForeigner || dni.length !== 8) {
       setDniHint("idle");
       return;
     }
@@ -44,7 +46,7 @@ export default function FriendJoinBoxPage({ params }: Props) {
       if (!nameTouchedRef.current) setNameDraft(res.fullName);
     }, 600);
     return () => clearTimeout(t);
-  }, [dni, dniLookup]);
+  }, [dni, dniLookup, isForeigner]);
 
   if (box.isLoading) {
     return <Shell><Centered><div style={{ color: C.dim }}>Cargando…</div></Centered></Shell>;
@@ -67,7 +69,8 @@ export default function FriendJoinBoxPage({ params }: Props) {
     ? b.members.find((m) => m.profileId === me.data?.user?.id)
     : null;
 
-  const dniOk = /^\d{8}$/.test(dni);
+  // Peruano: DNI de 8 dígitos. Extranjero: pasaporte/documento alfanumérico (≥5).
+  const dniOk = isForeigner ? dni.trim().length >= 5 : /^\d{8}$/.test(dni);
   const phoneOk = phone.length >= 9;
   const canSubmit = dniOk && !!name && phoneOk && !join.isPending && remaining > 0;
 
@@ -157,25 +160,41 @@ export default function FriendJoinBoxPage({ params }: Props) {
 
       {!alreadyIn && (
         <>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: C.dim, cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={isForeigner}
+              onChange={(e) => setIsForeigner(e.target.checked)}
+              style={{ width: 16, height: 16, accentColor: C.purple }}
+            />
+            Soy extranjero (no tengo DNI)
+          </label>
           <Field
-            label="DNI"
+            label={isForeigner ? "Pasaporte / documento" : "DNI"}
             value={dni}
             onChange={(e) => {
-              setDni(e.target.value.replace(/\D/g, "").slice(0, 8));
+              // Extranjero: alfanumérico (pasaporte). Peruano: solo 8 dígitos.
+              setDni(
+                isForeigner
+                  ? e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 15)
+                  : e.target.value.replace(/\D/g, "").slice(0, 8),
+              );
               nameTouchedRef.current = false;
             }}
             active={dni.length > 0}
             mono
-            inputMode="numeric"
-            placeholder="8 dígitos"
+            inputMode={isForeigner ? "text" : "numeric"}
+            placeholder={isForeigner ? "AB123456" : "8 dígitos"}
             hint={
-              dniPending
-                ? "Buscando en RENIEC…"
-                : dniHint === "not_found"
-                  ? "No encontramos ese DNI. Podés escribir tu nombre manualmente."
-                  : dni.length === 0
-                    ? "Lo usamos para emitir tu QR a tu nombre."
-                    : undefined
+              isForeigner
+                ? "Con lo que te identificas en la puerta."
+                : dniPending
+                  ? "Buscando en RENIEC…"
+                  : dniHint === "not_found"
+                    ? "No encontramos ese DNI. Podés escribir tu nombre manualmente."
+                    : dni.length === 0
+                      ? "Lo usamos para emitir tu QR a tu nombre."
+                      : undefined
             }
           />
           <Field
@@ -186,7 +205,9 @@ export default function FriendJoinBoxPage({ params }: Props) {
               setNameDraft(e.target.value);
             }}
             active={name.length > 0}
-            placeholder={dni.length === 8 ? "Cargando…" : "Como aparece en tu DNI"}
+            placeholder={
+              isForeigner ? "Tu nombre y apellido" : dni.length === 8 ? "Cargando…" : "Como aparece en tu DNI"
+            }
           />
           <div>
             <div style={{ fontSize: 11, color: C.dimmer, letterSpacing: "0.06em", marginBottom: 6 }}>
