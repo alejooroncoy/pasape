@@ -110,7 +110,7 @@ export function LibroReclamacionesClient() {
               alt="Libro de Reclamaciones"
               width={96}
               height={64}
-              className="h-14 w-auto"
+              style={{ height: "3.5rem", width: "auto" }}
               priority
             />
           </div>
@@ -279,15 +279,13 @@ export function LibroReclamacionesClient() {
             </p>
           )}
 
-          <div className="sticky bottom-4 z-10">
-            <button
-              type="submit"
-              disabled={submitting}
-              className="h-14 w-full rounded-full bg-(--color-accent) text-base font-semibold text-white shadow-lg shadow-(--color-accent)/25 transition active:scale-[0.99] disabled:opacity-60"
-            >
-              {submitting ? "Enviando…" : "Enviar solicitud"}
-            </button>
-          </div>
+          <button
+            type="submit"
+            disabled={submitting}
+            className="h-14 w-full rounded-full bg-(--color-accent) text-base font-semibold text-white shadow-lg shadow-(--color-accent)/25 transition active:scale-[0.99] disabled:opacity-60"
+          >
+            {submitting ? "Enviando…" : "Enviar solicitud"}
+          </button>
 
           <p className="text-center text-xs leading-relaxed text-cart-ink-4">
             Al enviar, tu {TIPO_RECLAMACION_LABEL[tipo].toLowerCase()} queda registrado con un código de constancia.
