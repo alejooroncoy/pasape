@@ -73,3 +73,7 @@ DerivedData/
 bun.lock
 .gstack/
 devserver.log
+
+# Supabase — estado local de la CLI (trabajamos con el proyecto de prod)
+supabase/.temp/
+supabase/.branches/
