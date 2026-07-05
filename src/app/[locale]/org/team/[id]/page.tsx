@@ -4,6 +4,7 @@ import { use, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Link, useRouter } from "@/i18n/navigation";
 import { OrgShell } from "@/app/[locale]/org/_shell/OrgShell";
+import { PhoneField } from "@/components/design/PhoneField";
 import {
   useOrgPromoterDetail,
   useUpdateOrgPromoter,
@@ -316,7 +317,10 @@ function PromoterEditForm({
   return (
     <div className="flex flex-col gap-4 pb-4">
       <Field label="Nombre" value={name} onChange={setName} />
-      <Field label="WhatsApp" type="tel" mono value={whatsapp} onChange={setWhatsapp} />
+      <label className="flex flex-col gap-1.5">
+        <Label>WhatsApp</Label>
+        <PhoneField value={whatsapp} onChange={setWhatsapp} />
+      </label>
       <div>
         <Label>Comisión por defecto</Label>
         <p className="mt-1 text-[11.5px] leading-snug text-cart-ink-3">
@@ -333,7 +337,7 @@ function PromoterEditForm({
                 : "bg-cart-bg-elev text-cart-ink-2 hover:text-white")
             }
           >
-            Hereda
+            Igual que la marca
           </button>
           {[10, 15, 20].map((p) => (
             <button

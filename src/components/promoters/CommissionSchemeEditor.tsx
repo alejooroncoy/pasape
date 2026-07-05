@@ -73,11 +73,16 @@ export function CommissionSchemeEditor({
       <SchemeSection
         title="Comisión por venta"
         summary={
-          pct != null
-            ? `${pct}%`
-            : canInherit
-              ? `Hereda ${inheritedPct ?? 0}%`
-              : "Sin comisión"
+          pct != null ? (
+            `${pct}%`
+          ) : canInherit ? (
+            <span>
+              {inheritedPct ?? 0}%{" "}
+              <span className="text-cart-ink-4">· igual que {inheritLabel}</span>
+            </span>
+          ) : (
+            "Sin comisión"
+          )
         }
         defaultOpen={pct != null}
       >
@@ -92,8 +97,9 @@ export function CommissionSchemeEditor({
         <p className="mt-2.5 text-[12px] leading-relaxed text-cart-ink-3">
           {canInherit ? (
             <>
-              Sin tocar nada, <b className="text-cart-ink-2">hereda {inheritLabel ?? "el default"}</b>.
-              Pon un número solo para cambiarlo aquí.
+              Sin tocar nada, va{" "}
+              <b className="text-cart-ink-2">{inheritedPct ?? 0}% igual que {inheritLabel}</b>. Pon
+              otro número solo si aquí cambia.
             </>
           ) : (
             <>
@@ -225,7 +231,7 @@ function PctField({
               : "bg-cart-bg-elev-2 text-cart-ink-2 hover:text-white")
           }
         >
-          Hereda{inheritedPct != null ? ` ${inheritedPct}%` : ""}
+          Igual que {inheritLabel ?? "el default"}
         </button>
       )}
       {presets.map((p) => (

@@ -13,6 +13,7 @@ import {
 import { AnimatePresence, motion } from "motion/react";
 import { Money } from "@/lib/_shared/money";
 import { useRouter } from "@/i18n/navigation";
+import { PhoneField } from "@/components/design/PhoneField";
 import { useCreateEvent } from "@/lib/events/hooks/useCreateEvent";
 import { useUpdateEvent } from "@/lib/events/hooks/useUpdateEvent";
 import { useEvent } from "@/lib/events/hooks/useEvents";
@@ -2898,7 +2899,7 @@ function PromoterPoolPicker({
                     )}
                   </div>
                   <span className="rounded-full bg-cart-accent-soft px-2 py-1 text-[11px] font-semibold text-cart-accent">
-                    {p.defaultCommissionPct == null ? "Hereda" : `${p.defaultCommissionPct}%`}
+                    {p.defaultCommissionPct == null ? "Igual que marca" : `${p.defaultCommissionPct}%`}
                   </span>
                   <span
                     className={
@@ -2940,13 +2941,7 @@ function PromoterPoolPicker({
               placeholder="Nombre"
               className="rounded-xl bg-cart-bg-elev px-3 py-2.5 text-[14px] outline-none placeholder:text-cart-ink-4"
             />
-            <input
-              value={whatsapp}
-              onChange={(e) => setWhatsapp(e.target.value)}
-              placeholder="+51 9XX XXX XXX (opcional)"
-              inputMode="tel"
-              className="rounded-xl bg-cart-bg-elev px-3 py-2.5 font-mono text-[13.5px] outline-none placeholder:text-cart-ink-4"
-            />
+            <PhoneField value={whatsapp} onChange={setWhatsapp} />
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
@@ -2958,7 +2953,7 @@ function PromoterPoolPicker({
                     : "bg-cart-bg-elev text-cart-ink-2 hover:text-white")
                 }
               >
-                Hereda
+                Igual que la marca
               </button>
               {[10, 15, 20].map((p) => (
                 <button

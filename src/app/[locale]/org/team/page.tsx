@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import { Link } from "@/i18n/navigation";
 import { OrgShell } from "@/app/[locale]/org/_shell/OrgShell";
+import { PhoneField } from "@/components/design/PhoneField";
 import { useOrgInvites } from "@/lib/identity/organizations/hooks/useOrgInvites";
 import { useCreateInvite } from "@/lib/identity/organizations/hooks/useCreateInvite";
 import { useMyOrgs } from "@/lib/identity/organizations/hooks/useMyOrgs";
@@ -340,14 +341,10 @@ function CoorgInviteForm({
           placeholder="mafer@nocturno.pe"
         />
       ) : (
-        <FieldInput
-          label="WhatsApp"
-          type="tel"
-          value={phone}
-          onChange={setPhone}
-          placeholder="+51 9XX XXX XXX"
-          mono
-        />
+        <label className="flex flex-col gap-1.5">
+          <Label>WhatsApp</Label>
+          <PhoneField value={phone} onChange={setPhone} />
+        </label>
       )}
 
       {/* Rol */}
@@ -523,7 +520,7 @@ function PromoterRow({
         </div>
       </div>
       <span className="rounded-full bg-cart-accent-soft px-2.5 py-1 text-[11.5px] font-semibold text-cart-accent">
-        {promoter.defaultCommissionPct == null ? "Hereda" : `${promoter.defaultCommissionPct}%`}
+        {promoter.defaultCommissionPct == null ? "Igual que marca" : `${promoter.defaultCommissionPct}%`}
       </span>
       <div className="flex items-center gap-1">
         <button
@@ -710,19 +707,15 @@ function PromoterForm({
   return (
     <div className="flex flex-col gap-4 pb-4">
       <FieldInput label="Nombre" value={name} onChange={setName} placeholder="Lucho" />
-      <FieldInput
-        label="WhatsApp"
-        type="tel"
-        value={whatsapp}
-        onChange={setWhatsapp}
-        placeholder="+51 9XX XXX XXX"
-        mono
-      />
+      <label className="flex flex-col gap-1.5">
+        <Label>WhatsApp</Label>
+        <PhoneField value={whatsapp} onChange={setWhatsapp} />
+      </label>
 
       <div>
         <Label>Cómo le pagas</Label>
         <p className="mt-1 text-[11.5px] leading-snug text-cart-ink-3">
-          Por defecto hereda las reglas de tu marca. Cámbialo solo si este promotor cobra distinto.
+          Por defecto usa las reglas de tu marca. Cámbialo solo si este promotor cobra distinto.
         </p>
         <div className="mt-2.5">
           <CommissionSchemeEditor
@@ -733,7 +726,7 @@ function PromoterForm({
             onPctChange={setPct}
             onConfigChange={setConfig}
             inheritedPct={brand.data?.commissionPct ?? 0}
-            inheritLabel="de la marca"
+            inheritLabel="tu marca"
           />
         </div>
       </div>

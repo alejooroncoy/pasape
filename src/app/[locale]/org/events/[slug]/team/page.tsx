@@ -697,7 +697,7 @@ function EventSchemeCard({
         onPctChange={(v) => onSave({ commissionPct: v })}
         onConfigChange={(cfg) => onSave({ commissionConfig: cfg })}
         inheritedPct={brand.data?.commissionPct ?? 0}
-        inheritLabel="de la marca"
+        inheritLabel="tu marca"
       />
 
       <div className="rounded-2xl border border-cart-line bg-cart-bg-elev px-4 py-3.5 lg:px-5">
@@ -1038,7 +1038,7 @@ function PayEditor({
         onPctChange={(v) => onSet({ commissionPct: v })}
         onConfigChange={(cfg) => onSet({ commissionConfig: cfg })}
         inheritedPct={a.inheritedCommissionPct}
-        inheritLabel="del esquema"
+        inheritLabel="el evento"
       />
       {a.commissionCustom && (
         <button
@@ -1270,7 +1270,7 @@ function PoolPicker({
                 )}
               </div>
               <span className="rounded-full bg-cart-accent-soft px-2 py-1 text-[11px] font-semibold text-cart-accent">
-                {p.defaultCommissionPct == null ? "Hereda" : `${p.defaultCommissionPct}%`}
+                {p.defaultCommissionPct == null ? "Igual que marca" : `${p.defaultCommissionPct}%`}
               </span>
               <span
                 className={
