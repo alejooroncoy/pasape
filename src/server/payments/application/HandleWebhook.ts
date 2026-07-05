@@ -5,7 +5,6 @@ import { after } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { err, ok, type Result } from "@/server/_shared/result";
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
-import { supabaseCommissionTierRepository } from "@/server/promoters/tiers/infrastructure/repositories/SupabaseCommissionTierRepository";
 import { dispatchTicketDelivery } from "@/server/notifications/application/DispatchTicketDelivery";
 import { supabaseBoxRepository } from "@/server/boxes/infrastructure/repositories/SupabaseBoxRepository";
 import { mpClient, mpWebhookSecret } from "../infrastructure/MercadoPagoClient";
@@ -274,18 +273,9 @@ export const handleMpWebhook = async (
     );
   }
 
-  // Recalcular hitos de comisión si la venta vía promotor quedó aprobada.
-  if (mapped === "paid" && orderRow?.promoter_link_id) {
-    const { count: paidCount } = await db
-      .from("orders")
-      .select("id", { count: "exact", head: true })
-      .eq("promoter_link_id", orderRow.promoter_link_id)
-      .eq("status", "paid");
-    await supabaseCommissionTierRepository.recalcUnlocksForLink(
-      orderRow.promoter_link_id,
-      paidCount ?? 0,
-    );
-  }
+  // (Los hitos de comisión ya no se "desbloquean" persistiendo estado: se evalúan
+  // al vuelo con computePromoterPayout sobre las entradas vendidas, así que un
+  // pago aprobado no requiere recalcular nada — el payout sube solo en lectura.)
 
   // Compensación si el pago falla o se reembolsa: anular tickets (inválidos en
   // puerta) y devolver capacity. Sin esto, una entrada reembolsada seguiría

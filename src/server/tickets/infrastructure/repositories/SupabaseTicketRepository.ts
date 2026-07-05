@@ -16,7 +16,6 @@ import { activePricing, applyPromos, type PromoLineInput } from "@/lib/events/pr
 import { resolveOrderFee } from "@/lib/tickets/serviceFee";
 import { createPreference } from "@/server/payments/application/CreatePreference";
 import { dispatchTicketDelivery } from "@/server/notifications/application/DispatchTicketDelivery";
-import { supabaseCommissionTierRepository } from "@/server/promoters/tiers/infrastructure/repositories/SupabaseCommissionTierRepository";
 import { supabaseBoxRepository } from "@/server/boxes/infrastructure/repositories/SupabaseBoxRepository";
 import { encryptDni, dniLast4, normalizeDni } from "@/server/_shared/crypto/dni";
 import crypto from "node:crypto";
@@ -518,17 +517,8 @@ export const supabaseTicketRepository: TicketRepository = {
         }),
       );
 
-      if (promoterLinkId) {
-        const { count: paidCount } = await db
-          .from("orders")
-          .select("id", { count: "exact", head: true })
-          .eq("promoter_link_id", promoterLinkId)
-          .eq("status", "paid");
-        await supabaseCommissionTierRepository.recalcUnlocksForLink(
-          promoterLinkId,
-          paidCount ?? 0,
-        );
-      }
+      // (Los hitos ya no persisten desbloqueo: el payout se evalúa al vuelo con
+      // computePromoterPayout sobre las entradas vendidas — nada que recalcular.)
 
       return ok({
         order: { ...toOrder(orderRow), status: "paid" as const },
@@ -536,9 +526,6 @@ export const supabaseTicketRepository: TicketRepository = {
         preference: { id: "", initPoint: "" },
       });
     }
-
-    // Why: la recalc de hitos vive en HandleWebhook ahora — al momento de
-    // crear la order, su status es 'pending', así que sumarla acá no aporta.
 
     // Lookup event slug/title for the MP preference back URLs.
     const { data: ev } = await db
