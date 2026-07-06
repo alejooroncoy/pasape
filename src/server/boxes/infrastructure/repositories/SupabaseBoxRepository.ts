@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/server/_shared/supabase/admin";
 import { err, ok, type Result } from "@/server/_shared/result";
 import type { BoxRepository } from "@/server/boxes/ports/BoxRepository";
 import type { Box } from "@/server/boxes/domain/Box";
+import { encryptHolderPhone } from "@/server/_shared/crypto/holderContact";
 
 type BoxRow = {
   id: string;
@@ -316,7 +317,8 @@ export const supabaseBoxRepository: BoxRepository = {
         price_cents: 0,
         holder_name: holderName,
         holder_dni_last2: holderDni ? holderDni.slice(-2) : null,
-        holder_phone: holderPhone,
+        holder_phone: null,
+        holder_phone_enc: encryptHolderPhone(holderPhone),
         qr_code: generateQr(),
         current_holder: profileId,
         box_label: type?.box_label ?? null,

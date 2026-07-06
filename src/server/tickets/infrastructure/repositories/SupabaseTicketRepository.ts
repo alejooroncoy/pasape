@@ -21,6 +21,10 @@ import { resolveOrderFee } from "@/lib/tickets/serviceFee";
 import { dispatchTicketDelivery } from "@/server/notifications/application/DispatchTicketDelivery";
 import { supabaseBoxRepository } from "@/server/boxes/infrastructure/repositories/SupabaseBoxRepository";
 import { encryptDni, dniLast4, decryptDni, normalizeDni } from "@/server/_shared/crypto/dni";
+import {
+  encryptHolderEmail,
+  encryptHolderPhone,
+} from "@/server/_shared/crypto/holderContact";
 import crypto from "node:crypto";
 import * as Sentry from "@sentry/nextjs";
 
@@ -559,8 +563,10 @@ export const supabaseTicketRepository: TicketRepository = {
         ticket_type_id: item.ticketTypeId,
         price_cents: base + (i === 0 ? remainder : 0),
         holder_name: item.holderName ?? attendee?.fullName ?? buyerFullName,
-        holder_email: attendee?.email ?? null,
-        holder_phone: attendee?.phone ?? null,
+        holder_email: null,
+        holder_phone: null,
+        holder_email_enc: encryptHolderEmail(attendee?.email),
+        holder_phone_enc: encryptHolderPhone(attendee?.phone),
         // El portero busca por últimos dígitos del DNI — sin esto las
         // entradas de compradores logueados eran inubicables por DNI. last2
         // (deprecado) se mantiene en sync; last4 viaja al offline y enc cifrado
