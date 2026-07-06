@@ -40,7 +40,6 @@ type ScanResult = {
 
 type Attendee = {
   ticketId:   string;
-  qrCode:     string;
   status:     "active" | "used" | "void";
   holderName: string | null;
   dniLast4:   string | null;
@@ -191,56 +190,51 @@ function Inner() {
 
   const loadAttendees = useCallback(async (q = "") => {
     if (!eventSlug) return;
+    const trimmed = q.trim();
+    if (trimmed.length < 2) {
+      setAttendees([]);
+      setSearchLoading(false);
+      return;
+    }
     setSearchLoading(true);
 
     // 1. LOCAL-FIRST: buscar en el cache descargado — instantáneo, sin red.
-    //    Esto garantiza que el portero pueda buscar aunque se vaya el internet.
-    if (q.trim()) {
-      try {
-        const local = await searchCachedTickets(q);
-        if (local.length > 0) {
-          setAttendees(local.map((t) => ({
-            ticketId:   t.ticketId,
-            qrCode:     t.qrCode,
-            status:     t.status === "refunded" ? "void" : t.status,
-            holderName: t.holderName,
-            dniLast4:   t.holderDniLast4,
-            usedAt:     null, // el cache no guarda usedAt; el estado used/active basta
-            ticketType: t.ticketTypeName,
-          })));
-          setSearchLoading(false);
-          // Si hay internet, refrescamos en segundo plano para traer usedAt exacto.
-          if (!online) return;
-        }
-      } catch { /* cache vacío o no disponible → cae al servidor */ }
-    }
+    try {
+      const local = await searchCachedTickets(trimmed);
+      if (local.length > 0) {
+        setAttendees(local.map((t) => ({
+          ticketId:   t.ticketId,
+          status:     t.status === "refunded" ? "void" : t.status,
+          holderName: t.holderName,
+          dniLast4:   t.holderDniLast4,
+          usedAt:     null,
+          ticketType: t.ticketTypeName,
+        })));
+        setSearchLoading(false);
+        if (!online) return;
+      }
+    } catch { /* cache vacío → servidor */ }
 
     // 2. Servidor (cuando hay internet): resultado autoritativo con usedAt.
     if (!online) { setSearchLoading(false); return; }
     try {
       const res = await api.get<Attendee[]>(
-        `/api/events/${eventSlug}/attendees?q=${encodeURIComponent(q)}`
+        `/api/events/${eventSlug}/attendees?q=${encodeURIComponent(trimmed)}`
       );
       setAttendees(res);
-    } catch { /* offline u error → ya mostramos resultados locales si los había */ }
+    } catch { /* offline u error */ }
     finally { setSearchLoading(false); }
   }, [eventSlug, online]);
 
-  // Cargar lista inicial en desktop
-  useEffect(() => {
-    if (isDesktop && eventSlug) void loadAttendees("");
-  }, [isDesktop, eventSlug, loadAttendees]);
-
-  // Buscar con debounce
+  // Buscar con debounce (mín. 2 caracteres — sin export masivo)
   useEffect(() => {
     if (searchDebounce.current) clearTimeout(searchDebounce.current);
-    if (searchQuery.length === 0 && isDesktop) {
-      void loadAttendees("");
+    if (searchQuery.length < 2) {
+      setAttendees([]);
       return;
     }
-    if (searchQuery.length < 2) return;
     searchDebounce.current = setTimeout(() => void loadAttendees(searchQuery), 300);
-  }, [searchQuery, isDesktop, loadAttendees]);
+  }, [searchQuery, loadAttendees]);
 
   // Mobile search sheet open
   const openMobileSearch = () => {

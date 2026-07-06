@@ -15,6 +15,10 @@ import { updateEvent } from "../../application/UpdateEvent";
 import { generateDoorLink, type DoorLink } from "../../application/GenerateDoorLink";
 import { verifyScanAccess } from "@/server/scanning/application/VerifyScanAccess";
 import {
+  resolveZoneScanPolicy,
+  type ZoneScanPolicy,
+} from "@/server/scanning/application/ZonePolicy";
+import {
   listZones as listZonesSvc,
   createZone as createZoneSvc,
   updateZone as updateZoneSvc,
@@ -399,8 +403,10 @@ export const EventsController = {
     fetchedAt: string;
     /** true = snapshot completo (reemplazar cache); false = delta (merge). */
     full: boolean;
+    zonePolicy: ZoneScanPolicy;
     tickets: Array<{
       ticketId: string;
+      ticketTypeId: string;
       qrCode: string;
       holderName: string | null;
       holderDniLast4: string | null;
@@ -412,8 +418,10 @@ export const EventsController = {
       boxCapacity: number | null;
     }>;
   }>> {
-    const guard = await guardScanReader(slug);
-    if (!guard.ok) return err(guard.error);
+    const access = await verifyScanAccess(slug);
+    if (!access.ok) return err(access.error);
+    const eventId = access.value.eventId;
+    const zonePolicy = await resolveZoneScanPolicy(eventId, access.value.zoneId);
     const db = supabaseAdmin();
     // Cursor: timestamp ANTES de la query, para que el próximo delta no se pierda
     // cambios ocurridos durante la consulta.
@@ -430,9 +438,9 @@ export const EventsController = {
         box_host_ticket_id,
         signing_pub,
         orders!inner(event_id),
-        ticket_types!inner(name, capacity)
+        ticket_types!inner(id, name, capacity)
       `)
-      .eq("orders.event_id", guard.value.eventId);
+      .eq("orders.event_id", eventId);
     // Delta: TODO lo cambiado desde `since` (incl. void/refunded, para que el
     // portero los borre del cache). Full: solo activas/usadas (snapshot inicial).
     q = since ? q.gt("updated_at", since) : q.in("status", ["active", "used"]);
@@ -447,18 +455,20 @@ export const EventsController = {
         box_host_ticket_id: string | null;
         signing_pub: JsonWebKey | null;
         orders: { event_id: string };
-        ticket_types: { name: string; capacity: number };
+        ticket_types: { id: string; name: string; capacity: number };
       }>>();
 
     if (error) return err("database_error");
     if (!data) return err("database_error");
 
     return ok({
-      eventId: guard.value.eventId,
+      eventId,
       fetchedAt,
       full: !since,
+      zonePolicy,
       tickets: data.map((t) => ({
         ticketId: t.id,
+        ticketTypeId: t.ticket_types.id,
         qrCode: t.qr_code,
         holderName: t.holder_name,
         holderDniLast4: t.holder_dni_last4,
@@ -504,8 +514,8 @@ export const EventsController = {
   },
 
   async listCourtesies(slug: string): Promise<Result<CourtesySummary[]>> {
-    // Lectura restringida a miembros: expone contactos de invitados.
-    const guard = await guardEventMember(slug);
+    // PII de invitados: solo roles que pueden emitir cortesías (no reporter/door).
+    const guard = await guardEventMember(slug, ORG_WRITE_ROLES);
     if (!guard.ok) return err(guard.error);
     return listCourtesiesUc({ repo: ticketRepo }, guard.value.event.id);
   },

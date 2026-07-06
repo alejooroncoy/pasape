@@ -16,6 +16,13 @@ import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { useDniLookup } from "@/lib/identity/hooks/useDniLookup";
 import { usePromoterDisplayName } from "@/lib/promoters/hooks/usePromoter";
 import { formatMoney, formatPrice } from "@/lib/_shared/format";
+import { checkoutSessionKey, openCheckoutSession, sealCheckoutSession } from "@/lib/_shared/checkoutSessionStorage";
+import {
+  clearOrderToken,
+  persistOrderToken,
+  processingQuery,
+  readOrderToken,
+} from "@/lib/tickets/orderTokenStorage";
 import { Price } from "@/components/ui/Price";
 import { CardForm } from "@/components/payments/CardForm";
 import { YapeForm } from "@/components/payments/YapeForm";
@@ -36,6 +43,9 @@ import {
   unitNounPlural,
 } from "@/lib/events/ticketDisplay";
 import { activePricing, applyPromos } from "@/lib/events/pricing";
+import { sanitizeDocument, sanitizeEmail, sanitizePersonName } from "@/lib/input/sanitize";
+import { checkoutErrorMessage, payErrorReasonParam } from "@/lib/tickets/checkoutErrors";
+import { RecoverTicketsLink } from "@/components/tickets/RecoverTicketsLink";
 
 type Props = { params: Promise<{ slug: string }> };
 type Phase = "pick" | "data" | "pay";
@@ -58,18 +68,52 @@ function readPromoCookie(): string | null {
   return match ? decodeURIComponent(match[1]!) : null;
 }
 
-const BUY_ERRORS: Record<string, string> = {
-  promoter_quota_exceeded: "El promotor ya agotó su cuota de entradas. Ingresa directo al evento.",
-  self_purchase_blocked: "No puedes comprar con tu propio código de promotor.",
-};
-const buyErrorMsg = (raw: string, maxPerPerson?: number | null) => {
-  if (raw === "max_per_person_exceeded") {
-    return maxPerPerson
-      ? `Alcanzaste el máximo de ${maxPerPerson} ${maxPerPerson === 1 ? "entrada" : "entradas"} por persona para este evento.`
-      : "Alcanzaste el máximo de entradas por persona para este evento.";
+const buyErrorMsg = checkoutErrorMessage;
+
+/** Tras vencer la reserva: ¿el carrito restaurado sigue siendo comprable? Lee
+ *  `saleStatus`/`sold`/`stock` del backend — no infiere fechas en cliente. */
+type RestoredCartCheck =
+  | { kind: "ok" }
+  | { kind: "trimmed"; qty: Record<string, number> }
+  | { kind: "unavailable" };
+
+function evaluateRestoredCart(
+  qty: Record<string, number>,
+  ticketTypes: TicketType[],
+): RestoredCartCheck {
+  const byId = new Map(ticketTypes.map((tt) => [tt.id, tt]));
+  const next: Record<string, number> = {};
+  let hasItems = false;
+  let changed = false;
+
+  for (const [id, q] of Object.entries(qty)) {
+    if (q <= 0) continue;
+    const tt = byId.get(id);
+    if (!tt) {
+      changed = true;
+      continue;
+    }
+    const status = ticketStatus(tt);
+    if (status.kind !== "available") {
+      changed = true;
+      continue;
+    }
+    const clamped = Math.min(q, status.remaining);
+    if (clamped <= 0) {
+      changed = true;
+      continue;
+    }
+    if (clamped !== q) changed = true;
+    next[id] = clamped;
+    hasItems = true;
   }
-  return BUY_ERRORS[raw] ?? raw;
-};
+
+  if (!hasItems) return { kind: "unavailable" };
+  if (changed) return { kind: "trimmed", qty: next };
+  return { kind: "ok" };
+}
+
+type ResumeNotice = "reconfirm" | "trimmed" | "sold_out" | "pick_again";
 
 export default function BuyFlowPage(props: Props) {
   return (
@@ -82,7 +126,7 @@ export default function BuyFlowPage(props: Props) {
 function BuyFlowInner({ params }: Props) {
   const { slug } = use(params);
   const router = useRouter();
-  const { data } = useEvent(slug);
+  const { data, refetch: refetchEvent } = useEvent(slug);
   const me = useCurrentUser();
   const buy = useBuyTickets();
   const quote = useOrderQuote();
@@ -92,6 +136,7 @@ function BuyFlowInner({ params }: Props) {
   // del carrito que cotizó — si el carrito cambia, la cotización deja de
   // aplicar sola (se deriva null) sin necesidad de effects.
   const [quoted, setQuoted] = useState<{ sig: string; quote: OrderQuote } | null>(null);
+  const [quoteFailed, setQuoteFailed] = useState(false);
   const search = useSearchParams();
   const [phase, setPhase] = useState<Phase>("pick");
   const [qty, setQty] = useState<Record<string, number>>({});
@@ -106,6 +151,9 @@ function BuyFlowInner({ params }: Props) {
   // mostramos el countdown y, al vencer, un popover para reintentar o salir.
   const [reservedAt, setReservedAt] = useState<number | null>(null);
   const [reservationExpired, setReservationExpired] = useState(false);
+  /** Vuelta por sessionStorage con reserva vencida — copy según disponibilidad. */
+  const [resumeNotice, setResumeNotice] = useState<ResumeNotice | null>(null);
+  const restoreHandledRef = useRef(false);
   const [payMethod, setPayMethod] = useState<"yape" | "mp">("yape");
   const [guestName, setGuestName] = useState("");
   const [guestEmail, setGuestEmail] = useState("");
@@ -179,32 +227,158 @@ function BuyFlowInner({ params }: Props) {
   }, [slug, search]);
 
    
-  useEffect(() => {
-    const orderFromUrl = search.get("order");
-    if (!orderFromUrl) return;
+  const clearCheckoutOrder = (oid: string | null) => {
+    if (oid) {
+      try {
+        sessionStorage.removeItem(checkoutSessionKey(oid));
+      } catch {}
+      clearOrderToken(oid);
+    }
     try {
-      const raw = sessionStorage.getItem(`pasape:buy:${orderFromUrl}`);
-      if (!raw) return;
-      const restored = JSON.parse(raw) as {
-        qty: Record<string, number>;
-        payMethod: "yape" | "mp";
-        guestEmail: string;
-        guestName: string;
-        guestDni: string;
-        guestPhone: string;
-        orderToken?: string;
-      };
-      setQty(restored.qty ?? {});
-      setPayMethod(restored.payMethod ?? "yape");
-      setGuestEmail(restored.guestEmail ?? "");
-      setGuestName(restored.guestName ?? "");
-      setGuestDni(restored.guestDni ?? "");
-      setGuestPhone(restored.guestPhone ?? "");
-      setOrderId(orderFromUrl);
-      setOrderToken(restored.orderToken ?? null);
-      setPhase("pay");
+      const url = new URL(window.location.href);
+      url.searchParams.delete("order");
+      window.history.replaceState({}, "", url.toString());
     } catch {}
-  }, []);
+    setOrderId(null);
+    setOrderToken(null);
+    setReservedAt(null);
+  };
+
+  useEffect(() => {
+    if (!data?.event) return;
+    if (data.event.status !== "published") {
+      router.replace(`/events/${slug}` as never);
+      return;
+    }
+
+    const orderFromUrl = search.get("order");
+    if (!orderFromUrl || restoreHandledRef.current) return;
+    restoreHandledRef.current = true;
+
+    void (async () => {
+      try {
+        const raw = sessionStorage.getItem(checkoutSessionKey(orderFromUrl));
+        if (!raw) {
+          let orderStatus: string | null = null;
+          const tokenOnly = readOrderToken(orderFromUrl);
+          if (tokenOnly) {
+            try {
+              const res = await fetch(
+                `/api/tickets/order/${orderFromUrl}/status?k=${encodeURIComponent(tokenOnly)}`,
+              );
+              if (res.ok) {
+                const json = (await res.json()) as { data?: { status?: string } };
+                orderStatus = json.data?.status ?? null;
+              }
+            } catch {}
+          }
+          clearCheckoutOrder(orderFromUrl);
+          if (orderStatus === "expired" || orderStatus === "failed") {
+            setResumeNotice("pick_again");
+          }
+          return;
+        }
+        const restored = (await openCheckoutSession(orderFromUrl, raw)) as {
+          qty: Record<string, number>;
+          payMethod: "yape" | "mp";
+          guestEmail: string;
+          guestName: string;
+          guestDni: string;
+          guestPhone: string;
+          orderToken?: string;
+          reservedAt?: number;
+        } | null;
+        if (!restored) return;
+
+        setQty(restored.qty ?? {});
+        setPayMethod(restored.payMethod ?? "yape");
+        setGuestEmail(restored.guestEmail ?? "");
+        setGuestName(restored.guestName ?? "");
+        setGuestDni(restored.guestDni ?? "");
+        setGuestPhone(restored.guestPhone ?? "");
+
+        const token = restored.orderToken ?? readOrderToken(orderFromUrl) ?? null;
+        if (token) persistOrderToken(orderFromUrl, token);
+        setOrderToken(token);
+
+        let orderStatus: string | null = null;
+        if (token) {
+          try {
+            const res = await fetch(
+              `/api/tickets/order/${orderFromUrl}/status?k=${encodeURIComponent(token)}`,
+            );
+            if (res.ok) {
+              const json = (await res.json()) as { data?: { status?: string } };
+              orderStatus = json.data?.status ?? null;
+            }
+          } catch {}
+        }
+
+        if (orderStatus === "paid") {
+          router.push(
+            `/events/${slug}/processing?${processingQuery(orderFromUrl, token)}` as never,
+          );
+          return;
+        }
+
+        const reservedAtMs = restored.reservedAt ?? null;
+        const expiredByTime =
+          reservedAtMs != null && Date.now() >= reservedAtMs + RESERVATION_MS;
+        const expiredByServer = orderStatus === "expired" || orderStatus === "failed";
+        const expired =
+          expiredByServer || expiredByTime || !token || reservedAtMs == null;
+
+        if (expired) {
+          clearCheckoutOrder(orderFromUrl);
+
+          const fresh = await refetchEvent();
+          const ticketTypes = fresh.data?.ticketTypes ?? data.ticketTypes;
+          const cartCheck = evaluateRestoredCart(restored.qty ?? {}, ticketTypes);
+
+          if (cartCheck.kind === "ok") {
+            setResumeNotice("reconfirm");
+            setPhase("data");
+            const restoredItems = Object.entries(restored.qty ?? {})
+              .filter(([, q]) => q > 0)
+              .map(([ticketTypeId, q]) => ({ ticketTypeId, qty: q }));
+            if (restoredItems.length > 0) {
+              quote.mutate(
+                { eventId: data.event.id, items: restoredItems },
+                {
+                  onSuccess: (q) => {
+                    setQuoteFailed(false);
+                    setQuoted({ sig: JSON.stringify(restoredItems), quote: q });
+                  },
+                  onError: () => setQuoteFailed(true),
+                },
+              );
+            }
+            return;
+          }
+
+          if (cartCheck.kind === "trimmed") {
+            setQty(cartCheck.qty);
+            setQuoted(null);
+            setQuoteFailed(false);
+            setResumeNotice("trimmed");
+            setPhase("pick");
+            return;
+          }
+
+          setQty({});
+          setQuoted(null);
+          setQuoteFailed(false);
+          setResumeNotice("sold_out");
+          setPhase("pick");
+          return;
+        }
+
+        setOrderId(orderFromUrl);
+        setReservedAt(reservedAtMs ?? Date.now());
+        setPhase("pay");
+      } catch {}
+    })();
+  }, [data, search, slug, router, quote, refetchEvent]);
 
   // Al entrar a comprar, partir desde el inicio (no heredar el scroll del
   // detalle). Antes del paint para que sea imperceptible (sin destello).
@@ -325,6 +499,7 @@ function BuyFlowInner({ params }: Props) {
       { eventId: data.event.id, items: items.map((i) => ({ ticketTypeId: i.ticketTypeId, qty: i.qty })) },
       {
         onSuccess: (q) => {
+          setQuoteFailed(false);
           setQuoted({ sig: cartSig, quote: q });
           if (q.totalCents !== buyerSubtotal) {
             console.warn("[checkout] drift suma local vs total del server", {
@@ -333,9 +508,10 @@ function BuyFlowInner({ params }: Props) {
             });
           }
         },
-        // Error de red/rate-limit: seguimos con la suma local (el backend
-        // igual recalcula y cobra lo suyo al crear la orden).
-        onError: () => {},
+        onError: () => {
+          setQuoteFailed(true);
+          setQuoted(null);
+        },
       },
     );
   };
@@ -351,6 +527,13 @@ function BuyFlowInner({ params }: Props) {
     const id = setInterval(check, 1000);
     return () => clearInterval(id);
   }, [phase, reservedAt, reservationExpired]);
+
+  // Sin reservedAt en fase pay (sesión vieja o estado inconsistente) → modal.
+  useEffect(() => {
+    if (phase === "pay" && orderId && reservedAt == null) {
+      setReservationExpired(true);
+    }
+  }, [phase, orderId, reservedAt]);
 
   const isLogged = !!me.data?.user;
   // Pedido gratis: hay entradas pero el total es 0 → no hay pago. El flujo es de
@@ -372,7 +555,10 @@ function BuyFlowInner({ params }: Props) {
 
   const startPayment = async () => {
     if (paymentInFlightRef.current) return;
+    if (quoteFailed) return;
+    if (isFreeOrder && serverQuote && serverQuote.totalCents > 0) return;
     paymentInFlightRef.current = true;
+    setResumeNotice(null);
     try {
       const attendee = {
         email: guestEmail.trim() || null,
@@ -394,6 +580,7 @@ function BuyFlowInner({ params }: Props) {
       setPreferenceId(res.preference.id);
       setOrderId(res.order.id);
       setOrderToken(res.orderToken ?? null);
+      if (res.orderToken) persistOrderToken(res.order.id, res.orderToken);
       // La orden creada es LA verdad final: sus montos pisan cualquier
       // precálculo (local o quote previo) para la fase de pago.
       if (res.order.totalCents !== buyerSubtotal) {
@@ -423,43 +610,42 @@ function BuyFlowInner({ params }: Props) {
             },
       );
 
-      // Órdenes gratuitas: la orden ya está pagada en el server.
-      // Saltar PayPhase e ir directo a processing con total=0.
-      if (buyerSubtotal === 0) {
-        const emailQs = !isLogged && guestEmail.trim()
-          ? `&email=${encodeURIComponent(guestEmail.trim())}`
-          : "";
-        const tokenQs = res.orderToken ? `&k=${res.orderToken}` : "";
-        router.push(`/events/${slug}/processing?order=${res.order.id}&total=0&n=${totalItems}${emailQs}${tokenQs}`);
+      // Órdenes gratuitas: solo si el server confirmó total 0.
+      if (res.order.totalCents === 0) {
+        const qs = processingQuery(res.order.id, res.orderToken ?? null, {
+          total: 0,
+          n: totalItems,
+        });
+        router.push(`/events/${slug}/processing?${qs}`);
         return;
       }
 
-      setReservedAt(Date.now());
+      const reservedNow = Date.now();
+      setReservedAt(reservedNow);
       setReservationExpired(false);
       setPhase("pay");
       try {
         const url = new URL(window.location.href);
         url.searchParams.set("order", res.order.id);
         window.history.replaceState({}, "", url.toString());
-        sessionStorage.setItem(
-          `pasape:buy:${res.order.id}`,
-          JSON.stringify({
-            qty,
-            payMethod,
-            guestEmail: guestEmail.trim(),
-            guestName: guestName.trim(),
-            guestDni: guestDni.trim(),
-            guestPhone, // E.164; el PhoneField lo re-parsea al restaurar.
-            orderToken: res.orderToken ?? null,
-          }),
-        );
+        const sealed = await sealCheckoutSession(res.order.id, {
+          qty,
+          payMethod,
+          guestEmail: guestEmail.trim(),
+          guestName: guestName.trim(),
+          guestDni: guestDni.trim(),
+          guestPhone,
+          orderToken: res.orderToken ?? null,
+          reservedAt: reservedNow,
+        });
+        sessionStorage.setItem(checkoutSessionKey(res.order.id), sealed);
       } catch {}
     } catch (e) {
       // Pedido gratis: nunca se intentó cobrar nada (falló crear la orden/los
       // tickets en sí) — el copy de "no pudimos cobrarte" del reason default
       // es incorrecto y confunde. `buy_failed` tiene copy neutral.
       const reason = encodeURIComponent(
-        buyerSubtotal === 0 ? "buy_failed" : (e as Error).message || "unknown",
+        payErrorReasonParam((e as Error).message, { freeOrder: buyerSubtotal === 0 }),
       );
       router.replace(`/events/${slug}/pay-error?reason=${reason}`);
     } finally {
@@ -497,8 +683,12 @@ function BuyFlowInner({ params }: Props) {
   // pedido desde el inicio (la orden vieja quedó expirada en el backend).
   const retryReservation = () => {
     setReservationExpired(false);
-    setReservedAt(null);
-    setOrderId(null);
+    setResumeNotice(null);
+    if (orderId) clearCheckoutOrder(orderId);
+    else {
+      setReservedAt(null);
+      setOrderId(null);
+    }
     setPreferenceId(null);
     setPhase("pick");
   };
@@ -533,7 +723,7 @@ function BuyFlowInner({ params }: Props) {
   const primaryCtaDisabled = (() => {
     if (buy.isPending) return true;
     if (phase === "pick") return !pickValid;
-    if (phase === "data") return !orderValid;
+    if (phase === "data") return !orderValid || quoteFailed || (isFreeOrder && serverQuote != null && serverQuote.totalCents > 0);
     return false;
   })();
 
@@ -563,6 +753,9 @@ function BuyFlowInner({ params }: Props) {
         <div className="grid w-full gap-8 lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-10">
           {/* Main */}
           <main className="pt-6 lg:pb-12">
+            {resumeNotice && phase !== "pay" && (
+              <ResumeNoticeBanner kind={resumeNotice} />
+            )}
             {phase === "pick" ? (
               <PickPhase
                 ticketTypes={data.ticketTypes}
@@ -603,10 +796,12 @@ function BuyFlowInner({ params }: Props) {
                 {reservedAt != null && !reservationExpired && (
                   <ReservationCountdown reservedAt={reservedAt} />
                 )}
+                {!reservationExpired && (
                 <PayPhase
                   payMethod={payMethod}
                   setPayMethod={setPayMethod}
                   orderId={orderId}
+                  orderToken={orderToken}
                   slug={slug}
                 onExpired={() => setReservationExpired(true)}
                 totalCents={displayTotal}
@@ -623,23 +818,27 @@ function BuyFlowInner({ params }: Props) {
                 onPaid={() => {
                   if (!orderId) return;
                   try {
-                    sessionStorage.removeItem(`pasape:buy:${orderId}`);
+                    sessionStorage.removeItem(checkoutSessionKey(orderId));
                   } catch {}
-                  // Why: el polling de /processing necesita el email del guest
-                  // para autorizar el lookup del status (sin sesión). Sin esto
-                  // todos los polls dan 403 y termina en pay-error a los 60s.
-                  const emailQs = !isLogged && guestEmail.trim()
-                    ? `&email=${encodeURIComponent(guestEmail.trim())}`
-                    : "";
-                  const tokenQs = orderToken ? `&k=${orderToken}` : "";
-                  router.push(`/events/${slug}/processing?order=${orderId}&total=${displayTotal}&method=${payMethod}&n=${totalItems}${emailQs}${tokenQs}`);
+                  const qs = processingQuery(orderId, orderToken, {
+                    total: displayTotal,
+                    method: payMethod,
+                    n: totalItems,
+                  });
+                  router.push(`/events/${slug}/processing?${qs}`);
                 }}
                 />
+                )}
               </>
             )}
             {/* Sentinel = final real del contenido. El espacio para el CTA va
                 debajo, así no infla la detección de "hay más abajo". */}
             <div ref={contentEndRef} aria-hidden className="h-px w-full" />
+            {phase !== "pay" && (
+              <p className="mt-6 text-center">
+                <RecoverTicketsLink compact />
+              </p>
+            )}
             <div aria-hidden className="h-40 lg:hidden" />
           </main>
 
@@ -664,6 +863,11 @@ function BuyFlowInner({ params }: Props) {
                 >
                   {primaryCtaLabel(false)}
                 </button>
+              )}
+              {quoteFailed && (
+                <p className="mt-3 text-center text-[12px] text-amber-200">
+                  No pudimos confirmar el precio. Revisá tu conexión e intentá de nuevo.
+                </p>
               )}
               {buy.error && (
                 <p className="mt-3 text-center text-[12px] text-rose-300">
@@ -737,6 +941,52 @@ function BuyFlowInner({ params }: Props) {
 }
 
 /* ====================== Reserva: countdown + modal ====================== */
+
+function ResumeNoticeBanner({ kind }: { kind: ResumeNotice }) {
+  const copy: Record<ResumeNotice, { title: string; body: string; tone: "amber" | "rose" }> = {
+    reconfirm: {
+      title: "Tu reserva venció.",
+      body: "Las entradas siguen disponibles — confirmá tus datos de nuevo para reservarlas otra vez.",
+      tone: "amber",
+    },
+    trimmed: {
+      title: "Tu reserva venció.",
+      body: "Mientras tanto cambió la disponibilidad — revisá tu pedido antes de continuar.",
+      tone: "amber",
+    },
+    sold_out: {
+      title: "Ya no hay entradas.",
+      body: "Tu reserva de 30 minutos terminó y alguien más las tomó. Armá un pedido nuevo si queda stock.",
+      tone: "rose",
+    },
+    pick_again: {
+      title: "Tu sesión de pago venció.",
+      body: "Elegí tus entradas de nuevo para continuar.",
+      tone: "amber",
+    },
+  };
+  const { title, body, tone } = copy[kind];
+  const cls =
+    tone === "rose"
+      ? "border-rose-500/35 bg-rose-500/10 text-rose-100"
+      : "border-amber-500/35 bg-amber-500/10 text-amber-100";
+  const titleCls = tone === "rose" ? "text-rose-50" : "text-amber-50";
+
+  return (
+    <div
+      role="status"
+      className={`mb-4 flex items-start gap-2.5 rounded-xl border px-4 py-3 text-[13px] leading-snug ${cls}`}
+    >
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden className="mt-0.5 shrink-0">
+        <circle cx="8" cy="9" r="5.5" stroke="currentColor" strokeWidth="1.4" />
+        <path d="M8 6v3l2 1.5M6 1.5h4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      </svg>
+      <p>
+        <span className={`font-semibold ${titleCls}`}>{title}</span> {body}
+      </p>
+    </div>
+  );
+}
 
 function ReservationCountdown({ reservedAt }: { reservedAt: number }) {
   const [now, setNow] = useState(() => Date.now());
@@ -1071,7 +1321,7 @@ function DataPhase({
           <Field
             label={isForeigner ? "Pasaporte / documento" : "DNI"}
             value={guestDni}
-            onChange={setGuestDni}
+            onChange={(v) => setGuestDni(sanitizeDocument(v, isForeigner))}
             placeholder={isForeigner ? "AB123456" : "71234567"}
             mono
             hint={
@@ -1087,7 +1337,7 @@ function DataPhase({
           <Field
             label="Nombre completo"
             value={guestName}
-            onChange={setGuestName}
+            onChange={(v) => setGuestName(sanitizePersonName(v))}
             placeholder={dniPending ? "Buscando en RENIEC…" : "Juan Pérez García"}
             disabled={dniPending}
           />
@@ -1108,7 +1358,7 @@ function DataPhase({
             label="Email (opcional)"
             type="email"
             value={guestEmail}
-            onChange={setGuestEmail}
+            onChange={(v) => setGuestEmail(sanitizeEmail(v))}
             placeholder="juan@gmail.com"
             hint="Solo si pagas con tarjeta."
           />
@@ -1629,6 +1879,7 @@ function PayPhase({
   payMethod,
   setPayMethod,
   orderId,
+  orderToken,
   slug,
   totalCents,
   isLogged,
@@ -1647,6 +1898,7 @@ function PayPhase({
   payMethod: "yape" | "mp";
   setPayMethod: (m: "yape" | "mp") => void;
   orderId: string | null;
+  orderToken: string | null;
   slug: string;
   totalCents: number;
   isLogged: boolean;
@@ -1671,7 +1923,7 @@ function PayPhase({
     return (
       <PaymentReviewScreen
         orderId={orderId}
-        guestEmail={!isLogged ? guestEmail.trim() : ""}
+        orderToken={orderToken}
         slug={slug}
         onRetry={() => setReview(false)}
         onPaid={onPaid}
@@ -1744,6 +1996,7 @@ function PayPhase({
         {payMethod === "yape" ? (
           <YapeForm
             orderId={orderId}
+            orderToken={orderToken}
             amount={totalCents / 100}
             initialPhone={parseE164(isLogged ? userPhone : guestPhone).national}
             onPaid={onPaid}
@@ -1769,6 +2022,7 @@ function PayPhase({
         ) : (
           <CardForm
             orderId={orderId}
+            orderToken={orderToken}
             amount={totalCents / 100}
             initialHolder={isLogged ? userName : guestName}
             initialDni={isLogged ? "" : guestDni}
@@ -1793,13 +2047,13 @@ function PayPhase({
 // pago anterior en el backend antes de cobrar de nuevo) o esperar la confirmación.
 function PaymentReviewScreen({
   orderId,
-  guestEmail,
+  orderToken,
   onRetry,
   slug,
   onPaid,
 }: {
   orderId: string;
-  guestEmail: string;
+  orderToken: string | null;
   slug: string;
   onRetry: () => void;
   onPaid: () => void;
@@ -1808,15 +2062,8 @@ function PaymentReviewScreen({
   const [busy, setBusy] = useState(false);
   const [waited, setWaited] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // LOW-19: para invitados, "Ir a Mis entradas" mandaba a /tickets — un
-  // LoginGate con wallet vacía, porque la orden guest en revisión aún no se
-  // reclamó (eso pasa recién al pagar, vía /order/[id]/[token]). En su lugar
-  // se manda a /processing con el email del invitado: esa página ya sabe
-  // esperar el status y, si aprueba, aterrizar en el link firmado de la orden
-  // sin exigir login.
-  const waitHref = guestEmail
-    ? `/events/${slug}/processing?order=${orderId}&email=${encodeURIComponent(guestEmail)}`
-    : "/tickets";
+  const waitQs = processingQuery(orderId, orderToken);
+  const waitHref = `/events/${slug}/processing?${waitQs}`;
 
   const retry = async () => {
     setBusy(true);
@@ -1825,7 +2072,7 @@ function PaymentReviewScreen({
       const res = await fetch("/api/payments/retry", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId, guestEmail: guestEmail || undefined }),
+        body: JSON.stringify({ orderId }),
       });
       const body = (await res.json()) as { data?: { status: string }; error?: string };
       if (!res.ok || body.error) {

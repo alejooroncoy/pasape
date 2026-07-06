@@ -332,6 +332,16 @@ export const supabaseBoxRepository: BoxRepository = {
       ticket_id: ticket.id,
     });
 
+    const { count: memberCount } = await db
+      .from("box_members")
+      .select("id", { count: "exact", head: true })
+      .eq("box_id", box.id);
+    if ((memberCount ?? 0) > box.capacity) {
+      await db.from("box_members").delete().eq("box_id", box.id).eq("profile_id", profileId);
+      await db.from("tickets").delete().eq("id", ticket.id);
+      return err("box_full");
+    }
+
     const refreshed = await loadBox(box.id);
     return refreshed ? ok(refreshed) : err("box_load_failed");
   },
@@ -409,6 +419,16 @@ export const supabaseBoxRepository: BoxRepository = {
       profile_id: seatProfileId,
       ticket_id: ticket.id,
     });
+
+    const { count: memberCount } = await db
+      .from("box_members")
+      .select("id", { count: "exact", head: true })
+      .eq("box_id", box.id);
+    if ((memberCount ?? 0) > box.capacity) {
+      await db.from("box_members").delete().eq("box_id", box.id).eq("profile_id", seatProfileId);
+      await db.from("tickets").delete().eq("id", ticket.id);
+      return err("box_full");
+    }
 
     const refreshed = await loadBox(box.id);
     return refreshed ? ok(refreshed) : err("box_load_failed");

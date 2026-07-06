@@ -1,4 +1,4 @@
-import { lookupTicketById, markUsedLocalById, getBoxFill } from "./scanCache";
+import { lookupTicketById, markUsedLocalById, getBoxFill, getZonePolicy, isTicketAllowedInZone } from "./scanCache";
 import { enqueuePendingScan } from "./scanQueue";
 import { isSignedQr, verifySignedScan } from "./verifySignedQr";
 import { arbitrateTicket } from "./coordination/registry";
@@ -18,7 +18,7 @@ export type ScanLocalResult = {
    * inválido"), pero permite distinguir cache desactualizado (bad_cert) de clock
    * skew (bad_window) o formato no firmado (unrecognized/malformed).
    */
-  reason: "unrecognized" | "malformed" | "bad_cert" | "bad_window" | null;
+  reason: "unrecognized" | "malformed" | "bad_cert" | "bad_window" | "wrong_zone" | null;
 };
 
 const empty = (
@@ -72,6 +72,11 @@ async function admitResolved(
   override: { holderName?: string | null },
 ): Promise<ScanLocalResult> {
   const cached = await lookupTicketById(ticketId);
+  const zonePolicy = await getZonePolicy();
+  if (zonePolicy?.enforce && !isTicketAllowedInZone(cached?.ticketTypeId, zonePolicy)) {
+    console.warn(`[scan] ticket ${ticketId} tipo ${cached?.ticketTypeId ?? "?"} fuera de zona`);
+    return empty("invalid", "wrong_zone");
+  }
 
   const usedResult = (): ScanLocalResult => ({
     ...empty("already_used"),

@@ -45,8 +45,9 @@ export async function verifyScanAccess(
     // desde cualquier dispositivo. Si el caller manda un deviceId (body o
     // header x-scanner-device), debe coincidir con el device con el que se
     // creó la sesión — si no, el token filtrado no sirve desde otro device.
+  // Device binding obligatorio: sin header x-scanner-device el token no autentica.
     const callerDeviceId = opts.deviceId ?? hdrs.get(SCANNER_DEVICE_HEADER) ?? undefined;
-    if (callerDeviceId && callerDeviceId !== session.deviceId) return err("forbidden");
+    if (!callerDeviceId || callerDeviceId !== session.deviceId) return err("forbidden");
     return ok({
       profileId: null,
       eventId: detail.event.id,
@@ -71,6 +72,10 @@ export async function verifyScanAccess(
     .maybeSingle<{ role: string }>();
 
   if (membership) {
+    // Reporter/door no escanean vía dashboard: solo owner/admin/editor.
+    if (!["owner", "admin", "editor"].includes(membership.role)) {
+      return err("forbidden");
+    }
     return ok({
       profileId: auth.value.profileId,
       eventId: detail.event.id,

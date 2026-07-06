@@ -101,7 +101,6 @@ export interface TicketRepository {
     fromProfile: string;
     toContact: string;
     token: string;
-    expiresAt: string;
   }): Promise<Result<{ event: { title: string; startsAt: string } }>>;
   /** Reclama una transferencia pendiente: el ticket pasa a `toProfile`. Captura
       la identidad del holder real (nombre + DNI completo) en SU ticket. */
@@ -139,7 +138,7 @@ export interface TicketRepository {
   markUsedByTicketId(
     ticketId: string,
     scanner: ScannerRef,
-    opts?: { usedAt?: Date; expectedEventId?: string },
+    opts?: { usedAt?: Date; expectedEventId?: string; zoneId?: string | null },
   ): Promise<Result<MarkUsedResult>>;
   /**
    * Calcula el alcance del carrusel de entradas para un ticket dado.

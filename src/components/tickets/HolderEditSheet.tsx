@@ -3,6 +3,7 @@
 import { useEffect, useState, type RefObject } from "react";
 import { useSetHolder } from "@/lib/tickets/hooks/useTickets";
 import { isValidDocument } from "@/lib/identity/document";
+import { sanitizeDocument, sanitizePersonName } from "@/lib/input/sanitize";
 import { TicketActionSurface } from "./TicketActionSurface";
 
 export function HolderEditSheet({
@@ -14,6 +15,7 @@ export function HolderEditSheet({
   online,
   onClose,
   anchorRef,
+  variant = "gift",
 }: {
   open: boolean;
   ticketId: string;
@@ -23,6 +25,8 @@ export function HolderEditSheet({
   online: boolean;
   onClose: () => void;
   anchorRef?: RefObject<HTMLElement | null>;
+  /** "yours" = entrada propia; "gift" = regalo a otra persona. */
+  variant?: "yours" | "gift";
 }) {
   const setHolder = useSetHolder();
   const [name, setName] = useState(currentName ?? "");
@@ -53,8 +57,15 @@ export function HolderEditSheet({
 
   return (
     <TicketActionSurface open={open} onClose={onClose} anchorRef={anchorRef}>
-      <p className="text-[15px] font-bold text-white">Poner datos</p>
-      <p className="text-[12px] text-cart-ink-3">{ticketTypeName} · su nombre aparece en la puerta.</p>
+      <p className="text-[15px] font-bold text-white">
+        {variant === "gift" ? "Poner datos del titular" : "Tus datos en la puerta"}
+      </p>
+      <p className="text-[12px] text-cart-ink-3">
+        {ticketTypeName} ·{" "}
+        {variant === "gift"
+          ? "Estos datos aparecen al escanear. Para que entre, enviá la entrada por WhatsApp."
+          : "Tu nombre aparece al escanear en la puerta."}
+      </p>
 
       <div className="mt-4 space-y-3">
         <div>
@@ -63,7 +74,7 @@ export function HolderEditSheet({
           </label>
           <input
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) => setName(sanitizePersonName(e.target.value))}
             placeholder="Ej. María García"
             autoFocus
             className="mt-1 w-full rounded-xl border border-cart-line bg-cart-bg px-3 py-2.5 text-[14px] text-white outline-none focus:border-cart-accent/60"
@@ -84,13 +95,7 @@ export function HolderEditSheet({
           </label>
           <input
             value={dni}
-            onChange={(e) =>
-              setDni(
-                isForeigner
-                  ? e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 20)
-                  : e.target.value.replace(/\D/g, "").slice(0, 8),
-              )
-            }
+            onChange={(e) => setDni(sanitizeDocument(e.target.value, isForeigner))}
             inputMode={isForeigner ? "text" : "numeric"}
             placeholder={isForeigner ? "AB123456" : currentDniLast2 ? `•••••• ${currentDniLast2}` : "8 dígitos"}
             className="mt-1 w-full rounded-xl border border-cart-line bg-cart-bg px-3 py-2.5 text-[14px] text-white outline-none focus:border-cart-accent/60"

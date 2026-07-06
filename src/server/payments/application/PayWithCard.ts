@@ -2,14 +2,16 @@ import { Money } from "@/lib/_shared/money";
 import "server-only";
 import crypto from "node:crypto";
 import { MercadoPagoConfig, Payment } from "mercadopago";
-import { after } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { err, ok, type Result } from "@/server/_shared/result";
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
 import { appBaseUrl, isPublicBaseUrl, buildOrderItems, mpPeruIdentification } from "../infrastructure/MercadoPagoClient";
 import { reportMpError } from "../infrastructure/reportMpError";
-import { dispatchTicketDelivery } from "@/server/notifications/application/DispatchTicketDelivery";
+import { assertOrderPaymentAccess } from "./assertOrderPaymentAccess";
+import { validateMpPaymentAmount } from "./validateMpPaymentAmount";
+import { settleApprovedPayment } from "./settleApprovedPayment";
 import { parseE164 } from "@/lib/phone/countries";
+import { decryptDni } from "@/server/_shared/crypto/dni";
 
 // Why: en prod, si MP_ACCESS_TOKEN no arranca con "APP_USR-" (o sea, parece
 // ser de sandbox tipo "TEST-...") cobraríamos con dinero real usando
@@ -33,12 +35,12 @@ const assertProductionMpToken = (token: string): void => {
 export type PayWithCardInput = {
   orderId: string;
   token: string;
-  paymentMethodId: string; // "visa", "master", "amex", "debvisa", etc. — MP lo infiere del BIN
-  installments: number; // 1 = pago único
+  paymentMethodId: string;
+  installments: number;
   issuerId?: string | null;
-  // Device fingerprint de MP (window.MP_DEVICE_SESSION_ID, creado por el SDK v2).
-  // Mejora approval rate y antifraude — se envía como header X-meli-session-id.
   deviceId?: string | null;
+  /** Token firmado de la orden (misma llave que /processing?k=). */
+  orderToken?: string | null;
 };
 
 // Datos del challenge 3DS cuando el emisor pide autenticación. El frontend debe
@@ -61,6 +63,7 @@ type OrderRow = {
   guest_email: string | null;
   guest_name: string | null;
   guest_dni: string | null;
+  guest_dni_enc: string | null;
   guest_phone: string | null;
 };
 
@@ -78,7 +81,7 @@ export const payWithCard = async (
   const { data: order } = await db
     .from("orders")
     .select(
-      "id, buyer_id, event_id, status, total_cents, guest_email, guest_name, guest_dni, guest_phone",
+      "id, buyer_id, event_id, status, total_cents, guest_email, guest_name, guest_dni, guest_dni_enc, guest_phone",
     )
     .eq("id", input.orderId)
     .maybeSingle<OrderRow>();
@@ -86,10 +89,18 @@ export const payWithCard = async (
   if (order.status === "paid") return ok({ status: "approved", paymentId: "already_paid" });
   if (order.status !== "pending") return err(`order_status_invalid:${order.status}`);
 
+  const access = await assertOrderPaymentAccess({
+    orderId: order.id,
+    buyerId: order.buyer_id,
+    guestEmail: order.guest_email,
+    orderToken: input.orderToken,
+  });
+  if (!access.ok) return err(access.error);
+
   let email = order.guest_email ?? null;
   let fullName = order.guest_name ?? null;
   let phone = order.guest_phone ?? null;
-  const dni = order.guest_dni ?? null;
+  const dni = decryptDni(order.guest_dni_enc) ?? order.guest_dni ?? null;
   if (order.buyer_id) {
     const { data: profile } = await db
       .from("profiles")
@@ -205,6 +216,7 @@ export const payWithCard = async (
     status_detail?: string;
     message?: string;
     error?: string;
+    transaction_amount?: number;
     three_ds_info?: { external_resource_url?: string; creq?: string };
   };
   type CreateBody = Parameters<Payment["create"]>[0]["body"];
@@ -249,25 +261,35 @@ export const payWithCard = async (
     mp_payment_id: paymentId,
     mp_status: status,
   };
-  if (status === "approved") {
-    patch.status = "paid";
-    patch.paid_at = new Date().toISOString();
-  } else if (status === "rejected" || status === "cancelled") {
-    patch.status = "failed";
-  }
-  // in_process/pending: `status` sigue "pending" (nunca lo cambiamos, solo
-  // el lock en mp_status) — el webhook la moverá a paid/failed cuando MP
-  // resuelva async. mp_status ya queda sobrescrito arriba con el valor real,
-  // liberando el lock.
-  await db.from("orders").update(patch).eq("id", order.id);
 
   if (status === "approved") {
-    after(() =>
-      dispatchTicketDelivery({}, order.id).catch((e) => {
-        console.error("[payWithCard] dispatchTicketDelivery failed:", e);
-        Sentry.captureException(e, { tags: { area: "ticket-delivery", orderId: order.id } });
-      }),
+    const amountOk = validateMpPaymentAmount(
+      order.total_cents,
+      data.transaction_amount,
+      order.id,
     );
+    if (!amountOk.ok) {
+      await revertLock();
+      await db
+        .from("orders")
+        .update({
+          mp_status: "approved_amount_mismatch",
+          mp_payment_id: paymentId,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", order.id);
+      return err(amountOk.error);
+    }
+    const settled = await settleApprovedPayment(order.id, paymentId, status);
+    if (!settled.ok) {
+      await revertLock();
+      return settled;
+    }
+  } else if (status === "rejected" || status === "cancelled") {
+    patch.status = "failed";
+    await db.from("orders").update(patch).eq("id", order.id);
+  } else {
+    await db.from("orders").update(patch).eq("id", order.id);
   }
 
   // 3DS challenge: MP pide autenticar. La orden queda pending (el webhook la

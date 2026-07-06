@@ -9,7 +9,7 @@ import {
 } from "../../application/VerifyScanAccess";
 import { joinByCode, type JoinResult } from "../../application/JoinByCode";
 import { resolveAccessCode, type ResolvedCode } from "../../application/ResolveAccessCode";
-import { touchScannerSync, setSessionZone } from "../../application/ScannerSessions";
+import { touchScannerSync } from "../../application/ScannerSessions";
 import { listZones } from "@/server/events/application/ManageZones";
 import type { Zone } from "@/server/events/domain/Zone";
 import type { ScanResult } from "../../domain/ScanResult";
@@ -76,10 +76,7 @@ export const ScanningController = {
         qrCode:    parsed.data.qrCode,
         scanner:   { profileId: access.value.profileId, sessionId: access.value.sessionId },
         usedAt:    resolveOfflineScannedAt(context?.offlineScannedAt),
-        // Validación de puerta solo en el scan en vivo: en el sync offline la
-        // decisión ya se tomó en la puerta (y el ticket pudo marcarse local).
-        zoneId:    context?.offlineScannedAt ? undefined : access.value.zoneId,
-        // El ticket debe pertenecer al evento de esta sesión (anti cross-event).
+        zoneId:    access.value.zoneId,
         expectedEventId: access.value.eventId,
       },
     );
@@ -107,8 +104,8 @@ export const ScanningController = {
         ticketId:  parsed.data.ticketId,
         scanner:   { profileId: access.value.profileId, sessionId: access.value.sessionId },
         usedAt:    resolveOfflineScannedAt(context?.offlineScannedAt),
-        // El ticket debe pertenecer al evento de esta sesión (anti cross-event).
         expectedEventId: access.value.eventId,
+        zoneId:    access.value.zoneId,
       },
     );
   },
@@ -161,25 +158,17 @@ export const ScanningController = {
     return ok(await listZones(access.value.eventId));
   },
 
-  // El portero cambia su puerta activa. zoneId null = puerta principal (valida
-  // todas). Solo aplica a sesiones de portero; el organizador (membership) valida
-  // todo siempre.
+  // La puerta queda fijada al canjear el código — no se cambia en runtime.
   async setZone(
     eventSlug: string,
-    zoneId: string | null,
-    deviceId?: string,
+    _zoneId: string | null,
+    _deviceId?: string,
   ): Promise<Result<{ zoneId: string | null }>> {
-    const access = await verifyScanAccess(eventSlug, { deviceId });
+    const access = await verifyScanAccess(eventSlug, { deviceId: _deviceId });
     if (!access.ok) return err(access.error);
-    if (access.value.via !== "session" || !access.value.sessionId) {
-      return err("not_a_door_session");
+    if (access.value.via === "session") {
+      return err("zone_locked");
     }
-    const okSet = await setSessionZone(
-      access.value.sessionId,
-      access.value.eventId,
-      zoneId,
-    );
-    if (!okSet) return err("invalid_zone");
-    return ok({ zoneId });
+    return ok({ zoneId: access.value.zoneId });
   },
 };

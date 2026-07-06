@@ -65,6 +65,7 @@ export async function prewarmTicketCert(
 export const useLocalRotatingQr = (
   ticketId: string | null,
   k?: string | null,
+  retryNonce = 0,
 ): State => {
   const [state, setState] = useState<State>({
     payload: null,
@@ -188,7 +189,7 @@ export const useLocalRotatingQr = (
       cancelled = true;
       if (interval) clearInterval(interval);
     };
-  }, [ticketId, k]);
+  }, [ticketId, k, retryNonce]);
 
   return state;
 };

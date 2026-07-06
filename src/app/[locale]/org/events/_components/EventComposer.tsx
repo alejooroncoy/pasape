@@ -496,6 +496,7 @@ export function EventComposer(props: EventComposerProps) {
   );
   const [uploadingAssets, setUploadingAssets] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [promoterAssignError, setPromoterAssignError] = useState(false);
   const [publishNow, setPublishNow] = useState(seedFromEdit?.publishNow ?? true);
   const [openSheet, setOpenSheet] = useState<
     null | "tickets" | "promoters" | "description" | "promos"
@@ -533,6 +534,14 @@ export function EventComposer(props: EventComposerProps) {
       tickets.reduce((a, t) => a + Number(t.capacity || 0), 0) +
       spaceGroups.reduce((a, g) => a + spaceCount(g) * spaceSeats(g), 0),
     [tickets, spaceGroups],
+  );
+  const admissionStock = useMemo(
+    () => tickets.reduce((a, t) => a + Number(t.capacity || 0), 0),
+    [tickets],
+  );
+  const boxSeatTotal = useMemo(
+    () => spaceGroups.reduce((a, g) => a + spaceCount(g) * spaceSeats(g), 0),
+    [spaceGroups],
   );
   const totalMax = useMemo(
     () =>
@@ -576,6 +585,29 @@ export function EventComposer(props: EventComposerProps) {
   );
 
   const hasValidSpace = spaceGroups.some((g) => spaceCount(g) >= 1);
+
+  const ticketsCardHint = useMemo(() => {
+    if (validTickets.length === 0 && !hasValidSpace) return "Crea al menos un tipo de entrada";
+    const typeCount =
+      validTickets.length + (hasValidSpace ? spaceGroups.filter((g) => spaceCount(g) >= 1).length : 0);
+    const parts = [`${typeCount} ${typeCount === 1 ? "tipo" : "tipos"}`];
+    if (admissionStock > 0) parts.push(`${admissionStock.toLocaleString("es-PE")} entradas`);
+    if (spaceBoxesCount > 0) {
+      parts.push(
+        `${spaceBoxesCount} ${spaceBoxesCount === 1 ? "espacio" : "espacios"} (${boxSeatTotal} asientos)`,
+      );
+    }
+    parts.push(`hasta S/ ${totalMax.toLocaleString("es-PE")} potencial`);
+    return parts.join(" · ");
+  }, [
+    validTickets.length,
+    hasValidSpace,
+    spaceGroups,
+    admissionStock,
+    spaceBoxesCount,
+    boxSeatTotal,
+    totalMax,
+  ]);
 
   // Nombres de entrada repetidos (sin distinción de mayúsculas ni espacios):
   // confunden al comprador (no sabe cuál elegir). Se bloquea publicar.
@@ -716,16 +748,18 @@ export function EventComposer(props: EventComposerProps) {
         maxTicketsPerPerson: maxPerPerson.trim() ? Number(maxPerPerson) : null,
       });
       if (selectedPromoterIds.size > 0 && ev.slug) {
+        setPromoterAssignError(false);
         try {
-          await fetch(`/api/events/${ev.slug}/promoters`, {
+          const res = await fetch(`/api/events/${ev.slug}/promoters`, {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
               orgPromoterIds: Array.from(selectedPromoterIds),
             }),
           });
+          if (!res.ok) setPromoterAssignError(true);
         } catch {
-          // si falla la asignación, lo puede ajustar luego en /team
+          setPromoterAssignError(true);
         }
       }
 
@@ -741,7 +775,7 @@ export function EventComposer(props: EventComposerProps) {
         }
       }
       router.push(
-        `/org/events/new/success?slug=${ev.slug ?? ""}&status=${finalStatus}` as never,
+        `/org/events/new/success?slug=${ev.slug ?? ""}&status=${finalStatus}${promoterAssignError ? "&promoters=failed" : ""}` as never,
       );
     } catch (e) {
       setSubmitError((e as Error).message);
@@ -1335,11 +1369,7 @@ export function EventComposer(props: EventComposerProps) {
           <CardButton
             icon={<IconTicket />}
             label="Entradas"
-            hint={
-              validTickets.length
-                ? `${validTickets.length} ${validTickets.length === 1 ? "tipo" : "tipos"} · ${totalCapacity.toLocaleString("es-PE")} cupos · hasta S/ ${totalMax.toLocaleString("es-PE")} potencial`
-                : "Crea al menos un tipo de entrada"
-            }
+            hint={ticketsCardHint}
             onClick={() => setOpenSheet("tickets")}
             active={validTickets.length > 0}
             required={validTickets.length === 0}

@@ -398,7 +398,15 @@ function EventSelector({
                             : "bg-white/5 text-cart-ink-3"
                         }`}
                       >
-                        {e.status === "published" ? "Live" : e.status}
+                        {e.status === "published"
+                            ? "Publicado"
+                            : e.status === "draft"
+                              ? "Borrador"
+                              : e.status === "closed"
+                                ? "Cerrado"
+                                : e.status === "cancelled"
+                                  ? "Cancelado"
+                                  : e.status}
                       </span>
                     )}
                   </span>

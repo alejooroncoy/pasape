@@ -8,6 +8,8 @@ import { useMyTickets } from "@/lib/tickets/hooks/useTickets";
 import { useSessionReady } from "@/lib/identity/hooks/useSessionReady";
 import { api } from "@/lib/_shared/api-client";
 import { formatMoney } from "@/lib/_shared/format";
+import { persistOrderToken, readOrderToken } from "@/lib/tickets/orderTokenStorage";
+import { RecoverTicketsLink } from "@/components/tickets/RecoverTicketsLink";
 
 type Props = { params: Promise<{ slug: string }> };
 
@@ -24,21 +26,30 @@ function Inner({ params }: Props) {
   const router = useRouter();
   const search = useSearchParams();
   const orderId = search.get("order");
-  const guestEmail = search.get("email");
-  // Llave firmada de la orden: autoriza el polling de estado del guest que pagó
-  // sin sesión ni email (Yape). Sin ella, el poll daba 403 y el guest terminaba
-  // en una pantalla de "no pudimos cobrarte" pese al pago aprobado.
-  const orderToken = search.get("k");
+  const orderTokenFromUrl = search.get("k");
+  const [orderToken, setOrderToken] = useState<string | null>(orderTokenFromUrl);
   const payMethod = search.get("method") ?? "yape";
   const { data: eventData } = useEvent(slug);
   const { data: ticketData, refetch: refetchTickets } = useMyTickets();
   const { loggedIn } = useSessionReady();
   const [startedAt] = useState(() => Date.now());
   const [paid, setPaid] = useState(false);
+  const [pollError, setPollError] = useState<string | null>(null);
   // Delay entre confirmar `paid` y navegar a la orden — le da tiempo al usuario
   // de ver el check de éxito antes de saltar (LOW-10/LOW-20).
   const SUCCESS_NAV_DELAY_MS = 1600;
   const successNavTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!orderId) return;
+    if (orderTokenFromUrl) {
+      persistOrderToken(orderId, orderTokenFromUrl);
+      setOrderToken(orderTokenFromUrl);
+      return;
+    }
+    const stored = readOrderToken(orderId);
+    if (stored) setOrderToken(stored);
+  }, [orderId, orderTokenFromUrl]);
 
   useEffect(() => {
     if (!orderId || paid) return;
@@ -46,7 +57,6 @@ function Inner({ params }: Props) {
     const tick = async () => {
       try {
         const params = new URLSearchParams();
-        if (guestEmail) params.set("email", guestEmail);
         if (orderToken) params.set("k", orderToken);
         const qs = params.toString() ? `?${params.toString()}` : "";
         const res = await api.get<{
@@ -57,13 +67,10 @@ function Inner({ params }: Props) {
         }>(`/api/tickets/order/${orderId}/status${qs}`);
         if (cancelled) return;
         if (res.status === "paid") {
+          setPollError(null);
           setPaid(true);
           await refetchTickets();
           successNavTimer.current = setTimeout(() => {
-            // /order es el único punto de decisión post-pago: reclama la orden
-            // (o confirma que ya es tuya — claimOrder es idempotente para el
-            // dueño) con el conteo REAL de entradas, y recién ahí bifurca a
-            // /done o /tickets/[id]. No se decide acá con datos adivinados.
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             router.replace((res.orderUrl ?? "/tickets") as any);
           }, SUCCESS_NAV_DELAY_MS);
@@ -73,7 +80,16 @@ function Inner({ params }: Props) {
             `/events/${slug}/pay-error?reason=${res.status}` as any,
           );
         }
-      } catch {}
+      } catch (e) {
+        if (!cancelled) {
+          const msg = (e as Error).message ?? "poll_failed";
+          setPollError(
+            msg.includes("403") || msg.includes("forbidden")
+              ? "No pudimos verificar tu pago. Volvé al checkout desde el mismo dispositivo donde compraste."
+              : "Problema de conexión al verificar el pago. Seguimos intentando…",
+          );
+        }
+      }
     };
     void tick();
     const id = setInterval(() => void tick(), 2000);
@@ -81,7 +97,7 @@ function Inner({ params }: Props) {
       cancelled = true;
       clearInterval(id);
     };
-  }, [orderId, guestEmail, orderToken, router, slug, refetchTickets, paid, search]);
+  }, [orderId, orderToken, router, slug, refetchTickets, paid]);
 
   // Cleanup del salto a /order SOLO al desmontar de verdad (no en cada re-run
   // del efecto de arriba, que se dispara también cuando `paid` cambia a true
@@ -260,12 +276,20 @@ function Inner({ params }: Props) {
             <br />
             Tu QR llega en segundos.
           </p>
+          {pollError && (
+            <p className="mt-4 max-w-[360px] text-[13px] leading-[1.5] text-amber-200">
+              {pollError}
+            </p>
+          )}
           {summary && (
             <div className="mt-7 rounded-full bg-cart-bg-elev px-4 py-2 font-mono text-[12px] text-cart-ink-3">
               {summary.price ? `${summary.price} · ` : ""}
               {summary.title}
             </div>
           )}
+          <p className="mt-6">
+            <RecoverTicketsLink compact />
+          </p>
         </div>
       )}
     </div>

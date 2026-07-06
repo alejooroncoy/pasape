@@ -96,7 +96,7 @@ export default function PromoAppliedWaitingPage({ params }: Props) {
                 Tu solicitud<br />ya está en revisión.
               </div>
               <div style={{ fontSize: 14, color: C.dim, marginTop: 14, lineHeight: 1.5, maxWidth: 280 }}>
-                En cuanto te aprueben, te llega un mensaje al WhatsApp con tu link único de venta.
+                En cuanto te aprueben, vas a poder vender desde el panel de promotor con tu link único.
               </div>
 
               <div

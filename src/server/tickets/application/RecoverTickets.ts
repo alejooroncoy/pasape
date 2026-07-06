@@ -4,14 +4,9 @@ import type { WalletTicket } from "../domain/Ticket";
 import { supabaseTicketRepository } from "../infrastructure/repositories/SupabaseTicketRepository";
 import { signOrderLink } from "@/server/notifications/domain/OrderLinkToken";
 
-// Why: mock-OTP recovery flow for the pilot. We don't want to wire Firebase
-// signInWithPhone for a "recover my QR" UX since the user may have lost
-// their phone session. We store a 6-digit code in `ticket_recovery_otp`,
-// log it to the server console (or return it in dev), and let the user
-// verify it to fetch their active tickets.
-
 const OTP_TTL_MIN = 10;
 const MAX_ATTEMPTS = 5;
+const MAX_STARTS_PER_HOUR = 5;
 
 const isEmail = (s: string): boolean => /@/.test(s);
 const normalizePhone = (s: string): string => s.replace(/[^\d+]/g, "");
@@ -19,7 +14,6 @@ const normalizePhone = (s: string): string => s.replace(/[^\d+]/g, "");
 export type StartRecoveryInput = { identifier: string };
 export type StartRecoveryResult = {
   identifierKind: "phone" | "email";
-  // In dev we leak the code so the pilot can be tested without SMS infra.
   devCode?: string;
 };
 
@@ -39,13 +33,13 @@ export const startTicketRecovery = async (
 
   const db = supabaseAdmin();
 
-  // Best-effort profile lookup. We don't reveal whether the profile exists
-  // (the verify step returns an empty list instead).
-  const { data: profile } = await db
-    .from("profiles")
-    .select("id")
-    .eq(kind === "email" ? "email" : "phone", identifier)
-    .maybeSingle<{ id: string }>();
+  const since = new Date(Date.now() - 60 * 60_000).toISOString();
+  const { count: recentStarts } = await db
+    .from("ticket_recovery_otp")
+    .select("id", { count: "exact", head: true })
+    .eq("identifier", identifier)
+    .gte("created_at", since);
+  if ((recentStarts ?? 0) >= MAX_STARTS_PER_HOUR) return err("too_many_attempts");
 
   const code = generateCode();
   const expiresAt = new Date(Date.now() + OTP_TTL_MIN * 60_000).toISOString();
@@ -53,14 +47,12 @@ export const startTicketRecovery = async (
   const { error: insertErr } = await db.from("ticket_recovery_otp").insert({
     identifier,
     identifier_kind: kind,
-    profile_id: profile?.id ?? null,
+    profile_id: null,
     code,
     expires_at: expiresAt,
   });
   if (insertErr) return err(insertErr.message);
 
-  // Mock delivery — real infra (SMS/email) plugs in here later.
-   
   console.log(`[ticket-recovery] OTP for ${identifier}: ${code}`);
 
   const out: StartRecoveryResult = { identifierKind: kind };
@@ -73,11 +65,6 @@ export type RecoveredOrderLink = { orderId: string; token: string };
 export type VerifyRecoveryResult = {
   profileId: string | null;
   tickets: WalletTicket[];
-  /** Un link firmado por cada orden distinta detrás de las entradas
-   *  recuperadas — misma ruta /order/[id]/[token] que usa la entrega por
-   *  WhatsApp/email. El profile del recovery es un guest sin sesión; el
-   *  frontend debe llevar al usuario ahí (login + claimOrder) en vez de a
-   *  /tickets, que exige una sesión que este flujo nunca crea. */
   orderLinks: RecoveredOrderLink[];
 };
 
@@ -92,9 +79,21 @@ export const verifyTicketRecovery = async (
 
   const db = supabaseAdmin();
 
+  const since = new Date(Date.now() - 60 * 60_000).toISOString();
+  const { data: attemptRows } = await db
+    .from("ticket_recovery_otp")
+    .select("attempts")
+    .eq("identifier", identifier)
+    .gte("created_at", since);
+  const totalAttempts = (attemptRows ?? []).reduce(
+    (sum, r) => sum + ((r as { attempts: number }).attempts ?? 0),
+    0,
+  );
+  if (totalAttempts >= MAX_ATTEMPTS * MAX_STARTS_PER_HOUR) return err("too_many_attempts");
+
   const { data: row } = await db
     .from("ticket_recovery_otp")
-    .select("id, code, attempts, consumed_at, expires_at, profile_id")
+    .select("id, code, attempts, consumed_at, expires_at")
     .eq("identifier", identifier)
     .is("consumed_at", null)
     .order("created_at", { ascending: false })
@@ -105,7 +104,6 @@ export const verifyTicketRecovery = async (
       attempts: number;
       consumed_at: string | null;
       expires_at: string;
-      profile_id: string | null;
     }>();
 
   if (!row) return err("code_not_found");
@@ -125,17 +123,41 @@ export const verifyTicketRecovery = async (
     .update({ consumed_at: new Date().toISOString() })
     .eq("id", row.id);
 
-  if (!row.profile_id) return ok({ profileId: null, tickets: [], orderLinks: [] });
+  // Fuente de verdad: contacto guest en orders (no profiles.email sintético).
+  let orderQuery = db.from("orders").select("id, buyer_id").eq("status", "paid");
+  if (kind === "email") {
+    orderQuery = orderQuery.ilike("guest_email", identifier);
+  } else {
+    const digits = identifier.replace(/\D/g, "");
+    orderQuery = orderQuery.or(`guest_phone.ilike.%${digits}%,guest_phone.eq.${identifier}`);
+  }
+  const { data: orders } = await orderQuery.returns<Array<{ id: string; buyer_id: string | null }>>();
+  if (!orders?.length) return ok({ profileId: null, tickets: [], orderLinks: [] });
 
-  const tickets = await supabaseTicketRepository.listMine(row.profile_id);
-  // Why: only surface usable tickets in the recovery flow.
-  const active = tickets.filter((t) => t.status === "active");
+  const orderIds = orders.map((o) => o.id);
+  const { data: ticketRows } = await db
+    .from("tickets")
+    .select("id, order_id, status, current_holder")
+    .in("order_id", orderIds)
+    .eq("status", "active");
 
-  const orderIds = [...new Set(active.map((t) => t.orderId))];
-  const orderLinks: RecoveredOrderLink[] = orderIds.map((orderId) => ({
+  const holderIds = [...new Set((ticketRows ?? []).map((t) => (t as { current_holder: string }).current_holder))];
+  const allTickets: WalletTicket[] = [];
+  for (const holderId of holderIds) {
+    const mine = await supabaseTicketRepository.listMine(holderId);
+    allTickets.push(...mine.filter((t) => t.status === "active" && orderIds.includes(t.orderId)));
+  }
+
+  const uniqueTickets = [...new Map(allTickets.map((t) => [t.id, t])).values()];
+  const recoveredOrderIds = [...new Set(uniqueTickets.map((t) => t.orderId))];
+  const orderLinks: RecoveredOrderLink[] = recoveredOrderIds.map((orderId) => ({
     orderId,
     token: signOrderLink(orderId),
   }));
 
-  return ok({ profileId: row.profile_id, tickets: active, orderLinks });
+  return ok({
+    profileId: holderIds[0] ?? null,
+    tickets: uniqueTickets,
+    orderLinks,
+  });
 };
