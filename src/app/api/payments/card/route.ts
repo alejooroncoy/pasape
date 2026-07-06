@@ -4,6 +4,8 @@ import { json } from "@/server/_shared/http";
 import { err } from "@/server/_shared/result";
 import { payWithCard } from "@/server/payments/application/PayWithCard";
 import { createRateLimiter } from "@/server/_shared/rateLimit";
+import { getOrderBuyerId } from "@/lib/posthog-server";
+import { serverEvents } from "@/lib/analytics/serverEvents";
 
 const schema = z.object({
   orderId: z.string().uuid(),
@@ -30,5 +32,14 @@ export const POST = async (req: NextRequest) => {
     return json(err(parsed.error.issues[0]?.message ?? "invalid_input"));
   }
   const res = await payWithCard(parsed.data);
+  if (res.ok) {
+    const distinctId = (await getOrderBuyerId(parsed.data.orderId)) ?? "anonymous";
+    serverEvents.paymentCardInitiated(distinctId, { order_id: parsed.data.orderId });
+    // Rechazo síncrono de MP: no siempre llega webhook aparte para esto, así que
+    // lo capturamos acá también (el webhook cubre el caso async/in_process).
+    if (res.value.status === "rejected") {
+      serverEvents.paymentFailed(distinctId, { order_id: parsed.data.orderId, method: "card" });
+    }
+  }
   return json(res);
 };

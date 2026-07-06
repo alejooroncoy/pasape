@@ -8,6 +8,7 @@ import { clearPersistedQueryCache } from "@/lib/_shared/query-persister";
 import { resetPrefetchWallet } from "@/lib/tickets/prefetchWallet";
 import { setOauthReturn } from "@/components/auth/PostLoginRedirect";
 import { currentUserKey } from "./useCurrentUser";
+import { clientEvents } from "@/lib/analytics/clientEvents";
 
 export const useGoogleSignIn = (opts: { redirectTo?: string } = {}) => {
   const [pending, setPending] = useState(false);
@@ -46,6 +47,7 @@ export const useGoogleSignIn = (opts: { redirectTo?: string } = {}) => {
 export const useSignOut = () => {
   const qc = useQueryClient();
   return useCallback(async () => {
+    clientEvents.signOut();
     const supabase = createSupabaseBrowserClient();
     await supabase.auth.signOut();
     // Limpia cookie de org activa server-side.

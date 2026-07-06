@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, use, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { clientEvents } from "@/lib/analytics/clientEvents";
 import { AnimatePresence, motion } from "motion/react";
 import { useSearchParams } from "next/navigation";
 
@@ -658,13 +659,17 @@ function BuyFlowInner({ params }: Props) {
 
   const onPrimary = () => {
     if (phase === "pick" && pickValid) {
+      clientEvents.checkoutStepAdvanced({ from_phase: "pick", to_phase: "data", event_slug: slug, items_count: totalItems });
       // No bloquea el paso: la cotización llega en paralelo y pisa los números
       // locales al aterrizar.
       requestQuote();
       setPhase("data");
       return;
     }
-    if (phase === "data" && orderValid) void startPayment();
+    if (phase === "data" && orderValid) {
+      clientEvents.checkoutStepAdvanced({ from_phase: "data", to_phase: "pay", event_slug: slug, items_count: totalItems });
+      void startPayment();
+    }
   };
 
   const onBack = () => {

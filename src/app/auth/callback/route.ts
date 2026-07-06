@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { headers } from "next/headers";
 import { createSupabaseServerClient } from "@/server/_shared/supabase/server";
 import { resolveDefaultLanding } from "@/server/_shared/landingRoute";
+import { serverEvents } from "@/lib/analytics/serverEvents";
 
 // Origin visto por el navegador (ngrok/proxy reescriben Host) — sin esto el
 // redirect post-login mandaría a localhost en vez del dominio público.
@@ -36,10 +37,18 @@ export const GET = async (req: NextRequest) => {
       );
     }
 
+    const { data: userData } = await supabase.auth.getUser();
+    if (userData?.user?.id) {
+      serverEvents.identify(userData.user.id, {
+        email: userData.user.email,
+        name: userData.user.user_metadata?.full_name,
+      });
+      serverEvents.userSignedIn(userData.user.id, { provider: "google" });
+    }
+
     if (!nextParam) {
-      const { data } = await supabase.auth.getUser();
-      if (data?.user?.id) {
-        const dest = await resolveDefaultLanding(data.user.id, "es");
+      if (userData?.user?.id) {
+        const dest = await resolveDefaultLanding(userData.user.id, "es");
         return NextResponse.redirect(new URL(dest, origin));
       }
     }

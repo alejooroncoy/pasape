@@ -92,7 +92,11 @@ const mapOrderStatus = (
 
 export const handleMpWebhook = async (
   input: WebhookInput,
-): Promise<Result<{ orderId?: string; status?: string }>> => {
+): Promise<Result<{
+  orderId?: string;
+  status?: string;
+  mapped?: "paid" | "failed" | "pending" | "refunded" | null;
+}>> => {
   assertProductionMpToken();
 
   // MP sends `type` and `data.id` either via query or JSON body, depending on topic.
@@ -392,5 +396,5 @@ export const handleMpWebhook = async (
     raw: parsed as object,
   });
 
-  return ok({ orderId, status });
+  return ok({ orderId, status, mapped });
 };
