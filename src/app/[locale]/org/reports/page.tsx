@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import { createContext, Suspense, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { AnimatePresence, motion, useMotionValue, useTransform, animate } from "motion/react";
@@ -398,7 +398,15 @@ function EventSelector({
                             : "bg-white/5 text-cart-ink-3"
                         }`}
                       >
-                        {e.status === "published" ? "Live" : e.status}
+                        {e.status === "published"
+                            ? "Publicado"
+                            : e.status === "draft"
+                              ? "Borrador"
+                              : e.status === "closed"
+                                ? "Cerrado"
+                                : e.status === "cancelled"
+                                  ? "Cancelado"
+                                  : e.status}
                       </span>
                     )}
                   </span>
@@ -973,10 +981,16 @@ function displayMetric(r: BreakdownRow): { sold: number; total: number; unitLabe
   return { sold: r.sold, total: r.capacity, unitLabel: null };
 }
 
-/** "Box 1" → "Box"; "Mesa M1" → "Mesa"; "Box S.VIP 3" → "Box S.VIP"; "Preventa" → "Preventa". */
+/**
+ * "Box 1" → "Box"; "Mesa M1" → "Mesa"; "Box S.VIP 3" → "Box S.VIP";
+ * "Box A" → "Box" (esquema de etiqueta ALPHA, el default del composer);
+ * "Preventa" → "Preventa".
+ */
 function baseName(name: string): string {
-  // Quita sufijos numéricos finales con o sin letra previa: " 1", " 12", " M1", " A3".
-  const trimmed = name.trim().replace(/\s+[A-Za-z]?\d+\s*$/, "").trim();
+  // Quita sufijos finales de: dígitos con o sin letra previa (" 1", " 12",
+  // " M1", " A3") o UNA sola letra suelta (" A".." Z", el esquema alpha por
+  // defecto — LOW-15). No toca palabras de 2+ letras como "VIP"/"Alfa".
+  const trimmed = name.trim().replace(/\s+([A-Za-z]?\d+|[A-Za-z])\s*$/, "").trim();
   return trimmed.length > 0 ? trimmed : name.trim();
 }
 
@@ -1555,7 +1569,7 @@ function NoEventsEmpty() {
         </p>
       </div>
       <Link
-        href="/es/org/eventos/nuevo"
+        href={"/org/events/new" as never}
         className="relative mt-1 inline-flex items-center gap-2 rounded-full bg-cart-accent px-5 py-2.5 text-[13.5px] font-semibold text-cart-on-accent shadow-[0_0_30px_var(--color-cart-accent-glow)] transition-transform active:scale-95"
       >
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>

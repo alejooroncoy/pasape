@@ -1,38 +1,24 @@
 import type { NextRequest } from "next/server";
 import { z } from "zod";
+import { reportDniLookupRateLimited } from "@/server/identity/dniLookupObservability";
 import { buildFullName, lookupDni } from "@/server/identity/infrastructure/DecolectaClient";
 import { fail, ok as okJson } from "@/server/_shared/http";
+import { createRateLimiter } from "@/server/_shared/rateLimit";
 
 const dniSchema = z.object({ dni: z.string().regex(/^\d{8}$/, "invalid_dni") });
 
-// Rate limit in-memory: 10 req/min por IP. Suficiente para mitigar abuso casual;
-// en producción real se sustituye por edge/redis si crece tráfico.
-type Bucket = { count: number; resetAt: number };
-const BUCKETS = new Map<string, Bucket>();
-const WINDOW_MS = 60_000;
-const MAX_PER_WINDOW = 10;
-
-const consumeRate = (ip: string): boolean => {
-  const now = Date.now();
-  const b = BUCKETS.get(ip);
-  if (!b || now > b.resetAt) {
-    BUCKETS.set(ip, { count: 1, resetAt: now + WINDOW_MS });
-    return true;
-  }
-  if (b.count >= MAX_PER_WINDOW) return false;
-  b.count += 1;
-  return true;
-};
-
-const ipOf = (req: NextRequest): string => {
-  const fwd = req.headers.get("x-forwarded-for");
-  if (fwd) return fwd.split(",")[0]!.trim();
-  return req.headers.get("x-real-ip") ?? "unknown";
-};
+// Consulta RENIEC (vía Decolecta) sin sesión: es pública por diseño (checkout de
+// invitado, onboarding, join de box). El rate limit vive en Upstash Redis
+// (compartido entre instancias serverless) igual que los demás endpoints
+// sensibles — un Map in-memory por-instancia no sirve en Vercel multi-instancia.
+const DNI_LOOKUP_MAX_PER_MINUTE = 10;
+const rateLimiter = createRateLimiter("identity:dni-lookup", DNI_LOOKUP_MAX_PER_MINUTE);
 
 export const GET = async (req: NextRequest) => {
-  const ip = ipOf(req);
-  if (!consumeRate(ip)) return fail("rate_limited", 429);
+  if (!(await rateLimiter.check(req))) {
+    reportDniLookupRateLimited();
+    return rateLimiter.response();
+  }
 
   const url = new URL(req.url);
   const parsed = dniSchema.safeParse({ dni: url.searchParams.get("dni") ?? "" });

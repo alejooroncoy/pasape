@@ -1,10 +1,17 @@
 import { z } from "zod";
 import { isValidDocument } from "@/lib/identity/document";
+import {
+  sanitizeDocument,
+  sanitizeGuestContact,
+  sanitizePersonName,
+  sanitizePhone,
+  sanitizePromoCode,
+} from "@/lib/input/sanitize";
 import { err, type Result } from "@/server/_shared/result";
 import { getAuthContext } from "@/server/_shared/AuthContext";
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
 import { verifyTicketLink } from "@/server/notifications/domain/TicketLinkToken";
-import { verifyOrderLink } from "@/server/notifications/domain/OrderLinkToken";
+import { signOrderLink, verifyOrderLink } from "@/server/notifications/domain/OrderLinkToken";
 import { supabaseTicketRepository as repo } from "../../infrastructure/repositories/SupabaseTicketRepository";
 import { buyTickets } from "../../application/BuyTickets";
 import { getMyTicketById, getMyTickets } from "../../application/GetMyTickets";
@@ -16,24 +23,34 @@ import type { BuyOutput } from "../../ports/TicketRepository";
 
 // Why: el QR llega por WhatsApp o email — exigimos al menos uno. DNI es
 // obligatorio (lo verifica el portero en puerta).
-const guestSchema = z
-  .object({
-    email: z.string().email().nullable().optional(),
-    phone: z.string().min(6).nullable().optional(),
-    fullName: z.string().min(2),
-    // DNI (8 díg) o documento de extranjero (5-20). `isForeigner` decide la regla:
-    // estricta para el peruano, laxa para el extranjero (no frágil, no bloqueante).
-    dni: z.string().trim().min(1).max(20),
-    isForeigner: z.boolean().optional(),
-  })
-  .refine((g) => isValidDocument(g.dni, !!g.isForeigner), {
-    message: "invalid_document",
-    path: ["dni"],
-  })
-  .refine((g) => !!g.email || !!g.phone, {
-    message: "guest_contact_required",
-    path: ["phone"],
-  });
+const guestObject = z.object({
+  email: z.string().nullable().optional(),
+  phone: z.string().nullable().optional(),
+  fullName: z.string(),
+  dni: z.string(),
+  isForeigner: z.boolean().optional(),
+});
+
+const guestSchema = guestObject
+  .transform(sanitizeGuestContact)
+  .pipe(
+    z
+      .object({
+        email: z.string().email().nullable().optional(),
+        phone: z.string().min(6).nullable().optional(),
+        fullName: z.string().min(2).max(120),
+        dni: z.string().min(1).max(20),
+        isForeigner: z.boolean().optional(),
+      })
+      .refine((g) => isValidDocument(g.dni, !!g.isForeigner), {
+        message: "invalid_document",
+        path: ["dni"],
+      })
+      .refine((g) => !!g.email || !!g.phone, {
+        message: "guest_contact_required",
+        path: ["phone"],
+      }),
+  );
 
 const buySchema = z.object({
   eventId: z.string().uuid(),
@@ -45,11 +62,20 @@ const buySchema = z.object({
         // organizador por evento (events.max_tickets_per_person) y lo hace cumplir
         // el repositorio (priceOrder/buy).
         qty: z.number().int().min(1).max(50),
-        holderName: z.string().nullable().optional(),
+        holderName: z
+          .string()
+          .nullable()
+          .optional()
+          .transform((v) => (v == null || v === "" ? v : sanitizePersonName(v))),
       }),
     )
     .min(1),
-  promoCode: z.string().min(1).max(64).nullable().optional(),
+  promoCode: z
+    .string()
+    .nullable()
+    .optional()
+    .transform((v) => (v == null || v === "" ? v : sanitizePromoCode(v)))
+    .pipe(z.string().min(1).max(64).nullable().optional()),
   guest: guestSchema.optional(),
   // Datos del comprador logueado — mismos campos que guest; se persisten en
   // su perfil/kyc para autorrellenar la próxima compra.
@@ -60,20 +86,34 @@ const transferSchema = z.object({
   ticketId: z.string().uuid(),
   // Solo por WhatsApp: la transferencia siempre queda en espera de reclamo y
   // el link viaja al número del receptor.
-  toPhone: z.string().min(6),
+  toPhone: z.string().transform(sanitizePhone).pipe(z.string().min(6)),
 });
 
-const claimSchema = z.object({
+const claimObject = z.object({
   token: z.string().min(10),
-  // Identidad del holder real: se captura al reclamar (autorrellenada desde el
-  // perfil del receptor si ya la tiene). Opcionales para no romper claims viejos.
-  fullName: z.string().trim().min(2).max(120).nullable().optional(),
-  dni: z.string().trim().min(1).max(20).nullable().optional(),
+  fullName: z.string().nullable().optional(),
+  dni: z.string().nullable().optional(),
   isForeigner: z.boolean().optional(),
-}).refine((c) => c.dni == null || isValidDocument(c.dni, !!c.isForeigner), {
-  message: "invalid_document",
-  path: ["dni"],
 });
+
+const claimSchema = claimObject
+  .transform((c) => ({
+    ...c,
+    fullName:
+      c.fullName == null || c.fullName === "" ? c.fullName : sanitizePersonName(c.fullName),
+    dni: c.dni == null || c.dni === "" ? c.dni : sanitizeDocument(c.dni, !!c.isForeigner),
+  }))
+  .refine(
+    (c) =>
+      c.fullName == null ||
+      c.fullName === "" ||
+      (c.fullName.length >= 2 && c.fullName.length <= 120),
+    { message: "invalid_input", path: ["fullName"] },
+  )
+  .refine((c) => c.dni == null || c.dni === "" || isValidDocument(c.dni, !!c.isForeigner), {
+    message: "invalid_document",
+    path: ["dni"],
+  });
 
 // Desbloqueo de la propia compra: orderId + token de orden (HMAC) como llave.
 const claimOrderSchema = z.object({
@@ -84,15 +124,32 @@ const claimOrderSchema = z.object({
 // Reparto post-compra: el dueño nombra al titular de su entrada. Nombre opcional
 // (puede limpiarlo) y DNI de 8 dígitos (el DNI completo se cifra server-side; el
 // portero valida por los últimos dígitos).
-const setHolderSchema = z.object({
+const setHolderObject = z.object({
   ticketId: z.string().uuid(),
-  holderName: z.string().trim().min(1).max(120).nullable(),
-  dni: z.string().trim().min(1).max(20).nullable().optional(),
+  holderName: z.string().nullable(),
+  dni: z.string().nullable().optional(),
   isForeigner: z.boolean().optional(),
-}).refine((s) => s.dni == null || isValidDocument(s.dni, !!s.isForeigner), {
-  message: "invalid_document",
-  path: ["dni"],
 });
+
+const setHolderSchema = setHolderObject
+  .transform((s) => ({
+    ...s,
+    holderName:
+      s.holderName == null || s.holderName === ""
+        ? s.holderName
+        : sanitizePersonName(s.holderName),
+    dni: s.dni == null || s.dni === "" ? s.dni : sanitizeDocument(s.dni, !!s.isForeigner),
+  }))
+  .refine(
+    (s) =>
+      s.holderName == null ||
+      (s.holderName.length >= 1 && s.holderName.length <= 120),
+    { message: "invalid_input", path: ["holderName"] },
+  )
+  .refine((s) => s.dni == null || s.dni === "" || isValidDocument(s.dni, !!s.isForeigner), {
+    message: "invalid_document",
+    path: ["dni"],
+  });
 
 // Cotización del pedido (sin crear orden). Público: es el mismo precio que ya
 // muestra la página del evento; no expone nada sensible.
@@ -116,12 +173,19 @@ export const TicketsController = {
     const auth = await getAuthContext();
     // Why: compra como invitado es first-class — el comprador es commodity y
     // no debe registrarse para comprar. Si no hay sesión, exigimos guest.
+    let res: Result<BuyOutput>;
     if (!auth.ok) {
       if (!parsed.data.guest) return err("guest_required");
       // Sin sesión no hay perfil que actualizar — buyer no aplica.
-      return buyTickets({ repo }, { ...parsed.data, guest: parsed.data.guest, buyer: undefined });
+      res = await buyTickets({ repo }, { ...parsed.data, guest: parsed.data.guest, buyer: undefined });
+    } else {
+      res = await buyTickets({ repo }, { buyerId: auth.value.profileId, ...parsed.data });
     }
-    return buyTickets({ repo }, { buyerId: auth.value.profileId, ...parsed.data });
+    // Adjunta la llave firmada de la orden: el cliente la conserva para leer el
+    // estado de su propia compra en /processing (polling) aun sin sesión ni
+    // email — imprescindible para el guest que paga con Yape sin correo.
+    if (res.ok) return { ok: true, value: { ...res.value, orderToken: signOrderLink(res.value.order.id) } };
+    return res;
   },
 
   async mine(): Promise<Result<WalletTicket[]>> {

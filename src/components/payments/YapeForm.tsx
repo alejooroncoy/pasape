@@ -6,6 +6,7 @@ import { useMpSdk } from "@/lib/payments/hooks/useMpSdk";
 
 type Props = {
   orderId: string;
+  orderToken?: string | null;
   amount: number;
   initialPhone?: string;
   onPaid: () => void;
@@ -15,13 +16,14 @@ type Props = {
   onError?: (message: string) => void;
 };
 
-export function YapeForm({ orderId, amount, initialPhone = "", onPaid, onReview, onError }: Props) {
+export function YapeForm({ orderId, orderToken, amount, initialPhone = "", onPaid, onReview, onError }: Props) {
   const mp = useMpSdk(onError);
   const [phone, setPhone] = useState(initialPhone.replace(/\D/g, "").slice(0, 9));
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [submitting, setSubmitting] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const otpRefs = useRef<Array<HTMLInputElement | null>>([]);
+  const submittingRef = useRef(false);
 
   const otpCode = otp.join("");
   const phoneDigits = phone.replace(/\D/g, "");
@@ -52,11 +54,13 @@ export function YapeForm({ orderId, amount, initialPhone = "", onPaid, onReview,
   };
 
   const submit = async () => {
+    if (submittingRef.current || !canSubmit) return;
     setLocalError(null);
     if (!mp) {
       setLocalError("MP SDK no cargado");
       return;
     }
+    submittingRef.current = true;
     setSubmitting(true);
     try {
       const tokenResp = await mp.yape({ otp: otpCode, phoneNumber: phoneDigits }).create();
@@ -65,6 +69,7 @@ export function YapeForm({ orderId, amount, initialPhone = "", onPaid, onReview,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           orderId,
+          orderToken: orderToken ?? null,
           token: tokenResp.id,
           phoneNumber: phoneDigits,
           // Device fingerprint que el SDK v2 crea al cargar (antifraude +
@@ -106,6 +111,7 @@ export function YapeForm({ orderId, amount, initialPhone = "", onPaid, onReview,
       setLocalError(humanizeYapeError(msg));
       onError?.(msg);
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   };

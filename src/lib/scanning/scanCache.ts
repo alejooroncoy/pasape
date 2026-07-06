@@ -6,10 +6,11 @@ const DB_NAME = "pasape-scan";
 const STORE = "tickets";
 const META = "meta";
 const PENDING = "pending_scans";
-const VERSION = 3;
+const VERSION = 4;
 
 export type CachedTicket = {
   ticketId: string;
+  ticketTypeId: string;
   qrCode: string;
   holderName: string | null;
   holderDniLast4: string | null;
@@ -28,7 +29,14 @@ type ScanCacheResponse = {
   fetchedAt: string;
   /** true = snapshot completo (reemplaza el cache); false = delta (merge). */
   full: boolean;
+  zonePolicy: ZoneScanPolicy;
   tickets: CachedTicket[];
+};
+
+/** Reglas de puerta cacheadas junto al snapshot offline. */
+export type ZoneScanPolicy = {
+  enforce: boolean;
+  allowedTicketTypeIds: string[];
 };
 
 async function db(): Promise<IDBPDatabase> {
@@ -39,6 +47,12 @@ async function db(): Promise<IDBPDatabase> {
         s.createIndex("qrCode", "qrCode", { unique: false });
       } else if (oldVersion < 3) {
         // Migrar keyPath de qrCode → ticketId
+        db.deleteObjectStore(STORE);
+        const s = db.createObjectStore(STORE, { keyPath: "ticketId" });
+        s.createIndex("qrCode", "qrCode", { unique: false });
+      }
+      if (oldVersion < 4 && db.objectStoreNames.contains(STORE)) {
+        // ticketTypeId + zonePolicy — forzar re-sync completo en el próximo refresh.
         db.deleteObjectStore(STORE);
         const s = db.createObjectStore(STORE, { keyPath: "ticketId" });
         s.createIndex("qrCode", "qrCode", { unique: false });
@@ -78,7 +92,9 @@ export async function refreshScanCache(
     : `/api/events/${slug}/scan-cache`;
   const res = await fetch(resolveUrl(url), { headers: deviceHeaders() });
   if (!res.ok) throw new Error("scan_cache_fetch_failed");
-  const json: ScanCacheResponse = await res.json();
+  const body = (await res.json()) as { data?: ScanCacheResponse };
+  if (!body.data) throw new Error("scan_cache_fetch_failed");
+  const json = body.data;
   const tx = d.transaction([STORE, META], "readwrite");
   const store = tx.objectStore(STORE);
   if (json.full) await store.clear(); // snapshot: reemplaza todo
@@ -89,6 +105,10 @@ export async function refreshScanCache(
   }
   await tx.objectStore(META).put(json.fetchedAt, "lastSync");
   await tx.objectStore(META).put(json.eventId, "eventId");
+  await tx.objectStore(META).put(
+    json.zonePolicy ?? { enforce: false, allowedTicketTypeIds: [] },
+    "zonePolicy",
+  );
   await tx.done;
   // Refrescamos la pública del evento junto con el cache (best-effort).
   try {
@@ -100,6 +120,21 @@ export async function refreshScanCache(
   } finally {
     syncing = false;
   }
+}
+
+export async function getZonePolicy(): Promise<ZoneScanPolicy | null> {
+  const d = await db();
+  return (await d.get(META, "zonePolicy")) ?? null;
+}
+
+/** Valida tipo de entrada contra la puerta activa cacheada (offline). */
+export function isTicketAllowedInZone(
+  ticketTypeId: string | undefined,
+  policy: ZoneScanPolicy | null,
+): boolean {
+  if (!policy?.enforce) return true;
+  if (!ticketTypeId) return false;
+  return policy.allowedTicketTypeIds.includes(ticketTypeId);
 }
 
 export async function lookupTicketById(

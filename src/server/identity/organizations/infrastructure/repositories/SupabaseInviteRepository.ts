@@ -94,7 +94,7 @@ export const supabaseInviteRepository: InviteRepository = {
     const { data } = await db
       .from("invites")
       .select(
-        "id, role, expires_at, accepted_at, revoked_at, scope_type, scope_id, invited_by, profiles!invites_invited_by_fkey(full_name)",
+        "id, role, email, expires_at, accepted_at, revoked_at, scope_type, scope_id, invited_by, profiles!invites_invited_by_fkey(full_name)",
       )
       .eq("token", token)
       .maybeSingle();
@@ -102,6 +102,7 @@ export const supabaseInviteRepository: InviteRepository = {
     type Joined = {
       id: string;
       role: OrgInviteRole;
+      email: string | null;
       expires_at: string;
       accepted_at: string | null;
       revoked_at: string | null;
@@ -123,6 +124,7 @@ export const supabaseInviteRepository: InviteRepository = {
       }),
       scope,
       scopeLabel,
+      inviteEmail: row.email?.trim().toLowerCase() ?? null,
       invitedBy: {
         fullName: row.profiles?.full_name ?? null,
       },

@@ -2,7 +2,7 @@
 
 import { use, useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
-import { useRouter } from "@/i18n/navigation";
+import { Link, useRouter } from "@/i18n/navigation";
 import { useClaimOrder } from "@/lib/tickets/hooks/useTickets";
 import { useSessionReady } from "@/lib/identity/hooks/useSessionReady";
 import { useUpdateProfile } from "@/lib/identity/hooks/useUpdateProfile";
@@ -152,8 +152,10 @@ export default function OrderPage(props: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [done, needPhone]);
 
-  const errorMsg = claimIsError ? unlockErrorCopy((claimError as Error | null)?.message ?? "") : null;
-  const waitingPayment = (claimError as Error | null)?.message === "order_not_paid";
+  const claimErrorCode = (claimError as Error | null)?.message ?? "";
+  const errorMsg = claimIsError ? unlockErrorCopy(claimErrorCode) : null;
+  const waitingPayment = claimErrorCode === "order_not_paid";
+  const isAlreadyClaimed = claimErrorCode === "order_already_claimed";
 
   return (
     <main className="relative grid min-h-dvh place-items-center overflow-hidden bg-cart-bg px-6 py-12 text-white">
@@ -201,8 +203,11 @@ export default function OrderPage(props: Props) {
             </div>
             <p className="text-[12px] font-bold uppercase tracking-[0.16em] text-emerald-300">{isFreeOrder ? "Entrada confirmada" : "Pago confirmado"}</p>
             <h1 className="mt-1 text-[26px] font-bold tracking-[-0.02em]">Entra para ver tus entradas</h1>
-            <p className="mx-auto mt-2 max-w-[32ch] text-[13.5px] leading-snug text-cart-ink-3">
-              Las guardamos en tu cuenta, con tu propio QR. Así las tienes siempre a la mano y puedes repartirlas.
+            <p className="mx-auto mt-2 max-w-[34ch] text-[13.5px] leading-snug text-cart-ink-3">
+              Entra con tu cuenta para guardar tus entradas. No reenvíes este enlace.
+            </p>
+            <p className="mx-auto mt-2 max-w-[34ch] text-[12.5px] leading-snug text-cart-ink-3/80">
+              Quedan en tu cuenta con tu propio QR, siempre a la mano.
             </p>
             <div className="mt-7">
               <GoogleBtn
@@ -299,15 +304,26 @@ export default function OrderPage(props: Props) {
           </>
         ) : errorMsg ? (
           <>
-            <h1 className="text-[24px] font-bold tracking-[-0.02em]">No pudimos guardarlas</h1>
+            <h1 className="text-[24px] font-bold tracking-[-0.02em]">
+              {isAlreadyClaimed ? "Entradas ya guardadas" : "No pudimos guardarlas"}
+            </h1>
             <p className="mx-auto mt-2 max-w-[34ch] text-[13.5px] leading-snug text-cart-ink-3">{errorMsg}</p>
-            <button
-              type="button"
-              onClick={() => router.push("/tickets" as never)}
-              className="mt-6 text-[13px] font-semibold text-cart-accent underline"
-            >
-              Ir a mis entradas
-            </button>
+            {isAlreadyClaimed ? (
+              <Link
+                href="/tickets/recover"
+                className="mt-6 inline-block text-[13.5px] font-semibold text-cart-accent underline"
+              >
+                ¿No fuiste tú? Recupera tus entradas
+              </Link>
+            ) : (
+              <button
+                type="button"
+                onClick={() => router.push("/tickets" as never)}
+                className="mt-6 text-[13px] font-semibold text-cart-accent underline"
+              >
+                Ir a mis entradas
+              </button>
+            )}
           </>
         ) : (
           /* Reclamando */

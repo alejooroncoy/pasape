@@ -6,6 +6,7 @@ import * as Sentry from "@sentry/nextjs";
 import { err, ok, type Result } from "@/server/_shared/result";
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
 import { dispatchTicketDelivery } from "@/server/notifications/application/DispatchTicketDelivery";
+import { validateMpPaymentAmount } from "./validateMpPaymentAmount";
 import { dispatchPaymentReview } from "@/server/notifications/application/DispatchPaymentReview";
 import { supabaseBoxRepository } from "@/server/boxes/infrastructure/repositories/SupabaseBoxRepository";
 import { mpClient, mpWebhookSecret, refundMpPayment } from "../infrastructure/MercadoPagoClient";
@@ -139,7 +140,8 @@ export const handleMpWebhook = async (
   }
 
   const db = supabaseAdmin();
-  const dedupeKey = `payment-${dataId}-${input.headers.requestId ?? "noreq"}`;
+  // Dedupe por payment id (L10): MP puede reenviar el mismo pago con distinto x-request-id.
+  const dedupeKey = `payment-${dataId}`;
 
   // Idempotency insert. If duplicate, return ok early.
   const { error: dupErr } = await db
@@ -183,6 +185,30 @@ export const handleMpWebhook = async (
   let orderRow: { id: string; status: string; promoter_link_id: string | null } | null = null;
 
   if (mapped === "paid") {
+    const { data: orderForAmount } = await db
+      .from("orders")
+      .select("total_cents, status")
+      .eq("id", orderId)
+      .maybeSingle<{ total_cents: number; status: string }>();
+    if (!orderForAmount) return ok({});
+
+    const amountOk = validateMpPaymentAmount(
+      orderForAmount.total_cents,
+      payment.transaction_amount,
+      orderId,
+    );
+    if (!amountOk.ok) {
+      await db
+        .from("orders")
+        .update({
+          mp_status: status,
+          mp_payment_id: dataId,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", orderId);
+      return ok({ orderId, status: "amount_mismatch" });
+    }
+
     // Backstop anti-doble-cobro: si la orden ya se pagó con OTRO pago (el
     // comprador reintentó con otra tarjeta/Yape y este pago viejo se aprobó
     // igual), reembolsamos ESTE pago y no tocamos la orden. El guard `!== dataId`
@@ -263,6 +289,23 @@ export const handleMpWebhook = async (
       updated_at: new Date().toISOString(),
     };
     if (mapped === "failed") {
+      const { data: cur } = await db
+        .from("orders")
+        .select("status")
+        .eq("id", orderId)
+        .maybeSingle<{ status: string }>();
+      // Webhook tardío de un intento rechazado: no anular una orden ya pagada.
+      if (cur?.status === "paid") {
+        await db
+          .from("orders")
+          .update({
+            mp_status: status,
+            mp_payment_id: dataId,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", orderId);
+        return ok({ orderId, status: "ignored_stale_rejection" });
+      }
       update.status = "failed";
     } else if (mapped === "refunded") {
       // Reembolso/contracargo: estado terminal. Cambiar status (no solo mp_status)

@@ -11,6 +11,7 @@ import { TransferTicketSheet } from "@/components/tickets/TransferTicketSheet";
 import { useMyTickets } from "@/lib/tickets/hooks/useTickets";
 import { maskPhone } from "@/lib/tickets/phoneFormat";
 import { useOnline } from "@/lib/_shared/useOnline";
+import { RecoverTicketsLink } from "@/components/tickets/RecoverTicketsLink";
 import type { WalletTicket } from "@/server/tickets/domain/Ticket";
 
 const WALLET_POLL_MS = 2000;
@@ -32,6 +33,7 @@ function Inner() {
   const { sessionReady, loggedIn } = useSessionReady();
   const { data: ticketData, isLoading, refetch } = useMyTickets();
   const [mounted, setMounted] = useState(false);
+  const [pollExhausted, setPollExhausted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -63,7 +65,10 @@ function Inner() {
     const id = setInterval(() => {
       attempts += 1;
       void refetch();
-      if (attempts >= WALLET_POLL_MAX) clearInterval(id);
+      if (attempts >= WALLET_POLL_MAX) {
+        clearInterval(id);
+        setPollExhausted(true);
+      }
     }, WALLET_POLL_MS);
 
     return () => clearInterval(id);
@@ -91,6 +96,8 @@ function Inner() {
       n={n}
       first={first}
       rest={rest}
+      pollExhausted={pollExhausted}
+      onRetrySync={() => void refetch()}
       onGoWallet={() => router.push("/tickets" as never)}
       onViewQr={(id) => router.push(`/tickets/${id}` as never)}
     />
@@ -193,12 +200,16 @@ function DoneContent({
   n,
   first,
   rest,
+  pollExhausted,
+  onRetrySync,
   onGoWallet,
   onViewQr,
 }: {
   n: number;
   first: WalletTicket | undefined;
   rest: WalletTicket[];
+  pollExhausted: boolean;
+  onRetrySync: () => void;
   onGoWallet: () => void;
   onViewQr: (id: string) => void;
 }) {
@@ -215,10 +226,21 @@ function DoneContent({
       ? "La 1ª es tuya. A las demás envíaselas por WhatsApp cuando quieras."
       : n === 1
         ? "Tu entrada ya está en tu wallet, lista para mostrar en la puerta."
-        : "No encontramos las entradas de esta compra en tu wallet. Revisa Mis entradas.";
+        : pollExhausted
+          ? "Tu pago puede estar confirmado pero las entradas tardan en aparecer. Buscá de nuevo o recuperalas con tu celular."
+          : "Estamos sincronizando tus entradas…";
 
   const footer = (
     <div className={compact ? "flex w-full flex-col gap-2.5" : "text-center"}>
+      {compact && pollExhausted && (
+        <button
+          type="button"
+          onClick={onRetrySync}
+          className="w-full rounded-full bg-cart-accent py-3 text-[14px] font-semibold text-cart-bg transition hover:brightness-110"
+        >
+          Buscar de nuevo
+        </button>
+      )}
       <button
         type="button"
         onClick={onGoWallet}
@@ -226,6 +248,11 @@ function DoneContent({
       >
         Ir a mis entradas
       </button>
+      {compact && pollExhausted && (
+        <p className="text-center">
+          <RecoverTicketsLink />
+        </p>
+      )}
     </div>
   );
 
@@ -240,7 +267,7 @@ function DoneContent({
             : "mt-4 text-center text-[22px] font-bold tracking-[-0.02em]"
         }
       >
-        {n > 0 ? `¡Listo! Tienes ${n} ${n === 1 ? "entrada" : "entradas"}` : "¡Listo! Pago confirmado"}
+        {n > 0 ? `¡Listo! Tienes ${n} ${n === 1 ? "entrada" : "entradas"}` : pollExhausted ? "Pago recibido" : "Confirmando…"}
       </h1>
       <p
         className={
@@ -285,6 +312,7 @@ function DoneContent({
           ticketTypeName={sheetTicket.ticketType.name}
           online={online}
           anchorRef={sheet.anchorRef}
+          variant="gift"
           onClose={() => setSheet(null)}
         />
       )}

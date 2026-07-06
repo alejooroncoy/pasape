@@ -10,11 +10,12 @@ type Deps = { ticketRepo: TicketRepository };
 // buscó por nombre/DNI, o reconcilia un ingreso ya validado en la puerta.
 export const admitTicket = async (
   { ticketRepo }: Deps,
-  input: { ticketId: string; scanner: ScannerRef; usedAt?: Date; expectedEventId?: string },
+  input: { ticketId: string; scanner: ScannerRef; usedAt?: Date; expectedEventId?: string; zoneId?: string | null },
 ): Promise<Result<ScanResult>> => {
   const result = await ticketRepo.markUsedByTicketId(input.ticketId, input.scanner, {
     usedAt: input.usedAt,
     expectedEventId: input.expectedEventId,
+    zoneId: input.zoneId,
   });
   if (!result.ok) {
     return ok({

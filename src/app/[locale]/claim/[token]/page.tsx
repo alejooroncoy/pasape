@@ -1,9 +1,10 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { useRouter } from "@/i18n/navigation";
 import { useClaimTransfer } from "@/lib/tickets/hooks/useTickets";
+import { sanitizeDocument, sanitizePersonName } from "@/lib/input/sanitize";
 import { isValidDocument } from "@/lib/identity/document";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { useGoogleSignIn } from "@/lib/identity/hooks/useFirebaseAuth";
@@ -34,6 +35,7 @@ export default function ClaimPage(props: Props) {
   const [dni, setDni] = useState("");
   const [isForeigner, setIsForeigner] = useState(false);
   const [touched, setTouched] = useState(false);
+  const claimInFlightRef = useRef(false);
 
   // Hidratar los campos con los datos del perfil una vez carga la sesión.
   useEffect(() => {
@@ -48,12 +50,16 @@ export default function ClaimPage(props: Props) {
 
   const submit = () => {
     setTouched(true);
-    if (!canSubmit) return;
+    if (!isLogged || !nameValid || !dniValid || claim.isPending || claimInFlightRef.current) return;
+    claimInFlightRef.current = true;
     claim
       .mutateAsync({ token, fullName: name.trim(), dni, isForeigner })
       .then((res) => setDone({ ticketId: res.ticketId }))
       .catch(() => {
         /* el error se muestra abajo */
+      })
+      .finally(() => {
+        claimInFlightRef.current = false;
       });
   };
 
@@ -152,7 +158,7 @@ export default function ClaimPage(props: Props) {
                 <input
                   type="text"
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  onChange={(e) => setName(sanitizePersonName(e.target.value))}
                   placeholder="Tu nombre y apellido"
                   className="w-full rounded-xl border border-white/10 bg-cart-bg-elev px-3.5 py-3 text-[14.5px] text-white placeholder:text-cart-ink-3 focus:border-cart-accent focus:outline-none"
                 />
@@ -179,13 +185,7 @@ export default function ClaimPage(props: Props) {
                   inputMode={isForeigner ? "text" : "numeric"}
                   maxLength={isForeigner ? 20 : 8}
                   value={dni}
-                  onChange={(e) =>
-                    setDni(
-                      isForeigner
-                        ? e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 20)
-                        : e.target.value.replace(/\D/g, "").slice(0, 8),
-                    )
-                  }
+                  onChange={(e) => setDni(sanitizeDocument(e.target.value, isForeigner))}
                   placeholder={isForeigner ? "AB123456" : "8 dígitos"}
                   className="w-full rounded-xl border border-white/10 bg-cart-bg-elev px-3.5 py-3 text-[14.5px] tracking-[0.08em] text-white placeholder:text-cart-ink-3 placeholder:tracking-normal focus:border-cart-accent focus:outline-none"
                 />

@@ -12,9 +12,9 @@
  * monto TOTAL cobrado ≈ 4.12% + S/1.18 fijo. Esa curva es la que fija los
  * tramos de abajo:
  *
- * - Tramo 1 (S/0–S/300 de subtotal): 10% flat, con piso de S/2 — cubre con
+ * - Tramo 1 (S/0–S/300 de subtotal): 10% flat, con piso de S/3 — cubre con
  *   margen el costo fijo de MP incluso en el mínimo absoluto (S/1 de
- *   entrada, fee S/2, margen ~S/0.70 tras descontar el costo real de MP).
+ *   entrada, fee S/3, margen ~S/1.65 tras descontar el costo real de MP).
  * - Tramo 2 (más de S/300): 10% sobre los primeros S/300 (=S/30 fijos) +
  *   5% SOLO sobre el excedente (como un tramo de impuesto, no sobre todo
  *   el monto) — un tope fijo (ej. S/15) eventualmente lo supera cualquier

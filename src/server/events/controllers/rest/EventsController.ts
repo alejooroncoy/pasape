@@ -1,5 +1,4 @@
 import { z } from "zod";
-import * as Sentry from "@sentry/nextjs";
 import { headers } from "next/headers";
 import { err, ok, type Result } from "@/server/_shared/result";
 import { getAuthContext, resolveActiveOrgSlug } from "@/server/_shared/AuthContext";
@@ -7,6 +6,7 @@ import { supabaseEventRepository as repo } from "../../infrastructure/repositori
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
 import { listPublishedEvents } from "../../application/ListPublishedEvents";
 import { getEventBySlug } from "../../application/GetEventBySlug";
+import { getEventAvailability } from "../../application/GetEventAvailability";
 import { listEventsByOrganization } from "../../application/ListEventsByOrganization";
 import { createEvent } from "../../application/CreateEvent";
 import { getEventStats, type EventStatsResult } from "../../application/GetEventStats";
@@ -14,6 +14,10 @@ import { listEventAccesos } from "../../application/ListEventAccesos";
 import { updateEvent } from "../../application/UpdateEvent";
 import { generateDoorLink, type DoorLink } from "../../application/GenerateDoorLink";
 import { verifyScanAccess } from "@/server/scanning/application/VerifyScanAccess";
+import {
+  resolveZoneScanPolicy,
+  type ZoneScanPolicy,
+} from "@/server/scanning/application/ZonePolicy";
 import {
   listZones as listZonesSvc,
   createZone as createZoneSvc,
@@ -176,6 +180,10 @@ export const EventsController = {
     return { ok: true, value: data };
   },
 
+  async availability(slug: string) {
+    return getEventAvailability(slug);
+  },
+
   async listMine(): Promise<Result<Event[]>> {
     const ctx = await resolveOrgCtx();
     if (!ctx.ok) return err(ctx.error);
@@ -247,7 +255,7 @@ export const EventsController = {
   },
 
   async update(slug: string, input: unknown): Promise<Result<Event>> {
-    const guard = await guardEventMember(slug);
+    const guard = await guardEventMember(slug, ORG_WRITE_ROLES);
     if (!guard.ok) return err(guard.error);
     const parsed = updateSchema.safeParse(input);
     if (!parsed.success) return err(parsed.error.issues[0]?.message ?? "invalid_input");
@@ -255,7 +263,10 @@ export const EventsController = {
   },
 
   async doorLink(slug: string): Promise<Result<DoorLink>> {
-    const guard = await guardEventMember(slug);
+    // Acuñar el link de puerta es una acción sensible (enrola porteros con
+    // acceso de escaneo), no una simple lectura de miembro: requiere rol de
+    // gestión igual que crear zonas o publicar (LOW-3).
+    const guard = await guardEventMember(slug, ["owner", "admin", "editor"]);
     if (!guard.ok) return err(guard.error);
     const origin = await resolveOriginFromHeaders();
     return ok(await generateDoorLink(guard.value.event, origin));
@@ -396,8 +407,10 @@ export const EventsController = {
     fetchedAt: string;
     /** true = snapshot completo (reemplazar cache); false = delta (merge). */
     full: boolean;
+    zonePolicy: ZoneScanPolicy;
     tickets: Array<{
       ticketId: string;
+      ticketTypeId: string;
       qrCode: string;
       holderName: string | null;
       holderDniLast4: string | null;
@@ -409,8 +422,10 @@ export const EventsController = {
       boxCapacity: number | null;
     }>;
   }>> {
-    const guard = await guardScanReader(slug);
-    if (!guard.ok) return err(guard.error);
+    const access = await verifyScanAccess(slug);
+    if (!access.ok) return err(access.error);
+    const eventId = access.value.eventId;
+    const zonePolicy = await resolveZoneScanPolicy(eventId, access.value.zoneId);
     const db = supabaseAdmin();
     // Cursor: timestamp ANTES de la query, para que el próximo delta no se pierda
     // cambios ocurridos durante la consulta.
@@ -427,9 +442,9 @@ export const EventsController = {
         box_host_ticket_id,
         signing_pub,
         orders!inner(event_id),
-        ticket_types!inner(name, capacity)
+        ticket_types!inner(id, name, capacity)
       `)
-      .eq("orders.event_id", guard.value.eventId);
+      .eq("orders.event_id", eventId);
     // Delta: TODO lo cambiado desde `since` (incl. void/refunded, para que el
     // portero los borre del cache). Full: solo activas/usadas (snapshot inicial).
     q = since ? q.gt("updated_at", since) : q.in("status", ["active", "used"]);
@@ -444,18 +459,20 @@ export const EventsController = {
         box_host_ticket_id: string | null;
         signing_pub: JsonWebKey | null;
         orders: { event_id: string };
-        ticket_types: { name: string; capacity: number };
+        ticket_types: { id: string; name: string; capacity: number };
       }>>();
 
     if (error) return err("database_error");
     if (!data) return err("database_error");
 
     return ok({
-      eventId: guard.value.eventId,
+      eventId,
       fetchedAt,
       full: !since,
+      zonePolicy,
       tickets: data.map((t) => ({
         ticketId: t.id,
+        ticketTypeId: t.ticket_types.id,
         qrCode: t.qr_code,
         holderName: t.holder_name,
         holderDniLast4: t.holder_dni_last4,
@@ -468,24 +485,6 @@ export const EventsController = {
         boxCapacity: t.box_label ? t.ticket_types.capacity : null,
       })),
     });
-  },
-
-  // Diagnóstico offline: el portero sube los PROBLEMAS de scan que ocurrieron sin
-  // red (bad_window/bad_cert/inválido/ya-usado) al reconectar. Son TELEMETRÍA de
-  // sistema → van a Sentry, NO a la DB (no ensuciar datos de negocio). El buffer
-  // durable es la cola en el device; aquí solo lo reportamos.
-  async recordScanEvent(slug: string, input: unknown): Promise<Result<{ ok: true }>> {
-    const guard = await guardScanReader(slug);
-    if (!guard.ok) return err(guard.error);
-    const b = (input ?? {}) as {
-      qrCode?: string; result?: string; reason?: string | null; offlineScannedAt?: string;
-    };
-    Sentry.captureMessage(`[scan-offline] ${b.reason ?? b.result ?? "unknown"}`, {
-      level: "warning",
-      tags: { area: "portero-scan", eventId: guard.value.eventId, result: b.result ?? "unknown", reason: b.reason ?? "none" },
-      extra: { qrPreview: (b.qrCode ?? "").slice(0, 16), offlineScannedAt: b.offlineScannedAt ?? null },
-    });
-    return ok({ ok: true });
   },
 
   // Sirve la pública ECDSA del evento al portero (la cachea para verificar QR
@@ -501,8 +500,8 @@ export const EventsController = {
   },
 
   async listCourtesies(slug: string): Promise<Result<CourtesySummary[]>> {
-    // Lectura restringida a miembros: expone contactos de invitados.
-    const guard = await guardEventMember(slug);
+    // PII de invitados: solo roles que pueden emitir cortesías (no reporter/door).
+    const guard = await guardEventMember(slug, ORG_WRITE_ROLES);
     if (!guard.ok) return err(guard.error);
     return listCourtesiesUc({ repo: ticketRepo }, guard.value.event.id);
   },

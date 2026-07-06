@@ -5,6 +5,7 @@ import { CompositeNotificationSender } from "../infrastructure/CompositeNotifica
 import { ResendEmailSender } from "../infrastructure/ResendEmailSender";
 import { WhatsAppNotificationSender } from "../infrastructure/WhatsAppNotificationSender";
 import { signOrderLink } from "../domain/OrderLinkToken";
+import { resolveHolderEmail, resolveHolderPhone } from "@/server/_shared/crypto/holderContact";
 
 // Despacha el QR del ticket por email + WhatsApp tras un pago exitoso.
 //
@@ -50,6 +51,8 @@ type TicketRow = {
   holder_name: string | null;
   holder_email: string | null;
   holder_phone: string | null;
+  holder_email_enc: string | null;
+  holder_phone_enc: string | null;
 };
 
 const defaultSender = (): NotificationSender =>
@@ -97,7 +100,7 @@ export const dispatchTicketDelivery = async (
       .maybeSingle<EventRow>(),
     db
       .from("tickets")
-      .select("id, holder_name, holder_email, holder_phone")
+      .select("id, holder_name, holder_email, holder_phone, holder_email_enc, holder_phone_enc")
       .eq("order_id", order.id)
       .returns<TicketRow[]>(),
   ]);
@@ -137,8 +140,8 @@ export const dispatchTicketDelivery = async (
 
   for (const ticket of tickets) {
     const to = {
-      email: ticket.holder_email ?? orderEmail,
-      phone: ticket.holder_phone ?? orderPhone,
+      email: resolveHolderEmail(ticket) ?? orderEmail,
+      phone: resolveHolderPhone(ticket) ?? orderPhone,
     };
     const holderName = ticket.holder_name ?? orderHolderName;
     // Una sola página: el link es un redirector durable a tu orden (/order) —

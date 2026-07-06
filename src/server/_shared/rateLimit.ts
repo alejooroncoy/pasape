@@ -44,6 +44,10 @@ const ephemeralCache = new Map<string, number>();
 
 let warnedNoRedis = false;
 
+// Timeout de la llamada a Redis antes de fail-open (ver comentario en
+// createRateLimiter): preferimos dejar pasar tráfico a bloquearlo por latencia.
+const REDIS_TIMEOUT_MS = 2000;
+
 // ── Backend in-memory (fallback dev) ────────────────────────────────────────
 type Bucket = { count: number; resetAt: number };
 
@@ -98,7 +102,7 @@ export const createRateLimiter = (
     prefix: `rl:${name}`,
     // Fail-open si Redis está lento/inalcanzable: preferimos disponibilidad a
     // bloquear tráfico legítimo (el límite es defensa anti-abuso, no un gate).
-    timeout: 2000,
+    timeout: REDIS_TIMEOUT_MS,
   });
 
   return {

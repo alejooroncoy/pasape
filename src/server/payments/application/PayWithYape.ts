@@ -2,13 +2,16 @@ import { Money } from "@/lib/_shared/money";
 import "server-only";
 import crypto from "node:crypto";
 import { MercadoPagoConfig, Payment } from "mercadopago";
-import { after } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { err, ok, type Result } from "@/server/_shared/result";
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
 import { appBaseUrl, isPublicBaseUrl, buildOrderItems, mpPeruIdentification } from "../infrastructure/MercadoPagoClient";
 import { reportMpError } from "../infrastructure/reportMpError";
-import { dispatchTicketDelivery } from "@/server/notifications/application/DispatchTicketDelivery";
+import { assertOrderPaymentAccess } from "./assertOrderPaymentAccess";
+import { validateMpPaymentAmount } from "./validateMpPaymentAmount";
+import { settleApprovedPayment } from "./settleApprovedPayment";
+import { acquireOrderPaymentLock, releaseOrderPaymentLock } from "./acquireOrderPaymentLock";
+import { decryptDni } from "@/server/_shared/crypto/dni";
 
 // Why: en prod, si MP_ACCESS_TOKEN no arranca con "APP_USR-" (o sea, parece
 // ser de sandbox tipo "TEST-...") cobraríamos con dinero real usando
@@ -31,13 +34,10 @@ const assertProductionMpToken = (token: string): void => {
 
 export type PayWithYapeInput = {
   orderId: string;
-  token: string; // yape token generado por SDK v2 en el frontend
-  phoneNumber: string; // 9 dígitos PE, viene del form
-  // Device fingerprint de MP (window.MP_DEVICE_SESSION_ID, creado por el SDK v2).
-  // Se envía como header X-Meli-Session-Id. Es el ítem "SDK de frontend" del
-  // checklist de calidad: si la medición cae sobre un pago Yape, sin esto MP no
-  // detecta el uso del SDK y baja el puntaje. También mejora el antifraude.
+  token: string;
+  phoneNumber: string;
   deviceId?: string | null;
+  orderToken?: string | null;
 };
 
 export type PayWithYapeOutput = {
@@ -55,6 +55,7 @@ type OrderRow = {
   guest_email: string | null;
   guest_name: string | null;
   guest_dni: string | null;
+  guest_dni_enc: string | null;
 };
 
 type ProfileRow = {
@@ -76,7 +77,7 @@ export const payWithYape = async (
   const { data: order } = await db
     .from("orders")
     .select(
-      "id, buyer_id, event_id, status, total_cents, guest_email, guest_name, guest_dni",
+      "id, buyer_id, event_id, status, total_cents, guest_email, guest_name, guest_dni, guest_dni_enc",
     )
     .eq("id", input.orderId)
     .maybeSingle<OrderRow>();
@@ -91,10 +92,18 @@ export const payWithYape = async (
     return err(`order_status_invalid:${order.status}`);
   }
 
+  const access = await assertOrderPaymentAccess({
+    orderId: order.id,
+    buyerId: order.buyer_id,
+    guestEmail: order.guest_email,
+    orderToken: input.orderToken,
+  });
+  if (!access.ok) return err(access.error);
+
   // Resolver email/nombre/dni: buyer profile o guest fields.
   let email = order.guest_email ?? null;
   let fullName = order.guest_name ?? null;
-  const dni = order.guest_dni ?? null;
+  const dni = decryptDni(order.guest_dni_enc) ?? order.guest_dni ?? null;
   if (order.buyer_id) {
     const { data: profile } = await db
       .from("profiles")
@@ -159,24 +168,13 @@ export const payWithYape = async (
   // condicional que solo pasa si nadie más la tomó ya. Dos requests
   // concurrentes (doble clic, reintento de red) ya no pueden ambos leer
   // "pending" y ambos cobrar en MP: el segundo pierde el CAS y no llama a MP.
-  const { data: lockedOrder, error: lockErr } = await db
-    .from("orders")
-    .update({ mp_status: "locked" })
-    .eq("id", order.id)
-    .eq("status", "pending")
-    .or("mp_status.is.null,mp_status.neq.locked")
-    .select("id")
-    .maybeSingle();
-  if (lockErr || !lockedOrder) {
+  const locked = await acquireOrderPaymentLock(order.id);
+  if (!locked) {
     return err("order_already_processing");
   }
 
   const revertLock = async () => {
-    await db
-      .from("orders")
-      .update({ mp_status: null })
-      .eq("id", order.id)
-      .eq("mp_status", "locked");
+    await releaseOrderPaymentLock(order.id);
   };
 
   // Idempotency key determinística: hash de orderId + token de Yape. Un
@@ -194,6 +192,7 @@ export const payWithYape = async (
     status_detail?: string;
     message?: string;
     error?: string;
+    transaction_amount?: number;
   };
   type CreateBody = Parameters<Payment["create"]>[0]["body"];
 
@@ -232,32 +231,39 @@ export const payWithYape = async (
   const paymentId = String(data.id ?? "");
   const status = data.status ?? "rejected";
 
-  // Persistir snapshot del estado MP en la order.
   const patch: Record<string, unknown> = {
     mp_payment_id: paymentId,
     mp_status: status,
   };
+
   if (status === "approved") {
-    patch.status = "paid";
-    patch.paid_at = new Date().toISOString();
+    const amountOk = validateMpPaymentAmount(
+      order.total_cents,
+      data.transaction_amount,
+      order.id,
+    );
+    if (!amountOk.ok) {
+      await revertLock();
+      await db
+        .from("orders")
+        .update({
+          mp_status: "approved_amount_mismatch",
+          mp_payment_id: paymentId,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", order.id);
+      return err(amountOk.error);
+    }
+    const settled = await settleApprovedPayment(order.id, paymentId, status);
+    if (!settled.ok) {
+      await revertLock();
+      return settled;
+    }
   } else if (status === "rejected" || status === "cancelled") {
     patch.status = "failed";
-  }
-  // in_process/pending: `status` sigue "pending" (nunca lo cambiamos, solo
-  // el lock en mp_status) — el webhook la moverá a paid/failed cuando MP
-  // resuelva async. mp_status ya queda sobrescrito arriba con el valor real,
-  // liberando el lock.
-  await db.from("orders").update(patch).eq("id", order.id);
-
-  // Si quedó aprobado, dispara el envío del QR. El webhook también lo
-  // intentará — DispatchTicketDelivery es idempotente vía notification_dispatches.
-  if (status === "approved") {
-    after(() =>
-      dispatchTicketDelivery({}, order.id).catch((e) => {
-        console.error("[payWithYape] dispatchTicketDelivery failed:", e);
-        Sentry.captureException(e, { tags: { area: "ticket-delivery", orderId: order.id } });
-      }),
-    );
+    await db.from("orders").update(patch).eq("id", order.id);
+  } else {
+    await db.from("orders").update(patch).eq("id", order.id);
   }
 
   return ok({

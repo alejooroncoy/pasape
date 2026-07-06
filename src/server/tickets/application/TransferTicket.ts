@@ -14,10 +14,6 @@ type Input = {
   toPhone: string;
 };
 
-// El link de reclamo vence en 7 días. Suficiente para que el receptor lo abra
-// sin dejar la entrada "en el aire" indefinidamente.
-const CLAIM_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-
 const normalizePhone = (raw: string): string => raw.replace(/\D/g, "");
 
 const claimUrl = (token: string): string => {
@@ -37,13 +33,11 @@ export const transferTicket = async (
   if (phone.length < 9) return err("invalid_phone");
 
   const token = crypto.randomBytes(24).toString("base64url");
-  const expiresAt = new Date(Date.now() + CLAIM_TTL_MS).toISOString();
   const pending = await repo.createPendingTransfer({
     ticketId: input.ticketId,
     fromProfile: input.fromProfile,
     toContact: phone,
     token,
-    expiresAt,
   });
   if (!pending.ok) return pending;
 

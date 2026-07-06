@@ -207,7 +207,10 @@ const freeReleasePayload = (t: TicketRow) => ({
 });
 
 // ── Helpers de grupos de espacios (boxes/mesas) ──────────────────────────────
-const spaceCount = (g: SpaceGroup) => Math.max(0, Math.min(60, Number(g.count) || 0));
+/** Tope de boxes que se pueden crear en un solo grupo (evita expansiones enormes de ticket_types). */
+const MAX_BOXES_PER_GROUP = 60;
+const spaceCount = (g: SpaceGroup) =>
+  Math.max(0, Math.min(MAX_BOXES_PER_GROUP, Number(g.count) || 0));
 const spaceSeats = (g: SpaceGroup) => Math.max(1, Number(g.seats) || 1);
 const spaceBoxLabel = (g: SpaceGroup, i: number) => {
   const auto = g.scheme === "alpha" ? String.fromCharCode(65 + (i % 26)) : String(i + 1);
@@ -493,6 +496,7 @@ export function EventComposer(props: EventComposerProps) {
   );
   const [uploadingAssets, setUploadingAssets] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [promoterAssignError, setPromoterAssignError] = useState(false);
   const [publishNow, setPublishNow] = useState(seedFromEdit?.publishNow ?? true);
   const [openSheet, setOpenSheet] = useState<
     null | "tickets" | "promoters" | "description" | "promos"
@@ -530,6 +534,14 @@ export function EventComposer(props: EventComposerProps) {
       tickets.reduce((a, t) => a + Number(t.capacity || 0), 0) +
       spaceGroups.reduce((a, g) => a + spaceCount(g) * spaceSeats(g), 0),
     [tickets, spaceGroups],
+  );
+  const admissionStock = useMemo(
+    () => tickets.reduce((a, t) => a + Number(t.capacity || 0), 0),
+    [tickets],
+  );
+  const boxSeatTotal = useMemo(
+    () => spaceGroups.reduce((a, g) => a + spaceCount(g) * spaceSeats(g), 0),
+    [spaceGroups],
   );
   const totalMax = useMemo(
     () =>
@@ -573,6 +585,29 @@ export function EventComposer(props: EventComposerProps) {
   );
 
   const hasValidSpace = spaceGroups.some((g) => spaceCount(g) >= 1);
+
+  const ticketsCardHint = useMemo(() => {
+    if (validTickets.length === 0 && !hasValidSpace) return "Crea al menos un tipo de entrada";
+    const typeCount =
+      validTickets.length + (hasValidSpace ? spaceGroups.filter((g) => spaceCount(g) >= 1).length : 0);
+    const parts = [`${typeCount} ${typeCount === 1 ? "tipo" : "tipos"}`];
+    if (admissionStock > 0) parts.push(`${admissionStock.toLocaleString("es-PE")} entradas`);
+    if (spaceBoxesCount > 0) {
+      parts.push(
+        `${spaceBoxesCount} ${spaceBoxesCount === 1 ? "espacio" : "espacios"} (${boxSeatTotal} asientos)`,
+      );
+    }
+    parts.push(`hasta S/ ${totalMax.toLocaleString("es-PE")} potencial`);
+    return parts.join(" · ");
+  }, [
+    validTickets.length,
+    hasValidSpace,
+    spaceGroups,
+    admissionStock,
+    spaceBoxesCount,
+    boxSeatTotal,
+    totalMax,
+  ]);
 
   // Nombres de entrada repetidos (sin distinción de mayúsculas ni espacios):
   // confunden al comprador (no sabe cuál elegir). Se bloquea publicar.
@@ -713,16 +748,18 @@ export function EventComposer(props: EventComposerProps) {
         maxTicketsPerPerson: maxPerPerson.trim() ? Number(maxPerPerson) : null,
       });
       if (selectedPromoterIds.size > 0 && ev.slug) {
+        setPromoterAssignError(false);
         try {
-          await fetch(`/api/events/${ev.slug}/promoters`, {
+          const res = await fetch(`/api/events/${ev.slug}/promoters`, {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
               orgPromoterIds: Array.from(selectedPromoterIds),
             }),
           });
+          if (!res.ok) setPromoterAssignError(true);
         } catch {
-          // si falla la asignación, lo puede ajustar luego en /team
+          setPromoterAssignError(true);
         }
       }
 
@@ -738,7 +775,7 @@ export function EventComposer(props: EventComposerProps) {
         }
       }
       router.push(
-        `/org/events/new/success?slug=${ev.slug ?? ""}&status=${finalStatus}` as never,
+        `/org/events/new/success?slug=${ev.slug ?? ""}&status=${finalStatus}${promoterAssignError ? "&promoters=failed" : ""}` as never,
       );
     } catch (e) {
       setSubmitError((e as Error).message);
@@ -1332,11 +1369,7 @@ export function EventComposer(props: EventComposerProps) {
           <CardButton
             icon={<IconTicket />}
             label="Entradas"
-            hint={
-              validTickets.length
-                ? `${validTickets.length} ${validTickets.length === 1 ? "tipo" : "tipos"} · ${totalCapacity.toLocaleString("es-PE")} cupos · hasta S/ ${totalMax.toLocaleString("es-PE")} potencial`
-                : "Crea al menos un tipo de entrada"
-            }
+            hint={ticketsCardHint}
             onClick={() => setOpenSheet("tickets")}
             active={validTickets.length > 0}
             required={validTickets.length === 0}
@@ -2356,6 +2389,7 @@ function BoxGroupEditor({
   presaleRow,
   onPresaleChange,
   feeMode,
+  dupKeys,
 }: {
   boxes: TicketRow[];
   canDelete: boolean;
@@ -2366,6 +2400,8 @@ function BoxGroupEditor({
   presaleRow: TicketRow;
   onPresaleChange: (patch: Partial<TicketRow>) => void;
   feeMode: FeeMode;
+  /** rowKeys con etiqueta de box repetida dentro de este mismo grupo (LOW-16). */
+  dupKeys: Set<string>;
 }) {
   const [advOpen, setAdvOpen] = useState(false);
   const first = boxes[0]!;
@@ -2417,7 +2453,7 @@ function BoxGroupEditor({
           onChange={(v) => onUpdateAll({ priceSoles: v })}
         />
         <Stepper
-          label="Disponibles c/u"
+          label="Personas/box"
           value={first.capacity}
           onChange={(v) => onUpdateAll({ capacity: v })}
         />
@@ -2438,10 +2474,14 @@ function BoxGroupEditor({
         <div className="flex flex-wrap gap-1.5">
           {boxes.map((b) => {
             const priceOverridden = b.priceSoles !== first.priceSoles;
+            const isDup = dupKeys.has(b.rowKey);
             return (
               <div
                 key={b.rowKey}
-                className="flex flex-col gap-0.5 rounded-lg border border-cart-line bg-cart-bg-elev px-2 py-1.5"
+                className={
+                  "flex flex-col gap-0.5 rounded-lg border bg-cart-bg-elev px-2 py-1.5 " +
+                  (isDup ? "border-rose-400/70" : "border-cart-line")
+                }
               >
                 <div className="flex items-center gap-1">
                   <input
@@ -2450,7 +2490,7 @@ function BoxGroupEditor({
                     maxLength={20}
                     className={
                       "w-[4.5rem] bg-transparent font-mono text-[12.5px] font-semibold outline-none " +
-                      (b.boxLabel.trim() ? "text-white" : "text-amber-300")
+                      (isDup ? "text-rose-300" : b.boxLabel.trim() ? "text-white" : "text-amber-300")
                     }
                   />
                   {canDelete && (
@@ -2495,6 +2535,11 @@ function BoxGroupEditor({
             Agregar
           </button>
         </div>
+        {boxes.some((b) => dupKeys.has(b.rowKey)) && (
+          <p className="mt-1.5 text-[11px] font-medium text-rose-300">
+            Dos {nounPlural.toLowerCase()} tienen la misma etiqueta — el portero no podrá distinguirlos. Ponles etiquetas distintas.
+          </p>
+        )}
       </div>
 
       {advOpen && (
@@ -2545,12 +2590,23 @@ function AdvancedToggle({ open, onToggle, hasContent }: { open: boolean; onToggl
 // cuentan como el mismo nombre.
 const normTicketName = (s: string): string => s.trim().replace(/\s+/g, " ").toLowerCase();
 
-// rowKeys de entradas (no-box) cuyo nombre se repite. Los boxes se distinguen
-// por su etiqueta, no aplica.
+// rowKeys de entradas (no-box) cuyo nombre se repite, MÁS rowKeys de boxes
+// cuya etiqueta (boxLabel) se repite dentro del mismo unitNoun ("box", "mesa"…)
+// (LOW-16). La etiqueta se imprime en el QR de cada invitado y la usa el
+// portero para distinguir boxes en la puerta — dos boxes con la misma
+// etiqueta son indistinguibles ahí, por eso también bloquea publicar.
 function duplicateTicketRowKeys(rows: TicketRow[]): Set<string> {
   const byName = new Map<string, string[]>();
+  const byBoxLabel = new Map<string, string[]>();
   for (const t of rows) {
-    if (t.kind === "box") continue;
+    if (t.kind === "box") {
+      const norm = normTicketName(`${t.unitNoun}:${t.boxLabel}`);
+      if (!t.boxLabel.trim()) continue;
+      const arr = byBoxLabel.get(norm) ?? [];
+      arr.push(t.rowKey);
+      byBoxLabel.set(norm, arr);
+      continue;
+    }
     const norm = normTicketName(t.name);
     if (!norm) continue;
     const arr = byName.get(norm) ?? [];
@@ -2559,6 +2615,7 @@ function duplicateTicketRowKeys(rows: TicketRow[]): Set<string> {
   }
   const dups = new Set<string>();
   for (const arr of byName.values()) if (arr.length > 1) arr.forEach((k) => dups.add(k));
+  for (const arr of byBoxLabel.values()) if (arr.length > 1) arr.forEach((k) => dups.add(k));
   return dups;
 }
 
@@ -2734,6 +2791,7 @@ function TicketsEditor({
               presaleRow={first}
               onPresaleChange={(patch) => updateAll(group.map((b) => b.rowKey), patch)}
               feeMode={feeMode}
+              dupKeys={dupKeys}
               onAddOne={() => {
                 const next = String.fromCharCode(65 + group.length);
                 const nounCap = first.unitNoun
@@ -2799,7 +2857,7 @@ function TicketsEditor({
             </div>
             <div className="mt-3 grid grid-cols-2 gap-2">
               <Stepper label="Precio" suffix="S/" value={t.priceSoles} onChange={(v) => update(t.rowKey, { priceSoles: v })} />
-              <Stepper label="Cupos" value={t.capacity} onChange={(v) => update(t.rowKey, { capacity: v })} />
+              <Stepper label="Personas/box" value={t.capacity} onChange={(v) => update(t.rowKey, { capacity: v })} />
             </div>
             <PriceFeeHint priceSoles={t.priceSoles} feeMode={feeMode} />
             <label className="mt-2 flex flex-col gap-1 rounded-xl bg-cart-bg-elev px-3 py-2">
@@ -3298,6 +3356,12 @@ function SpaceGroupCard({
         <Stepper label="Personas/box" value={group.seats} onChange={(v) => onChange({ seats: v })} />
         <Stepper label="Cuántos" value={group.count} onChange={(v) => onChange({ count: v })} />
       </div>
+      {(Number(group.count) || 0) > MAX_BOXES_PER_GROUP && (
+        <p className="mt-1.5 text-[11.5px] leading-[1.4] text-amber-300">
+          Máximo {MAX_BOXES_PER_GROUP} boxes por grupo — se crearán {MAX_BOXES_PER_GROUP}. Si
+          necesitas más, agrega otro grupo.
+        </p>
+      )}
       <PriceFeeHint priceSoles={group.priceSoles} feeMode={feeMode} />
 
       {/* Etiquetas de los boxes */}

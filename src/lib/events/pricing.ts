@@ -21,6 +21,9 @@ export type ActivePricing = {
   presaleRemaining: number | null;
   /** Cierre de la preventa por fecha (ISO) o null. */
   presaleEndsAt: string | null;
+  /** Backend: mostrar countdown (< 6h). No inferir en cliente. */
+  showCountdown: boolean;
+  countdownEndsAt: string | null;
 };
 
 /** Campos mínimos para resolver el precio activo (sirve a TicketType y a rows snake-mapeados). */
@@ -34,6 +37,8 @@ export type PricingInput = Pick<
   | "isPresaleActive"
   | "isFreeActive"
   | "freeUntilAt"
+  | "showCountdown"
+  | "countdownEndsAt"
 >;
 
 /**
@@ -52,6 +57,8 @@ export function activePricing(tt: PricingInput): ActivePricing {
       isPresale: false,
       presaleRemaining: null,
       presaleEndsAt: null,
+      showCountdown: tt.showCountdown ?? false,
+      countdownEndsAt: tt.countdownEndsAt ?? null,
     };
   }
   if (!tt.isPresaleActive || tt.presalePriceCents == null) {
@@ -63,6 +70,8 @@ export function activePricing(tt: PricingInput): ActivePricing {
       isPresale: false,
       presaleRemaining: null,
       presaleEndsAt: null,
+      showCountdown: tt.showCountdown ?? false,
+      countdownEndsAt: tt.countdownEndsAt ?? null,
     };
   }
   return {
@@ -73,6 +82,8 @@ export function activePricing(tt: PricingInput): ActivePricing {
     isPresale: true,
     presaleRemaining: tt.presaleQty == null ? null : Math.max(0, tt.presaleQty - tt.sold),
     presaleEndsAt: tt.presaleEndsAt,
+    showCountdown: tt.showCountdown ?? false,
+    countdownEndsAt: tt.countdownEndsAt ?? null,
   };
 }
 

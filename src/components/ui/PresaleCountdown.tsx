@@ -3,9 +3,8 @@
 import { useEffect, useState } from "react";
 
 /**
- * FOMO de preventa estilo Posh: countdown vivo en una sola línea, ámbar →
- * rojo cuando falta < 1h. Pensado para mostrarse SOLO cuando la preventa cierra
- * pronto (ver `shouldCountdown`). No satura el resto del tiempo.
+ * Countdown de preventa/liberación. La visibilidad la decide el backend
+ * (`showCountdown` + `countdownEndsAt`); acá solo animamos el display.
  */
 export function PresaleCountdown({
   endsAt,
@@ -39,11 +38,4 @@ export function PresaleCountdown({
       {String(m).padStart(2, "0")}m {String(s).padStart(2, "0")}s
     </span>
   );
-}
-
-/** Mostrar countdown solo si la preventa cierra dentro de ~6h. */
-export function shouldCountdown(endsAt: string | null, withinHours = 6): boolean {
-  if (!endsAt) return false;
-  const left = new Date(endsAt).getTime() - Date.now();
-  return left > 0 && left <= withinHours * 3600_000;
 }
