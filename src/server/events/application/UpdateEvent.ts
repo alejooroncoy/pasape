@@ -2,6 +2,7 @@ import type { Result } from "@/server/_shared/result";
 import type { Event } from "../domain/Event";
 import type { EventRepository, UpdateEventInput } from "../ports/EventRepository";
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
+import { notifyPendingReview } from "@/server/notifications/application/NotifyPendingReview";
 
 type Deps = { repo: EventRepository };
 
@@ -83,6 +84,12 @@ export const updateEvent = async (
   const before = (await repo.listByOrganization(orgId)).find((e) => e.id === eventId);
   const result = await repo.update(eventId, orgId, gatedInput);
   if (!result.ok) return result;
+
+  // Solo avisar a Pasape en la TRANSICIÓN a pending_review — si el organizador
+  // reguarda un evento que ya estaba en revisión, no hay nada nuevo que avisar.
+  if (gatedInput.status === "pending_review" && before?.status !== "pending_review") {
+    await notifyPendingReview(eventId);
+  }
 
   // Why: idempotent — skip notification fanout when nothing buyer-facing changed.
   if (before) {

@@ -12,6 +12,7 @@ import { createEvent } from "../../application/CreateEvent";
 import { getEventStats, type EventStatsResult } from "../../application/GetEventStats";
 import { listEventAccesos } from "../../application/ListEventAccesos";
 import { updateEvent } from "../../application/UpdateEvent";
+import { notifyPendingReview } from "@/server/notifications/application/NotifyPendingReview";
 import { generateDoorLink, type DoorLink } from "../../application/GenerateDoorLink";
 import { verifyScanAccess } from "@/server/scanning/application/VerifyScanAccess";
 import {
@@ -239,7 +240,10 @@ export const EventsController = {
   async publishBySlug(slug: string): Promise<Result<Event>> {
     const guard = await guardEventMember(slug, ["owner", "admin", "editor"]);
     if (!guard.ok) return err(guard.error);
-    return repo.publish(guard.value.event.id, guard.value.event.organizationId);
+    const wasAlreadyPendingReview = guard.value.event.status === "pending_review";
+    const result = await repo.publish(guard.value.event.id, guard.value.event.organizationId);
+    if (result.ok && !wasAlreadyPendingReview) await notifyPendingReview(guard.value.event.id);
+    return result;
   },
 
   async stats(slug: string): Promise<Result<EventStatsResult>> {
