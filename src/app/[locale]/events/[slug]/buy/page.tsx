@@ -29,7 +29,7 @@ import { YapeForm } from "@/components/payments/YapeForm";
 import { PhoneField } from "@/components/design/PhoneField";
 import { parseE164 } from "@/lib/phone/countries";
 import { isValidDocument } from "@/lib/identity/document";
-import { PresaleCountdown, shouldCountdown } from "@/components/ui/PresaleCountdown";
+import { PresaleCountdown } from "@/components/ui/PresaleCountdown";
 import type { TicketType } from "@/server/events/domain/Event";
 import {
   boxSeats,
@@ -1676,13 +1676,9 @@ function TicketCard({
               <span className="text-cart-ink-4"> · luego {formatMoney(ap.basePriceCents, tt.currency)}</span>
             )}
           </div>
-          {ap.isFree && ap.freeUntilAt && shouldCountdown(ap.freeUntilAt) ? (
+          {ap.showCountdown && ap.countdownEndsAt ? (
             <div className="mt-1">
-              <PresaleCountdown endsAt={ap.freeUntilAt} />
-            </div>
-          ) : ap.isPresale && ap.presaleEndsAt && shouldCountdown(ap.presaleEndsAt) ? (
-            <div className="mt-1">
-              <PresaleCountdown endsAt={ap.presaleEndsAt} />
+              <PresaleCountdown endsAt={ap.countdownEndsAt} />
             </div>
           ) : saleDeadline ? (
             <div className="mt-1 text-[11px] text-amber-400/80">Válida hasta el {saleDeadline}</div>

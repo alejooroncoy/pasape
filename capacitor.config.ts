@@ -46,14 +46,6 @@ const config: CapacitorConfig = {
     // (dev LAN o app.pasape.lat en prod). CapacitorHttp enruta los fetch por
     // HTTP nativo → sin CORS ni mixed-content, en dev y en prod.
     CapacitorHttp: { enabled: true },
-    BluetoothLe: {
-      displayStrings: {
-        scanning: "Buscando puertas…",
-        cancel: "Cancelar",
-        availableDevices: "Puertas disponibles",
-        noDeviceFound: "No se encontraron puertas",
-      },
-    },
   },
 };
 

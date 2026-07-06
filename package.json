@@ -24,7 +24,6 @@
     "build:door-app:ios": "cd scanner && VITE_API_URL=https://app.pasape.lat npm run build && cd .. && npx cap sync ios"
   },
   "dependencies": {
-    "@capacitor-community/bluetooth-le": "^8.2.0",
     "@capacitor/android": "^8.4.0",
     "@capacitor/cli": "^8.4.0",
     "@capacitor/core": "^8.4.0",

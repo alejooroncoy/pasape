@@ -1,4 +1,5 @@
 import { err, ok, type Result } from "@/server/_shared/result";
+import { supabaseAdmin } from "@/server/_shared/supabase/admin";
 import type { InviteRepository } from "../ports/InviteRepository";
 import type { MembershipRepository } from "../ports/MembershipRepository";
 import type { OrganizationRepository } from "../ports/OrganizationRepository";
@@ -11,7 +12,12 @@ type Deps = {
   orgs: OrganizationRepository;
 };
 
-type Input = { token: string; profileId: string };
+type Input = { token: string; profileId: string; profileEmail: string | null };
+
+const normEmail = (raw: string | null | undefined): string | null => {
+  const e = raw?.trim().toLowerCase();
+  return e && e.includes("@") ? e : null;
+};
 
 export const acceptInvite = async (
   { invites, memberships, orgs }: Deps,
@@ -22,6 +28,29 @@ export const acceptInvite = async (
 
   const status = inviteStatus(invite);
   if (status !== "pending") return err(`invite_${status}`);
+
+  if (invite.role === "door") return err("invite_role_deprecated");
+
+  const invitedEmail = normEmail(invite.email);
+  if (!invitedEmail) {
+    // Invites legacy por WhatsApp — pedir reenvío por correo.
+    return err("invite_email_required");
+  }
+
+  const accepterEmail =
+    normEmail(input.profileEmail) ??
+    normEmail(
+      (
+        await supabaseAdmin()
+          .from("profiles")
+          .select("email")
+          .eq("id", input.profileId)
+          .maybeSingle<{ email: string | null }>()
+      ).data?.email,
+    );
+
+  if (!accepterEmail) return err("invite_sign_in_with_email");
+  if (accepterEmail !== invitedEmail) return err("invite_wrong_account");
 
   const upserted = await memberships.upsert({
     profileId: input.profileId,

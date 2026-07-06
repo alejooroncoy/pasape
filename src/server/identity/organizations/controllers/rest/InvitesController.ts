@@ -7,21 +7,14 @@ import { supabaseInviteRepository } from "../../infrastructure/repositories/Supa
 import { supabaseMembershipRepository } from "../../infrastructure/repositories/SupabaseMembershipRepository";
 import { createInvite } from "../../application/CreateInvite";
 import { acceptInvite } from "../../application/AcceptInvite";
+import { dispatchTeamInviteNotification } from "../../application/dispatchTeamInviteNotification";
 import { listInvites, type InviteWithStatus } from "../../application/ListInvites";
 import { revokeInvite } from "../../application/RevokeInvite";
-import { inviteEmailSender } from "@/server/notifications/infrastructure/InviteEmailSender";
-import { inviteWhatsAppSender } from "@/server/notifications/infrastructure/InviteWhatsAppSender";
+import { isTeamInviteWhatsAppEnabled } from "../../teamInviteChannels";
 import { supabaseUserRepository } from "@/server/identity/infrastructure/repositories/SupabaseUserRepository";
 import { supabaseLegalEntityRepository } from "../../infrastructure/repositories/SupabaseLegalEntityRepository";
-import type { OrgInviteRole, OrgInvitePreview, InviteScopeType } from "../../domain/Invite";
+import type { InvitableOrgRole, OrgInvitePreview, InviteScopeType } from "../../domain/Invite";
 import type { Organization, OrgRole } from "../../domain/Organization";
-
-const ROLE_LABEL: Record<OrgInviteRole, string> = {
-  admin: "Administrador",
-  editor: "Editor",
-  reporter: "Solo lectura",
-  door: "Puerta",
-};
 
 const resolveScopeLabel = async (
   scopeType: InviteScopeType,
@@ -35,7 +28,6 @@ const resolveScopeLabel = async (
     const e = await supabaseLegalEntityRepository.findById(scopeId);
     return e?.name ?? fallback;
   }
-  // portfolio
   const owner = await supabaseUserRepository.findById(scopeId);
   return owner?.fullName ? `Portafolio de ${owner.fullName}` : "Portafolio";
 };
@@ -46,20 +38,18 @@ const deps = {
   memberships: supabaseMembershipRepository,
 };
 
-const ROLE_VALUES: OrgInviteRole[] = ["admin", "editor", "reporter", "door"];
+const INVITABLE_ROLES: InvitableOrgRole[] = ["admin", "editor", "reporter"];
 const SCOPE_VALUES: InviteScopeType[] = ["portfolio", "legal_entity", "organization"];
 
-// Canal por el que mandamos el invite. Uno y solo uno requerido.
 const createSchema = z
   .object({
-    channel: z.enum(["email", "whatsapp"]),
+    channel: z.enum(["email", "whatsapp"]).default("email"),
     email: z.string().email().optional(),
-    // Phone E.164 (+ opcional, dígitos). Validamos largo mínimo razonable.
     phone: z
       .string()
       .regex(/^\+?\d{8,15}$/, "Número inválido. Usa formato internacional (+51 9...).")
       .optional(),
-    role: z.enum(ROLE_VALUES as [OrgInviteRole, ...OrgInviteRole[]]).default("admin"),
+    role: z.enum(INVITABLE_ROLES as [InvitableOrgRole, ...InvitableOrgRole[]]).default("admin"),
     scopeType: z.enum(SCOPE_VALUES as [InviteScopeType, ...InviteScopeType[]]).optional(),
     scopeId: z.string().uuid().optional(),
   })
@@ -135,6 +125,11 @@ export const InvitesController = {
     const parsed = createSchema.safeParse(input);
     if (!parsed.success) return err(parsed.error.issues[0]?.message ?? "invalid_input");
 
+    const channel = parsed.data.channel;
+    if (channel === "whatsapp" && !isTeamInviteWhatsAppEnabled()) {
+      return err("invite_whatsapp_disabled");
+    }
+
     let scopeType = parsed.data.scopeType;
     let scopeId = parsed.data.scopeId;
     let scopeFallbackLabel = "una marca";
@@ -148,14 +143,15 @@ export const InvitesController = {
       scopeFallbackLabel = org.name;
     } else if (scopeType === "organization") {
       const org = await supabaseOrganizationRepository.findBySlug(
-        // findById no existe; resolvemos via slug del activo si coincide, sino "una marca".
         (await getActiveOrgSlug()) ?? "",
       );
       if (org?.id === scopeId) scopeFallbackLabel = org.name;
     }
 
-    const channel = parsed.data.channel;
-    const destination = channel === "email" ? parsed.data.email! : parsed.data.phone!;
+    const destination =
+      channel === "email"
+        ? parsed.data.email!.trim().toLowerCase()
+        : parsed.data.phone!.trim();
 
     const result = await createInvite(deps, {
       callerProfileId: auth.value.profileId,
@@ -168,30 +164,21 @@ export const InvitesController = {
 
     const inviteUrl = await buildInviteUrl(result.value.token);
 
-    // Resolve datos para el template y envía. No bloqueamos el flow si falla.
     const [scopeLabel, inviter] = await Promise.all([
       resolveScopeLabel(scopeType, scopeId, scopeFallbackLabel),
       supabaseUserRepository.findById(auth.value.profileId),
     ]);
 
-    const sent =
-      channel === "email"
-        ? await inviteEmailSender.send({
-            to: destination,
-            inviterName: inviter?.fullName ?? null,
-            scopeLabel,
-            roleLabel: ROLE_LABEL[parsed.data.role],
-            inviteUrl,
-            expiresAt: result.value.expiresAt,
-          })
-        : await inviteWhatsAppSender.send({
-            to: destination,
-            inviterName: inviter?.fullName ?? null,
-            scopeLabel,
-            roleLabel: ROLE_LABEL[parsed.data.role],
-            token: result.value.token,
-            expiresAt: result.value.expiresAt,
-          });
+    const sent = await dispatchTeamInviteNotification({
+      channel,
+      destination,
+      token: result.value.token,
+      inviteUrl,
+      expiresAt: result.value.expiresAt,
+      role: parsed.data.role,
+      scopeLabel,
+      inviterName: inviter?.fullName ?? null,
+    });
 
     return ok({
       id: result.value.id,
@@ -217,6 +204,10 @@ export const InvitesController = {
   async accept(token: string): Promise<Result<{ org: Organization | null }>> {
     const auth = await getAuthContext();
     if (!auth.ok) return err(auth.error);
-    return acceptInvite(deps, { token, profileId: auth.value.profileId });
+    return acceptInvite(deps, {
+      token,
+      profileId: auth.value.profileId,
+      profileEmail: auth.value.email,
+    });
   },
 };

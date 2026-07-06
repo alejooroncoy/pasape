@@ -10,6 +10,7 @@ import { reportMpError } from "../infrastructure/reportMpError";
 import { assertOrderPaymentAccess } from "./assertOrderPaymentAccess";
 import { validateMpPaymentAmount } from "./validateMpPaymentAmount";
 import { settleApprovedPayment } from "./settleApprovedPayment";
+import { acquireOrderPaymentLock, releaseOrderPaymentLock } from "./acquireOrderPaymentLock";
 import { decryptDni } from "@/server/_shared/crypto/dni";
 
 // Why: en prod, si MP_ACCESS_TOKEN no arranca con "APP_USR-" (o sea, parece
@@ -167,24 +168,13 @@ export const payWithYape = async (
   // condicional que solo pasa si nadie más la tomó ya. Dos requests
   // concurrentes (doble clic, reintento de red) ya no pueden ambos leer
   // "pending" y ambos cobrar en MP: el segundo pierde el CAS y no llama a MP.
-  const { data: lockedOrder, error: lockErr } = await db
-    .from("orders")
-    .update({ mp_status: "locked" })
-    .eq("id", order.id)
-    .eq("status", "pending")
-    .or("mp_status.is.null,mp_status.neq.locked")
-    .select("id")
-    .maybeSingle();
-  if (lockErr || !lockedOrder) {
+  const locked = await acquireOrderPaymentLock(order.id);
+  if (!locked) {
     return err("order_already_processing");
   }
 
   const revertLock = async () => {
-    await db
-      .from("orders")
-      .update({ mp_status: null })
-      .eq("id", order.id)
-      .eq("mp_status", "locked");
+    await releaseOrderPaymentLock(order.id);
   };
 
   // Idempotency key determinística: hash de orderId + token de Yape. Un

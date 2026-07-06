@@ -1,10 +1,16 @@
 "use client";
 
 import { use } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "@/i18n/navigation";
-import { useEvent } from "@/lib/events/hooks/useEvents";
-import { unitsRemaining } from "@/lib/events/ticketDisplay";
 import { payErrorInfo, normalizeCheckoutErrorCode } from "@/lib/tickets/checkoutErrors";
+import { api } from "@/lib/_shared/api-client";
+
+type Availability = {
+  totalRemaining: number;
+  lowStock: boolean;
+  asOf: string;
+};
 
 type Props = {
   params: Promise<{ slug: string }>;
@@ -15,15 +21,25 @@ export default function BuyerPayErrorPage({ params, searchParams }: Props) {
   const { slug } = use(params);
   const sp = searchParams ? use(searchParams) : undefined;
   const router = useRouter();
-  const { data } = useEvent(slug);
+  const [availability, setAvailability] = useState<Availability | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void api
+      .get<Availability>(`/api/events/${slug}/availability`)
+      .then((res) => {
+        if (!cancelled) setAvailability(res);
+      })
+      .catch(() => {
+        if (!cancelled) setAvailability(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [slug]);
 
   const reasonKey = normalizeCheckoutErrorCode(sp?.reason ?? "unknown");
   const info = payErrorInfo(reasonKey);
-
-  const remaining = data?.ticketTypes.reduce(
-    (sum, tt) => sum + unitsRemaining(tt),
-    0,
-  ) ?? null;
 
   const retry = () => router.push(`/events/${slug}/buy` as never);
   const retryWithoutPromo = () => {
@@ -46,6 +62,11 @@ export default function BuyerPayErrorPage({ params, searchParams }: Props) {
       : info.primaryCta?.label ?? "Intentar de nuevo";
 
   const showRecover = reasonKey === "in_review" || reasonKey === "buy_failed" || reasonKey === "unknown";
+
+  const showLowStock =
+    availability?.lowStock === true &&
+    reasonKey !== "sold_out" &&
+    reasonKey !== "in_review";
 
   return (
     <div className="min-h-dvh bg-cart-bg text-white">
@@ -80,13 +101,24 @@ export default function BuyerPayErrorPage({ params, searchParams }: Props) {
             <p className="mt-3 text-[13px] leading-relaxed text-cart-ink-3">{info.note}</p>
           )}
 
-          {remaining != null && remaining > 0 && remaining <= 20 && (
-            <div className="mt-3 flex items-center gap-2 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
-              <span className="size-2 animate-pulse rounded-full bg-amber-400" />
-              <span className="text-[13px] text-amber-100">
-                Quedan <strong className="text-white">{remaining} entradas</strong> — apúrate antes de que se agoten.
+          {showLowStock && availability && (
+            <div className="mt-3 flex flex-col gap-1 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-left">
+              <div className="flex items-center gap-2">
+                <span className="size-2 animate-pulse rounded-full bg-amber-400" />
+                <span className="text-[13px] text-amber-100">
+                  Quedan <strong className="text-white">{availability.totalRemaining} entradas</strong> ahora mismo.
+                </span>
+              </div>
+              <span className="text-[11px] text-amber-200/70">
+                Stock consultado al servidor — confirmá en checkout antes de pagar.
               </span>
             </div>
+          )}
+
+          {reasonKey === "order_already_processing" && (
+            <p className="mt-3 text-[13px] leading-relaxed text-cart-ink-3">
+              Si el pago quedó colgado, esperá unos minutos y volvé a intentar — el bloqueo se libera solo.
+            </p>
           )}
 
           <div className="mt-8 flex flex-col gap-2.5 lg:mt-6">

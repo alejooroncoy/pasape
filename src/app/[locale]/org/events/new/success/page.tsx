@@ -315,7 +315,7 @@ function Hero({ variant, isLive }: { variant: "mobile" | "desktop"; isLive: bool
         }
       >
         {isLive
-          ? "Le mandamos su link a cada promotor por WhatsApp. Comparte el tuyo donde quieras."
+          ? "Cada promotor asignado tiene su link único en el panel del evento. Comparte el tuyo donde quieras."
           : "Lo guardamos en borrador. Publícalo cuando estés lista y aparecerá en la cartelera al instante."}
       </motion.p>
     </div>

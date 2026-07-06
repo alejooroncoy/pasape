@@ -3,14 +3,14 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/_shared/api-client";
 
-export type ProfileLookup =
-  | { found: true; displayName: string }
-  | { found: false };
+export type ProfileLookup = {
+  /** Hint uniforme — no expone si el número está registrado (anti-enumeración). */
+  displayHint: string;
+};
 
 /**
- * Hook estilo Yape: cuando el comprador escribe el WhatsApp del destinatario,
- * después de un debounce buscamos el perfil y mostramos el nombre corto para
- * confirmar visualmente. Si no hay match, dejamos found: false (no error).
+ * Lookup de WhatsApp para confirmar destino al transferir. Respuesta uniforme
+ * (L9): siempre displayHint; nunca `found: true/false`.
  */
 export function useProfileLookup(rawPhone: string, debounceMs = 450) {
   const [result, setResult] = useState<ProfileLookup | null>(null);
@@ -32,7 +32,7 @@ export function useProfileLookup(rawPhone: string, debounceMs = 450) {
         });
         if (!cancelled) setResult(res);
       } catch {
-        if (!cancelled) setResult({ found: false });
+        if (!cancelled) setResult({ displayHint: "WhatsApp verificado" });
       } finally {
         if (!cancelled) setLoading(false);
       }

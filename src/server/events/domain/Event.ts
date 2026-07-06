@@ -184,6 +184,13 @@ type TicketTypeBase = {
   saleStatus: "available" | "expired" | "soldout";
   /** Backend-computed: si la preventa está vigente ahora. */
   isPresaleActive: boolean;
+  /**
+   * Backend: mostrar countdown FOMO (< 6h para cierre). El frontend solo renderiza;
+   * no usa Date.now() para decidir visibilidad.
+   */
+  showCountdown: boolean;
+  /** ISO fin del countdown (preventa o liberación gratis). null si no aplica. */
+  countdownEndsAt: string | null;
   /** Tramos de preventa ordenados por ends_at asc. El backend elige el activo. */
   presaleTiers: PresaleTier[];
 };

@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ data: { found: false } }, { status: 200 });
+    return NextResponse.json({ data: { displayHint: "WhatsApp verificado" } }, { status: 200 });
   }
   return json(await IdentityController.lookupByPhone(body));
 }

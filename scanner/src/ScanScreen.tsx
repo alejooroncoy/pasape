@@ -15,20 +15,11 @@ import { useScanQr } from "@/lib/scanning/hooks/useScanQr";
 import { refreshScanCache, searchCachedTickets } from "@/lib/scanning/scanCache";
 import { useOnlineStatus } from "@/lib/_shared/hooks/useOnlineStatus";
 import { scanLocal, admitLocal } from "@/lib/scanning/scanLocal";
-import { countPending, enqueuePendingScan } from "@/lib/scanning/scanQueue";
+import { countPending } from "@/lib/scanning/scanQueue";
 import { syncPending } from "@/lib/scanning/syncWorker";
 import { useEvent } from "@/lib/events/hooks/useEvents";
 import { useEventStats } from "@/lib/events/hooks/useEventStats";
 import { api } from "@/lib/_shared/api-client";
-import { Capacitor } from "@capacitor/core";
-import { createStarTransport, type StarTransport, type StarRole } from "@/lib/scanning/coordination/starTransport";
-import { TcpCoord } from "@/lib/scanning/coordination/tcpPlugin";
-import { ClaimCoordinator } from "@/lib/scanning/coordination/ClaimCoordinator";
-import { setActiveCoordinator } from "@/lib/scanning/coordination/registry";
-import { getDeviceId } from "@/lib/scanning/deviceId";
-
-const COORD_PORT = 49737;
-
 // ─── Haptic ────────────────────────────────────────────────────────────────
 const haptic = (kind: "valid" | "already_used" | "invalid") => {
   if (typeof navigator === "undefined" || !("vibrate" in navigator)) return;
@@ -341,15 +332,6 @@ export function ScanScreen({ eventSlug }: { eventSlug: string }) {
         boxCapacity: local.boxCapacity,
         scannedAt:   null,
       });
-      // Auditoría offline: guardar los PROBLEMAS (inválido/ya-usado, con su
-      // reason) en el stack para mandarlos al server cuando vuelva internet.
-      if (local.kind !== "valid") {
-        void enqueuePendingScan({
-          ticketId: "", token: code, kind: "signed",
-          scannedAt: new Date().toISOString(),
-          logOnly: true, result: local.kind, reason: local.reason,
-        }).catch(() => {});
-      }
       if (online) void syncPending(eventSlug); // empuja la cola sin bloquear
     } catch {
       showResult({ kind: "invalid", holderName: null, typeName: "QR no reconocido", dniLast4: null, boxLabel: null, boxHostName: null, boxFilled: null, boxCapacity: null, scannedAt: null });
@@ -498,58 +480,6 @@ export function ScanScreen({ eventSlug }: { eventSlug: string }) {
     };
     window.addEventListener("online", onOnline);
     return () => { cancel = true; clearInterval(id); window.removeEventListener("online", onOnline); };
-  }, [eventSlug]);
-
-  // Coordinación entre porteros por la LAN del hotspot (SIN internet) en topología
-  // ESTRELLA: el que comparte el hotspot es el HOST (servidor TCP + relay) y los
-  // demás se conectan a su IP de gateway. Cuando uno admite un ticket lo propaga y
-  // los demás lo marcan usado en vivo → evita doble ingreso en la misma puerta.
-  // Sólo en nativo; en web/dev no hay socket TCP y `arbitrateTicket` degrada a
-  // "granted" (el duplicado se detecta al sincronizar con flag dup_offline).
-  useEffect(() => {
-    if (!eventSlug) return;
-    if (!Capacitor.isNativePlatform()) return;
-    let disposed = false;
-    let transport: StarTransport | null = null;
-    let coord: ClaimCoordinator | null = null;
-    void (async () => {
-      try {
-        // Rol: el host es quien comparte el hotspot (siempre Android, corre el
-        // servidor). Heurística por red: si tengo un gateway distinto a mi IP → soy
-        // cliente y me conecto a él; si no (soy el AP/gateway) → soy host. iOS es
-        // SIEMPRE cliente (no levanta servidor).
-        const info = await TcpCoord.getNetworkInfo().catch(
-          () => ({}) as { gatewayIp?: string; myIp?: string },
-        );
-        const gw = info.gatewayIp ?? "";
-        const isIOS = Capacitor.getPlatform() === "ios";
-        const role: StarRole = isIOS ? "client" : !gw || gw === info.myIp ? "host" : "client";
-        const t = await createStarTransport({
-          eventSlug,
-          role,
-          port: COORD_PORT,
-          host: role === "client" ? gw || "192.168.43.1" : undefined,
-        });
-        if (disposed) {
-          void t.dispose();
-          return;
-        }
-        transport = t;
-        // claimTimeoutMs=150: el coordinador concede al VENCER el timeout → latencia
-        // añadida a cada scan válido. En LAN local (RTT <10ms) da ~15x de margen para
-        // oír un DENY y es casi imperceptible (vs. 400ms default).
-        coord = new ClaimCoordinator(getDeviceId(), t, { claimTimeoutMs: 150 });
-        setActiveCoordinator(coord);
-      } catch {
-        // plugin/red falló → sin coordinación; se degrada limpio (detección al sync).
-      }
-    })();
-    return () => {
-      disposed = true;
-      setActiveCoordinator(null);
-      coord?.dispose();
-      void transport?.dispose();
-    };
   }, [eventSlug]);
 
   useEffect(() => {

@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { z } from "zod";
+import { reportDniLookupRateLimited } from "@/server/identity/dniLookupObservability";
 import { buildFullName, lookupDni } from "@/server/identity/infrastructure/DecolectaClient";
 import { fail, ok as okJson } from "@/server/_shared/http";
 import { createRateLimiter } from "@/server/_shared/rateLimit";
@@ -14,7 +15,10 @@ const DNI_LOOKUP_MAX_PER_MINUTE = 10;
 const rateLimiter = createRateLimiter("identity:dni-lookup", DNI_LOOKUP_MAX_PER_MINUTE);
 
 export const GET = async (req: NextRequest) => {
-  if (!(await rateLimiter.check(req))) return rateLimiter.response();
+  if (!(await rateLimiter.check(req))) {
+    reportDniLookupRateLimited();
+    return rateLimiter.response();
+  }
 
   const url = new URL(req.url);
   const parsed = dniSchema.safeParse({ dni: url.searchParams.get("dni") ?? "" });

@@ -1394,6 +1394,12 @@ async function isAllowedInZone(
   return !!link;
 }
 
+/** Huella del payload escaneado — no guardamos el QR completo en scan_events (L2). */
+function scanTokenFingerprint(raw: string): string | null {
+  if (!raw) return null;
+  return crypto.createHash("sha256").update(raw).digest("hex").slice(0, 32);
+}
+
 // Núcleo de marcado por qr_code estático (interno). Lo comparten markUsedByQr
 // (tras resolver la firma) y markUsedByTicketId (admisión confiable).
 async function markByQrCode(
@@ -1435,7 +1441,7 @@ async function markByQrCode(
         scanned_by: scanner.profileId,
         scanner_session_id: scanner.sessionId,
         result: "valid",
-        raw_token: rawToken,
+        raw_token: scanTokenFingerprint(rawToken),
       });
 
       // Why: el portero debe ver inmediatamente "BOX A · invitado por José ·
@@ -1510,7 +1516,7 @@ async function markByQrCode(
       scanned_by: scanner.profileId,
       scanner_session_id: scanner.sessionId,
       result,
-      raw_token: rawToken,
+      raw_token: scanTokenFingerprint(rawToken),
       flag,
     });
     return err(result);

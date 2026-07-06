@@ -31,6 +31,7 @@ export const KNOWN_CHECKOUT_CODES = new Set([
   "box_qty_must_be_one",
   "order_create_failed",
   "tickets_create_failed",
+  "order_already_processing",
 ]);
 
 export const PAY_ERROR_REASONS: Record<string, PayErrorReason> = {
@@ -110,6 +111,11 @@ export const PAY_ERROR_REASONS: Record<string, PayErrorReason> = {
     title: "No pudimos cobrarte",
     body: "Algo salió mal con el pago. Tu entrada no fue cobrada.",
     note: YAPE_NOTE,
+  },
+  order_already_processing: {
+    title: "Pago en proceso",
+    body: "Ya hay un intento de pago en curso para esta orden. Esperá unos minutos antes de reintentar.",
+    note: "Si cerraste la app a mitad del pago, el bloqueo se libera solo en unos minutos.",
   },
 };
 

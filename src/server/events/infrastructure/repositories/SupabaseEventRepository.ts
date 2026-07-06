@@ -163,6 +163,20 @@ const toEvent = (r: EventRow): Event => ({
   createdAt: r.created_at,
 });
 
+const COUNTDOWN_WINDOW_MS = 6 * 3600_000;
+
+const computeShowCountdown = (
+  endsAt: string | null | undefined,
+  now: Date,
+): { showCountdown: boolean; countdownEndsAt: string | null } => {
+  if (!endsAt) return { showCountdown: false, countdownEndsAt: null };
+  const left = new Date(endsAt).getTime() - now.getTime();
+  if (left <= 0 || left > COUNTDOWN_WINDOW_MS) {
+    return { showCountdown: false, countdownEndsAt: null };
+  }
+  return { showCountdown: true, countdownEndsAt: endsAt };
+};
+
 const toTicketType = (
   r: TicketTypeRow,
   tiers: PresaleTierRow[] = [],
@@ -176,6 +190,12 @@ const toTicketType = (
   // regla que activePricing. De ahí sale el precio "todo incluido" del comprador.
   const isFreeActive = r.is_free && (r.free_until_at == null || new Date(r.free_until_at) > now);
   const activePriceCents = isFreeActive ? 0 : (active?.price_cents ?? r.price_cents);
+  const countdownSource = isFreeActive
+    ? r.free_until_at
+    : active != null
+      ? active.ends_at
+      : null;
+  const countdown = computeShowCountdown(countdownSource, now);
   // Frontera ÚNICA donde la columna `capacity` (ambigua) se traduce a su
   // significado tipado: `seats` en un box, `stock` en una entrada. De aquí en
   // adelante el resto del código no puede confundirlos (unión discriminada).
@@ -201,6 +221,8 @@ const toTicketType = (
     isFreeActive,
     saleStatus: computeSaleStatus(r, now),
     isPresaleActive: active != null,
+    showCountdown: countdown.showCountdown,
+    countdownEndsAt: countdown.countdownEndsAt,
     presaleTiers: sorted.map(t => ({
       id: t.id,
       ticketTypeId: t.ticket_type_id,

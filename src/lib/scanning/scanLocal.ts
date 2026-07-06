@@ -1,7 +1,6 @@
 import { lookupTicketById, markUsedLocalById, getBoxFill, getZonePolicy, isTicketAllowedInZone } from "./scanCache";
 import { enqueuePendingScan } from "./scanQueue";
 import { isSignedQr, verifySignedScan } from "./verifySignedQr";
-import { arbitrateTicket } from "./coordination/registry";
 
 export type ScanLocalResult = {
   kind: "valid" | "already_used" | "invalid";
@@ -88,10 +87,8 @@ async function admitResolved(
 
   if (cached?.status === "used") return usedResult();
 
-  // Arbitraje entre puertas: si otra puerta de la zona ya tomó este ticket, es
-  // un duplicado en vivo. Sin coordinador (BLE caído), concede y detecta al sync.
-  if ((await arbitrateTicket(ticketId)) === "denied") return usedResult();
-
+  // Dos puertas 100% offline pueden admitir el mismo QR; al sync el server marca
+  // dup_offline y el panel del org alerta. Modelo operativo — ver CAPACITOR.md.
   if (cached) await markUsedLocalById(ticketId);
   await enqueuePendingScan({
     ticketId,

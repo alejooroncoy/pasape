@@ -123,6 +123,7 @@ export const supabaseInviteRepository: InviteRepository = {
       }),
       scope,
       scopeLabel,
+      inviteEmail: row.email?.trim().toLowerCase() ?? null,
       invitedBy: {
         fullName: row.profiles?.full_name ?? null,
       },

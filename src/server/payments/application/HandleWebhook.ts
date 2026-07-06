@@ -140,7 +140,8 @@ export const handleMpWebhook = async (
   }
 
   const db = supabaseAdmin();
-  const dedupeKey = `payment-${dataId}-${input.headers.requestId ?? "noreq"}`;
+  // Dedupe por payment id (L10): MP puede reenviar el mismo pago con distinto x-request-id.
+  const dedupeKey = `payment-${dataId}`;
 
   // Idempotency insert. If duplicate, return ok early.
   const { error: dupErr } = await db

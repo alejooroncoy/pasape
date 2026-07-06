@@ -49,7 +49,7 @@ afterAll(async () => {
   await db
     .from("mp_webhook_events")
     .delete()
-    .like("mp_id", `payment-${DATA_ID}-%`);
+    .eq("mp_id", `payment-${DATA_ID}`);
 });
 
 describe.skipIf(!hasCreds)("webhook de Mercado Pago (integración)", () => {
@@ -70,7 +70,7 @@ describe.skipIf(!hasCreds)("webhook de Mercado Pago (integración)", () => {
   );
 
   it.skipIf(!hasWebhookSecret)(
-    "el mismo webhook (mismo data.id + request-id) no se procesa dos veces",
+    "el mismo webhook (mismo data.id) no se procesa dos veces",
     async () => {
       const secret = process.env.MP_WEBHOOK_SECRET!;
       const { header } = signManifest({ dataId: DATA_ID, requestId: REQUEST_ID, secret });
@@ -88,20 +88,18 @@ describe.skipIf(!hasCreds)("webhook de Mercado Pago (integración)", () => {
       if (!first.ok) expect(first.error).toMatch(/^mp_payment_fetch_failed/);
 
       const db = supabaseAdmin();
-      const dedupeKey = `payment-${DATA_ID}-${REQUEST_ID}`;
+      const dedupeKey = `payment-${DATA_ID}`;
       const { data: rows } = await db
         .from("mp_webhook_events")
         .select("mp_id")
         .eq("mp_id", dedupeKey);
       expect(rows).toHaveLength(1);
 
-      // Segunda entrega: mismo data.id + request-id → mismo dedupeKey. El
-      // insert choca con la PK y el webhook corta ANTES de llamar a MP,
-      // retornando ok({}) sin tocar nada más.
+      // Segunda entrega: mismo data.id (aunque cambie request-id) → dedupe por payment id.
       const second = await handleMpWebhook({
         rawBody: rawBodyFor(DATA_ID),
         query: new URLSearchParams(),
-        headers: { signature: header, requestId: REQUEST_ID },
+        headers: { signature: header, requestId: "vitest-request-id-002" },
       });
       expect(second.ok).toBe(true);
       if (second.ok) expect(second.value).toEqual({});

@@ -1,5 +1,4 @@
 import { z } from "zod";
-import * as Sentry from "@sentry/nextjs";
 import { headers } from "next/headers";
 import { err, ok, type Result } from "@/server/_shared/result";
 import { getAuthContext, resolveActiveOrgSlug } from "@/server/_shared/AuthContext";
@@ -7,6 +6,7 @@ import { supabaseEventRepository as repo } from "../../infrastructure/repositori
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
 import { listPublishedEvents } from "../../application/ListPublishedEvents";
 import { getEventBySlug } from "../../application/GetEventBySlug";
+import { getEventAvailability } from "../../application/GetEventAvailability";
 import { listEventsByOrganization } from "../../application/ListEventsByOrganization";
 import { createEvent } from "../../application/CreateEvent";
 import { getEventStats, type EventStatsResult } from "../../application/GetEventStats";
@@ -178,6 +178,10 @@ export const EventsController = {
       if (!membership) return err("not_found");
     }
     return { ok: true, value: data };
+  },
+
+  async availability(slug: string) {
+    return getEventAvailability(slug);
   },
 
   async listMine(): Promise<Result<Event[]>> {
@@ -481,24 +485,6 @@ export const EventsController = {
         boxCapacity: t.box_label ? t.ticket_types.capacity : null,
       })),
     });
-  },
-
-  // Diagnóstico offline: el portero sube los PROBLEMAS de scan que ocurrieron sin
-  // red (bad_window/bad_cert/inválido/ya-usado) al reconectar. Son TELEMETRÍA de
-  // sistema → van a Sentry, NO a la DB (no ensuciar datos de negocio). El buffer
-  // durable es la cola en el device; aquí solo lo reportamos.
-  async recordScanEvent(slug: string, input: unknown): Promise<Result<{ ok: true }>> {
-    const guard = await guardScanReader(slug);
-    if (!guard.ok) return err(guard.error);
-    const b = (input ?? {}) as {
-      qrCode?: string; result?: string; reason?: string | null; offlineScannedAt?: string;
-    };
-    Sentry.captureMessage(`[scan-offline] ${b.reason ?? b.result ?? "unknown"}`, {
-      level: "warning",
-      tags: { area: "portero-scan", eventId: guard.value.eventId, result: b.result ?? "unknown", reason: b.reason ?? "none" },
-      extra: { qrPreview: (b.qrCode ?? "").slice(0, 16), offlineScannedAt: b.offlineScannedAt ?? null },
-    });
-    return ok({ ok: true });
   },
 
   // Sirve la pública ECDSA del evento al portero (la cachea para verificar QR
