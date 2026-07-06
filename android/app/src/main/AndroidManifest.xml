@@ -38,26 +38,9 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
-
-    <!-- Coordinación TCP en estrella entre porteros por la LAN del hotspot.
-         ACCESS_NETWORK_STATE: enumerar redes y bindear el socket a la interfaz WiFi
-         (ConnectivityManager). ACCESS_WIFI_STATE: leer la IP de gateway (DhcpInfo). -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
 
     <!-- Cámara: escaneo de QR en la puerta (getUserMedia en el WebView) -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
-
-    <!-- BLE: coordinación entre validadores (CLAIM/ACK/DENY). Android 12+ -->
-    <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
-        android:usesPermissionFlags="neverForLocation" />
-    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
-    <!-- BLE legacy (Android 11 e inferiores) -->
-    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
-    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"
-        android:maxSdkVersion="30" />
-    <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
 </manifest>

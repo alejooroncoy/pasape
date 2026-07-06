@@ -3,6 +3,9 @@ import type { OrgRole } from "./Organization";
 // `owner` no se puede invitar — la transferencia de ownership es flujo aparte.
 export type OrgInviteRole = Exclude<OrgRole, "owner">;
 
+/** Roles invitables al panel (admin/editor/reporter). Porteros usan código de puerta. */
+export type InvitableOrgRole = Exclude<OrgInviteRole, "door">;
+
 export type InviteScopeType = "portfolio" | "legal_entity" | "organization";
 
 export type InviteScope = {
@@ -39,6 +42,8 @@ export type OrgInvitePreview = {
   status: OrgInviteStatus;
   scope: InviteScope;
   scopeLabel: string;
+  /** Correo al que se envió — quien acepta debe entrar con esa cuenta Google. */
+  inviteEmail: string | null;
   invitedBy: {
     fullName: string | null;
   };

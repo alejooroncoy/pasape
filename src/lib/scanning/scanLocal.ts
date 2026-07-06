@@ -1,7 +1,6 @@
-import { lookupTicketById, markUsedLocalById, getBoxFill } from "./scanCache";
+import { lookupTicketById, markUsedLocalById, getBoxFill, getZonePolicy, isTicketAllowedInZone } from "./scanCache";
 import { enqueuePendingScan } from "./scanQueue";
 import { isSignedQr, verifySignedScan } from "./verifySignedQr";
-import { arbitrateTicket } from "./coordination/registry";
 
 export type ScanLocalResult = {
   kind: "valid" | "already_used" | "invalid";
@@ -18,7 +17,7 @@ export type ScanLocalResult = {
    * inválido"), pero permite distinguir cache desactualizado (bad_cert) de clock
    * skew (bad_window) o formato no firmado (unrecognized/malformed).
    */
-  reason: "unrecognized" | "malformed" | "bad_cert" | "bad_window" | null;
+  reason: "unrecognized" | "malformed" | "bad_cert" | "bad_window" | "wrong_zone" | null;
 };
 
 const empty = (
@@ -72,6 +71,11 @@ async function admitResolved(
   override: { holderName?: string | null },
 ): Promise<ScanLocalResult> {
   const cached = await lookupTicketById(ticketId);
+  const zonePolicy = await getZonePolicy();
+  if (zonePolicy?.enforce && !isTicketAllowedInZone(cached?.ticketTypeId, zonePolicy)) {
+    console.warn(`[scan] ticket ${ticketId} tipo ${cached?.ticketTypeId ?? "?"} fuera de zona`);
+    return empty("invalid", "wrong_zone");
+  }
 
   const usedResult = (): ScanLocalResult => ({
     ...empty("already_used"),
@@ -83,10 +87,8 @@ async function admitResolved(
 
   if (cached?.status === "used") return usedResult();
 
-  // Arbitraje entre puertas: si otra puerta de la zona ya tomó este ticket, es
-  // un duplicado en vivo. Sin coordinador (BLE caído), concede y detecta al sync.
-  if ((await arbitrateTicket(ticketId)) === "denied") return usedResult();
-
+  // Dos puertas 100% offline pueden admitir el mismo QR; al sync el server marca
+  // dup_offline y el panel del org alerta. Modelo operativo — ver CAPACITOR.md.
   if (cached) await markUsedLocalById(ticketId);
   await enqueuePendingScan({
     ticketId,

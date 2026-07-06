@@ -24,16 +24,34 @@ type OrderRow = {
   status: string;
   mp_status: string | null;
   mp_payment_id: string | null;
+  buyer_id: string;
+  guest_email: string | null;
 };
 
-export const prepareRetry = async (orderId: string): Promise<Result<PrepareRetryOutput>> => {
+// Prueba de posesión requerida: el buyer logueado (profileId) o el email de
+// invitado con el que se hizo la compra (guest_email), igual que exige
+// /api/tickets/order/[id]/status para evitar el IDOR de LOW-1/LOW-6.
+export type RetryCaller = { profileId: string | null; guestEmail: string | null };
+
+export const prepareRetry = async (
+  orderId: string,
+  caller: RetryCaller,
+): Promise<Result<PrepareRetryOutput>> => {
   const db = supabaseAdmin();
   const { data: order } = await db
     .from("orders")
-    .select("id, status, mp_status, mp_payment_id")
+    .select("id, status, mp_status, mp_payment_id, buyer_id, guest_email")
     .eq("id", orderId)
     .maybeSingle<OrderRow>();
   if (!order) return err("order_not_found");
+
+  const isOwner = !!caller.profileId && caller.profileId === order.buyer_id;
+  const isGuest =
+    !!caller.guestEmail &&
+    !!order.guest_email &&
+    order.guest_email.toLowerCase() === caller.guestEmail.toLowerCase();
+  if (!isOwner && !isGuest) return err("forbidden");
+
   if (order.status === "paid") return ok({ status: "already_paid" });
   if (order.status !== "pending") return err(`order_status_invalid:${order.status}`);
 

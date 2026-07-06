@@ -18,6 +18,10 @@ type PromoterRow = {
   claim_token_used_at: string | null;
 };
 
+// Sanity check contra tokens truncados/vacíos antes de golpear la DB (el token
+// real lo genera `refresh_org_promoter_claim_token` con más entropía que esto).
+const MIN_CLAIM_TOKEN_LENGTH = 16;
+
 const cleanPhone = (raw: string | null): string => {
   if (!raw) return "";
   let p = raw.trim();
@@ -137,7 +141,7 @@ export const supabasePromoterClaimRepository: PromoterClaimRepository = {
   },
 
   async resolveToken(token): Promise<Result<PromoterClaimContext>> {
-    if (!token || token.length < 16) return err("invalid_token");
+    if (!token || token.length < MIN_CLAIM_TOKEN_LENGTH) return err("invalid_token");
     const db = supabaseAdmin();
     const { data, error } = await db
       .from("org_promoters")
@@ -155,7 +159,7 @@ export const supabasePromoterClaimRepository: PromoterClaimRepository = {
     token,
     profileId,
   ): Promise<Result<PromoterClaimContext>> {
-    if (!token || token.length < 16) return err("invalid_token");
+    if (!token || token.length < MIN_CLAIM_TOKEN_LENGTH) return err("invalid_token");
     const db = supabaseAdmin();
     const { data: existing, error: readErr } = await db
       .from("org_promoters")

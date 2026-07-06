@@ -36,11 +36,18 @@ export async function verifyScanAccess(
   if (!detail) return err("event_not_found");
 
   // Camino portero por código: token opaco, sin login.
-  const token =
-    opts.doorToken ?? (await headers()).get(SCANNER_TOKEN_HEADER) ?? undefined;
+  const hdrs = await headers();
+  const token = opts.doorToken ?? hdrs.get(SCANNER_TOKEN_HEADER) ?? undefined;
   if (token) {
     const session = await getSessionByToken(token);
     if (!session || session.eventId !== detail.event.id) return err("forbidden");
+    // Device binding (LOW-7): el token opaco por sí solo NO debe autenticar
+    // desde cualquier dispositivo. Si el caller manda un deviceId (body o
+    // header x-scanner-device), debe coincidir con el device con el que se
+    // creó la sesión — si no, el token filtrado no sirve desde otro device.
+  // Device binding obligatorio: sin header x-scanner-device el token no autentica.
+    const callerDeviceId = opts.deviceId ?? hdrs.get(SCANNER_DEVICE_HEADER) ?? undefined;
+    if (!callerDeviceId || callerDeviceId !== session.deviceId) return err("forbidden");
     return ok({
       profileId: null,
       eventId: detail.event.id,
@@ -65,6 +72,10 @@ export async function verifyScanAccess(
     .maybeSingle<{ role: string }>();
 
   if (membership) {
+    // Reporter/door no escanean vía dashboard: solo owner/admin/editor.
+    if (!["owner", "admin", "editor"].includes(membership.role)) {
+      return err("forbidden");
+    }
     return ok({
       profileId: auth.value.profileId,
       eventId: detail.event.id,

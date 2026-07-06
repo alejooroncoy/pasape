@@ -10,6 +10,7 @@ import { useMpSdk, type BinChangeData, type MpField } from "@/lib/payments/hooks
 
 type Props = {
   orderId: string;
+  orderToken?: string | null;
   amount: number;
   initialHolder?: string;
   initialDni?: string;
@@ -46,6 +47,7 @@ const SECURE_FIELD_STYLE: Record<string, unknown> = {
 
 export function CardForm({
   orderId,
+  orderToken,
   amount,
   initialHolder,
   initialDni,
@@ -69,6 +71,7 @@ export function CardForm({
   // listo y se desmontan al salir. Los refs evitan re-montar en cada render.
   const mountedRef = useRef(false);
   const fieldsRef = useRef<MpField[]>([]);
+  const submittingRef = useRef(false);
 
   useEffect(() => {
     if (!mp || mountedRef.current) return;
@@ -128,7 +131,8 @@ export function CardForm({
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canSubmit || !mp || !paymentMethodId) return;
+    if (submittingRef.current || !canSubmit || !mp || !paymentMethodId) return;
+    submittingRef.current = true;
     setSubmitting(true);
     setError(null);
     try {
@@ -158,6 +162,7 @@ export function CardForm({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           orderId,
+          orderToken: orderToken ?? null,
           token: token.id,
           paymentMethodId,
           installments: 1,
@@ -211,6 +216,7 @@ export function CardForm({
       setError(humanizeCardError(msg));
       onError?.(msg);
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   };

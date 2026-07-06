@@ -7,13 +7,20 @@ offline (cache local + QR firmado ECDSA). El backend Next sigue desplegado en
 `https://app.pasape.lat` y la SPA lo consume por HTTP (`CapacitorHttp`, sin
 CORS ni mixed-content) — `VITE_API_URL` fija ese origin en build-time.
 
-Coordinación entre porteros (evitar doble ingreso en la misma puerta, sin
-internet): **TCP en topología estrella** sobre la LAN del hotspot — el que
-comparte el hotspot corre un servidor TCP (host) y los demás porteros se
-conectan a su IP de gateway (clientes). **No es BLE.** El código vive en
-`src/lib/scanning/coordination/starTransport.ts` + `tcpPlugin.ts`, gateado a
-`Capacitor.isNativePlatform()`; en web/dev degrada limpio (el duplicado se
-detecta al sincronizar, flag `dup_offline`).
+**Varias puertas offline:** cada celular valida de forma autónoma (cache local +
+QR firmado ECDSA). No hay sincronización LAN entre dispositivos — es un tradeoff
+consciente a favor de velocidad en la puerta.
+
+Si dos porteros escanean el mismo ticket **sin haber sincronizado**, ambos pueden
+dejar pasar. Al reconectar, el server marca el segundo como `dup_offline` en
+`scan_events` y el panel del organizador muestra el banner de alerta.
+
+**Operación recomendada:**
+
+1. Loguear y **sincronizar el cache** (con señal) antes de abrir la puerta.
+2. Si hay varias entradas físicas, **priorizar una puerta con datos** o
+   sincronizar cada ~3 min (el panel avisa puertas «stale»).
+3. Tras el evento, revisar el banner de duplicados offline en el panel del org.
 
 El escaneo de QR usa `BarcodeDetector` nativo (rápido, robusto con QR
 borroso/inclinado) con fallback automático a `jsQR` si no existe en el
@@ -81,13 +88,5 @@ ni `CAP_CLEARTEXT`, con `VITE_API_URL=https://app.pasape.lat` (lo que hace
 ## Permisos ya configurados
 
 - **Android** (`AndroidManifest.xml`): `CAMERA` (escaneo de QR),
-  `ACCESS_NETWORK_STATE`/`ACCESS_WIFI_STATE` (coordinación TCP: bindear el
-  socket a la interfaz WiFi y leer la IP de gateway). También quedan permisos
-  BLE (`BLUETOOTH_SCAN/CONNECT/ADVERTISE` + legacy) porque el plugin
-  `@capacitor-community/bluetooth-le` sigue configurado en
-  `capacitor.config.ts` — no se usan hoy para coordinación (eso es TCP), no
-  se removieron por si el plugin se reactiva.
-- **iOS** (`Info.plist`): `NSCameraUsageDescription`,
-  `NSLocalNetworkUsageDescription` (coordinación TCP en la LAN del hotspot).
-  También quedan `NSBluetoothAlways/PeripheralUsageDescription` por la misma
-  razón que en Android.
+  `INTERNET`, `ACCESS_NETWORK_STATE` (detectar online/offline).
+- **iOS** (`Info.plist`): `NSCameraUsageDescription`.

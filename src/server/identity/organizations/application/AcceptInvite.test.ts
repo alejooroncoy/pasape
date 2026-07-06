@@ -1,16 +1,16 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { acceptInvite } from "./AcceptInvite";
 import type { InviteRepository } from "../ports/InviteRepository";
 import type { MembershipRepository } from "../ports/MembershipRepository";
 import type { OrganizationRepository } from "../ports/OrganizationRepository";
 import type { OrgInvite } from "../domain/Invite";
 
-const basePhoneInvite: OrgInvite = {
+const baseEmailInvite: OrgInvite = {
   id: "invite-1",
   scope: { type: "organization", id: "org-1" },
   invitedBy: "profile-1",
-  email: null,
-  phone: "+51987654321",
+  email: "invitado@pasape.lat",
+  phone: null,
   role: "admin",
   token: "tok",
   expiresAt: new Date(Date.now() + 60_000).toISOString(),
@@ -24,13 +24,19 @@ const basePhoneInvite: OrgInvite = {
   otpAttempts: 0,
 };
 
+const basePhoneInvite: OrgInvite = {
+  ...baseEmailInvite,
+  email: null,
+  phone: "+51987654321",
+};
+
 const fakeInvites = (overrides: Partial<InviteRepository> = {}): InviteRepository => ({
   create: vi.fn(),
   findByToken: vi.fn(),
-  findRowByToken: vi.fn(async () => basePhoneInvite),
+  findRowByToken: vi.fn(async () => baseEmailInvite),
   findById: vi.fn(),
   listForOrg: vi.fn(),
-  markAccepted: vi.fn(async () => ({ ok: true, value: basePhoneInvite }) as const),
+  markAccepted: vi.fn(async () => ({ ok: true, value: baseEmailInvite }) as const),
   revoke: vi.fn(),
   recordOtpSent: vi.fn(),
   recordOtpFailedAttempt: vi.fn(),
@@ -56,58 +62,61 @@ const fakeOrgs = (): OrganizationRepository => ({
   listMembers: vi.fn(),
 });
 
-describe("acceptInvite — gate de OTP de teléfono", () => {
-  afterEach(() => {
-    delete process.env.INVITE_PHONE_OTP_REQUIRED;
-  });
-
-  it("acepta un invite por WhatsApp sin verificar cuando el flag está apagado (default)", async () => {
+describe("acceptInvite — invite por email (match de cuenta)", () => {
+  it("acepta cuando el email de la cuenta coincide con el invitado", async () => {
     const invites = fakeInvites();
     const result = await acceptInvite(
       { invites, memberships: fakeMemberships(), orgs: fakeOrgs() },
-      { token: "tok", profileId: "profile-2" },
+      { token: "tok", profileId: "profile-2", profileEmail: "invitado@pasape.lat" },
     );
     expect(result.ok).toBe(true);
   });
 
-  it("bloquea un invite por WhatsApp sin verificar cuando el flag está prendido", async () => {
-    process.env.INVITE_PHONE_OTP_REQUIRED = "true";
+  it("rechaza si el email de la cuenta no coincide con el invitado", async () => {
     const invites = fakeInvites();
     const result = await acceptInvite(
       { invites, memberships: fakeMemberships(), orgs: fakeOrgs() },
-      { token: "tok", profileId: "profile-2" },
+      { token: "tok", profileId: "profile-2", profileEmail: "otra@cuenta.com" },
+    );
+    expect(result).toEqual({ ok: false, error: "invite_wrong_account" });
+  });
+});
+
+describe("acceptInvite — invite por WhatsApp (gate de OTP de teléfono)", () => {
+  it("bloquea si el teléfono no está verificado", async () => {
+    const invites = fakeInvites({ findRowByToken: vi.fn(async () => basePhoneInvite) });
+    const result = await acceptInvite(
+      { invites, memberships: fakeMemberships(), orgs: fakeOrgs() },
+      { token: "tok", profileId: "profile-2", profileEmail: "cualquiera@x.com" },
     );
     expect(result).toEqual({ ok: false, error: "phone_verification_required" });
   });
 
-  it("acepta un invite por WhatsApp ya verificado aunque el flag esté prendido", async () => {
-    process.env.INVITE_PHONE_OTP_REQUIRED = "true";
+  it("acepta si el teléfono ya está verificado", async () => {
     const invites = fakeInvites({
       findRowByToken: vi.fn(async () => ({
         ...basePhoneInvite,
         phoneVerifiedAt: new Date().toISOString(),
       })),
+      markAccepted: vi.fn(async () => ({ ok: true, value: basePhoneInvite }) as const),
     });
     const result = await acceptInvite(
       { invites, memberships: fakeMemberships(), orgs: fakeOrgs() },
-      { token: "tok", profileId: "profile-2" },
+      { token: "tok", profileId: "profile-2", profileEmail: null },
     );
     expect(result.ok).toBe(true);
   });
+});
 
-  it("no aplica el gate a invites por email aunque el flag esté prendido", async () => {
-    process.env.INVITE_PHONE_OTP_REQUIRED = "true";
+describe("acceptInvite — roles deprecados", () => {
+  it("rechaza invites con rol door", async () => {
     const invites = fakeInvites({
-      findRowByToken: vi.fn(async () => ({
-        ...basePhoneInvite,
-        phone: null,
-        email: "a@b.com",
-      })),
+      findRowByToken: vi.fn(async () => ({ ...baseEmailInvite, role: "door" as const })),
     });
     const result = await acceptInvite(
       { invites, memberships: fakeMemberships(), orgs: fakeOrgs() },
-      { token: "tok", profileId: "profile-2" },
+      { token: "tok", profileId: "profile-2", profileEmail: "invitado@pasape.lat" },
     );
-    expect(result.ok).toBe(true);
+    expect(result).toEqual({ ok: false, error: "invite_role_deprecated" });
   });
 });

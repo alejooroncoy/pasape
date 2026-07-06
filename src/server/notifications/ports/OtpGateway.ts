@@ -4,8 +4,15 @@
 // expiración — este BC no persiste el código en ningún lado, solo el
 // resultado (verificado sí/no) del lado del caller.
 //
-// Implementaciones: TwilioOtpGateway.
+// Implementaciones: TwilioOtpGateway (SMS, interino).
 // Selección: otpGateway() (factory por env OTP_PROVIDER).
+//
+// Plan a futuro: Twilio (SMS) es el proveedor mientras el canal WhatsApp de
+// invites esté apagado (TEAM_INVITE_WHATSAPP_ENABLED). Cuando se reactive,
+// el OTP debería moverse a un WhatsApp Authentication template vía Meta
+// directo (más barato que Twilio Verify) — ver skill whatsapp-templates para
+// el bloqueo pendiente de permiso de cuenta ("Authentication templates" sin
+// activar en la WABA). Ese adapter (MetaOtpGateway) todavía no existe.
 
 export interface OtpGateway {
   // "twilio" — se usa en logs y en el mensaje de error.

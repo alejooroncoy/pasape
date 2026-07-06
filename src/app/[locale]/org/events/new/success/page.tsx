@@ -26,6 +26,7 @@ function SuccessContent() {
   const initialStatus = (params.get("status") === "draft" ? "draft" : "published") as
     | "draft"
     | "published";
+  const promotersFailed = params.get("promoters") === "failed";
   const [status, setStatus] = useState<"draft" | "published">(initialStatus);
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
@@ -219,13 +220,18 @@ function SuccessContent() {
                 No pudimos publicar — intenta de nuevo o desde el panel del evento.
               </div>
             )}
+            {promotersFailed && (
+              <div className="mt-4 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-[13px] text-amber-100">
+                El evento se creó, pero no pudimos asignar los promotores. Revisá en Equipo del evento.
+              </div>
+            )}
 
             <div className="mt-10 flex items-center gap-2 text-[13px] text-cart-ink-3">
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                 <path d="M7 1.5l1.7 3.5 3.8.5-2.8 2.7.7 3.8L7 10.2l-3.4 1.8.7-3.8L1.5 5.5l3.8-.5L7 1.5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
               </svg>
               {isLive
-                ? "Cada promotor recibió su link único por WhatsApp."
+                ? "Cada promotor tiene su link único — compartilo desde el panel del evento."
                 : "Tu evento está guardado. Solo aparecerá en la cartelera cuando lo publiques."}
             </div>
           </div>
@@ -309,7 +315,7 @@ function Hero({ variant, isLive }: { variant: "mobile" | "desktop"; isLive: bool
         }
       >
         {isLive
-          ? "Le mandamos su link a cada promotor por WhatsApp. Comparte el tuyo donde quieras."
+          ? "Cada promotor asignado tiene su link único en el panel del evento. Comparte el tuyo donde quieras."
           : "Lo guardamos en borrador. Publícalo cuando estés lista y aparecerá en la cartelera al instante."}
       </motion.p>
     </div>

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { err, type Result } from "@/server/_shared/result";
 import { getAuthContext, resolveActiveOrgSlug } from "@/server/_shared/AuthContext";
+import { supabaseAdmin } from "@/server/_shared/supabase/admin";
 import { supabaseOrganizationRepository } from "@/server/identity/organizations/infrastructure/repositories/SupabaseOrganizationRepository";
 import { supabasePromoterRepository as repo } from "../../infrastructure/repositories/SupabasePromoterRepository";
 import {
@@ -29,6 +30,7 @@ const generateSchema = z.object({
 const applySchema = z.object({
   token: z.string().min(1),
   message: z.string().nullable().optional(),
+  fullName: z.string().trim().min(1).max(120).nullable().optional(),
 });
 
 const decideSchema = z.object({
@@ -43,6 +45,22 @@ const orgFromActive = async (profileId: string) => {
   const slug = await resolveActiveOrgSlug(profileId);
   if (!slug) return null;
   return supabaseOrganizationRepository.findBySlug(slug);
+};
+
+// Aprobar/rechazar postulantes y emitir links de invitación fija comisiones
+// (dinero) — exigir rol de gestión, no solo membresía, igual que
+// OrgPromotersController.ORG_WRITE_ROLES.
+const ORG_WRITE_ROLES = ["owner", "admin", "editor"];
+
+const hasWriteRole = async (orgId: string, profileId: string): Promise<boolean> => {
+  const { data: membership } = await supabaseAdmin()
+    .from("memberships")
+    .select("role")
+    .eq("scope_type", "organization")
+    .eq("scope_id", orgId)
+    .eq("profile_id", profileId)
+    .maybeSingle<{ role: string }>();
+  return !!membership && ORG_WRITE_ROLES.includes(membership.role);
 };
 
 export const PromotersController = {
@@ -71,6 +89,7 @@ export const PromotersController = {
     if (!auth.ok) return err(auth.error);
     const org = await orgFromActive(auth.value.profileId);
     if (!org) return err("no_active_org");
+    if (!(await hasWriteRole(org.id, auth.value.profileId))) return err("forbidden");
     const parsed = generateSchema.safeParse(input);
     if (!parsed.success) return err("invalid_input");
     return generateInviteToken(
@@ -92,7 +111,12 @@ export const PromotersController = {
     if (!parsed.success) return err("invalid_input");
     return applyByLink(
       { repo },
-      { token: parsed.data.token, applicantId: auth.value.profileId, message: parsed.data.message ?? null },
+      {
+        token: parsed.data.token,
+        applicantId: auth.value.profileId,
+        message: parsed.data.message ?? null,
+        fullName: parsed.data.fullName ?? null,
+      },
     );
   },
 
@@ -109,6 +133,7 @@ export const PromotersController = {
     if (!auth.ok) return err(auth.error);
     const org = await orgFromActive(auth.value.profileId);
     if (!org) return err("no_active_org");
+    if (!(await hasWriteRole(org.id, auth.value.profileId))) return err("forbidden");
     return { ok: true, value: await listPendingApplications({ repo }, eventSlug, org.id) };
   },
 
@@ -117,6 +142,7 @@ export const PromotersController = {
     if (!auth.ok) return err(auth.error);
     const org = await orgFromActive(auth.value.profileId);
     if (!org) return err("no_active_org");
+    if (!(await hasWriteRole(org.id, auth.value.profileId))) return err("forbidden");
     const parsed = decideSchema.safeParse(input);
     if (!parsed.success) return err("invalid_input");
     return decideApplication(

@@ -6,18 +6,20 @@ import { useCreateInvite, type CreateInviteOutput } from "@/lib/identity/organiz
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { useMyOrgs } from "@/lib/identity/organizations/hooks/useMyOrgs";
 import { useLegalEntities } from "@/lib/identity/organizations/hooks/useLegalEntities";
-import type { OrgInviteRole, InviteScopeType } from "@/server/identity/organizations/domain/Invite";
+import type { InvitableOrgRole, InviteScopeType } from "@/server/identity/organizations/domain/Invite";
+import { isTeamInviteWhatsAppEnabled } from "@/lib/identity/organizations/teamInviteChannels";
 import { PhoneField } from "@/components/design/PhoneField";
 
 type Props = { open: boolean; onClose: () => void };
 type Channel = "email" | "whatsapp";
 
-type RoleOption = { value: OrgInviteRole; label: string; description: string };
+const whatsappInvitesEnabled = isTeamInviteWhatsAppEnabled();
+
+type RoleOption = { value: InvitableOrgRole; label: string; description: string };
 const ROLES: RoleOption[] = [
   { value: "admin", label: "Administrador", description: "Acceso completo: eventos, ventas, equipo, pagos." },
   { value: "editor", label: "Editor", description: "Crea y edita eventos. No ve pagos ni equipo." },
   { value: "reporter", label: "Solo lectura", description: "Ve reportes y ventas. No edita nada." },
-  { value: "door", label: "Puerta", description: "Solo escanea entradas el día del evento." },
 ];
 
 export function InviteSheet({ open, onClose }: Props) {
@@ -32,7 +34,7 @@ export function InviteSheet({ open, onClose }: Props) {
   const [channel, setChannel] = useState<Channel>("email");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [role, setRole] = useState<OrgInviteRole>("admin");
+  const [role, setRole] = useState<InvitableOrgRole>("admin");
   const [scopeType, setScopeType] = useState<InviteScopeType>("organization");
   const [created, setCreated] = useState<CreateInviteOutput | null>(null);
   const mutation = useCreateInvite();
@@ -146,10 +148,12 @@ export function InviteSheet({ open, onClose }: Props) {
                   {created
                     ? created.sent
                       ? created.channel === "email"
-                        ? `Le mandamos el correo a ${created.destination}. Caduca en 14 días.`
+                        ? `Le mandamos el correo a ${created.destination}. Debe aceptar con esa cuenta Google. Caduca en 14 días.`
                         : `Le enviamos un WhatsApp a ${created.destination}. Caduca en 14 días.`
                       : `No pudimos enviar por ${created.channel === "email" ? "correo" : "WhatsApp"}. Intenta de nuevo más tarde.`
-                    : "Define el alcance y el rol. Le mandamos el invite directo."}
+                    : whatsappInvitesEnabled
+                      ? "Define el alcance y el rol. Porteros en puerta: link de Portero en el evento."
+                      : "Solo por correo por ahora. Debe aceptar con Google usando ese email. Porteros: link de Portero en el evento."}
                 </p>
               </div>
               <button
@@ -166,51 +170,71 @@ export function InviteSheet({ open, onClose }: Props) {
 
             {!created ? (
               <form onSubmit={onSubmit} className="space-y-5">
-                {/* Canal */}
-                <div>
-                  <div className="mb-1.5 text-[12px] font-medium text-cart-ink-2">Enviar por</div>
-                  <div className="grid grid-cols-2 gap-2 rounded-xl border border-cart-line bg-cart-bg-elev-2 p-1">
-                    {(["email", "whatsapp"] as const).map((c) => {
-                      const selected = channel === c;
-                      return (
-                        <button
-                          key={c}
-                          type="button"
-                          onClick={() => setChannel(c)}
-                          className={`rounded-lg px-3 py-2 text-[13px] font-medium transition ${
-                            selected
-                              ? "bg-cart-accent text-white shadow-[0_0_0_1px_rgba(255,255,255,0.08)_inset]"
-                              : "text-cart-ink-2 hover:text-white"
-                          }`}
-                        >
-                          {c === "email" ? "Correo" : "WhatsApp"}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Destinatario */}
-                {channel === "email" ? (
+                {whatsappInvitesEnabled ? (
+                  <>
+                    <div>
+                      <div className="mb-1.5 text-[12px] font-medium text-cart-ink-2">Enviar por</div>
+                      <div className="grid grid-cols-2 gap-2 rounded-xl border border-cart-line bg-cart-bg-elev-2 p-1">
+                        {(["email", "whatsapp"] as const).map((c) => {
+                          const selected = channel === c;
+                          return (
+                            <button
+                              key={c}
+                              type="button"
+                              onClick={() => setChannel(c)}
+                              className={`rounded-lg px-3 py-2 text-[13px] font-medium transition ${
+                                selected
+                                  ? "bg-cart-accent text-white shadow-[0_0_0_1px_rgba(255,255,255,0.08)_inset]"
+                                  : "text-cart-ink-2 hover:text-white"
+                              }`}
+                            >
+                              {c === "email" ? "Correo" : "WhatsApp"}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    {channel === "email" ? (
+                      <label className="block">
+                        <div className="mb-1.5 text-[12px] font-medium text-cart-ink-2">Correo del invitado</div>
+                        <input
+                          type="email"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          placeholder="persona@ejemplo.com"
+                          required
+                          autoComplete="email"
+                          className="block w-full rounded-xl border border-cart-line bg-cart-bg-elev-2 px-3.5 py-2.5 text-[14px] text-white placeholder:text-cart-ink-3 focus:border-cart-accent focus:outline-none"
+                        />
+                        <p className="mt-1.5 text-[11.5px] leading-snug text-cart-ink-3">
+                          Debe aceptar con Google usando ese correo.
+                        </p>
+                      </label>
+                    ) : (
+                      <label className="block">
+                        <div className="mb-1.5 text-[12px] font-medium text-cart-ink-2">WhatsApp del invitado</div>
+                        <PhoneField value={phone} onChange={setPhone} />
+                      </label>
+                    )}
+                  </>
+                ) : (
                   <label className="block">
-                    <div className="mb-1.5 text-[12px] font-medium text-cart-ink-2">Correo</div>
+                    <div className="mb-1.5 text-[12px] font-medium text-cart-ink-2">Correo del invitado</div>
                     <input
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="persona@ejemplo.com"
                       required
+                      autoComplete="email"
                       className="block w-full rounded-xl border border-cart-line bg-cart-bg-elev-2 px-3.5 py-2.5 text-[14px] text-white placeholder:text-cart-ink-3 focus:border-cart-accent focus:outline-none"
                     />
-                  </label>
-                ) : (
-                  <label className="block">
-                    <div className="mb-1.5 text-[12px] font-medium text-cart-ink-2">WhatsApp</div>
-                    <PhoneField value={phone} onChange={setPhone} />
+                    <p className="mt-1.5 text-[11.5px] leading-snug text-cart-ink-3">
+                      Solo podrá aceptar entrando con Google usando ese correo.
+                    </p>
                   </label>
                 )}
 
-                {/* Scope */}
                 <div>
                   <div className="mb-1.5 text-[12px] font-medium text-cart-ink-2">Acceso a</div>
                   <div className="space-y-2">
@@ -250,7 +274,6 @@ export function InviteSheet({ open, onClose }: Props) {
                   </div>
                 </div>
 
-                {/* Rol */}
                 <div>
                   <div className="mb-1.5 text-[12px] font-medium text-cart-ink-2">Rol</div>
                   <div className="space-y-2">
@@ -302,9 +325,11 @@ export function InviteSheet({ open, onClose }: Props) {
                 >
                   {mutation.isPending
                     ? "Enviando…"
-                    : channel === "email"
-                    ? "Enviar por correo"
-                    : "Enviar por WhatsApp"}
+                    : whatsappInvitesEnabled
+                      ? channel === "email"
+                        ? "Enviar por correo"
+                        : "Enviar por WhatsApp"
+                      : "Enviar invitación por correo"}
                 </button>
               </form>
             ) : (

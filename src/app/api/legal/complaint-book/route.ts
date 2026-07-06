@@ -10,6 +10,7 @@ import {
   formatCodigoReclamacion,
   type ComplaintSubmission,
 } from "@/lib/legal/complaintBook";
+import { encryptText, maskDocNumber, maskEmail } from "@/server/_shared/crypto/pii";
 
 const schema = z
   .object({
@@ -143,19 +144,27 @@ export const POST = async (req: NextRequest) => {
     .from("complaint_book")
     .insert({
       tipo: d.tipo,
-      nombre: d.nombre,
+      nombre: d.nombre.slice(0, 1) + "***",
       tipo_documento: d.tipoDocumento,
-      numero_documento: d.numeroDocumento,
-      domicilio: d.domicilio,
-      telefono: d.telefono || null,
-      email: d.email.toLowerCase(),
+      numero_documento: maskDocNumber(d.numeroDocumento),
+      domicilio: "[protegido]",
+      telefono: d.telefono ? "***" : null,
+      email: maskEmail(d.email.toLowerCase()),
       es_menor_de_edad: d.esMenorDeEdad,
-      apoderado: d.apoderado || null,
+      apoderado: d.apoderado ? "[protegido]" : null,
       tipo_bien: d.tipoBien,
       monto_cents: montoCents,
       descripcion_bien: d.descripcionBien,
-      detalle: d.detalle,
-      pedido: d.pedido,
+      detalle: "[protegido]",
+      pedido: "[protegido]",
+      nombre_enc: encryptText(d.nombre),
+      numero_documento_enc: encryptText(d.numeroDocumento),
+      domicilio_enc: encryptText(d.domicilio),
+      telefono_enc: encryptText(d.telefono || null),
+      email_enc: encryptText(d.email.toLowerCase()),
+      apoderado_enc: encryptText(d.apoderado || null),
+      detalle_enc: encryptText(d.detalle),
+      pedido_enc: encryptText(d.pedido),
     })
     .select("correlativo, created_at")
     .single();

@@ -410,19 +410,39 @@ export function RequestsSheet({ slug }: { slug: string }) {
   const pending = usePendingApplications(slug);
   useRealtimePromoterApplications(slug);
   const decide = useDecideApplication(slug);
+  const scheme = useEventPromoterScheme(slug);
+  const brand = useOrgScheme();
   const list = pending.data ?? [];
   const count = list.length;
+  const [notice, setNotice] = useState<string | null>(null);
+  const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const effectivePct = scheme.data?.commissionPct ?? brand.data?.commissionPct ?? 0;
+  const hasMilestones = (scheme.data?.commissionConfig?.milestones?.length ?? 0) > 0;
+  const commissionLabel = `${effectivePct}%${hasMilestones ? " + metas" : ""}`;
+
+  const flash = (msg: string) => {
+    setNotice(msg);
+    if (noticeTimer.current) clearTimeout(noticeTimer.current);
+    noticeTimer.current = setTimeout(() => setNotice(null), 2200);
+  };
 
   return (
     <div className="flex flex-col">
+      {notice && (
+        <p className="mb-3 rounded-xl bg-emerald-500/15 px-3 py-2 text-[13px] font-medium text-emerald-200">
+          {notice}
+        </p>
+      )}
       <h4 className="text-[17px] font-semibold leading-tight tracking-[-0.02em]">
         {count === 0
           ? "Sin solicitudes pendientes."
           : `${count} ${count === 1 ? "persona quiere" : "personas quieren"} ser tus promotores.`}
       </h4>
       <p className="mt-2 text-[13px] leading-relaxed text-cart-ink-3">
-        Entraron por tu link. Acepta solo a los que conozcas — al aceptar heredan el esquema de
-        comisión del evento.
+        Entraron por tu link. Acepta solo a los que conozcas — al aceptar recibirán{" "}
+        <span className="font-semibold text-white">{commissionLabel}</span> de comisión
+        (según el esquema del evento).
       </p>
 
       <div className="mt-5 flex flex-col gap-2.5">
@@ -438,7 +458,7 @@ export function RequestsSheet({ slug }: { slug: string }) {
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[15px] font-semibold">{req.applicantName}</div>
                   <div className="truncate text-[11.5px] text-cart-ink-3">
-                    {req.applicantHandle ?? "sin contacto"}
+                    {req.applicantHandle ?? "sin contacto"} · recibirá {commissionLabel}
                   </div>
                 </div>
               </div>
@@ -451,7 +471,12 @@ export function RequestsSheet({ slug }: { slug: string }) {
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={() => decide.mutate({ applicationId: req.id, decision: "rejected" })}
+                  onClick={() =>
+                    decide.mutate(
+                      { applicationId: req.id, decision: "rejected" },
+                      { onSuccess: () => flash(`Solicitud de ${req.applicantName} rechazada`) },
+                    )
+                  }
                   className="h-10 flex-1 rounded-xl bg-cart-bg-elev-2 text-[13px] font-semibold text-cart-ink-3 transition hover:text-white disabled:opacity-50"
                 >
                   Rechazar
@@ -459,7 +484,12 @@ export function RequestsSheet({ slug }: { slug: string }) {
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={() => decide.mutate({ applicationId: req.id, decision: "approved" })}
+                  onClick={() =>
+                    decide.mutate(
+                      { applicationId: req.id, decision: "approved" },
+                      { onSuccess: () => flash(`${req.applicantName} aceptado · ${commissionLabel}`) },
+                    )
+                  }
                   className="h-10 flex-1 rounded-xl bg-cart-accent text-[13px] font-semibold text-white shadow-[0_8px_20px_-4px_var(--color-cart-accent-glow-strong)] disabled:opacity-50"
                 >
                   {busy ? "…" : "Aceptar"}
@@ -521,20 +551,18 @@ export function PromotersSection({ slug }: { slug: string }) {
       {/* 0 · Invitar por link de grupo (self-apply + solicitudes) */}
       <EventInviteLinkCard slug={slug} />
 
-      {/* 1 · Configuración para todos */}
-      {assigned.length > 0 && (
-        <section>
-          <SectionHeader
-            title="Esquema del evento"
-            subtitle="Comisión y cupos para todos los promotores. Lo defines una vez; personaliza a uno tocándolo abajo."
-          />
-          <EventSchemeCard
-            scheme={scheme.data}
-            onSave={(patch) => updateScheme.mutate(patch)}
-            saving={updateScheme.isPending}
-          />
-        </section>
-      )}
+      {/* 1 · Esquema del evento — visible siempre (H23) */}
+      <section>
+        <SectionHeader
+          title="Esquema del evento"
+          subtitle="Comisión y cupos para todos los promotores. Configuralo antes de aprobar solicitudes."
+        />
+        <EventSchemeCard
+          scheme={scheme.data}
+          onSave={(patch) => updateScheme.mutate(patch)}
+          saving={updateScheme.isPending}
+        />
+      </section>
 
       {/* 2 · Promotores de este evento */}
       <section>

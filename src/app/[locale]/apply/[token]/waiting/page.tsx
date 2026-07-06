@@ -25,6 +25,12 @@ export default function PromoAppliedWaitingPage({ params }: Props) {
     }
   }, [status.data?.status, router]);
 
+  // "rejected"/"cancelled" no tienen pantalla de destino propia (a diferencia
+  // de approved → /promo/accepted): sin este chequeo el postulante rechazado
+  // se queda viendo "en revisión" para siempre, esperando un WhatsApp que
+  // nunca llega.
+  const isClosedOut = status.data?.status === "rejected" || status.data?.status === "cancelled";
+
   return (
     <Phone>
       <div style={{ position: "absolute", inset: 0, background: "radial-gradient(70% 50% at 50% 30%, rgba(255,206,59,0.18), transparent 70%)", pointerEvents: "none" }} />
@@ -40,54 +46,76 @@ export default function PromoAppliedWaitingPage({ params }: Props) {
               width: 120,
               height: 120,
               borderRadius: 36,
-              background: "linear-gradient(135deg, #FFCE3B, #FF9B3B)",
-              boxShadow: "0 30px 60px -10px rgba(255,206,59,0.5), 0 0 0 6px rgba(255,206,59,0.12)",
+              background: isClosedOut
+                ? "linear-gradient(135deg, #6B7280, #4B5563)"
+                : "linear-gradient(135deg, #FFCE3B, #FF9B3B)",
+              boxShadow: isClosedOut
+                ? "0 30px 60px -10px rgba(75,85,99,0.5), 0 0 0 6px rgba(107,114,128,0.12)"
+                : "0 30px 60px -10px rgba(255,206,59,0.5), 0 0 0 6px rgba(255,206,59,0.12)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               gap: 8,
             }}
           >
-            {[0, 1, 2].map((i) => (
+            {isClosedOut
+              ? "✕"
+              : [0, 1, 2].map((i) => (
+                  <div
+                    key={i}
+                    style={{
+                      width: 12,
+                      height: 12,
+                      borderRadius: 999,
+                      background: "#1a1200",
+                      animation: "pulse 1.4s ease-in-out infinite",
+                      animationDelay: `${i * 0.2}s`,
+                    }}
+                  />
+                ))}
+          </div>
+
+          {isClosedOut ? (
+            <>
+              <div style={{ fontSize: 11, letterSpacing: "0.18em", color: C.dim, fontWeight: 700, marginTop: 26 }}>
+                ◆ SOLICITUD CERRADA
+              </div>
+              <div style={{ fontFamily: FONT_DISPLAY, fontSize: 32, fontWeight: 700, letterSpacing: "-0.035em", lineHeight: 0.95, marginTop: 10 }}>
+                El organizador no<br />aprobó tu solicitud esta vez.
+              </div>
+              <div style={{ fontSize: 14, color: C.dim, marginTop: 14, lineHeight: 1.5, maxWidth: 280 }}>
+                No te va a llegar el link de venta para este evento. Puedes postular a otro evento cuando quieras.
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: 11, letterSpacing: "0.18em", color: C.yellow, fontWeight: 700, marginTop: 26 }}>
+                ◆ EN ESPERA
+              </div>
+              <div style={{ fontFamily: FONT_DISPLAY, fontSize: 32, fontWeight: 700, letterSpacing: "-0.035em", lineHeight: 0.95, marginTop: 10 }}>
+                Tu solicitud<br />ya está en revisión.
+              </div>
+              <div style={{ fontSize: 14, color: C.dim, marginTop: 14, lineHeight: 1.5, maxWidth: 280 }}>
+                En cuanto te aprueben, vas a poder vender desde el panel de promotor con tu link único.
+              </div>
+
               <div
-                key={i}
                 style={{
-                  width: 12,
-                  height: 12,
+                  marginTop: 26,
+                  padding: "10px 16px",
                   borderRadius: 999,
-                  background: "#1a1200",
-                  animation: "pulse 1.4s ease-in-out infinite",
-                  animationDelay: `${i * 0.2}s`,
+                  background: "rgba(255,255,255,0.06)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  fontSize: 12,
+                  color: C.dim,
                 }}
-              />
-            ))}
-          </div>
-
-          <div style={{ fontSize: 11, letterSpacing: "0.18em", color: C.yellow, fontWeight: 700, marginTop: 26 }}>
-            ◆ EN ESPERA
-          </div>
-          <div style={{ fontFamily: FONT_DISPLAY, fontSize: 32, fontWeight: 700, letterSpacing: "-0.035em", lineHeight: 0.95, marginTop: 10 }}>
-            Tu solicitud<br />ya está en revisión.
-          </div>
-          <div style={{ fontSize: 14, color: C.dim, marginTop: 14, lineHeight: 1.5, maxWidth: 280 }}>
-            En cuanto te aprueben, te llega un mensaje al WhatsApp con tu link único de venta.
-          </div>
-
-          <div
-            style={{
-              marginTop: 26,
-              padding: "10px 16px",
-              borderRadius: 999,
-              background: "rgba(255,255,255,0.06)",
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              fontSize: 12,
-              color: C.dim,
-            }}
-          >
-            <Dot color={C.yellow} /> Suele responder en 1-2 horas
-          </div>
+              >
+                <Dot color={C.yellow} /> Suele responder en 1-2 horas
+              </div>
+            </>
+          )}
         </div>
 
         <button

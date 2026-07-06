@@ -23,7 +23,7 @@ import {
 } from "@/lib/_shared/color";
 import type { TicketType } from "@/server/events/domain/Event";
 import { VenueLayoutModal } from "@/components/ui/VenueLayoutModal";
-import { PresaleCountdown, shouldCountdown } from "@/components/ui/PresaleCountdown";
+import { PresaleCountdown } from "@/components/ui/PresaleCountdown";
 import { activePricing } from "@/lib/events/pricing";
 import {
   eventAvailability,
@@ -754,13 +754,9 @@ function GroupCard({
             {group.items[0].description}
           </p>
         )}
-        {ap?.freeUntilAt && shouldCountdown(ap.freeUntilAt) ? (
+        {ap?.showCountdown && ap.countdownEndsAt ? (
           <div className="mt-1">
-            <PresaleCountdown endsAt={ap.freeUntilAt} />
-          </div>
-        ) : ap?.presaleEndsAt && shouldCountdown(ap.presaleEndsAt) ? (
-          <div className="mt-1">
-            <PresaleCountdown endsAt={ap.presaleEndsAt} />
+            <PresaleCountdown endsAt={ap.countdownEndsAt} />
           </div>
         ) : null}
         {summary.isAllBoxes && !summary.isAllSoldOut && (

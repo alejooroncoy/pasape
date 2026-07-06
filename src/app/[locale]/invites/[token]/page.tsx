@@ -22,6 +22,17 @@ const ROLE_LABEL: Record<string, string> = {
   door: "Puerta",
 };
 
+const INVITE_ACCEPT_ERRORS: Record<string, string> = {
+  invite_wrong_account:
+    "Esta invitación es para otra cuenta. Entrá con Google usando el correo al que te invitaron.",
+  invite_sign_in_with_email:
+    "Entrá con Google usando el correo al que te invitaron.",
+  invite_email_required:
+    "Esta invitación ya no es válida. Pedile a quien te invitó que te mande una nueva por correo.",
+  invite_role_deprecated:
+    "Las invitaciones de portero ya no usan este link. Pedile el link de Portero del evento.",
+};
+
 const ROLE_PERKS: Record<string, string[]> = {
   admin: [
     "Crear y editar eventos de la marca",
@@ -39,7 +50,7 @@ const ROLE_PERKS: Record<string, string[]> = {
     "Sin permisos de edición",
   ],
   door: [
-    "Escanear tickets en puerta",
+    "Escanea tickets en puerta",
     "Ver invitados del evento",
     "Sin acceso a configuración",
   ],
@@ -135,6 +146,13 @@ export default function AcceptInvitePage({ params }: Props) {
                 </p>
               </div>
 
+                {preview.data.inviteEmail ? (
+                  <p className="mt-4 text-center text-[12.5px] leading-snug text-cart-ink-3">
+                    Entrá con Google como{" "}
+                    <span className="font-medium text-white">{preview.data.inviteEmail}</span>
+                  </p>
+                ) : null}
+
               {preview.data.status === "pending" ? (
                 <>
                   <ul className="mt-6 space-y-2.5 rounded-2xl border border-cart-line bg-cart-bg-elev-2 p-4">
@@ -191,7 +209,8 @@ export default function AcceptInvitePage({ params }: Props) {
                     </p>
                     {acceptError ? (
                       <div className="mt-2 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-center text-[12.5px] text-rose-200">
-                        No pudimos aceptar la invitación. Intenta nuevamente.
+                        {INVITE_ACCEPT_ERRORS[acceptError] ??
+                          "No pudimos aceptar la invitación. Intenta nuevamente."}
                       </div>
                     ) : null}
                   </div>

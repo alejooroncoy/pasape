@@ -422,8 +422,8 @@ function PromotersTab() {
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-[13.5px] text-cart-ink-3">
-            Tu pool de promotores. Cuando armes un evento eliges quiénes participan, cada uno con su
-            link único.
+            Promotores de tu marca — los agregás acá una vez y después elegís quiénes venden en cada
+            evento, cada uno con su link único.
           </p>
         </div>
         <button
@@ -437,7 +437,7 @@ function PromotersTab() {
 
       <BrandSchemeCard />
 
-      <Section title="Pool" count={promoters.data?.length ?? 0}>
+      <Section title="Promotores de la marca" count={promoters.data?.length ?? 0}>
         {promoters.isLoading ? (
           <EmptyCell label="Cargando…" />
         ) : (promoters.data?.length ?? 0) === 0 ? (

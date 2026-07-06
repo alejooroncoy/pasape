@@ -161,7 +161,7 @@ export const IdentityController = {
   // displayName corto (privacy-preserving).
   async lookupByPhone(input: unknown): Promise<Result<LookupResult>> {
     const parsed = z.object({ phone: z.string().min(9) }).safeParse(input);
-    if (!parsed.success) return { ok: true, value: { found: false } };
+    if (!parsed.success) return { ok: true, value: { displayHint: "WhatsApp verificado" } };
     const result = await lookupProfileByPhone(parsed.data.phone);
     return { ok: true, value: result };
   },

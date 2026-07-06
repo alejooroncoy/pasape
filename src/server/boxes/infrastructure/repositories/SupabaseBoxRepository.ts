@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/server/_shared/supabase/admin";
 import { err, ok, type Result } from "@/server/_shared/result";
 import type { BoxRepository } from "@/server/boxes/ports/BoxRepository";
 import type { Box } from "@/server/boxes/domain/Box";
+import { encryptHolderPhone } from "@/server/_shared/crypto/holderContact";
 
 type BoxRow = {
   id: string;
@@ -316,7 +317,8 @@ export const supabaseBoxRepository: BoxRepository = {
         price_cents: 0,
         holder_name: holderName,
         holder_dni_last2: holderDni ? holderDni.slice(-2) : null,
-        holder_phone: holderPhone,
+        holder_phone: null,
+        holder_phone_enc: encryptHolderPhone(holderPhone),
         qr_code: generateQr(),
         current_holder: profileId,
         box_label: type?.box_label ?? null,
@@ -331,6 +333,16 @@ export const supabaseBoxRepository: BoxRepository = {
       profile_id: profileId,
       ticket_id: ticket.id,
     });
+
+    const { count: memberCount } = await db
+      .from("box_members")
+      .select("id", { count: "exact", head: true })
+      .eq("box_id", box.id);
+    if ((memberCount ?? 0) > box.capacity) {
+      await db.from("box_members").delete().eq("box_id", box.id).eq("profile_id", profileId);
+      await db.from("tickets").delete().eq("id", ticket.id);
+      return err("box_full");
+    }
 
     const refreshed = await loadBox(box.id);
     return refreshed ? ok(refreshed) : err("box_load_failed");
@@ -409,6 +421,16 @@ export const supabaseBoxRepository: BoxRepository = {
       profile_id: seatProfileId,
       ticket_id: ticket.id,
     });
+
+    const { count: memberCount } = await db
+      .from("box_members")
+      .select("id", { count: "exact", head: true })
+      .eq("box_id", box.id);
+    if ((memberCount ?? 0) > box.capacity) {
+      await db.from("box_members").delete().eq("box_id", box.id).eq("profile_id", seatProfileId);
+      await db.from("tickets").delete().eq("id", ticket.id);
+      return err("box_full");
+    }
 
     const refreshed = await loadBox(box.id);
     return refreshed ? ok(refreshed) : err("box_load_failed");

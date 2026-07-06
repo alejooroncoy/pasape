@@ -1,4 +1,5 @@
 import { err, ok, type Result } from "@/server/_shared/result";
+import { supabaseAdmin } from "@/server/_shared/supabase/admin";
 import type { InviteRepository } from "../ports/InviteRepository";
 import type { MembershipRepository } from "../ports/MembershipRepository";
 import type { OrganizationRepository } from "../ports/OrganizationRepository";
@@ -11,7 +12,12 @@ type Deps = {
   orgs: OrganizationRepository;
 };
 
-type Input = { token: string; profileId: string };
+type Input = { token: string; profileId: string; profileEmail: string | null };
+
+const normEmail = (raw: string | null | undefined): string | null => {
+  const e = raw?.trim().toLowerCase();
+  return e && e.includes("@") ? e : null;
+};
 
 export const acceptInvite = async (
   { invites, memberships, orgs }: Deps,
@@ -23,16 +29,36 @@ export const acceptInvite = async (
   const status = inviteStatus(invite);
   if (status !== "pending") return err(`invite_${status}`);
 
-  // Invites por WhatsApp (sin email) no tienen ninguna otra prueba de
-  // posesión del canal que el link — el gate exige el OTP del teléfono antes
-  // de asignar membership. Apagado por default (INVITE_PHONE_OTP_REQUIRED):
-  // el envío/verificación de OTP ya existe (send/verify), pero el paso en el
-  // frontend del accept page todavía no está construido — activar el flag
-  // sin eso bloquearía todos los invites por WhatsApp. Prender cuando el UI
-  // esté listo.
-  const otpGateEnabled = process.env.INVITE_PHONE_OTP_REQUIRED === "true";
-  if (otpGateEnabled && invite.phone && !invite.phoneVerifiedAt) {
-    return err("phone_verification_required");
+  if (invite.role === "door") return err("invite_role_deprecated");
+
+  const invitedEmail = normEmail(invite.email);
+  if (invitedEmail) {
+    // Invite por email: la cuenta de Google que acepta debe ser la invitada.
+    const accepterEmail =
+      normEmail(input.profileEmail) ??
+      normEmail(
+        (
+          await supabaseAdmin()
+            .from("profiles")
+            .select("email")
+            .eq("id", input.profileId)
+            .maybeSingle<{ email: string | null }>()
+        ).data?.email,
+      );
+
+    if (!accepterEmail) return err("invite_sign_in_with_email");
+    if (accepterEmail !== invitedEmail) return err("invite_wrong_account");
+  } else if (invite.phone) {
+    // Invite por WhatsApp (sin email): no hay cuenta con la que hacer match,
+    // así que la prueba de posesión del canal es el OTP del teléfono en vez
+    // del email. Hoy la creación de invites por WhatsApp está apagada por
+    // TEAM_INVITE_WHATSAPP_ENABLED — este branch queda listo para cuando se
+    // reactive (y cubre invites legacy que ya existan con solo teléfono).
+    if (!invite.phoneVerifiedAt) return err("phone_verification_required");
+  } else {
+    // No debería pasar (constraint DB: email o phone requerido), pero por
+    // las dudas no dejamos aceptar un invite sin ninguna prueba de posesión.
+    return err("invite_email_required");
   }
 
   const upserted = await memberships.upsert({

@@ -8,6 +8,8 @@ import { useMyTickets } from "@/lib/tickets/hooks/useTickets";
 import { useSessionReady } from "@/lib/identity/hooks/useSessionReady";
 import { api } from "@/lib/_shared/api-client";
 import { formatMoney } from "@/lib/_shared/format";
+import { persistOrderToken, readOrderToken } from "@/lib/tickets/orderTokenStorage";
+import { RecoverTicketsLink } from "@/components/tickets/RecoverTicketsLink";
 
 type Props = { params: Promise<{ slug: string }> };
 
@@ -24,23 +26,39 @@ function Inner({ params }: Props) {
   const router = useRouter();
   const search = useSearchParams();
   const orderId = search.get("order");
-  const guestEmail = search.get("email");
+  const orderTokenFromUrl = search.get("k");
+  const [orderToken, setOrderToken] = useState<string | null>(orderTokenFromUrl);
   const payMethod = search.get("method") ?? "yape";
   const { data: eventData } = useEvent(slug);
   const { data: ticketData, refetch: refetchTickets } = useMyTickets();
   const { loggedIn } = useSessionReady();
   const [startedAt] = useState(() => Date.now());
   const [paid, setPaid] = useState(false);
-  // Último status visto en el polling. Si al agotar el tiempo sigue 'pending', el
-  // pago quedó en revisión (in_process) — no es un error, va a la pantalla amable.
-  const lastStatus = useRef<string | null>(null);
+  const [pollError, setPollError] = useState<string | null>(null);
+  // Delay entre confirmar `paid` y navegar a la orden — le da tiempo al usuario
+  // de ver el check de éxito antes de saltar (LOW-10/LOW-20).
+  const SUCCESS_NAV_DELAY_MS = 1600;
+  const successNavTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!orderId) return;
+    if (orderTokenFromUrl) {
+      persistOrderToken(orderId, orderTokenFromUrl);
+      setOrderToken(orderTokenFromUrl);
+      return;
+    }
+    const stored = readOrderToken(orderId);
+    if (stored) setOrderToken(stored);
+  }, [orderId, orderTokenFromUrl]);
 
   useEffect(() => {
     if (!orderId || paid) return;
     let cancelled = false;
     const tick = async () => {
       try {
-        const qs = guestEmail ? `?email=${encodeURIComponent(guestEmail)}` : "";
+        const params = new URLSearchParams();
+        if (orderToken) params.set("k", orderToken);
+        const qs = params.toString() ? `?${params.toString()}` : "";
         const res = await api.get<{
           status: string;
           paidAt: string | null;
@@ -48,25 +66,30 @@ function Inner({ params }: Props) {
           orderUrl: string | null;
         }>(`/api/tickets/order/${orderId}/status${qs}`);
         if (cancelled) return;
-        lastStatus.current = res.status;
         if (res.status === "paid") {
+          setPollError(null);
           setPaid(true);
           await refetchTickets();
-          setTimeout(() => {
-            // /order es el único punto de decisión post-pago: reclama la orden
-            // (o confirma que ya es tuya — claimOrder es idempotente para el
-            // dueño) con el conteo REAL de entradas, y recién ahí bifurca a
-            // /done o /tickets/[id]. No se decide acá con datos adivinados.
+          successNavTimer.current = setTimeout(() => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             router.replace((res.orderUrl ?? "/tickets") as any);
-          }, 1600);
+          }, SUCCESS_NAV_DELAY_MS);
         } else if (res.status === "failed" || res.status === "expired") {
           router.replace(
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             `/events/${slug}/pay-error?reason=${res.status}` as any,
           );
         }
-      } catch {}
+      } catch (e) {
+        if (!cancelled) {
+          const msg = (e as Error).message ?? "poll_failed";
+          setPollError(
+            msg.includes("403") || msg.includes("forbidden")
+              ? "No pudimos verificar tu pago. Volvé al checkout desde el mismo dispositivo donde compraste."
+              : "Problema de conexión al verificar el pago. Seguimos intentando…",
+          );
+        }
+      }
     };
     void tick();
     const id = setInterval(() => void tick(), 2000);
@@ -74,7 +97,17 @@ function Inner({ params }: Props) {
       cancelled = true;
       clearInterval(id);
     };
-  }, [orderId, guestEmail, router, slug, refetchTickets, paid, search]);
+  }, [orderId, orderToken, router, slug, refetchTickets, paid]);
+
+  // Cleanup del salto a /order SOLO al desmontar de verdad (no en cada re-run
+  // del efecto de arriba, que se dispara también cuando `paid` cambia a true
+  // — justo cuando este timer recién se armó; cancelarlo ahí rompería la
+  // navegación de éxito). LOW-10/LOW-20.
+  useEffect(() => {
+    return () => {
+      if (successNavTimer.current) clearTimeout(successNavTimer.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (orderId) return;
@@ -96,18 +129,28 @@ function Inner({ params }: Props) {
     }
   }, [orderId, ticketData, slug, router, startedAt]);
 
+  const PROCESSING_TIMEOUT_MS = 60_000;
+
   useEffect(() => {
+    // Si el pago ya se confirmó (paid=true), NO armar el timeout duro: un
+    // pago aprobado en el último instante nunca debe poder disparar
+    // pay-error, así este efecto se re-arme por el cambio de `paid`
+    // (LOW-10/LOW-20).
+    if (paid) return;
     const t = setTimeout(() => {
-      // Si el pago sigue en revisión (pending/in_process) a los 60s, no es un
-      // error: MP puede tardar. Vamos a la pantalla amable de "en revisión".
-      const reason = lastStatus.current === "pending" ? "?reason=in_review" : "";
+      // Llegar acá a los 60s significa que NUNCA vimos un estado terminal: un
+      // pago rechazado/expirado ya habría redirigido dentro del propio poll. Sea
+      // porque sigue 'pending' (MP tarda) o porque jamás pudimos leer el estado,
+      // la verdad honesta es "en revisión" — nunca "no pudimos cobrarte", que
+      // afirmaría un fallo que no confirmamos (y confundiría a un guest cuyo Yape
+      // SÍ se aprobó). No inferimos "pagado": solo evitamos el falso negativo.
       router.replace(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        `/events/${slug}/pay-error${reason}` as any,
+        `/events/${slug}/pay-error?reason=in_review` as any,
       );
-    }, 60_000);
+    }, PROCESSING_TIMEOUT_MS);
     return () => clearTimeout(t);
-  }, [router, slug]);
+  }, [router, slug, paid]);
 
   const summary = useMemo(() => {
     if (!eventData) return null;
@@ -233,12 +276,20 @@ function Inner({ params }: Props) {
             <br />
             Tu QR llega en segundos.
           </p>
+          {pollError && (
+            <p className="mt-4 max-w-[360px] text-[13px] leading-[1.5] text-amber-200">
+              {pollError}
+            </p>
+          )}
           {summary && (
             <div className="mt-7 rounded-full bg-cart-bg-elev px-4 py-2 font-mono text-[12px] text-cart-ink-3">
               {summary.price ? `${summary.price} · ` : ""}
               {summary.title}
             </div>
           )}
+          <p className="mt-6">
+            <RecoverTicketsLink compact />
+          </p>
         </div>
       )}
     </div>

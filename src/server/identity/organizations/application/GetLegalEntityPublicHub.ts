@@ -1,6 +1,6 @@
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
 import { buyerUnitPriceCents } from "@/lib/tickets/serviceFee";
-import type { FeeMode } from "@/server/events/domain/Event";
+import { SHOWCASE_RECENT_GRACE_MS, type FeeMode } from "@/server/events/domain/Event";
 import { supabaseLegalEntityRepository } from "../infrastructure/repositories/SupabaseLegalEntityRepository";
 import type { LegalEntity } from "../domain/LegalEntity";
 
@@ -56,7 +56,7 @@ export const getLegalEntityPublicHub = async (slug: string): Promise<PublicHub |
   }
 
   const orgIds = orgRows.map((o) => o.id);
-  const cutoff = new Date(Date.now() - 6 * 3600 * 1000).toISOString();
+  const cutoff = new Date(Date.now() - SHOWCASE_RECENT_GRACE_MS).toISOString();
 
   const { data: rawEvents } = await db
     .from("events")

@@ -24,6 +24,9 @@ import type { Box } from "@/server/boxes/domain/Box";
 
 type Props = { params: Promise<{ id: string }> };
 
+// Key local (no sync entre dispositivos) para no repetir el nudge educativo del box.
+const BOX_NUDGE_SEEN_KEY = "pasape:box_nudge_seen";
+
 // Transición direccional del carrusel de entradas: la nueva entra desde el lado
 // del gesto y la saliente sale hacia el opuesto. `dir` 1 = siguiente, -1 = anterior.
 const cardVariants = {
@@ -130,9 +133,10 @@ function TicketDetailInner({ id }: { id: string }) {
 
   // No pedimos cert/QR si la orden aún está en revisión (in_process): el server
   // no lo emite hasta que esté pagada, así que evitamos el fetch fallido.
+  const [qrRetryNonce, setQrRetryNonce] = useState(0);
   const activeTicketId =
     data && data.status === "active" && data.orderStatus !== "pending" ? activeId : null;
-  const rotating = useLocalRotatingQr(activeTicketId);
+  const rotating = useLocalRotatingQr(activeTicketId, undefined, qrRetryNonce);
   const isBoxTicket = !!data?.boxLabel;
   const isHost = isBoxTicket && !data?.boxHostTicketId;
   // Id del ticket host del box, estés en el host o en un acompañante que llevas:
@@ -164,13 +168,13 @@ function TicketDetailInner({ id }: { id: string }) {
   const [boxNudgeSeen, setBoxNudgeSeen] = useState(false);
   useEffect(() => {
     try {
-      if (localStorage.getItem("pasape:box_nudge_seen")) setBoxNudgeSeen(true);
+      if (localStorage.getItem(BOX_NUDGE_SEEN_KEY)) setBoxNudgeSeen(true);
     } catch {}
   }, []);
   useEffect(() => {
     if (!panelInView) return;
     try {
-      localStorage.setItem("pasape:box_nudge_seen", "1");
+      localStorage.setItem(BOX_NUDGE_SEEN_KEY, "1");
     } catch {}
     setBoxNudgeSeen(true);
   }, [panelInView]);
@@ -383,12 +387,25 @@ function TicketDetailInner({ id }: { id: string }) {
               ) : rotating.payload ? (
                 <QrSquare code={rotating.payload} size={240} errorCorrectionLevel="L" />
               ) : (
-                <div className="grid size-[240px] place-items-center px-4 text-center text-[13px] text-cart-ink-3">
-                  {rotating.error
-                    ? rotating.error === "offline_no_cert"
-                      ? "Necesitas conexión la primera vez para activar tu QR. Conéctate y recarga."
-                      : "No pudimos generar el QR. Recarga la página."
-                    : "Generando QR…"}
+                <div className="grid size-[240px] place-content-center gap-3 px-4 text-center text-[13px] text-cart-ink-3">
+                  {rotating.error ? (
+                    <>
+                      <p>
+                        {rotating.error === "offline_no_cert"
+                          ? "Necesitas conexión la primera vez para activar tu QR."
+                          : "No pudimos generar el QR."}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setQrRetryNonce((n) => n + 1)}
+                        className="rounded-full bg-cart-accent px-4 py-2 text-[12.5px] font-semibold text-white transition hover:brightness-110"
+                      >
+                        {rotating.error === "offline_no_cert" ? "Reintentar con conexión" : "Reintentar"}
+                      </button>
+                    </>
+                  ) : (
+                    "Generando QR…"
+                  )}
                 </div>
               )}
               {rotating.payload && <CountdownRing seconds={rotating.secondsLeft} />}
@@ -664,6 +681,7 @@ function TicketDetailInner({ id }: { id: string }) {
         ticketTypeName={data.ticketType.name}
         online={online}
         anchorRef={holderBtnRef}
+        variant="yours"
         onClose={() => setEditOpen(false)}
       />
     </div>
@@ -827,6 +845,7 @@ function BoxPanel({ box }: { box: Box }) {
   const [addMode, setAddMode] = useState<"closed" | "choose" | "companion">("closed");
   const [cName, setCName] = useState("");
   const [cDni, setCDni] = useState("");
+  const addInFlightRef = useRef(false);
 
   const origin = typeof window === "undefined" ? "" : window.location.origin;
   const url = `${origin}/box/${box.inviteToken}`;
@@ -844,7 +863,8 @@ function BoxPanel({ box }: { box: Box }) {
   const cDniValid = cDni === "" || /^\d{8}$/.test(cDni);
   const canAdd = cName.trim().length >= 2 && cDniValid && !addCompanion.isPending;
   const submitCompanion = () => {
-    if (!canAdd) return;
+    if (addInFlightRef.current || !canAdd) return;
+    addInFlightRef.current = true;
     addCompanion.mutate(
       { token: box.inviteToken, holderName: cName.trim(), holderDni: cDni || undefined },
       {
@@ -852,6 +872,9 @@ function BoxPanel({ box }: { box: Box }) {
           setCName("");
           setCDni("");
           setAddMode("closed");
+        },
+        onSettled: () => {
+          addInFlightRef.current = false;
         },
       },
     );

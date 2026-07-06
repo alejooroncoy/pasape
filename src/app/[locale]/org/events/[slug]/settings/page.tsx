@@ -77,9 +77,21 @@ export default function OrgEventConfigPage({ params }: { params: Params }) {
                 </div>
               </div>
               {ev?.status === "closed" ? (
-                <div className="inline-flex items-center gap-1.5 rounded-full bg-white/8 px-3 py-1 text-[12px] font-semibold text-cart-ink-2">
-                  <span className="size-1.5 rounded-full bg-cart-ink-2" />
-                  Cerrado
+                <div className="flex flex-col items-start gap-2 lg:items-end">
+                  <div className="inline-flex items-center gap-1.5 rounded-full bg-white/8 px-3 py-1 text-[12px] font-semibold text-cart-ink-2">
+                    <span className="size-1.5 rounded-full bg-cart-ink-2" />
+                    Cerrado
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirm("¿Reabrir el evento? Volverá a estar publicado y se reanudarán las ventas."))
+                        update.mutate({ status: "published" });
+                    }}
+                    className="rounded-full border border-cart-line bg-cart-bg-elev-2 px-4 py-2 text-[12.5px] font-semibold text-cart-ink-2 transition hover:border-cart-line-strong hover:text-white"
+                  >
+                    Reabrir evento
+                  </button>
                 </div>
               ) : (
                 <button

@@ -2,21 +2,21 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/_shared/api-client";
-import type { OrgInviteRole, InviteScopeType } from "@/server/identity/organizations/domain/Invite";
+import type { InvitableOrgRole, InviteScopeType } from "@/server/identity/organizations/domain/Invite";
 import { orgInvitesKey } from "./useOrgInvites";
 
 type Input =
   | {
       channel: "email";
       email: string;
-      role: OrgInviteRole;
+      role: InvitableOrgRole;
       scopeType?: InviteScopeType;
       scopeId?: string;
     }
   | {
       channel: "whatsapp";
       phone: string;
-      role: OrgInviteRole;
+      role: InvitableOrgRole;
       scopeType?: InviteScopeType;
       scopeId?: string;
     };

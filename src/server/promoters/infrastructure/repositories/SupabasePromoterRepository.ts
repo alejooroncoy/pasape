@@ -9,6 +9,9 @@ import type {
 } from "@/server/promoters/domain/Promoter";
 import { computePromoterPayout, resolveCommissionScheme } from "@/server/promoters/application/CommissionResolver";
 
+// Bytes de entropía del token opaco de invitación de promotor (LOW-4).
+const PROMOTER_APPLY_TOKEN_BYTES = 16;
+
 type LinkRow = {
   id: string;
   event_id: string;
@@ -47,6 +50,10 @@ type SchemeRow = {
   } | null;
 };
 
+// Ventana simétrica alrededor de startsAt (antes y después) en la que el
+// evento se considera "live" para el status del link de promotor.
+const LIVE_WINDOW_MS = 6 * 60 * 60 * 1000;
+
 const computeEventStatus = (
   startsAt: string,
   status: string,
@@ -54,7 +61,7 @@ const computeEventStatus = (
 ): "live" | "upcoming" | "closed" => {
   if (status === "closed" || status === "cancelled") return "closed";
   const diffMs = new Date(startsAt).getTime() - now.getTime();
-  if (Math.abs(diffMs) <= 6 * 60 * 60 * 1000) return "live";
+  if (Math.abs(diffMs) <= LIVE_WINDOW_MS) return "live";
   return "upcoming";
 };
 
@@ -171,18 +178,40 @@ export const supabasePromoterRepository: PromoterRepository = {
 
     const { data: orders } = await db
       .from("orders")
-      .select("created_at, buyer:profiles!inner(full_name)")
+      .select("created_at, total_cents, buyer:profiles!inner(full_name)")
       .eq("promoter_link_id", l.id)
       .eq("status", "paid")
       .gt("total_cents", 0)
       .order("created_at", { ascending: false })
       .limit(10);
 
-    type OrderRow = { created_at: string; buyer: { full_name: string | null } };
-    const recent = ((orders as unknown as OrderRow[] | null) ?? []).map((o) => ({
+    type OrderRow = { created_at: string; total_cents: number; buyer: { full_name: string | null } };
+    const orderRows = (orders as unknown as OrderRow[] | null) ?? [];
+    const recent = orderRows.slice(0, 10).map((o) => ({
       firstName: (o.buyer?.full_name ?? "Alguien").split(" ")[0] ?? "Alguien",
       createdAt: o.created_at,
     }));
+
+    // "Generado" del home: mismo cálculo que /r/[code]/state y getEarnings
+    // (% del vendido + hitos cash). El `limit(10)` de arriba es solo para
+    // "recent"; el gross para el payout necesita TODAS las órdenes pagadas.
+    const { data: grossOrders } = await db
+      .from("orders")
+      .select("total_cents")
+      .eq("promoter_link_id", l.id)
+      .eq("status", "paid")
+      .gt("total_cents", 0);
+    const grossCents = ((grossOrders as Array<{ total_cents: number }> | null) ?? []).reduce(
+      (a, o) => a + o.total_cents,
+      0,
+    );
+    const payoutCents = computePromoterPayout({
+      pct: scheme.pct,
+      config: scheme.config,
+      soldUnits: count ?? 0,
+      attendedUnits: attendedCount,
+      grossCents,
+    }).payoutCents;
 
     return {
       link: l,
@@ -192,6 +221,7 @@ export const supabasePromoterRepository: PromoterRepository = {
       commissionPct: scheme.pct,
       commissionConfig: scheme.config,
       schemeConfigured: scheme.configured,
+      payoutCents,
     };
   },
 
@@ -292,16 +322,27 @@ export const supabasePromoterRepository: PromoterRepository = {
   },
 
   async generateInviteToken({ eventSlug, orgId }) {
-    // Token = base64url(eventSlug). El "comisión" se guarda como per-link al aprobar.
+    // Token opaco random persistido en events.promoter_apply_token (LOW-4):
+    // ya NO es derivable a partir del slug público. Idempotente — si el
+    // evento ya tiene un token vigente, lo reutilizamos.
     const db = supabaseAdmin();
     const { data: ev } = await db
       .from("events")
-      .select("id, organization_id")
+      .select("id, organization_id, promoter_apply_token")
       .eq("slug", eventSlug)
-      .maybeSingle<{ id: string; organization_id: string }>();
+      .maybeSingle<{ id: string; organization_id: string; promoter_apply_token: string | null }>();
     if (!ev) return err("event_not_found");
     if (ev.organization_id !== orgId) return err("forbidden");
-    const token = Buffer.from(eventSlug).toString("base64url");
+
+    let token = ev.promoter_apply_token;
+    if (!token) {
+      token = crypto.randomBytes(PROMOTER_APPLY_TOKEN_BYTES).toString("base64url");
+      const { error } = await db
+        .from("events")
+        .update({ promoter_apply_token: token })
+        .eq("id", ev.id);
+      if (error) return err(error.message);
+    }
     return ok({
       token,
       url: `/apply/${token}`,
@@ -310,19 +351,13 @@ export const supabasePromoterRepository: PromoterRepository = {
 
   async resolveInviteToken(token) {
     const db = supabaseAdmin();
-    let slug: string;
-    try {
-      slug = Buffer.from(token, "base64url").toString("utf8");
-    } catch {
-      return null;
-    }
     const { data: ev } = await db
       .from("events")
       .select(
         "id, slug, title, promoter_commission_pct, promoter_commission_config, " +
           "organization:organizations!inner(name, promoter_commission_pct, promoter_commission_config)",
       )
-      .eq("slug", slug)
+      .eq("promoter_apply_token", token)
       .maybeSingle();
     if (!ev) return null;
     type E = {
@@ -361,10 +396,18 @@ export const supabasePromoterRepository: PromoterRepository = {
     };
   },
 
-  async applyByToken({ token, applicantId, message }) {
+  async applyByToken({ token, applicantId, message, fullName }) {
     const db = supabaseAdmin();
     const resolved = await this.resolveInviteToken(token);
     if (!resolved) return err("invalid_token");
+
+    // Persistimos el nombre tecleado en el profile: es la fuente que lee
+    // listPendingApplications (applicantName ← profiles.full_name). Sin esto
+    // el campo requerido del form se pierde y el organizador ve "—".
+    const trimmedName = fullName?.trim();
+    if (trimmedName) {
+      await db.from("profiles").update({ full_name: trimmedName }).eq("id", applicantId);
+    }
 
     // Si ya existe link activo, devolver "approved" implícito vía status.
     const { data: link } = await db
