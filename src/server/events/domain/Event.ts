@@ -63,6 +63,9 @@ export type Event = {
   endsAt: string | null;
   timezone: string;
   status: EventStatus;
+  /** Motivo que Pasape escribió al rechazar (status vuelve a "draft"). Se
+   *  limpia solo cuando el organizador reenvía a revisión (ver UpdateEvent.ts). */
+  rejectedReason: string | null;
   category: EventCategory | null;
   /** Moneda del evento (ISO 4217). Default 'PEN'; preparado para multi-mercado. */
   currency: string;

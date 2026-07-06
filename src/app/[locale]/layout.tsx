@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { NextIntlClientProvider, hasLocale } from "next-intl";
 import { setRequestLocale } from "next-intl/server";
 import type { ReactNode } from "react";
+import { Toaster } from "sonner";
 import { routing } from "@/i18n/routing";
 import { QueryProvider } from "@/lib/_shared/query-client";
 import { ServiceWorkerRegister } from "@/components/pwa/ServiceWorkerRegister";
@@ -30,6 +31,7 @@ export default async function LocaleLayout({ children, params }: Props) {
         <PostHogIdentify />
       </QueryProvider>
       <ServiceWorkerRegister />
+      <Toaster theme="dark" position="top-center" richColors />
     </NextIntlClientProvider>
   );
 }

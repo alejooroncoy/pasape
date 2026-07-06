@@ -76,9 +76,12 @@ export const updateEvent = async (
 ): Promise<Result<Event>> => {
   // El organizador nunca publica directo: pedir status "published" por este
   // canal (o por /publish) siempre cae en pending_review hasta que Pasape lo
-  // aprueba a mano. Ver SupabaseEventRepository.publish.
+  // aprueba a mano. Ver SupabaseEventRepository.publish. Reenviar a revisión
+  // también limpia un rechazo previo — es un intento nuevo, no el mismo.
   const gatedInput =
-    input.status === "published" ? { ...input, status: "pending_review" as const } : input;
+    input.status === "published"
+      ? { ...input, status: "pending_review" as const, rejectedReason: null }
+      : input;
 
   // Capture pre-update state so we can compute a diff after the write.
   const before = (await repo.listByOrganization(orgId)).find((e) => e.id === eventId);

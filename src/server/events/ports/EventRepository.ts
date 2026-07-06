@@ -212,6 +212,7 @@ export type PromoInput = {
 
 export type UpdateEventInput = {
   status?: EventStatus;
+  rejectedReason?: string | null;
   title?: string;
   description?: string | null;
   venue?: string | null;

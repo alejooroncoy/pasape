@@ -49,6 +49,7 @@ type EventRow = {
   ends_at: string | null;
   timezone: string;
   status: Event["status"];
+  rejected_reason: string | null;
   category: EventCategory | null;
   currency: string;
   total_capacity: number | null;
@@ -145,6 +146,7 @@ const toEvent = (r: EventRow): Event => ({
   endsAt: r.ends_at,
   timezone: r.timezone,
   status: r.status,
+  rejectedReason: r.rejected_reason,
   category: r.category,
   currency: r.currency,
   capacity: {
@@ -425,6 +427,7 @@ export const supabaseEventRepository: EventRepository = {
     const db = supabaseAdmin();
     const patch: Record<string, unknown> = {};
     if (input.status !== undefined) patch.status = input.status;
+    if (input.rejectedReason !== undefined) patch.rejected_reason = input.rejectedReason;
     if (input.title !== undefined) patch.title = input.title;
     if (input.description !== undefined) patch.description = input.description;
     if (input.venue !== undefined) patch.venue = input.venue;

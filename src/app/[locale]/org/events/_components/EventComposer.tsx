@@ -11,6 +11,7 @@ import {
   type SetStateAction,
 } from "react";
 import { AnimatePresence, motion } from "motion/react";
+import { toast } from "sonner";
 import { Money } from "@/lib/_shared/money";
 import { useRouter } from "@/i18n/navigation";
 import { PhoneField } from "@/components/design/PhoneField";
@@ -996,6 +997,16 @@ export function EventComposer(props: EventComposerProps) {
         return;
       }
 
+      // El backend gatea "published" a pending_review (ver UpdateEvent.ts) —
+      // el toast tiene que reflejar eso, no lo que el organizador pidió.
+      if (patch.status === "published") {
+        toast("Actualizado — quedó en revisión", {
+          description: "Pasape lo va a revisar antes de que el cambio siga público.",
+        });
+      } else {
+        toast("Evento actualizado");
+      }
+
       props.onClose?.();
     } catch (e) {
       setSubmitError((e as Error).message);
@@ -1498,6 +1509,18 @@ export function EventComposer(props: EventComposerProps) {
               <PublishToggle value={publishNow} onChange={setPublishNow} />
             </div>
           )}
+
+          {isEdit &&
+            props.initial.event.status === "draft" &&
+            props.initial.event.rejectedReason && (
+              <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+                <p className="font-semibold text-amber-100">Pasape rechazó este evento</p>
+                <p className="mt-1 text-amber-200/90">{props.initial.event.rejectedReason}</p>
+                <p className="mt-1.5 text-[13px] text-amber-200/70">
+                  Corrígelo y vuelve a enviarlo a revisión cuando quieras.
+                </p>
+              </div>
+            )}
 
           {submitError && (
             <div className="rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">
