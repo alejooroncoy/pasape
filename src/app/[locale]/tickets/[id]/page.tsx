@@ -15,6 +15,7 @@ import { useTicket, useCancelTransfer, useMyTickets, useCarouselScope, ticketDet
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { useOnline } from "@/lib/_shared/useOnline";
 import { useLocalRotatingQr, prewarmTicketCert } from "@/lib/tickets/hooks/useLocalRotatingQr";
+import { clientEvents } from "@/lib/analytics/clientEvents";
 import { useBoxForTicket, useRealtimeBox, useRemoveBoxMember, useAddBoxCompanion } from "@/lib/boxes/hooks/useBoxes";
 import { formatDate } from "@/lib/_shared/format";
 import { maskPhone } from "@/lib/tickets/phoneFormat";
@@ -137,6 +138,30 @@ function TicketDetailInner({ id }: { id: string }) {
   const activeTicketId =
     data && data.status === "active" && data.orderStatus !== "pending" ? activeId : null;
   const rotating = useLocalRotatingQr(activeTicketId, undefined, qrRetryNonce);
+
+  // ticket_viewed / ticket_qr_result: un solo disparo por ticket por sesión —
+  // el usuario puede ir y volver en el carrusel sin que se repita el evento.
+  const viewedRef = useRef<Set<string>>(new Set());
+  const qrResultRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!data || viewedRef.current.has(activeId)) return;
+    viewedRef.current.add(activeId);
+    clientEvents.ticketViewed({ ticket_id: activeId, event_id: data.event.id, status: data.status });
+  }, [activeId, data]);
+  useEffect(() => {
+    if (!activeTicketId || rotating.loading) return;
+    // Incluye qrRetryNonce en la key: un reintento (botón "Reintentar") sí debe
+    // reportar su propio resultado, no quedar silenciado por el intento previo.
+    const key = `${activeTicketId}:${qrRetryNonce}`;
+    if (qrResultRef.current.has(key)) return;
+    qrResultRef.current.add(key);
+    clientEvents.ticketQrResult({
+      ticket_id: activeTicketId,
+      ok: !!rotating.payload,
+      error: rotating.error,
+    });
+  }, [activeTicketId, qrRetryNonce, rotating.loading, rotating.payload, rotating.error]);
+
   const isBoxTicket = !!data?.boxLabel;
   const isHost = isBoxTicket && !data?.boxHostTicketId;
   // Id del ticket host del box, estés en el host o en un acompañante que llevas:

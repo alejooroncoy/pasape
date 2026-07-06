@@ -33,4 +33,14 @@ export const clientEvents = {
     event_slug: string;
     items_count: number;
   }) => posthog.capture("checkout_step_advanced", properties),
+
+  ticketViewed: (properties: { ticket_id: string; event_id: string; status: string }) =>
+    posthog.capture("ticket_viewed", properties),
+
+  // Resultado real del QR (éxito u error) — separado de ticket_viewed porque
+  // el cert tarda en resolver (red + WebCrypto) y puede fallar después de que
+  // la vista ya cargó. Sin esto, un caso como "mi QR no carga" solo se detecta
+  // a mano revisando Supabase/Sentry.
+  ticketQrResult: (properties: { ticket_id: string; ok: boolean; error: string | null }) =>
+    posthog.capture("ticket_qr_result", properties),
 };
