@@ -1,9 +1,10 @@
 "use client";
 
-import { ButtonHTMLAttributes, useEffect, useMemo, useState } from "react";
+import { ButtonHTMLAttributes, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Link, useRouter } from "@/i18n/navigation";
 import { clientEvents } from "@/lib/analytics/clientEvents";
+import { api } from "@/lib/_shared/api-client";
 import { UserHeader } from "@/app/[locale]/_home/UserHeader";
 import { useEvent } from "@/lib/events/hooks/useEvents";
 import { useSaveEvent } from "@/lib/identity/hooks/useSaveEvent";
@@ -41,6 +42,18 @@ import {
 // flash negro→color mientras esperaba el fetch del cliente.
 export function EventDetailClient({ slug }: { slug: string }) {
   const { data, isLoading, error } = useEvent(slug);
+
+  // Señal cruda para un futuro motor de recomendaciones (profile_category_views).
+  // Best-effort: si no hay sesión el server lo ignora en silencio, y si la red
+  // falla acá tampoco debe afectar la vista del evento.
+  const categoryViewSent = useRef<string | null>(null);
+  useEffect(() => {
+    const category = data?.event.category;
+    if (!category || categoryViewSent.current === slug) return;
+    categoryViewSent.current = slug;
+    api.post("/api/identity/category-view", { category }).catch(() => {});
+  }, [slug, data?.event.category]);
+
   // Los 3 tonos los eligió el organizador al crear/editar el evento (o los
   // dejó extraídos del flyer) — viajan ya resueltos en `event.palette*`, sin
   // canvas ni decodificación de imagen en el cliente. Si NO personalizó nada

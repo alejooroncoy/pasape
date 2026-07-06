@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { cookies } from "next/headers";
-import { err, type Result } from "@/server/_shared/result";
+import { err, ok, type Result } from "@/server/_shared/result";
 import { ACTIVE_ORG_COOKIE, getAuthContext, resolveActiveOrgSlug } from "@/server/_shared/AuthContext";
 import { getCurrentUser } from "../../application/GetCurrentUser";
 import { completeOnboarding } from "../../application/CompleteOnboarding";
@@ -11,6 +11,7 @@ import { followOrg, unfollowOrg } from "../../application/ToggleFollow";
 import { listSavedEvents, type SavedEvent } from "@/server/events/application/ListSavedEvents";
 import { saveEvent, unsaveEvent } from "@/server/events/application/ToggleSaveEvent";
 import { lookupProfileByPhone, type LookupResult } from "../../application/LookupProfile";
+import { recordCategoryView } from "../../application/RecordCategoryView";
 import { supabaseUserRepository } from "../../infrastructure/repositories/SupabaseUserRepository";
 import { supabaseOrganizationRepository } from "../../organizations/infrastructure/repositories/SupabaseOrganizationRepository";
 import { supabaseLegalEntityRepository } from "../../organizations/infrastructure/repositories/SupabaseLegalEntityRepository";
@@ -146,6 +147,16 @@ export const IdentityController = {
     const parsed = z.object({ eventId: z.string().uuid() }).safeParse(input);
     if (!parsed.success) return err("invalid_input");
     return saveEvent(auth.value.profileId, parsed.data.eventId);
+  },
+
+  // Guest sin sesión: no-op silencioso (no hay perfil estable al cual atribuir
+  // la señal — ver profile_category_views). No es un error, solo no aplica.
+  async recordCategoryView(input: unknown): Promise<Result<{ ok: true }>> {
+    const auth = await getAuthContext();
+    if (!auth.ok) return ok({ ok: true });
+    const parsed = z.object({ category: z.string().min(1).max(40) }).safeParse(input);
+    if (!parsed.success) return err("invalid_input");
+    return recordCategoryView(auth.value.profileId, parsed.data.category);
   },
 
   async unsaveEvent(input: unknown): Promise<Result<{ saved: false }>> {
