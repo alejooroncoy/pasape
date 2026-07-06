@@ -23,6 +23,18 @@ export const acceptInvite = async (
   const status = inviteStatus(invite);
   if (status !== "pending") return err(`invite_${status}`);
 
+  // Invites por WhatsApp (sin email) no tienen ninguna otra prueba de
+  // posesión del canal que el link — el gate exige el OTP del teléfono antes
+  // de asignar membership. Apagado por default (INVITE_PHONE_OTP_REQUIRED):
+  // el envío/verificación de OTP ya existe (send/verify), pero el paso en el
+  // frontend del accept page todavía no está construido — activar el flag
+  // sin eso bloquearía todos los invites por WhatsApp. Prender cuando el UI
+  // esté listo.
+  const otpGateEnabled = process.env.INVITE_PHONE_OTP_REQUIRED === "true";
+  if (otpGateEnabled && invite.phone && !invite.phoneVerifiedAt) {
+    return err("phone_verification_required");
+  }
+
   const upserted = await memberships.upsert({
     profileId: input.profileId,
     role: invite.role,

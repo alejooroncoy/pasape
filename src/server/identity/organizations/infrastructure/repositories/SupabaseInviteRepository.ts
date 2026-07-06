@@ -23,6 +23,10 @@ type Row = {
   accepted_by: string | null;
   revoked_at: string | null;
   created_at: string;
+  phone_verified_at: string | null;
+  otp_send_count: number;
+  otp_last_sent_at: string | null;
+  otp_attempts: number;
 };
 
 const toDomain = (r: Row): OrgInvite => ({
@@ -38,6 +42,10 @@ const toDomain = (r: Row): OrgInvite => ({
   acceptedBy: r.accepted_by,
   revokedAt: r.revoked_at,
   createdAt: r.created_at,
+  phoneVerifiedAt: r.phone_verified_at,
+  otpSendCount: r.otp_send_count,
+  otpLastSentAt: r.otp_last_sent_at,
+  otpAttempts: r.otp_attempts,
 });
 
 // Resuelve un nombre humano para mostrar el scope al invitado en el preview.
@@ -200,5 +208,58 @@ export const supabaseInviteRepository: InviteRepository = {
       .eq("id", input.id);
     if (error) return err(error.message);
     return ok(undefined);
+  },
+
+  async recordOtpSent(id): Promise<Result<OrgInvite>> {
+    const db = supabaseAdmin();
+    const { data: current, error: readErr } = await db
+      .from("invites")
+      .select("otp_send_count")
+      .eq("id", id)
+      .single<{ otp_send_count: number }>();
+    if (readErr || !current) return err(readErr?.message ?? "invite_not_found");
+
+    const { data, error } = await db
+      .from("invites")
+      .update({
+        otp_send_count: current.otp_send_count + 1,
+        otp_last_sent_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .select("*")
+      .single<Row>();
+    if (error || !data) return err(error?.message ?? "invite_otp_update_failed");
+    return ok(toDomain(data));
+  },
+
+  async recordOtpFailedAttempt(id): Promise<Result<OrgInvite>> {
+    const db = supabaseAdmin();
+    const { data: current, error: readErr } = await db
+      .from("invites")
+      .select("otp_attempts")
+      .eq("id", id)
+      .single<{ otp_attempts: number }>();
+    if (readErr || !current) return err(readErr?.message ?? "invite_not_found");
+
+    const { data, error } = await db
+      .from("invites")
+      .update({ otp_attempts: current.otp_attempts + 1 })
+      .eq("id", id)
+      .select("*")
+      .single<Row>();
+    if (error || !data) return err(error?.message ?? "invite_otp_update_failed");
+    return ok(toDomain(data));
+  },
+
+  async markPhoneVerified(id): Promise<Result<OrgInvite>> {
+    const db = supabaseAdmin();
+    const { data, error } = await db
+      .from("invites")
+      .update({ phone_verified_at: new Date().toISOString() })
+      .eq("id", id)
+      .select("*")
+      .single<Row>();
+    if (error || !data) return err(error?.message ?? "invite_otp_update_failed");
+    return ok(toDomain(data));
   },
 };

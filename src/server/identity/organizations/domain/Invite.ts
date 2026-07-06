@@ -25,6 +25,11 @@ export type OrgInvite = {
   acceptedBy: string | null;
   revokedAt: string | null;
   createdAt: string;
+  // Verificación OTP del teléfono (solo aplica a invites por WhatsApp, sin email).
+  phoneVerifiedAt: string | null;
+  otpSendCount: number;
+  otpLastSentAt: string | null;
+  otpAttempts: number;
 };
 
 export type OrgInvitePreview = {

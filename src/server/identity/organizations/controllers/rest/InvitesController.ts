@@ -7,10 +7,13 @@ import { supabaseInviteRepository } from "../../infrastructure/repositories/Supa
 import { supabaseMembershipRepository } from "../../infrastructure/repositories/SupabaseMembershipRepository";
 import { createInvite } from "../../application/CreateInvite";
 import { acceptInvite } from "../../application/AcceptInvite";
+import { sendInviteOtp } from "../../application/SendInviteOtp";
+import { verifyInviteOtp } from "../../application/VerifyInviteOtp";
 import { listInvites, type InviteWithStatus } from "../../application/ListInvites";
 import { revokeInvite } from "../../application/RevokeInvite";
 import { inviteEmailSender } from "@/server/notifications/infrastructure/InviteEmailSender";
 import { inviteWhatsAppSender } from "@/server/notifications/infrastructure/InviteWhatsAppSender";
+import { otpGateway } from "@/server/notifications/infrastructure/otp";
 import { supabaseUserRepository } from "@/server/identity/infrastructure/repositories/SupabaseUserRepository";
 import { supabaseLegalEntityRepository } from "../../infrastructure/repositories/SupabaseLegalEntityRepository";
 import type { OrgInviteRole, OrgInvitePreview, InviteScopeType } from "../../domain/Invite";
@@ -218,5 +221,18 @@ export const InvitesController = {
     const auth = await getAuthContext();
     if (!auth.ok) return err(auth.error);
     return acceptInvite(deps, { token, profileId: auth.value.profileId });
+  },
+
+  // OTP del teléfono para invites por WhatsApp — hoy no bloquea accept()
+  // salvo que INVITE_PHONE_OTP_REQUIRED=true (ver AcceptInvite.ts).
+  async sendOtp(token: string): Promise<Result<{ sent: boolean }>> {
+    return sendInviteOtp({ invites: supabaseInviteRepository, otp: otpGateway() }, { token });
+  },
+
+  async verifyOtp(token: string, code: string): Promise<Result<{ verified: true }>> {
+    return verifyInviteOtp(
+      { invites: supabaseInviteRepository, otp: otpGateway() },
+      { token, code },
+    );
   },
 };
