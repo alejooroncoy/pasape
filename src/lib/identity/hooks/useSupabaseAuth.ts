@@ -52,13 +52,19 @@ export const useSignOut = () => {
     await supabase.auth.signOut();
     // Limpia cookie de org activa server-side.
     await api.del<{ ok: true }>("/api/auth/session");
-    // Vacía la cache en memoria, el snapshot persistido en IndexedDB y la copia
-    // del service worker: sin esto, la wallet (entradas + DNI) de esta cuenta
-    // seguiría visible offline si otra persona entra en el mismo device.
+    // setQueryData ANTES de qc.clear(): ya sabemos el resultado (deslogeado), así
+    // que lo escribimos directo mientras el observer del header sigue enganchado
+    // a esta query. Si esto corriera DESPUÉS de qc.clear(), el observer queda
+    // desconectado de la query vieja y el setQueryData sobre la query nueva no le
+    // llega — confirmado en vivo: el header se quedaba mostrando el usuario
+    // anterior indefinidamente hasta un reload manual.
+    qc.setQueryData(currentUserKey, null);
+    // Vacía el resto de la cache en memoria, el snapshot persistido en IndexedDB
+    // y la copia del service worker: sin esto, la wallet (entradas + DNI) de esta
+    // cuenta seguiría visible offline si otra persona entra en el mismo device.
     qc.clear();
     await clearPersistedQueryCache();
     resetPrefetchWallet();
     navigator.serviceWorker?.controller?.postMessage({ type: "CLEAR_WALLET_CACHE" });
-    void qc.invalidateQueries({ queryKey: currentUserKey });
   }, [qc]);
 };
