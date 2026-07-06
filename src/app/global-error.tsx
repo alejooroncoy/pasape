@@ -2,6 +2,7 @@
 
 import * as Sentry from "@sentry/nextjs";
 import { useEffect } from "react";
+import posthog from "posthog-js";
 
 // Error boundary raíz del App Router. Captura errores no manejados que escapan
 // de los layouts y los reporta a Sentry (no-op si no hay DSN). Reemplaza la
@@ -15,6 +16,7 @@ export default function GlobalError({
 }) {
   useEffect(() => {
     Sentry.captureException(error);
+    posthog.captureException(error);
   }, [error]);
 
   return (

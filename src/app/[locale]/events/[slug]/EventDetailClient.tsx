@@ -3,6 +3,7 @@
 import { ButtonHTMLAttributes, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Link, useRouter } from "@/i18n/navigation";
+import { clientEvents } from "@/lib/analytics/clientEvents";
 import { UserHeader } from "@/app/[locale]/_home/UserHeader";
 import { useEvent } from "@/lib/events/hooks/useEvents";
 import { useSaveEvent } from "@/lib/identity/hooks/useSaveEvent";
@@ -248,7 +249,10 @@ export function EventDetailClient({ slug }: { slug: string }) {
                     </div>
 
                     <BuyButton
-                      onClick={() => router.push(buyHrefAll() as never)}
+                      onClick={() => {
+                        clientEvents.checkoutStarted({ event_slug: slug, location: "sidebar" });
+                        router.push(buyHrefAll() as never);
+                      }}
                       palette={palette}
                       disabled={allSoldOut}
                     >
@@ -280,7 +284,10 @@ export function EventDetailClient({ slug }: { slug: string }) {
       >
         <div className="mx-auto px-5 pt-3">
           <BuyButton
-            onClick={() => router.push(buyHrefAll() as never)}
+            onClick={() => {
+              clientEvents.checkoutStarted({ event_slug: slug, location: "bottom_bar" });
+              router.push(buyHrefAll() as never);
+            }}
             palette={palette}
             disabled={isClosed || allSoldOut}
           >
@@ -1030,10 +1037,14 @@ function BackButton() {
 
 function SaveEventButton({ eventId }: { eventId: string }) {
   const { isSaved, toggle, isPending } = useSaveEvent(eventId);
+  const handleToggle = () => {
+    clientEvents.eventSaved({ event_id: eventId, saved: !isSaved });
+    toggle();
+  };
   return (
     <button
       type="button"
-      onClick={toggle}
+      onClick={handleToggle}
       disabled={isPending}
       aria-label={isSaved ? "Quitar de favoritos" : "Guardar en favoritos"}
       aria-pressed={isSaved}
@@ -1065,6 +1076,7 @@ function ShareButton({ title }: { title: string }) {
     if (typeof navigator !== "undefined" && navigator.share) {
       try {
         await navigator.share({ title, url: window.location.href });
+        clientEvents.eventShared({ method: "native_share" });
       } catch {
         /* user cancelled */
       }
@@ -1072,6 +1084,7 @@ function ShareButton({ title }: { title: string }) {
     }
     try {
       await navigator.clipboard?.writeText(window.location.href);
+      clientEvents.eventShared({ method: "clipboard" });
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch { }

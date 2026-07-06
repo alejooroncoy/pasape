@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { EventsController } from "@/server/events/controllers/rest/EventsController";
+import { getAuthDistinctId } from "@/lib/posthog-server";
+import { serverEvents } from "@/lib/analytics/serverEvents";
 
 export const GET = async (
   _req: NextRequest,
@@ -7,6 +9,9 @@ export const GET = async (
 ) => {
   const { slug } = await params;
   const result = await EventsController.exportXlsx(slug);
+  if (result.ok) {
+    serverEvents.exportDownloaded(await getAuthDistinctId(), { event_slug: slug });
+  }
   if (!result.ok) {
     const status = result.error === "unauthenticated" || result.error === "invalid_session"
       ? 401

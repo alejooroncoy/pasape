@@ -24,6 +24,7 @@ import {
   type OrganizerCopy,
   type OrganizerType,
 } from "@/lib/identity/organizerType";
+import { clientEvents } from "@/lib/analytics/clientEvents";
 
 // ============================================================
 //  Onboarding multi-step — flows copiados de Mobbin:
@@ -232,6 +233,7 @@ function OnboardingInner() {
       entityTaxId: isOrganizerIntent ? vals.entityTaxId || null : null,
       brandName: isOrganizerIntent ? effectiveBrand || null : null,
     });
+    clientEvents.onboardingCompleted({ role: vals.role, is_organizer: isOrganizerIntent });
     clearVals();
     router.replace(vals.role === "organizer" && result.orgSlug ? "/org" : "/");
   };

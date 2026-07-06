@@ -72,6 +72,9 @@ export const QrSquare = ({ code, size = 220, centerImage, errorCorrectionLevel =
   return (
     <div
       ref={ref}
+      // ph-no-capture: excluye el QR del session replay de PostHog — es
+      // válido en vivo (rota cada 10s pero sigue siendo una entrada real).
+      className="ph-no-capture"
       style={{
         width: size,
         height: size,

@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
+import { serverEvents } from "@/lib/analytics/serverEvents";
 
 const schema = z.object({
   email: z.string().email(),
@@ -48,5 +49,6 @@ export const POST = async (req: NextRequest) => {
     console.error("[newsletter] failed:", error.message);
     return NextResponse.json({ error: "db_error" }, { status: 500 });
   }
+  serverEvents.newsletterSubscribed(parsed.data.email, { source: parsed.data.source ?? "home" });
   return NextResponse.json({ data: { ok: true } });
 };

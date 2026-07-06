@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { GoogleBtn } from "@/components/design";
 import { useGoogleSignIn } from "@/lib/identity/hooks/useFirebaseAuth";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
+import { clientEvents } from "@/lib/analytics/clientEvents";
 
 type Props = {
   open: boolean;
@@ -92,7 +93,7 @@ export function SignInDrawer({ open, onClose, redirectTo }: Props) {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2, duration: 0.3 }}
             >
-              <GoogleBtn onClick={() => void signIn()} disabled={pending} />
+              <GoogleBtn onClick={() => { clientEvents.signInStarted({ provider: "google" }); void signIn(); }} disabled={pending} />
             </motion.div>
             {error && (
               <div className="mt-3 text-center text-xs text-cart-ink-3" role="status">

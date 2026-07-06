@@ -11,6 +11,23 @@ const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 // offline; los datos los aporta la persistencia de React Query.
 
 const nextConfig: NextConfig = {
+  async rewrites() {
+    return [
+      {
+        source: "/ingest/static/:path*",
+        destination: "https://us-assets.i.posthog.com/static/:path*",
+      },
+      {
+        source: "/ingest/array/:path*",
+        destination: "https://us-assets.i.posthog.com/array/:path*",
+      },
+      {
+        source: "/ingest/:path*",
+        destination: "https://us.i.posthog.com/:path*",
+      },
+    ];
+  },
+  skipTrailingSlashRedirect: true,
   // Permite que el dev server acepte requests proxied desde ngrok (HTTPS).
   // Necesario para probar Mercado Pago localmente: MP rechaza CORS desde
   // localhost HTTP en /v1/card_tokens. Con ngrok obtenemos HTTPS válido.

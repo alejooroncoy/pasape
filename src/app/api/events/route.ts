@@ -2,6 +2,8 @@ import type { NextRequest } from "next/server";
 import { EventsController } from "@/server/events/controllers/rest/EventsController";
 import { json } from "@/server/_shared/http";
 import type { EventCategory } from "@/server/events/domain/Event";
+import { getAuthDistinctId } from "@/lib/posthog-server";
+import { serverEvents } from "@/lib/analytics/serverEvents";
 
 const VALID_CATEGORIES = new Set<string>(["conciertos","fiestas","festivales","comedia","cultura","deportes"]);
 
@@ -18,5 +20,12 @@ export const POST = async (req: NextRequest) => {
   //   title, description?, venue?, venueLayoutUrl?, startsAt, endsAt?, timezone?,
   //   totalCapacity?, overbookPct?, transfers*, ticketTypes[]
   const body = await req.json().catch(() => ({}));
-  return json(await EventsController.create(body), 201);
+  const result = await EventsController.create(body);
+  if (result.ok) {
+    serverEvents.eventCreated(await getAuthDistinctId(), {
+      event_id: result.value.id,
+      category: result.value.category,
+    });
+  }
+  return json(result, 201);
 };
