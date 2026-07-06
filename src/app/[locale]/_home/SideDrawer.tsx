@@ -218,6 +218,10 @@ function LogoutRow({ onClose }: { onClose: () => void }) {
   const handleSignOut = async () => {
     onClose();
     await signOut();
+    // Ruta que exige sesión (ej. /tickets): no tiene sentido quedarse ahí
+    // deslogeado, volvemos al home. En páginas públicas (ej. /events/[slug])
+    // el usuario se queda donde está — el header se actualiza solo porque
+    // useSignOut ya deja currentUserKey en null vía setQueryData.
     if (isBuyerProtectedPath(pathname)) {
       router.replace("/");
     }
