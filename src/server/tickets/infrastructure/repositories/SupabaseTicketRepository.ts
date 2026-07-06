@@ -244,6 +244,8 @@ const priceOrder = async (
       isPresaleActive,
       isFreeActive,
       freeUntilAt: tt.free_until_at,
+      showCountdown: false,
+      countdownEndsAt: null,
     });
     // Cortesía: precio efectivo 0 sin importar el precio del tipo. Subtotal 0
     // → sin fee → total 0 → la rama de órdenes gratis hace el resto.
