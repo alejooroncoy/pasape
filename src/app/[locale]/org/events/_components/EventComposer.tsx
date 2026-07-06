@@ -856,7 +856,13 @@ export function EventComposer(props: EventComposerProps) {
         ? "published"
         : "draft";
       const editableStatuses: EventDomain["status"][] = ["draft", "pending_review", "published"];
-      if (desiredStatus !== ev.status && editableStatuses.includes(ev.status)) {
+      // Un evento YA publicado que se vuelve a guardar con "En vivo" activo
+      // también cae a pending_review — cambió algo y Pasape tiene que verlo
+      // de nuevo antes de que el cambio siga público (ver UpdateEvent.ts).
+      if (
+        editableStatuses.includes(ev.status) &&
+        (desiredStatus !== ev.status || ev.status === "published")
+      ) {
         patch.status = desiredStatus;
       }
 
