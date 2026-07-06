@@ -371,11 +371,14 @@ export const supabaseEventRepository: EventRepository = {
     return ok(toEvent(data));
   },
 
+  // El organizador "publica", pero el evento queda en pending_review hasta
+  // que Pasape lo aprueba manualmente (cambia el status en Supabase) — ver
+  // AGENTS.md / [[review-eventos-pending]]. Solo published es visible al público.
   async publish(eventId, orgId): Promise<Result<Event>> {
     const db = supabaseAdmin();
     const { data, error } = await db
       .from("events")
-      .update({ status: "published" })
+      .update({ status: "pending_review" })
       .eq("id", eventId)
       .eq("organization_id", orgId)
       .select("*")

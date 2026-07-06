@@ -23,11 +23,11 @@ function SuccessContent() {
   const params = useSearchParams();
   const router = useRouter();
   const slug = params.get("slug") ?? "";
-  const initialStatus = (params.get("status") === "draft" ? "draft" : "published") as
+  const initialStatus = (params.get("status") === "pending_review" ? "pending_review" : "draft") as
     | "draft"
-    | "published";
+    | "pending_review";
   const promotersFailed = params.get("promoters") === "failed";
-  const [status, setStatus] = useState<"draft" | "published">(initialStatus);
+  const [status, setStatus] = useState<"draft" | "pending_review">(initialStatus);
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
 
@@ -41,7 +41,7 @@ function SuccessContent() {
         const body = await res.json().catch(() => ({}));
         throw new Error(body?.error ?? "publish_failed");
       }
-      setStatus("published");
+      setStatus("pending_review");
     } catch (e) {
       setPublishError((e as Error).message);
     } finally {
@@ -49,7 +49,10 @@ function SuccessContent() {
     }
   };
 
-  const isLive = status === "published";
+  // Ya no hay "publicado" instantáneo: al enviar a revisión, Pasape aprueba
+  // manualmente antes de que sea público. isLive nombra el estado "ya no es
+  // borrador" para reusar el layout — el copy real distingue ambos casos.
+  const isLive = status === "pending_review";
 
   const [origin, setOrigin] = useState("pasape.lat");
   useEffect(() => {
@@ -72,11 +75,6 @@ function SuccessContent() {
     } catch {
       // noop
     }
-  };
-
-  const whatsapp = () => {
-    const text = encodeURIComponent(`Estoy en Pasape — consigue tu entrada aquí: ${shareUrl}`);
-    window.open(`https://wa.me/?text=${text}`, "_blank");
   };
 
   return (
@@ -136,16 +134,10 @@ function SuccessContent() {
           {isLive ? (
             <button
               type="button"
-              onClick={whatsapp}
-              className="relative flex h-[58px] items-center justify-center gap-2.5 overflow-hidden rounded-2xl text-[15.5px] font-semibold tracking-[-0.01em] text-[#062315]"
-              style={{
-                background: "linear-gradient(180deg, #2EE584 0%, #25D366 100%)",
-                boxShadow:
-                  "0 14px 32px -10px rgba(37,211,102,0.55), 0 0 0 1px rgba(255,255,255,0.18) inset",
-              }}
+              onClick={() => router.push("/org")}
+              className="relative flex h-[58px] items-center justify-center gap-2.5 overflow-hidden rounded-2xl bg-cart-accent text-[15.5px] font-semibold tracking-[-0.01em] text-white shadow-[0_14px_32px_-10px_var(--color-cart-accent-glow-strong)]"
             >
-              <WhatsAppIcon />
-              Compartir por WhatsApp
+              Ir a mi panel
             </button>
           ) : (
             <button
@@ -162,13 +154,15 @@ function SuccessContent() {
               No pudimos publicar — intenta de nuevo o desde el panel.
             </div>
           )}
-          <button
-            type="button"
-            onClick={() => router.push("/org")}
-            className="flex h-[52px] items-center justify-center rounded-2xl border border-cart-line bg-cart-bg-elev/80 text-[14.5px] font-medium text-cart-ink-2 backdrop-blur transition hover:border-cart-line-strong hover:text-white"
-          >
-            {isLive ? "Ir a mi panel" : "Seguir editando"}
-          </button>
+          {!isLive && (
+            <button
+              type="button"
+              onClick={() => router.push("/org")}
+              className="flex h-[52px] items-center justify-center rounded-2xl border border-cart-line bg-cart-bg-elev/80 text-[14.5px] font-medium text-cart-ink-2 backdrop-blur transition hover:border-cart-line-strong hover:text-white"
+            >
+              Seguir editando
+            </button>
+          )}
         </div>
       </div>
 
@@ -182,37 +176,33 @@ function SuccessContent() {
               {isLive ? (
                 <button
                   type="button"
-                  onClick={whatsapp}
-                  className="relative flex h-[56px] items-center gap-2.5 overflow-hidden rounded-full px-7 text-[15px] font-semibold tracking-[-0.01em] text-[#062315] transition hover:-translate-y-[1px]"
-                  style={{
-                    background: "linear-gradient(180deg, #2EE584 0%, #25D366 100%)",
-                    boxShadow:
-                      "0 18px 40px -12px rgba(37,211,102,0.55), 0 0 0 1px rgba(255,255,255,0.18) inset",
-                  }}
+                  onClick={() => router.push("/org")}
+                  className="relative flex h-[56px] items-center gap-2.5 overflow-hidden rounded-full bg-cart-accent px-7 text-[15px] font-semibold tracking-[-0.01em] text-white shadow-[0_18px_40px_-12px_var(--color-cart-accent-glow-strong)] transition hover:-translate-y-[1px]"
                 >
-                  <WhatsAppIcon />
-                  Compartir por WhatsApp
+                  Ir a mi panel
                 </button>
               ) : (
-                <button
-                  type="button"
-                  onClick={publishNow}
-                  disabled={publishing}
-                  className="relative flex h-[56px] items-center gap-2.5 overflow-hidden rounded-full bg-cart-accent px-7 text-[15px] font-semibold tracking-[-0.01em] text-white shadow-[0_18px_40px_-12px_var(--color-cart-accent-glow-strong)] transition hover:-translate-y-[1px] disabled:opacity-60"
-                >
-                  {publishing ? "Publicando…" : "Publicar ahora"}
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={publishNow}
+                    disabled={publishing}
+                    className="relative flex h-[56px] items-center gap-2.5 overflow-hidden rounded-full bg-cart-accent px-7 text-[15px] font-semibold tracking-[-0.01em] text-white shadow-[0_18px_40px_-12px_var(--color-cart-accent-glow-strong)] transition hover:-translate-y-[1px] disabled:opacity-60"
+                  >
+                    {publishing ? "Publicando…" : "Publicar ahora"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => router.push("/org")}
+                    className="flex h-[56px] items-center gap-2 rounded-full border border-cart-line bg-cart-bg-elev/70 px-7 text-[14.5px] font-medium text-cart-ink-2 backdrop-blur transition hover:border-cart-line-strong hover:text-white"
+                  >
+                    Seguir editando
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                      <path d="M3 7h8M7 3l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                </>
               )}
-              <button
-                type="button"
-                onClick={() => router.push("/org")}
-                className="flex h-[56px] items-center gap-2 rounded-full border border-cart-line bg-cart-bg-elev/70 px-7 text-[14.5px] font-medium text-cart-ink-2 backdrop-blur transition hover:border-cart-line-strong hover:text-white"
-              >
-                {isLive ? "Ir a mi panel" : "Seguir editando"}
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                  <path d="M3 7h8M7 3l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </button>
             </div>
 
             {publishError && (
@@ -254,7 +244,7 @@ function SuccessContent() {
 // ============================================================
 function Hero({ variant, isLive }: { variant: "mobile" | "desktop"; isLive: boolean }) {
   const isDesktop = variant === "desktop";
-  const accent = isLive ? "text-cart-accent" : "text-cart-ink-2";
+  const accent = isLive ? "text-[#F5A623]" : "text-cart-ink-2";
   return (
     <div className="relative">
       <motion.div
@@ -264,7 +254,7 @@ function Hero({ variant, isLive }: { variant: "mobile" | "desktop"; isLive: bool
         className={
           "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-semibold tracking-[0.16em] backdrop-blur " +
           (isLive
-            ? "border-[#22D17F]/40 bg-[#22D17F]/12 text-[#22D17F]"
+            ? "border-[#F5A623]/40 bg-[#F5A623]/12 text-[#F5A623]"
             : "border-cart-line-strong bg-white/5 text-cart-ink-2")
         }
       >
@@ -272,11 +262,11 @@ function Hero({ variant, isLive }: { variant: "mobile" | "desktop"; isLive: bool
           className={
             "size-1.5 rounded-full " +
             (isLive
-              ? "bg-[#22D17F] shadow-[0_0_8px_rgba(34,209,127,0.7)]"
+              ? "bg-[#F5A623] shadow-[0_0_8px_rgba(245,166,35,0.7)]"
               : "bg-cart-ink-3")
           }
         />
-        {isLive ? "EN VIVO · PUBLICADO" : "GUARDADO COMO BORRADOR"}
+        {isLive ? "ENVIADO · EN REVISIÓN" : "GUARDADO COMO BORRADOR"}
       </motion.div>
 
       <motion.h1
@@ -293,8 +283,8 @@ function Hero({ variant, isLive }: { variant: "mobile" | "desktop"; isLive: bool
           <>
             Tu evento
             <br />
-            está en vivo.
-            <span className={"ml-1 " + accent}>🎉</span>
+            está en revisión.
+            <span className={"ml-1 " + accent}>👀</span>
           </>
         ) : (
           <>
@@ -315,7 +305,7 @@ function Hero({ variant, isLive }: { variant: "mobile" | "desktop"; isLive: bool
         }
       >
         {isLive
-          ? "Cada promotor asignado tiene su link único en el panel del evento. Comparte el tuyo donde quieras."
+          ? "Pasape revisa tu evento antes de publicarlo en la cartelera. Te avisamos apenas quede en vivo."
           : "Lo guardamos en borrador. Publícalo cuando estés lista y aparecerá en la cartelera al instante."}
       </motion.p>
     </div>
@@ -369,7 +359,7 @@ function ShareCard({
       {isDesktop && (
         <div className="relative mb-5 flex items-center justify-between">
           <div className="text-[12px] font-medium tracking-[0.18em] text-cart-ink-3">
-            {isLive ? "COMPARTE TU EVENTO" : "TU EVENTO (PRIVADO)"}
+            {isLive ? "TU EVENTO (EN REVISIÓN)" : "TU EVENTO (PRIVADO)"}
           </div>
           <div className="flex gap-1.5">
             <span className="size-2 rounded-full bg-cart-ink-4" />
@@ -377,7 +367,7 @@ function ShareCard({
             <span
               className={
                 "size-2 rounded-full " +
-                (isLive ? "bg-cart-accent" : "bg-cart-ink-3")
+                (isLive ? "bg-[#F5A623]" : "bg-cart-ink-3")
               }
             />
           </div>
@@ -403,7 +393,11 @@ function ShareCard({
         </div>
         <div className="min-w-0 flex-1">
           <div className="text-[10.5px] font-medium uppercase tracking-[0.14em] text-cart-ink-3">
-            {copied ? "Copiado al portapapeles" : "Tu link público"}
+            {copied
+              ? "Copiado al portapapeles"
+              : isLive
+                ? "Tu link (se activa al aprobarse)"
+                : "Tu link privado"}
           </div>
           <div
             className={
@@ -438,21 +432,13 @@ function ShareCard({
 
       {isDesktop && (
         <div className="relative mt-5 grid grid-cols-3 gap-3">
-          <Stat
-            label="Promotores"
-            value={isLive ? "Notificados" : "En espera"}
-            tone={isLive ? "accent" : "neutral"}
-          />
+          <Stat label="Promotores" value="En espera" tone="neutral" />
           <Stat
             label="Estado"
-            value={isLive ? "Live" : "Borrador"}
-            tone={isLive ? "green" : "neutral"}
+            value={isLive ? "En revisión" : "Borrador"}
+            tone="neutral"
           />
-          <Stat
-            label="Visibilidad"
-            value={isLive ? "Pública" : "Privada"}
-            tone={isLive ? "neutral" : "neutral"}
-          />
+          <Stat label="Visibilidad" value="Privada" tone="neutral" />
         </div>
       )}
     </motion.div>
@@ -531,13 +517,5 @@ function Confetti() {
         />
       ))}
     </div>
-  );
-}
-
-function WhatsAppIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 20 20" fill="#062315" aria-hidden>
-      <path d="M16.6 3.4A9 9 0 0 0 2 12.1l-1 4.9 5-1.3a9 9 0 0 0 4 1h0a9 9 0 0 0 9-9 9 9 0 0 0-2.4-4.3zm-6.6 13a7.5 7.5 0 0 1-3.8-1l-.3-.2-2.9.8.8-2.8-.2-.3a7.5 7.5 0 1 1 6.4 3.5zm4.1-5.6c-.2-.1-1.3-.7-1.5-.8s-.4-.1-.5.1-.5.7-.6.8-.3.1-.5 0a6 6 0 0 1-3-2.6c-.2-.4.2-.4.6-1.2 0-.2 0-.3-.1-.4l-.6-1.5c-.2-.4-.3-.3-.5-.3h-.4a.8.8 0 0 0-.6.3 2.5 2.5 0 0 0-.8 1.8c0 1 .8 2.1 1 2.3a8.5 8.5 0 0 0 3.5 3.2c2 .8 2 .5 2.4.5a2 2 0 0 0 1.3-1c.2-.4.2-.7.1-.7-.1-.1-.2-.2-.4-.3z" />
-    </svg>
   );
 }

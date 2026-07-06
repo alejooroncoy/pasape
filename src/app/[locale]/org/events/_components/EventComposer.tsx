@@ -421,7 +421,7 @@ export function EventComposer(props: EventComposerProps) {
                 freeUntilAt: "",
               },
             ],
-      publishNow: ev.status === "published",
+      publishNow: ev.status === "published" || ev.status === "pending_review",
     };
     // initial is stable per mount in edit mode (we re-mount per slug).
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -763,13 +763,13 @@ export function EventComposer(props: EventComposerProps) {
         }
       }
 
-      let finalStatus: "draft" | "published" = "draft";
+      let finalStatus: "draft" | "pending_review" = "draft";
       if (publishNow && ev.slug) {
         try {
           const res = await fetch(`/api/events/${ev.slug}/publish`, {
             method: "POST",
           });
-          if (res.ok) finalStatus = "published";
+          if (res.ok) finalStatus = "pending_review";
         } catch {
           // ignora — queda en draft
         }
@@ -850,10 +850,13 @@ export function EventComposer(props: EventComposerProps) {
       if (nextAccent !== ev.paletteAccent) patch.paletteAccent = nextAccent;
       if (nextLayoutUrl !== undefined) patch.venueLayoutUrl = nextLayoutUrl;
 
+      // "published" es la intención del organizador; el backend siempre lo
+      // baja a pending_review hasta que Pasape lo aprueba (ver UpdateEvent.ts).
       const desiredStatus: EventDomain["status"] = publishNow
         ? "published"
         : "draft";
-      if (desiredStatus !== ev.status && (ev.status === "draft" || ev.status === "published")) {
+      const editableStatuses: EventDomain["status"][] = ["draft", "pending_review", "published"];
+      if (desiredStatus !== ev.status && editableStatuses.includes(ev.status)) {
         patch.status = desiredStatus;
       }
 
@@ -1051,14 +1054,14 @@ export function EventComposer(props: EventComposerProps) {
       ? isEdit
         ? "Guardando…"
         : publishNow
-          ? "Publicando…"
+          ? "Enviando a revisión…"
           : "Guardando…"
       : !ready
         ? `Falta ${missingFields[0]}`
         : isEdit
           ? "Actualizar evento"
           : publishNow
-            ? "Publicar en vivo"
+            ? "Enviar a revisión"
             : "Guardar borrador";
 
   // ============================================================

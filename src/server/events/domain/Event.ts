@@ -1,4 +1,4 @@
-export type EventStatus = "draft" | "published" | "closed" | "cancelled";
+export type EventStatus = "draft" | "pending_review" | "published" | "closed" | "cancelled";
 
 // Ventana de gracia para vitrinas (org showcase, hub de marca): un evento que
 // ya empezó pero hace poco todavía se muestra como "próximo" en vez de
