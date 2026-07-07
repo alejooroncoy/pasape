@@ -5,7 +5,7 @@ const DB_NAME = "pasape-scan";
 const STORE = "tickets";
 const META = "meta";
 const PENDING = "pending_scans";
-const VERSION = 3;
+const VERSION = 4;
 
 export type PendingScan = {
   id?: number;
@@ -30,6 +30,11 @@ async function db(): Promise<IDBPDatabase> {
         const s = database.createObjectStore(STORE, { keyPath: "ticketId" });
         s.createIndex("qrCode", "qrCode", { unique: false });
       } else if (oldVersion < 3) {
+        database.deleteObjectStore(STORE);
+        const s = database.createObjectStore(STORE, { keyPath: "ticketId" });
+        s.createIndex("qrCode", "qrCode", { unique: false });
+      }
+      if (oldVersion < 4 && database.objectStoreNames.contains(STORE)) {
         database.deleteObjectStore(STORE);
         const s = database.createObjectStore(STORE, { keyPath: "ticketId" });
         s.createIndex("qrCode", "qrCode", { unique: false });
