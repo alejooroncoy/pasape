@@ -851,19 +851,15 @@ export function EventComposer(props: EventComposerProps) {
       if (nextAccent !== ev.paletteAccent) patch.paletteAccent = nextAccent;
       if (nextLayoutUrl !== undefined) patch.venueLayoutUrl = nextLayoutUrl;
 
-      // "published" es la intención del organizador; el backend siempre lo
-      // baja a pending_review hasta que Pasape lo aprueba (ver UpdateEvent.ts).
+      // "published" es la intención del organizador; en la PRIMERA publicación
+      // el backend lo baja a pending_review hasta que Pasape lo aprueba (ver
+      // UpdateEvent.ts). Un evento YA publicado no vuelve a revisión al
+      // editarse: no mandamos status si no cambió.
       const desiredStatus: EventDomain["status"] = publishNow
         ? "published"
         : "draft";
       const editableStatuses: EventDomain["status"][] = ["draft", "pending_review", "published"];
-      // Un evento YA publicado que se vuelve a guardar con "En vivo" activo
-      // también cae a pending_review — cambió algo y Pasape tiene que verlo
-      // de nuevo antes de que el cambio siga público (ver UpdateEvent.ts).
-      if (
-        editableStatuses.includes(ev.status) &&
-        (desiredStatus !== ev.status || ev.status === "published")
-      ) {
+      if (editableStatuses.includes(ev.status) && desiredStatus !== ev.status) {
         patch.status = desiredStatus;
       }
 
@@ -997,14 +993,15 @@ export function EventComposer(props: EventComposerProps) {
         return;
       }
 
-      // El backend gatea "published" a pending_review (ver UpdateEvent.ts) —
-      // el toast tiene que reflejar eso, no lo que el organizador pidió.
+      // patch.status === "published" solo ocurre en la primera publicación
+      // (un evento ya publicado no manda status), y ahí el backend lo gatea a
+      // pending_review (ver UpdateEvent.ts) — el toast refleja eso.
       if (patch.status === "published") {
-        toast("Actualizado — quedó en revisión", {
-          description: "Pasape lo va a revisar antes de que el cambio siga público.",
+        toast("Evento enviado a revisión", {
+          description: "El equipo de Pasape lo revisará antes de publicarlo.",
         });
       } else {
-        toast("Evento actualizado");
+        toast.success("Cambios guardados");
       }
 
       props.onClose?.();

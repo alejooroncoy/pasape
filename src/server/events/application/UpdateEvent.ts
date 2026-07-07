@@ -78,15 +78,18 @@ export const updateEvent = async (
   // decide the publish gate below.
   const before = (await repo.listByOrganization(orgId)).find((e) => e.id === eventId);
 
-  // El organizador nunca publica directo desde draft/pending_review: pedir
-  // status "published" por este canal (o por /publish) cae en pending_review
-  // hasta que Pasape lo aprueba a mano. Ver SupabaseEventRepository.publish.
-  // Reenviar a revisión también limpia un rechazo previo — es un intento
-  // nuevo, no el mismo. EXCEPCIÓN: reabrir un evento "closed" que YA pasó la
-  // revisión antes ("Reabrir evento" en settings/page.tsx) va directo a
-  // published — no perdió su aprobación por haber cerrado.
+  // La revisión de Pasape aplica solo a la PRIMERA publicación: pedir status
+  // "published" desde draft/pending_review (o por /publish) cae en
+  // pending_review hasta que Pasape lo aprueba a mano. Ver
+  // SupabaseEventRepository.publish. Reenviar a revisión también limpia un
+  // rechazo previo — es un intento nuevo, no el mismo. Un evento que YA está
+  // "published" (o "closed", vía "Reabrir evento" en settings/page.tsx) no
+  // pierde su aprobación por editarse: los cambios siguen públicos sin volver
+  // a revisión.
   const gatedInput =
-    input.status === "published" && before?.status !== "closed"
+    input.status === "published" &&
+    before?.status !== "closed" &&
+    before?.status !== "published"
       ? { ...input, status: "pending_review" as const, rejectedReason: null }
       : input;
 
