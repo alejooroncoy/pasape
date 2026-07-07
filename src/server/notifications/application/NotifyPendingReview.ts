@@ -1,5 +1,7 @@
 import "server-only";
+import { render } from "@react-email/components";
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
+import { EventPendingReviewEmail } from "../emails/EventPendingReviewEmail";
 
 // Aviso interno (Resend, no WhatsApp) cada vez que un evento cae en
 // pending_review por primera vez — ver AGENTS.md / [[review-eventos-pending]].
@@ -10,9 +12,6 @@ import { supabaseAdmin } from "@/server/_shared/supabase/admin";
 
 const APP_ORIGIN = (process.env.NEXT_PUBLIC_APP_URL || "https://pasape.lat").replace(/\/$/, "");
 const TEAM_EMAIL = "team@pasape.lat";
-
-const esc = (s: string): string =>
-  s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 
 type EventRow = {
   id: string;
@@ -62,6 +61,8 @@ export const notifyPendingReview = async (eventId: string): Promise<void> => {
     ]);
     const orgName = org?.name ?? "(organización desconocida)";
 
+    // Dynamic import: la dep es opcional. Si no está instalada, no rompe la build
+    // (mismo patrón que ResendEmailSender.ts / InviteEmailSender.ts).
     const mod = (await import("resend").catch(() => null)) as
       | { Resend: new (k: string) => { emails: { send: (a: unknown) => Promise<unknown> } } }
       | null;
@@ -72,27 +73,11 @@ export const notifyPendingReview = async (eventId: string): Promise<void> => {
 
     const panelUrl = `${APP_ORIGIN}/org/events/${event.slug}`;
     const prompt = buildPrompt(event, orgName, organizer?.email ?? null);
-
-    const html = `<!doctype html>
-<html><body style="font-family:system-ui,-apple-system,sans-serif;background:#0A0A0F;color:#fff;padding:24px">
-  <div style="max-width:640px;margin:0 auto;background:#140C28;border-radius:16px;padding:28px">
-    <div style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#8a8aa0">Evento pendiente de revisión</div>
-    <h1 style="font-size:22px;margin:6px 0 4px">${esc(event.title)}</h1>
-    <p style="color:rgba(255,255,255,0.7);margin:0 0 18px">
-      ${esc(orgName)} envió este evento a revisión. No es público hasta que alguien lo apruebe manualmente
-      (\`events.status\` → <code>published</code>) en Supabase.
-    </p>
-    <p style="font-size:13px;color:rgba(255,255,255,0.6)">
-      Panel del organizador: <a href="${panelUrl}" style="color:#B87CFF">${panelUrl}</a>
-    </p>
-    <div style="margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,.1)">
-      <div style="font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#8a8aa0;margin-bottom:8px">
-        Prompt para copiar en Claude Code
-      </div>
-      <pre style="white-space:pre-wrap;font-family:ui-monospace,monospace;font-size:12.5px;line-height:1.5;background:#0A0A0F;border-radius:10px;padding:14px;color:#e4e4f0">${esc(prompt)}</pre>
-    </div>
-  </div>
-</body></html>`;
+    const props = { eventTitle: event.title, orgName, panelUrl, prompt };
+    const [html, text] = await Promise.all([
+      render(EventPendingReviewEmail(props)),
+      render(EventPendingReviewEmail(props), { plainText: true }),
+    ]);
 
     const client = new mod.Resend(apiKey);
     await client.emails.send({
@@ -100,7 +85,7 @@ export const notifyPendingReview = async (eventId: string): Promise<void> => {
       to: TEAM_EMAIL,
       subject: `Evento pendiente de revisión: "${event.title}"`,
       html,
-      text: prompt,
+      text,
     });
   } catch (err) {
     console.error("[notifyPendingReview] envío falló:", err instanceof Error ? err.message : err);

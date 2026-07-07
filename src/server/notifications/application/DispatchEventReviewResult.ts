@@ -50,6 +50,8 @@ export const dispatchEventReviewResult = async (
       .maybeSingle<{ email: string | null; full_name: string | null }>();
     if (!organizer?.email) return;
 
+    // Dynamic import: la dep es opcional. Si no está instalada, no rompe la build
+    // (mismo patrón que ResendEmailSender.ts / InviteEmailSender.ts).
     const mod = (await import("resend").catch(() => null)) as
       | { Resend: new (k: string) => { emails: { send: (a: unknown) => Promise<unknown> } } }
       | null;
@@ -67,8 +69,10 @@ export const dispatchEventReviewResult = async (
       editUrl: `${APP_ORIGIN}/org/events/${event.slug}`,
       appOrigin: APP_ORIGIN,
     };
-    const html = await render(EventReviewResultEmail(props));
-    const text = await render(EventReviewResultEmail(props), { plainText: true });
+    const [html, text] = await Promise.all([
+      render(EventReviewResultEmail(props)),
+      render(EventReviewResultEmail(props), { plainText: true }),
+    ]);
 
     const subject =
       decision === "approved"

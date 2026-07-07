@@ -95,8 +95,13 @@ export const updateEvent = async (
 
   // Solo avisar a Pasape en la TRANSICIÓN a pending_review — si el organizador
   // reguarda un evento que ya estaba en revisión, no hay nada nuevo que avisar.
+  // Fire-and-forget: es una notificación interna best-effort (ver su propio
+  // try/catch) que no debe sumar la latencia de Resend + queries a la
+  // respuesta que el organizador está esperando.
   if (gatedInput.status === "pending_review" && before?.status !== "pending_review") {
-    await notifyPendingReview(eventId);
+    notifyPendingReview(eventId).catch((notifyErr) =>
+      console.error("[updateEvent] notifyPendingReview falló:", notifyErr),
+    );
   }
 
   // Why: idempotent — skip notification fanout when nothing buyer-facing changed.

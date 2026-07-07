@@ -376,17 +376,42 @@ export const supabaseEventRepository: EventRepository = {
   // El organizador "publica", pero el evento queda en pending_review hasta
   // que Pasape lo aprueba manualmente (cambia el status en Supabase) — ver
   // AGENTS.md / [[review-eventos-pending]]. Solo published es visible al público.
-  async publish(eventId, orgId): Promise<Result<Event>> {
+  //
+  // La transición SOLO se permite desde "draft" (el .eq("status","draft") es
+  // parte del WHERE, no un chequeo previo) — nunca desde "published"/"closed"/
+  // "cancelled", para que reintentar /publish desde una pestaña vieja (ver
+  // new/success/page.tsx, que nunca refresca su status local) no pueda
+  // des-publicar un evento ya aprobado y en vivo.
+  //
+  // Al estar el filtro en el propio UPDATE, la transición es atómica: bajo dos
+  // requests concurrentes (doble clic), Postgres serializa el lock de fila y
+  // solo UNA de las dos de verdad cambia el status (`transitioned: true`); la
+  // otra ve la fila ya en pending_review, no escribe nada y vuelve con
+  // `transitioned: false` — así el caller sabe si debe notificar sin fiarse de
+  // un status leído antes de la escritura (que ya podría estar obsoleto).
+  async publish(eventId, orgId): Promise<Result<{ event: Event; transitioned: boolean }>> {
     const db = supabaseAdmin();
     const { data, error } = await db
       .from("events")
       .update({ status: "pending_review" })
       .eq("id", eventId)
       .eq("organization_id", orgId)
+      .eq("status", "draft")
       .select("*")
-      .single<EventRow>();
-    if (error || !data) return err(error?.message ?? "publish_failed");
-    return ok(toEvent(data));
+      .maybeSingle<EventRow>();
+    if (error) return err(error.message);
+    if (data) return ok({ event: toEvent(data), transitioned: true });
+
+    // No hubo transición real (ya estaba pending_review/published/closed/
+    // cancelled) — traemos el evento tal cual está, sin tocar su status.
+    const { data: current, error: readError } = await db
+      .from("events")
+      .select("*")
+      .eq("id", eventId)
+      .eq("organization_id", orgId)
+      .maybeSingle<EventRow>();
+    if (readError || !current) return err(readError?.message ?? "publish_failed");
+    return ok({ event: toEvent(current), transitioned: false });
   },
 
   async listByOrgSlug(orgSlug) {
