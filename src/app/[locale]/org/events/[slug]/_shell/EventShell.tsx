@@ -6,6 +6,8 @@ import { OrgShell } from "@/app/[locale]/org/_shell/OrgShell";
 import { Link, useRouter } from "@/i18n/navigation";
 import { getEventBackTarget, type EventBackTarget } from "@/lib/_shared/eventBackTarget";
 import { useEvent } from "@/lib/events/hooks/useEvents";
+import { eventStatusLabel } from "@/lib/events/eventStatusDisplay";
+import type { EventStatus } from "@/server/events/domain/Event";
 import { ShareEventDialog } from "@/components/ui/ShareEventDialog";
 import { EventComposer } from "@/app/[locale]/org/events/_components/EventComposer";
 
@@ -474,21 +476,39 @@ function EventThumb({ title }: { title: string }) {
   );
 }
 
-function StatusPill({ status, live, finished }: { status: string; live: boolean; finished: boolean }) {
+function StatusPill({
+  status,
+  live,
+  finished,
+}: {
+  status: EventStatus;
+  live: boolean;
+  finished: boolean;
+}) {
+  // "EN VIVO"/"Finalizado" son estados DERIVADOS (status "published" + los
+  // flags live/finished que calcula esta pantalla), no un status crudo — no
+  // salen de eventStatusDisplay. El resto de labels sí vienen de ahí (fuente
+  // única, ver PR #77); solo el hex/tint/glow queda local a este componente.
   const cfg =
     live && status === "published"
       ? { dot: "#22D17F", label: "EN VIVO", tint: "rgba(34,209,127,0.15)", text: "#22D17F" }
       : finished && status === "published"
         ? { dot: "rgba(255,255,255,0.4)", label: "Finalizado", tint: "rgba(255,255,255,0.04)", text: "rgba(255,255,255,0.6)" }
         : status === "published"
-          ? { dot: "#22D17F", label: "Publicado", tint: "rgba(34,209,127,0.12)", text: "#22D17F" }
+          ? { dot: "#22D17F", label: eventStatusLabel(status), tint: "rgba(34,209,127,0.12)", text: "#22D17F" }
         : status === "draft"
-          ? { dot: "rgba(255,255,255,0.5)", label: "BORRADOR", tint: "rgba(255,255,255,0.06)", text: "rgba(255,255,255,0.75)" }
+          ? { dot: "rgba(255,255,255,0.5)", label: eventStatusLabel(status), tint: "rgba(255,255,255,0.06)", text: "rgba(255,255,255,0.75)" }
           : status === "closed"
-            ? { dot: "rgba(255,255,255,0.4)", label: "Cerrado", tint: "rgba(255,255,255,0.04)", text: "rgba(255,255,255,0.6)" }
+            ? { dot: "rgba(255,255,255,0.4)", label: eventStatusLabel(status), tint: "rgba(255,255,255,0.04)", text: "rgba(255,255,255,0.6)" }
             : status === "pending_review"
-              ? { dot: "#F5A623", label: "En revisión", tint: "rgba(245,166,35,0.12)", text: "#F5A623" }
-              : { dot: "#FF4D5E", label: "Cancelado", tint: "rgba(255,77,94,0.12)", text: "#FF4D5E" };
+              ? { dot: "#F5A623", label: eventStatusLabel(status), tint: "rgba(245,166,35,0.12)", text: "#F5A623" }
+              : status === "cancelled"
+                ? { dot: "#FF4D5E", label: eventStatusLabel(status), tint: "rgba(255,77,94,0.12)", text: "#FF4D5E" }
+                // Fallback defensivo: un EventStatus no contemplado arriba
+                // (drift de datos, o un status nuevo sin actualizar este
+                // componente) se pinta neutro con su label real — nunca cae
+                // en rojo "Cancelado" por accidente.
+                : { dot: "rgba(255,255,255,0.4)", label: eventStatusLabel(status), tint: "rgba(255,255,255,0.04)", text: "rgba(255,255,255,0.6)" };
   return (
     <span
       className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-[0.12em]"

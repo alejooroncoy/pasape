@@ -10,6 +10,8 @@ import type { EventStatsPayload } from "@/lib/events/hooks/useEventStats";
 import { useRealtimeEventStats } from "@/lib/events/hooks/useRealtimeEventStats";
 import { useEventCoOrganizers } from "@/lib/events/hooks/useEventCoOrganizers";
 import { useCourtesies } from "@/lib/events/hooks/useCourtesies";
+import { Badge } from "@/components/ui/Badge";
+import { eventStatusLabel, eventStatusTone } from "@/lib/events/eventStatusDisplay";
 import { formatMoney } from "@/lib/_shared/format";
 import { OrgShell } from "../_shell/OrgShell";
 import type { Event, TicketTypeKind } from "@/server/events/domain/Event";
@@ -316,7 +318,7 @@ function EventSelector({
 }: {
   value: string | null;
   onChange: (v: string) => void;
-  events: { slug: string; title: string; status?: string }[];
+  events: Pick<Event, "slug" | "title" | "status">[];
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -391,25 +393,13 @@ function EventSelector({
                   <span className="flex w-full items-center justify-between gap-2">
                     <span className="truncate">{e.title}</span>
                     {e.status && (
-                      <span
-                        className={`flex-shrink-0 rounded-full px-2 py-[2px] text-[10px] font-semibold uppercase tracking-[0.08em] ${
-                          e.status === "published"
-                            ? "bg-emerald-500/15 text-emerald-300"
-                            : "bg-white/5 text-cart-ink-3"
-                        }`}
+                      <Badge
+                        tone={eventStatusTone(e.status)}
+                        size="sm"
+                        className="flex-shrink-0 uppercase tracking-[0.08em]"
                       >
-                        {e.status === "published"
-                            ? "Publicado"
-                            : e.status === "draft"
-                              ? "Borrador"
-                              : e.status === "pending_review"
-                                ? "En revisión"
-                                : e.status === "closed"
-                                  ? "Cerrado"
-                                  : e.status === "cancelled"
-                                    ? "Cancelado"
-                                    : e.status}
-                      </span>
+                        {eventStatusLabel(e.status)}
+                      </Badge>
                     )}
                   </span>
                 </DropdownItem>
