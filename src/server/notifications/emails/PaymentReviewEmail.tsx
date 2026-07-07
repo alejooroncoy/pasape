@@ -78,8 +78,9 @@ export function PaymentReviewEmail({
       <Tailwind config={{ presets: [pixelBasedPreset] }}>
         <Body className="bg-[#f4f2f8] font-sans">
           <Container className="mx-auto my-[24px] w-[440px] max-w-full rounded-[18px] bg-white p-[32px]">
+            {/* PNG, no SVG — los clientes de correo bloquean imágenes SVG. */}
             <Img
-              src={`${appOrigin}/icons/logo-mark.svg`}
+              src={`${appOrigin.replace(/\/$/, "")}/icons/logo-icon-96.png`}
               width="40"
               height="40"
               alt="Pasape"
