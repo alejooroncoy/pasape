@@ -4,10 +4,14 @@ import { motion } from "motion/react";
 import { Link } from "@/i18n/navigation";
 import { formatDate } from "@/lib/_shared/format";
 import { setEventBackTarget } from "@/lib/_shared/eventBackTarget";
+import { eventStatusLabel, eventStatusPillClassName } from "@/lib/events/eventStatusDisplay";
 import type { Event } from "@/server/events/domain/Event";
 
 type Variant = "upcoming" | "past" | "draft";
 
+// Copy propio del tab activo (no del status crudo): dentro de "upcoming" solo
+// caen eventos published, y "Finalizado"/"Borrador" son más suaves que los
+// labels genéricos de eventStatusDisplay para este contexto de lista.
 const STATUS_CONFIG: Record<Variant, { label: string; className: string }> = {
   upcoming: {
     label: "Publicado",
@@ -25,13 +29,12 @@ const STATUS_CONFIG: Record<Variant, { label: string; className: string }> = {
 
 export function EventCard({ event, variant }: { event: Event; variant: Variant }) {
   // Un evento cancelado o en revisión no encaja en el variant del tab activo
-  // (ambos caen en "upcoming" vía classifyEvent): distinguirlos por su status real.
+  // (ambos caen en "upcoming" vía classifyEvent): distinguirlos por su status
+  // real, con label/color de la fuente única (eventStatusDisplay).
   const status =
-    event.status === "cancelled"
-      ? { label: "Cancelado", className: "bg-rose-500/10 text-rose-300 border-rose-400/20" }
-      : event.status === "pending_review"
-        ? { label: "En revisión", className: "bg-amber-400/10 text-amber-300 border-amber-400/20" }
-        : STATUS_CONFIG[variant];
+    event.status === "cancelled" || event.status === "pending_review"
+      ? { label: eventStatusLabel(event.status), className: eventStatusPillClassName(event.status) }
+      : STATUS_CONFIG[variant];
   const sold = event.listStats?.sold ?? 0;
   const capacity = event.listStats?.capacity ?? event.capacity?.totalCapacity ?? 0;
   const pct = capacity > 0 ? Math.min(100, Math.round((sold / capacity) * 100)) : 0;

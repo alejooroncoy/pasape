@@ -10,6 +10,7 @@ import type { EventStatsPayload } from "@/lib/events/hooks/useEventStats";
 import { useRealtimeEventStats } from "@/lib/events/hooks/useRealtimeEventStats";
 import { useEventCoOrganizers } from "@/lib/events/hooks/useEventCoOrganizers";
 import { useCourtesies } from "@/lib/events/hooks/useCourtesies";
+import { eventStatusLabel } from "@/lib/events/eventStatusDisplay";
 import { formatMoney } from "@/lib/_shared/format";
 import { OrgShell } from "../_shell/OrgShell";
 import type { Event, TicketTypeKind } from "@/server/events/domain/Event";
@@ -316,7 +317,7 @@ function EventSelector({
 }: {
   value: string | null;
   onChange: (v: string) => void;
-  events: { slug: string; title: string; status?: string }[];
+  events: Pick<Event, "slug" | "title" | "status">[];
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -398,17 +399,7 @@ function EventSelector({
                             : "bg-white/5 text-cart-ink-3"
                         }`}
                       >
-                        {e.status === "published"
-                            ? "Publicado"
-                            : e.status === "draft"
-                              ? "Borrador"
-                              : e.status === "pending_review"
-                                ? "En revisión"
-                                : e.status === "closed"
-                                  ? "Cerrado"
-                                  : e.status === "cancelled"
-                                    ? "Cancelado"
-                                    : e.status}
+                        {eventStatusLabel(e.status)}
                       </span>
                     )}
                   </span>

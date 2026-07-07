@@ -2,6 +2,7 @@ import ExcelJS from "exceljs";
 import { Money } from "@/lib/_shared/money";
 import { byCode, countryFromE164, DEFAULT_COUNTRY } from "@/lib/phone/countries";
 import { documentType } from "@/lib/identity/document";
+import { eventStatusLabel } from "@/lib/events/eventStatusDisplay";
 import type { Event } from "../domain/Event";
 import type { EventRepository } from "../ports/EventRepository";
 
@@ -12,13 +13,6 @@ const STATUS_LABEL: Record<string, string> = {
   used: "Usada",
   void: "Anulada",
   refunded: "Reembolsada",
-};
-
-const EVENT_STATUS_LABEL: Record<string, string> = {
-  draft: "Borrador",
-  published: "Publicado",
-  closed: "Finalizado",
-  cancelled: "Cancelado",
 };
 
 // Formato de moneda para celdas: se ve "S/ 150.00" pero la celda sigue siendo
@@ -288,7 +282,7 @@ export const exportEventReport = async (
   // y, si tampoco hay, mostramos "—" para que se lea como "no definido" y no como
   // una celda rota del export.
   wsS.addRow({ k: "Lugar", v: safeCell(event.venue ?? event.venueUrl) || "—" });
-  wsS.addRow({ k: "Estado", v: EVENT_STATUS_LABEL[event.status] ?? event.status });
+  wsS.addRow({ k: "Estado", v: eventStatusLabel(event.status) });
   wsS.addRow({ k: "" });
   wsS.addRow({ k: "Entradas vendidas", v: summary.sold });
   wsS.addRow({ k: "Entradas validadas", v: summary.validated });
