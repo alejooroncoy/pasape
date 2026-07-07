@@ -40,13 +40,7 @@ export const eventStatusTone = (status: EventStatus): EventStatusTone => infoFor
 export const isEventOver = (status: EventStatus): boolean =>
   status === "closed" || status === "cancelled";
 
-/** Clases Tailwind para un pill con fondo/borde/texto tintado según el tono del status. */
-const TONE_PILL_CLASSNAME: Record<EventStatusTone, string> = {
-  neutral: "border-cart-line bg-cart-bg-elev-2 text-cart-ink-3",
-  success: "border-emerald-400/30 bg-emerald-500/10 text-emerald-300",
-  warning: "border-amber-400/30 bg-amber-500/10 text-amber-300",
-  danger: "border-rose-400/30 bg-rose-500/10 text-rose-300",
-};
-
-export const eventStatusPillClassName = (status: EventStatus): string =>
-  TONE_PILL_CLASSNAME[eventStatusTone(status)];
+// El color del pill vive en <Badge tone={eventStatusTone(status)}> (componente
+// compartido en src/components/ui/Badge.tsx) — no acá. Antes este módulo tenía
+// su propia tabla tono→clases Tailwind en paralelo a Badge, que ya definía el
+// mismo vocabulario de tonos sin usuarios reales todavía.

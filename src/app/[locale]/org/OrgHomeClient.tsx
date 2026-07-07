@@ -9,7 +9,8 @@ import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { useMyOrgs } from "@/lib/identity/organizations/hooks/useMyOrgs";
 import { formatDate, formatMoney } from "@/lib/_shared/format";
 import { setEventBackTarget } from "@/lib/_shared/eventBackTarget";
-import { eventStatusLabel, eventStatusPillClassName } from "@/lib/events/eventStatusDisplay";
+import { Badge } from "@/components/ui/Badge";
+import { eventStatusLabel, eventStatusTone } from "@/lib/events/eventStatusDisplay";
 import type { EventStatus } from "@/server/events/domain/Event";
 import { OrgShell } from "./_shell/OrgShell";
 
@@ -263,11 +264,9 @@ function MiniStat({ label, value, tone }: { label: string; value: string; tone?:
 
 function StatusPill({ status }: { status: EventStatus }) {
   return (
-    <span
-      className={`shrink-0 rounded-full border px-2 py-0.5 text-[10.5px] font-medium uppercase tracking-wide ${eventStatusPillClassName(status)}`}
-    >
+    <Badge tone={eventStatusTone(status)} size="sm" className="shrink-0 uppercase tracking-wide">
       {eventStatusLabel(status)}
-    </span>
+    </Badge>
   );
 }
 

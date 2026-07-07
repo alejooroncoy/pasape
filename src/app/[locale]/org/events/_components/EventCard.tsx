@@ -4,39 +4,31 @@ import { motion } from "motion/react";
 import { Link } from "@/i18n/navigation";
 import { formatDate } from "@/lib/_shared/format";
 import { setEventBackTarget } from "@/lib/_shared/eventBackTarget";
-import { eventStatusLabel, eventStatusPillClassName } from "@/lib/events/eventStatusDisplay";
+import { Badge } from "@/components/ui/Badge";
+import { eventStatusLabel, eventStatusTone } from "@/lib/events/eventStatusDisplay";
 import type { Event } from "@/server/events/domain/Event";
 
 type Variant = "upcoming" | "past" | "draft";
 
-// Color propio del tab activo (más suave que el pill genérico de
-// eventStatusDisplay, pensado para esta lista). El label de "upcoming"/"draft"
-// SÍ viene de la fuente única (dentro de "upcoming" solo caen eventos
-// published vía classifyEvent); "past" agrupa closed+cancelled bajo un copy
-// más suave ("Finalizado") — cancelled real se distingue abajo con su propio
-// color, así que este label solo aplica al caso "closed".
-const STATUS_CONFIG: Record<Variant, { label: string; className: string }> = {
-  upcoming: {
-    label: eventStatusLabel("published"),
-    className: "bg-emerald-300/10 text-emerald-300 border-emerald-300/20",
-  },
-  past: {
-    label: "Finalizado",
-    className: "bg-white/5 text-cart-ink-4 border-cart-line",
-  },
-  draft: {
-    label: eventStatusLabel("draft"),
-    className: "bg-white/5 text-cart-ink-3 border-cart-line",
-  },
+// Tono/label propios del tab activo, no del status crudo: dentro de
+// "upcoming" solo caen eventos published vía classifyEvent, y "past" agrupa
+// closed bajo un copy más suave ("Finalizado" en vez de "Cerrado") — cancelled
+// real se distingue abajo con su propio tono, así que este label solo aplica
+// al caso "closed". El label de "upcoming"/"draft" sí viene de la fuente
+// única (eventStatusDisplay); el tono siempre viene de ahí.
+const STATUS_CONFIG: Record<Variant, { label: string; tone: "success" | "neutral" }> = {
+  upcoming: { label: eventStatusLabel("published"), tone: "success" },
+  past: { label: "Finalizado", tone: "neutral" },
+  draft: { label: eventStatusLabel("draft"), tone: "neutral" },
 };
 
 export function EventCard({ event, variant }: { event: Event; variant: Variant }) {
   // Un evento cancelado o en revisión no encaja en el variant del tab activo
   // (ambos caen en "upcoming" vía classifyEvent): distinguirlos por su status
-  // real, con label/color de la fuente única (eventStatusDisplay).
+  // real, con label/tono de la fuente única (eventStatusDisplay).
   const status =
     event.status === "cancelled" || event.status === "pending_review"
-      ? { label: eventStatusLabel(event.status), className: eventStatusPillClassName(event.status) }
+      ? { label: eventStatusLabel(event.status), tone: eventStatusTone(event.status) }
       : STATUS_CONFIG[variant];
   const sold = event.listStats?.sold ?? 0;
   const capacity = event.listStats?.capacity ?? event.capacity?.totalCapacity ?? 0;
@@ -97,11 +89,9 @@ export function EventCard({ event, variant }: { event: Event; variant: Variant }
               />
             )}
             <div className="absolute right-3 top-3">
-              <span
-                className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium backdrop-blur-md ${status.className}`}
-              >
+              <Badge tone={status.tone} size="sm" className="backdrop-blur-md">
                 {status.label}
-              </span>
+              </Badge>
             </div>
           </div>
 
@@ -147,11 +137,9 @@ export function EventCard({ event, variant }: { event: Event; variant: Variant }
         <div className="flex min-w-0 flex-1 flex-col justify-between gap-2 p-3.5 sm:hidden">
           <div className="min-w-0">
             <div className="mb-1.5 flex items-center gap-2">
-              <span
-                className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${status.className}`}
-              >
+              <Badge tone={status.tone} size="sm">
                 {status.label}
-              </span>
+              </Badge>
             </div>
             <h3 className="line-clamp-2 text-[15.5px] font-semibold leading-tight tracking-[-0.01em] text-white">
               {event.title}
