@@ -95,11 +95,17 @@ describe.skipIf(!hasCreds)("webhook de Mercado Pago (integración)", () => {
         .eq("mp_id", dedupeKey);
       expect(rows).toHaveLength(1);
 
-      // Segunda entrega: mismo data.id (aunque cambie request-id) → dedupe por payment id.
+      // Segunda entrega: mismo data.id, otro request-id → dedupe por payment id.
+      // MP firma cada entrega con su propio request-id, así que la firma hay
+      // que recalcularla para el nuevo request-id (reusar `header` de la
+      // primera entrega falla la verificación: el manifest incluye
+      // request-id, y verifySignature lo recompone con el request-id actual).
+      const requestId2 = "vitest-request-id-002";
+      const { header: header2 } = signManifest({ dataId: DATA_ID, requestId: requestId2, secret });
       const second = await handleMpWebhook({
         rawBody: rawBodyFor(DATA_ID),
         query: new URLSearchParams(),
-        headers: { signature: header, requestId: "vitest-request-id-002" },
+        headers: { signature: header2, requestId: requestId2 },
       });
       expect(second.ok).toBe(true);
       if (second.ok) expect(second.value).toEqual({});

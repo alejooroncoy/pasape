@@ -86,8 +86,13 @@ describe.skipIf(!hasSupabase)("audit v2 remediation — smoke (integración)", (
     const db = supabaseAdmin();
     const { data: boxType } = await db
       .from("ticket_types")
-      .select("id, event_id")
+      // Filtramos por evento "published": priceOrder corta con event_not_published
+      // antes de llegar a validar qty, así que un box de un evento en draft/
+      // pending_review/closed/cancelled (dev DB compartida y mutable) daría
+      // ese error en vez del que este test realmente ejercita.
+      .select("id, event_id, event:events!inner(status)")
       .eq("kind", "box")
+      .eq("event.status", "published")
       .limit(1)
       .maybeSingle<{ id: string; event_id: string }>();
     if (!boxType) return;
