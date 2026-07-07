@@ -376,6 +376,8 @@ export const supabaseEventRepository: EventRepository = {
   // El organizador "publica", pero el evento queda en pending_review hasta
   // que Pasape lo aprueba manualmente (cambia el status en Supabase) — ver
   // AGENTS.md / [[review-eventos-pending]]. Solo published es visible al público.
+  // Excepción: si `organizations.trusted = true`, nos saltamos la revisión y
+  // publicamos directo — ver 20260707100000_organizations_trusted.sql.
   //
   // La transición SOLO se permite desde "draft" (el .eq("status","draft") es
   // parte del WHERE, no un chequeo previo) — nunca desde "published"/"closed"/
@@ -391,9 +393,15 @@ export const supabaseEventRepository: EventRepository = {
   // un status leído antes de la escritura (que ya podría estar obsoleto).
   async publish(eventId, orgId): Promise<Result<{ event: Event; transitioned: boolean }>> {
     const db = supabaseAdmin();
+    const { data: org } = await db
+      .from("organizations")
+      .select("trusted")
+      .eq("id", orgId)
+      .maybeSingle<{ trusted: boolean }>();
+    const targetStatus = org?.trusted ? "published" : "pending_review";
     const { data, error } = await db
       .from("events")
-      .update({ status: "pending_review" })
+      .update({ status: targetStatus })
       .eq("id", eventId)
       .eq("organization_id", orgId)
       .eq("status", "draft")
