@@ -16,6 +16,7 @@ const STATUS_LABEL: Record<string, string> = {
 
 const EVENT_STATUS_LABEL: Record<string, string> = {
   draft: "Borrador",
+  pending_review: "En revisión",
   published: "Publicado",
   closed: "Finalizado",
   cancelled: "Cancelado",

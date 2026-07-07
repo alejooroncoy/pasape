@@ -262,6 +262,7 @@ function MiniStat({ label, value, tone }: { label: string; value: string; tone?:
 function StatusPill({ status }: { status: string }) {
   const map: Record<string, { label: string; cls: string }> = {
     published: { label: "Publicado", cls: "border-emerald-400/30 bg-emerald-500/10 text-emerald-300" },
+    pending_review: { label: "En revisión", cls: "border-amber-400/30 bg-amber-500/10 text-amber-300" },
     draft: { label: "Borrador", cls: "border-cart-line bg-cart-bg-elev-2 text-cart-ink-3" },
     closed: { label: "Cerrado", cls: "border-cart-line bg-cart-bg-elev-2 text-cart-ink-3" },
     cancelled: { label: "Cancelado", cls: "border-rose-400/30 bg-rose-500/10 text-rose-300" },
