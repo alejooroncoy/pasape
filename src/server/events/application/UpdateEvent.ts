@@ -74,17 +74,22 @@ export const updateEvent = async (
   orgId: string,
   input: UpdateEventInput,
 ): Promise<Result<Event>> => {
-  // El organizador nunca publica directo: pedir status "published" por este
-  // canal (o por /publish) siempre cae en pending_review hasta que Pasape lo
-  // aprueba a mano. Ver SupabaseEventRepository.publish. Reenviar a revisión
-  // también limpia un rechazo previo — es un intento nuevo, no el mismo.
+  // Capture pre-update state so we can compute a diff after the write, and to
+  // decide the publish gate below.
+  const before = (await repo.listByOrganization(orgId)).find((e) => e.id === eventId);
+
+  // El organizador nunca publica directo desde draft/pending_review: pedir
+  // status "published" por este canal (o por /publish) cae en pending_review
+  // hasta que Pasape lo aprueba a mano. Ver SupabaseEventRepository.publish.
+  // Reenviar a revisión también limpia un rechazo previo — es un intento
+  // nuevo, no el mismo. EXCEPCIÓN: reabrir un evento "closed" que YA pasó la
+  // revisión antes ("Reabrir evento" en settings/page.tsx) va directo a
+  // published — no perdió su aprobación por haber cerrado.
   const gatedInput =
-    input.status === "published"
+    input.status === "published" && before?.status !== "closed"
       ? { ...input, status: "pending_review" as const, rejectedReason: null }
       : input;
 
-  // Capture pre-update state so we can compute a diff after the write.
-  const before = (await repo.listByOrganization(orgId)).find((e) => e.id === eventId);
   const result = await repo.update(eventId, orgId, gatedInput);
   if (!result.ok) return result;
 
