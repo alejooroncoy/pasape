@@ -212,6 +212,7 @@ export type PromoInput = {
 
 export type UpdateEventInput = {
   status?: EventStatus;
+  rejectedReason?: string | null;
   title?: string;
   description?: string | null;
   venue?: string | null;
@@ -318,7 +319,11 @@ export interface EventRepository {
     slug: string,
   ): Promise<{ event: Event; ticketTypes: TicketType[]; promos: Promo[] } | null>;
   create(input: CreateEventInput): Promise<Result<Event>>;
-  publish(eventId: string, orgId: string): Promise<Result<Event>>;
+  /** Solo transiciona draft -> pending_review (idempotente si ya estaba ahí).
+   *  `transitioned` distingue una transición real de un no-op (evento ya
+   *  pending_review/published/closed/cancelled), para que el caller decida
+   *  si debe notificar sin depender de un status leído antes de la escritura. */
+  publish(eventId: string, orgId: string): Promise<Result<{ event: Event; transitioned: boolean }>>;
   update(eventId: string, orgId: string, input: UpdateEventInput): Promise<Result<Event>>;
   createTicketType(eventId: string, input: CreateTicketTypeInput): Promise<Result<TicketType>>;
   updateTicketType(

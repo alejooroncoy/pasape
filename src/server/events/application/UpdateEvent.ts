@@ -2,6 +2,7 @@ import type { Result } from "@/server/_shared/result";
 import type { Event } from "../domain/Event";
 import type { EventRepository, UpdateEventInput } from "../ports/EventRepository";
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
+import { notifyPendingReview } from "@/server/notifications/application/NotifyPendingReview";
 
 type Deps = { repo: EventRepository };
 
@@ -73,10 +74,35 @@ export const updateEvent = async (
   orgId: string,
   input: UpdateEventInput,
 ): Promise<Result<Event>> => {
-  // Capture pre-update state so we can compute a diff after the write.
+  // Capture pre-update state so we can compute a diff after the write, and to
+  // decide the publish gate below.
   const before = (await repo.listByOrganization(orgId)).find((e) => e.id === eventId);
-  const result = await repo.update(eventId, orgId, input);
+
+  // El organizador nunca publica directo desde draft/pending_review: pedir
+  // status "published" por este canal (o por /publish) cae en pending_review
+  // hasta que Pasape lo aprueba a mano. Ver SupabaseEventRepository.publish.
+  // Reenviar a revisión también limpia un rechazo previo — es un intento
+  // nuevo, no el mismo. EXCEPCIÓN: reabrir un evento "closed" que YA pasó la
+  // revisión antes ("Reabrir evento" en settings/page.tsx) va directo a
+  // published — no perdió su aprobación por haber cerrado.
+  const gatedInput =
+    input.status === "published" && before?.status !== "closed"
+      ? { ...input, status: "pending_review" as const, rejectedReason: null }
+      : input;
+
+  const result = await repo.update(eventId, orgId, gatedInput);
   if (!result.ok) return result;
+
+  // Solo avisar a Pasape en la TRANSICIÓN a pending_review — si el organizador
+  // reguarda un evento que ya estaba en revisión, no hay nada nuevo que avisar.
+  // Fire-and-forget: es una notificación interna best-effort (ver su propio
+  // try/catch) que no debe sumar la latencia de Resend + queries a la
+  // respuesta que el organizador está esperando.
+  if (gatedInput.status === "pending_review" && before?.status !== "pending_review") {
+    notifyPendingReview(eventId).catch((notifyErr) =>
+      console.error("[updateEvent] notifyPendingReview falló:", notifyErr),
+    );
+  }
 
   // Why: idempotent — skip notification fanout when nothing buyer-facing changed.
   if (before) {

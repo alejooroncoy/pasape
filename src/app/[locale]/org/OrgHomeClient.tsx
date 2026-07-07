@@ -29,6 +29,8 @@ export function OrgHomeClient() {
   const totalEvents = events.data?.length ?? 0;
   const publishedCount = events.data?.filter((e) => e.status === "published").length ?? 0;
   const draftCount = events.data?.filter((e) => e.status === "draft").length ?? 0;
+  const pendingReviewCount =
+    events.data?.filter((e) => e.status === "pending_review").length ?? 0;
   const totalCapacity =
     events.data?.reduce(
       (sum, e) => sum + (e.listStats?.capacity ?? e.capacity.totalCapacity ?? 0),
@@ -70,7 +72,15 @@ export function OrgHomeClient() {
       ) : (
         <div className="pb-[calc(env(safe-area-inset-bottom,0px)+24px)] sm:pb-0">
           <section className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <StatCard label="Eventos" value={String(totalEvents)} hint={`${draftCount} en borrador`} />
+            <StatCard
+              label="Eventos"
+              value={String(totalEvents)}
+              hint={
+                pendingReviewCount > 0
+                  ? `${draftCount} en borrador · ${pendingReviewCount} en revisión`
+                  : `${draftCount} en borrador`
+              }
+            />
             <StatCard label="Publicados" value={String(publishedCount)} tone="accent" />
             <StatCard label="Aforo total" value={totalCapacity.toLocaleString("es-PE")} />
             <StatCard label="Recaudado" value={liveEvent ? formatMoney(liveRevenue) : "—"} hint={liveEvent ? liveEvent.title : "Sin evento activo"} tone="green" />

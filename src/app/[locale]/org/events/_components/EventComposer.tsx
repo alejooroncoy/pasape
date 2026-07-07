@@ -11,6 +11,7 @@ import {
   type SetStateAction,
 } from "react";
 import { AnimatePresence, motion } from "motion/react";
+import { toast } from "sonner";
 import { Money } from "@/lib/_shared/money";
 import { useRouter } from "@/i18n/navigation";
 import { PhoneField } from "@/components/design/PhoneField";
@@ -421,7 +422,7 @@ export function EventComposer(props: EventComposerProps) {
                 freeUntilAt: "",
               },
             ],
-      publishNow: ev.status === "published",
+      publishNow: ev.status === "published" || ev.status === "pending_review",
     };
     // initial is stable per mount in edit mode (we re-mount per slug).
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -763,13 +764,13 @@ export function EventComposer(props: EventComposerProps) {
         }
       }
 
-      let finalStatus: "draft" | "published" = "draft";
+      let finalStatus: "draft" | "pending_review" = "draft";
       if (publishNow && ev.slug) {
         try {
           const res = await fetch(`/api/events/${ev.slug}/publish`, {
             method: "POST",
           });
-          if (res.ok) finalStatus = "published";
+          if (res.ok) finalStatus = "pending_review";
         } catch {
           // ignora — queda en draft
         }
@@ -850,10 +851,19 @@ export function EventComposer(props: EventComposerProps) {
       if (nextAccent !== ev.paletteAccent) patch.paletteAccent = nextAccent;
       if (nextLayoutUrl !== undefined) patch.venueLayoutUrl = nextLayoutUrl;
 
+      // "published" es la intención del organizador; el backend siempre lo
+      // baja a pending_review hasta que Pasape lo aprueba (ver UpdateEvent.ts).
       const desiredStatus: EventDomain["status"] = publishNow
         ? "published"
         : "draft";
-      if (desiredStatus !== ev.status && (ev.status === "draft" || ev.status === "published")) {
+      const editableStatuses: EventDomain["status"][] = ["draft", "pending_review", "published"];
+      // Un evento YA publicado que se vuelve a guardar con "En vivo" activo
+      // también cae a pending_review — cambió algo y Pasape tiene que verlo
+      // de nuevo antes de que el cambio siga público (ver UpdateEvent.ts).
+      if (
+        editableStatuses.includes(ev.status) &&
+        (desiredStatus !== ev.status || ev.status === "published")
+      ) {
         patch.status = desiredStatus;
       }
 
@@ -987,6 +997,16 @@ export function EventComposer(props: EventComposerProps) {
         return;
       }
 
+      // El backend gatea "published" a pending_review (ver UpdateEvent.ts) —
+      // el toast tiene que reflejar eso, no lo que el organizador pidió.
+      if (patch.status === "published") {
+        toast("Actualizado — quedó en revisión", {
+          description: "Pasape lo va a revisar antes de que el cambio siga público.",
+        });
+      } else {
+        toast("Evento actualizado");
+      }
+
       props.onClose?.();
     } catch (e) {
       setSubmitError((e as Error).message);
@@ -1051,14 +1071,14 @@ export function EventComposer(props: EventComposerProps) {
       ? isEdit
         ? "Guardando…"
         : publishNow
-          ? "Publicando…"
+          ? "Enviando a revisión…"
           : "Guardando…"
       : !ready
         ? `Falta ${missingFields[0]}`
         : isEdit
           ? "Actualizar evento"
           : publishNow
-            ? "Publicar en vivo"
+            ? "Enviar a revisión"
             : "Guardar borrador";
 
   // ============================================================
@@ -1489,6 +1509,18 @@ export function EventComposer(props: EventComposerProps) {
               <PublishToggle value={publishNow} onChange={setPublishNow} />
             </div>
           )}
+
+          {isEdit &&
+            props.initial.event.status === "draft" &&
+            props.initial.event.rejectedReason && (
+              <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+                <p className="font-semibold text-amber-100">Pasape rechazó este evento</p>
+                <p className="mt-1 text-amber-200/90">{props.initial.event.rejectedReason}</p>
+                <p className="mt-1.5 text-[13px] text-amber-200/70">
+                  Corrígelo y vuelve a enviarlo a revisión cuando quieras.
+                </p>
+              </div>
+            )}
 
           {submitError && (
             <div className="rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">

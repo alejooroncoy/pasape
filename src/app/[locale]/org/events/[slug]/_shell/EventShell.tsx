@@ -486,7 +486,9 @@ function StatusPill({ status, live, finished }: { status: string; live: boolean;
           ? { dot: "rgba(255,255,255,0.5)", label: "BORRADOR", tint: "rgba(255,255,255,0.06)", text: "rgba(255,255,255,0.75)" }
           : status === "closed"
             ? { dot: "rgba(255,255,255,0.4)", label: "Cerrado", tint: "rgba(255,255,255,0.04)", text: "rgba(255,255,255,0.6)" }
-            : { dot: "#FF4D5E", label: "Cancelado", tint: "rgba(255,77,94,0.12)", text: "#FF4D5E" };
+            : status === "pending_review"
+              ? { dot: "#F5A623", label: "En revisión", tint: "rgba(245,166,35,0.12)", text: "#F5A623" }
+              : { dot: "#FF4D5E", label: "Cancelado", tint: "rgba(255,77,94,0.12)", text: "#FF4D5E" };
   return (
     <span
       className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-[0.12em]"

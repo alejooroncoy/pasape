@@ -402,11 +402,13 @@ function EventSelector({
                             ? "Publicado"
                             : e.status === "draft"
                               ? "Borrador"
-                              : e.status === "closed"
-                                ? "Cerrado"
-                                : e.status === "cancelled"
-                                  ? "Cancelado"
-                                  : e.status}
+                              : e.status === "pending_review"
+                                ? "En revisión"
+                                : e.status === "closed"
+                                  ? "Cerrado"
+                                  : e.status === "cancelled"
+                                    ? "Cancelado"
+                                    : e.status}
                       </span>
                     )}
                   </span>

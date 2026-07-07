@@ -12,6 +12,7 @@ import { createEvent } from "../../application/CreateEvent";
 import { getEventStats, type EventStatsResult } from "../../application/GetEventStats";
 import { listEventAccesos } from "../../application/ListEventAccesos";
 import { updateEvent } from "../../application/UpdateEvent";
+import { notifyPendingReview } from "@/server/notifications/application/NotifyPendingReview";
 import { generateDoorLink, type DoorLink } from "../../application/GenerateDoorLink";
 import { verifyScanAccess } from "@/server/scanning/application/VerifyScanAccess";
 import {
@@ -230,16 +231,20 @@ export const EventsController = {
     );
   },
 
-  async publish(eventId: string): Promise<Result<Event>> {
-    const ctx = await resolveOrgCtx(ORG_WRITE_ROLES);
-    if (!ctx.ok) return err(ctx.error);
-    return repo.publish(eventId, ctx.value.orgId);
-  },
-
   async publishBySlug(slug: string): Promise<Result<Event>> {
     const guard = await guardEventMember(slug, ["owner", "admin", "editor"]);
     if (!guard.ok) return err(guard.error);
-    return repo.publish(guard.value.event.id, guard.value.event.organizationId);
+    const result = await repo.publish(guard.value.event.id, guard.value.event.organizationId);
+    if (!result.ok) return result;
+    // Solo notificar si ESTA llamada causó la transición real (ver
+    // SupabaseEventRepository.publish) — evita duplicar el correo interno de
+    // revisión si dos requests concurrentes (doble clic, retry) llegan aquí.
+    if (result.value.transitioned) {
+      notifyPendingReview(result.value.event.id).catch((notifyErr) =>
+        console.error("[publishBySlug] notifyPendingReview falló:", notifyErr),
+      );
+    }
+    return ok(result.value.event);
   },
 
   async stats(slug: string): Promise<Result<EventStatsResult>> {
