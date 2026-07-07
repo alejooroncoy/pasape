@@ -86,10 +86,25 @@ export const updateEvent = async (
   // "published" (o "closed", vía "Reabrir evento" en settings/page.tsx) no
   // pierde su aprobación por editarse: los cambios siguen públicos sin volver
   // a revisión.
-  const gatedInput =
+  //
+  // Excepción: organizaciones con `organizations.trusted = true` se saltan la
+  // revisión y publican directo — ver 20260707100000_organizations_trusted.sql.
+  const entersFirstPublish =
     input.status === "published" &&
     before?.status !== "closed" &&
-    before?.status !== "published"
+    before?.status !== "published";
+  let orgTrusted = false;
+  if (entersFirstPublish) {
+    const db = supabaseAdmin();
+    const { data: org } = await db
+      .from("organizations")
+      .select("trusted")
+      .eq("id", orgId)
+      .maybeSingle<{ trusted: boolean }>();
+    orgTrusted = org?.trusted ?? false;
+  }
+  const gatedInput =
+    entersFirstPublish && !orgTrusted
       ? { ...input, status: "pending_review" as const, rejectedReason: null }
       : input;
 
