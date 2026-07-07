@@ -4,6 +4,7 @@ import {
   sanitizeEmail,
   sanitizeGuestContact,
   sanitizePersonName,
+  sanitizePersonNameLive,
   sanitizePromoCode,
 } from "./sanitize";
 
@@ -11,6 +12,17 @@ describe("sanitizePersonName", () => {
   it("quita tags y colapsa espacios", () => {
     expect(sanitizePersonName("  Juan <script>Pérez  ")).toBe("Juan scriptPérez");
     expect(sanitizePersonName("María-José O'Connor")).toBe("María-José O'Connor");
+  });
+});
+
+describe("sanitizePersonNameLive", () => {
+  it("no recorta el espacio final mientras se escribe (regresión: la barra espaciadora 'no funcionaba' en mobile)", () => {
+    expect(sanitizePersonNameLive("Juan ")).toBe("Juan ");
+    expect(sanitizePersonNameLive("Juan  Pérez")).toBe("Juan Pérez");
+  });
+
+  it("igual sanitiza tags y caracteres inválidos", () => {
+    expect(sanitizePersonNameLive("Juan <script>Pérez")).toBe("Juan scriptPérez");
   });
 });
 

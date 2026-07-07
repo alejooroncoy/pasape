@@ -44,7 +44,7 @@ import {
   unitNounPlural,
 } from "@/lib/events/ticketDisplay";
 import { activePricing, applyPromos } from "@/lib/events/pricing";
-import { sanitizeDocument, sanitizeEmail, sanitizePersonName } from "@/lib/input/sanitize";
+import { sanitizeDocument, sanitizeEmail, sanitizePersonNameLive } from "@/lib/input/sanitize";
 import { checkoutErrorMessage, payErrorReasonParam } from "@/lib/tickets/checkoutErrors";
 import { RecoverTicketsLink } from "@/components/tickets/RecoverTicketsLink";
 
@@ -1342,7 +1342,7 @@ function DataPhase({
           <Field
             label="Nombre completo"
             value={guestName}
-            onChange={(v) => setGuestName(sanitizePersonName(v))}
+            onChange={(v) => setGuestName(sanitizePersonNameLive(v))}
             placeholder={dniPending ? "Buscando en RENIEC…" : "Juan Pérez García"}
             disabled={dniPending}
           />
