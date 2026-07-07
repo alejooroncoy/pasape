@@ -49,6 +49,20 @@ const claimFallbackTemplateName = (): string =>
   process.env.KAPSO_WA_CLAIM_FALLBACK_TEMPLATE_NAME ??
   "ticket_transferred_in_v7";
 
+// Versiones con botón de URL (más práctico que el link como texto plano en el
+// cuerpo, y el cuerpo queda mejor espaciado) — pendientes de aprobación en
+// Meta al momento de escribir esto. Mientras no aprueben, sendTransferClaim
+// cae a las plantillas *_v1/*_v7 de siempre (mismo link, sin botón).
+const claimButtonTemplateName = (): string =>
+  process.env.WA_CLAIM_TEMPLATE_NAME_V2 ??
+  process.env.KAPSO_WA_CLAIM_TEMPLATE_NAME_V2 ??
+  "ticket_claim_invite_v2";
+
+const claimFallbackButtonTemplateName = (): string =>
+  process.env.WA_CLAIM_FALLBACK_TEMPLATE_NAME_V2 ??
+  process.env.KAPSO_WA_CLAIM_FALLBACK_TEMPLATE_NAME_V2 ??
+  "ticket_transferred_in_v8";
+
 const paymentReviewTemplateName = (): string =>
   process.env.WA_PAYMENT_REVIEW_TEMPLATE_NAME ?? "payment_in_review_v1";
 
@@ -82,8 +96,35 @@ export class WhatsAppNotificationSender implements NotificationSender {
   }): Promise<boolean> {
     const lang = templateLang();
     const startsAt = formatDateForTemplate(input.eventStartsAt);
+    // El botón de las versiones _v2/_v8 apunta a `https://pasape.lat/es/claim/{{1}}`,
+    // así que el parámetro es el sufijo tras "/es/claim/" (el token).
+    const buttonUrlSuffix = input.claimUrl.split("/es/claim/")[1] ?? input.claimUrl;
 
-    // 1) Template propio (sin nombre del receptor, lenguaje de "reclamo").
+    // 1a) Botón de URL (más práctico que el link en texto plano) — pendiente
+    // de aprobación en Meta al momento de escribir esto.
+    try {
+      await this.gateway.sendTemplate({
+        to: input.phone,
+        templateName: claimButtonTemplateName(),
+        languageCode: lang,
+        components: [
+          bodyComponent({
+            sender_name: input.senderName,
+            event_title: input.eventTitle,
+            event_starts_at: startsAt,
+          }),
+          urlButtonComponent(buttonUrlSuffix),
+        ],
+      });
+      return true;
+    } catch (err) {
+      console.warn(
+        "[WhatsAppNotificationSender] claim template con botón falló, uso el de siempre:",
+        err,
+      );
+    }
+
+    // 1b) Template propio de siempre (sin nombre del receptor, link en texto).
     try {
       await this.gateway.sendTemplate({
         to: input.phone,
@@ -105,6 +146,31 @@ export class WhatsAppNotificationSender implements NotificationSender {
       console.warn("[WhatsAppNotificationSender] claim template falló, uso fallback:", err);
     }
 
+    // 2a) Fallback con botón.
+    try {
+      await this.gateway.sendTemplate({
+        to: input.phone,
+        templateName: claimFallbackButtonTemplateName(),
+        languageCode: lang,
+        components: [
+          bodyComponent({
+            holder_name: "👋",
+            sender_name: input.senderName,
+            event_title: input.eventTitle,
+            event_starts_at: startsAt,
+          }),
+          urlButtonComponent(buttonUrlSuffix),
+        ],
+      });
+      return true;
+    } catch (err) {
+      console.warn(
+        "[WhatsAppNotificationSender] fallback con botón falló, uso el de siempre:",
+        err,
+      );
+    }
+
+    // 2b) Fallback de siempre (link en texto).
     try {
       await this.gateway.sendTemplate({
         to: input.phone,
