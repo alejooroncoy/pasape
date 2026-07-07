@@ -15,6 +15,19 @@ export const sanitizePersonName = (raw: string, maxLen = 120): string => {
   return s.slice(0, maxLen);
 };
 
+/** Misma sanitización que `sanitizePersonName`, pero para usar en el `onChange`
+ *  de un input controlado mientras el usuario escribe: NO recorta el espacio
+ *  final. `collapseSpaces` hace `.trim()`, así que llamado en cada tecla se
+ *  comía el espacio recién tecleado — en el celular parecía que la barra
+ *  espaciadora "no funcionaba". El trim final sigue pasando en
+ *  `sanitizePersonName` (server-side) o al guardar/enviar. */
+export const sanitizePersonNameLive = (raw: string, maxLen = 120): string => {
+  let s = stripControlChars(raw).replace(/\s+/g, " ");
+  s = s.replace(/[<>&"`\\]/g, "");
+  s = s.replace(/[^\p{L}\p{M}\s'.-]/gu, "");
+  return s.slice(0, maxLen);
+};
+
 export const sanitizeEmail = (raw: string): string =>
   collapseSpaces(stripControlChars(raw)).toLowerCase().slice(0, 254);
 

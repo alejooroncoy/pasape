@@ -3,7 +3,7 @@
 import { useEffect, useState, type RefObject } from "react";
 import { useSetHolder } from "@/lib/tickets/hooks/useTickets";
 import { isValidDocument } from "@/lib/identity/document";
-import { sanitizeDocument, sanitizePersonName } from "@/lib/input/sanitize";
+import { sanitizeDocument, sanitizePersonNameLive } from "@/lib/input/sanitize";
 import { TicketActionSurface } from "./TicketActionSurface";
 
 export function HolderEditSheet({
@@ -74,7 +74,7 @@ export function HolderEditSheet({
           </label>
           <input
             value={name}
-            onChange={(e) => setName(sanitizePersonName(e.target.value))}
+            onChange={(e) => setName(sanitizePersonNameLive(e.target.value))}
             placeholder="Ej. María García"
             autoFocus
             className="mt-1 w-full rounded-xl border border-cart-line bg-cart-bg px-3 py-2.5 text-[14px] text-white outline-none focus:border-cart-accent/60"

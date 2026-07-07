@@ -4,7 +4,7 @@ import { use, useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { useRouter } from "@/i18n/navigation";
 import { useClaimTransfer } from "@/lib/tickets/hooks/useTickets";
-import { sanitizeDocument, sanitizePersonName } from "@/lib/input/sanitize";
+import { sanitizeDocument, sanitizePersonNameLive } from "@/lib/input/sanitize";
 import { isValidDocument } from "@/lib/identity/document";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { useGoogleSignIn } from "@/lib/identity/hooks/useFirebaseAuth";
@@ -158,7 +158,7 @@ export default function ClaimPage(props: Props) {
                 <input
                   type="text"
                   value={name}
-                  onChange={(e) => setName(sanitizePersonName(e.target.value))}
+                  onChange={(e) => setName(sanitizePersonNameLive(e.target.value))}
                   placeholder="Tu nombre y apellido"
                   className="w-full rounded-xl border border-white/10 bg-cart-bg-elev px-3.5 py-3 text-[14.5px] text-white placeholder:text-cart-ink-3 focus:border-cart-accent focus:outline-none"
                 />
