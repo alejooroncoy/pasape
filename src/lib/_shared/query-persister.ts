@@ -12,17 +12,19 @@ const DB_NAME = "pasape-rq";
 const STORE = "cache";
 const KEY = "client";
 
-let dbPromise: Promise<IDBPDatabase> | null = null;
-const getDb = () => {
+// No cachear la conexión entre llamadas: en sesiones largas (wallet abierta
+// horas) el navegador puede cerrar la conexión IDB en background (sobre todo
+// Safari/iOS) sin avisar. Una promesa de módulo reusaría ese handle ya cerrado
+// y el próximo persistClient() fallaría con "InvalidStateError: the database
+// connection is closing". Abrir una conexión nueva por operación (igual que
+// ticketKeyStore.ts / scanCache.ts / claimedOrderStore.ts) evita el problema.
+const getDb = (): Promise<IDBPDatabase> | null => {
   if (typeof indexedDB === "undefined") return null;
-  if (!dbPromise) {
-    dbPromise = openDB(DB_NAME, 1, {
-      upgrade(db) {
-        if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
-      },
-    });
-  }
-  return dbPromise;
+  return openDB(DB_NAME, 1, {
+    upgrade(db) {
+      if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
+    },
+  });
 };
 
 // Standalone (no depende de la instancia de persister del provider): usado en
