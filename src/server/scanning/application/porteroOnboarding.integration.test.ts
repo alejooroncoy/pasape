@@ -93,7 +93,10 @@ describe.skipIf(!hasCreds)("onboarding del portero por código (integración)", 
     expect(joined.ok).toBe(true);
     if (!joined.ok) return;
 
-    const access = await verifyScanAccess(EVENT.slug, { doorToken: joined.value.token });
+    const access = await verifyScanAccess(EVENT.slug, {
+      doorToken: joined.value.token,
+      deviceId: DEVICE,
+    });
     expect(access.ok).toBe(true);
     if (!access.ok) return;
     expect(access.value.via).toBe("session");
@@ -113,8 +116,13 @@ describe.skipIf(!hasCreds)("onboarding del portero por código (integración)", 
     const joined = await joinByCode({ code: link.code, deviceId: DEVICE });
     expect(joined.ok).toBe(true);
     if (!joined.ok) return;
-    // El controller lee el token del header (no de opts): lo inyectamos.
-    currentHeaders = new Map([["x-door-token", joined.value.token]]);
+    // El controller lee el token y el device del header (no de opts): los
+    // inyectamos. Sin x-scanner-device, verifyScanAccess rechaza por device
+    // binding (LOW-7) aunque el token sea válido.
+    currentHeaders = new Map([
+      ["x-door-token", joined.value.token],
+      ["x-scanner-device", DEVICE],
+    ]);
 
     const cache = await EventsController.getScanCache(EVENT.slug);
     expect(cache.ok).toBe(true);
