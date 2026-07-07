@@ -138,12 +138,28 @@ export const dispatchTicketDelivery = async (
     error: string | null;
   }[] = [];
 
+  // Agrupar por contacto único ANTES de mandar: si el comprador aún no repartió
+  // sus N tickets a holders distintos, todos caen al mismo email/teléfono de la
+  // orden (fallback) — sin esto, mandábamos N correos y N WhatsApps casi
+  // idénticos a la misma persona. Un ticket ya repartido a otro holder (email/
+  // teléfono propio) forma su propio grupo y recibe su propio aviso, como debe.
+  const groups = new Map<string, { to: { email: string | null; phone: string | null }; holderName: string; ticketIds: string[] }>();
   for (const ticket of tickets) {
     const to = {
       email: resolveHolderEmail(ticket) ?? orderEmail,
       phone: resolveHolderPhone(ticket) ?? orderPhone,
     };
     const holderName = ticket.holder_name ?? orderHolderName;
+    const key = `${to.email ?? ""}|${to.phone ?? ""}`;
+    const existing = groups.get(key);
+    if (existing) {
+      existing.ticketIds.push(ticket.id);
+    } else {
+      groups.set(key, { to, holderName, ticketIds: [ticket.id] });
+    }
+  }
+
+  for (const group of groups.values()) {
     // Una sola página: el link es un redirector durable a tu orden (/order) —
     // decide solo si te manda al login+reclamo, o directo a tu ticket ya
     // reclamado (offline-capable incluido). (Reemplaza /t/?k= como vista de
@@ -153,13 +169,14 @@ export const dispatchTicketDelivery = async (
     const walletSignupUrl = orderUrl;
 
     const res = await sender.sendTicketDelivery({
-      to,
-      holderName,
+      to: group.to,
+      holderName: group.holderName,
       eventTitle: event.title,
       eventStartsAt: event.starts_at,
       eventVenue: event.venue,
       ticketUrl,
       walletSignupUrl,
+      ticketCount: group.ticketIds.length,
     });
 
     if (res.emailSent) emailSentAny = true;

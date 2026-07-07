@@ -15,6 +15,9 @@ export type TicketDeliveryInput = {
   eventVenue: string | null;
   ticketUrl: string;
   walletSignupUrl: string;
+  /** Cuántos tickets de la orden caen en este mismo destinatario (agrupados
+   *  por contacto en DispatchTicketDelivery) — 1 = copy singular, >1 = "tienes N". */
+  ticketCount: number;
 };
 
 export type TicketDeliveryResult = {
