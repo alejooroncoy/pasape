@@ -231,13 +231,6 @@ export const EventsController = {
     );
   },
 
-  async publish(eventId: string): Promise<Result<Event>> {
-    const ctx = await resolveOrgCtx(ORG_WRITE_ROLES);
-    if (!ctx.ok) return err(ctx.error);
-    const result = await repo.publish(eventId, ctx.value.orgId);
-    return result.ok ? ok(result.value.event) : result;
-  },
-
   async publishBySlug(slug: string): Promise<Result<Event>> {
     const guard = await guardEventMember(slug, ["owner", "admin", "editor"]);
     if (!guard.ok) return err(guard.error);
