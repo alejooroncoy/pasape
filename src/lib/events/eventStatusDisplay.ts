@@ -20,9 +20,25 @@ const EVENT_STATUS: Record<EventStatus, EventStatusInfo> = {
   cancelled: { label: "Cancelado", tone: "danger" },
 };
 
-export const eventStatusLabel = (status: EventStatus): string => EVENT_STATUS[status].label;
+// TS garantiza en compile-time que `status` es una de las 5 keys de arriba,
+// pero eso no lo valida nadie en runtime: `api-client.ts` castea la respuesta
+// HTTP con `as T` sin verificar, y la DB solo lo restringe con un CHECK
+// constraint que puede quedar desincronizado del enum TS durante un deploy
+// (ver memoria "Drift Supabase remoto↔local" — ya un incidente real en este
+// proyecto). Antes de este módulo, cada copia tenía su propio fallback ante
+// un status desconocido ("—", el status crudo); sin fallback acá, un dato
+// viejo/desincronizado tumba el render entero en vez de degradar.
+const FALLBACK: EventStatusInfo = { label: "—", tone: "neutral" };
+const infoFor = (status: EventStatus): EventStatusInfo => EVENT_STATUS[status] ?? FALLBACK;
 
-export const eventStatusTone = (status: EventStatus): EventStatusTone => EVENT_STATUS[status].tone;
+export const eventStatusLabel = (status: EventStatus): string => infoFor(status).label;
+
+export const eventStatusTone = (status: EventStatus): EventStatusTone => infoFor(status).tone;
+
+/** Evento ya no activo (cerrado o cancelado) — solo para tratamientos visuales
+ *  tipo atenuar/escala de grises, no para lógica de negocio. */
+export const isEventOver = (status: EventStatus): boolean =>
+  status === "closed" || status === "cancelled";
 
 /** Clases Tailwind para un pill con fondo/borde/texto tintado según el tono del status. */
 const TONE_PILL_CLASSNAME: Record<EventStatusTone, string> = {

@@ -7,6 +7,7 @@ import { useSaveEvent } from "@/lib/identity/hooks/useSaveEvent";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { LoginGate } from "@/components/ui/LoginGate";
 import { formatDate } from "@/lib/_shared/format";
+import { isEventOver } from "@/lib/events/eventStatusDisplay";
 import { CATEGORY_BY_ID } from "../_home/categories";
 import type { SavedEvent } from "@/server/events/application/ListSavedEvents";
 
@@ -71,7 +72,7 @@ export default function FavoritesPage() {
 
 function SavedRow({ ev, onClick }: { ev: SavedEvent; onClick: () => void }) {
   const { toggle, isPending } = useSaveEvent(ev.id);
-  const closed = ev.status === "closed" || ev.status === "cancelled";
+  const closed = isEventOver(ev.status);
   return (
     <motion.div
       whileTap={{ scale: 0.99 }}

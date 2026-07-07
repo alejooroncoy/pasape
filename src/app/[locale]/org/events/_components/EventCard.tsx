@@ -9,12 +9,15 @@ import type { Event } from "@/server/events/domain/Event";
 
 type Variant = "upcoming" | "past" | "draft";
 
-// Copy propio del tab activo (no del status crudo): dentro de "upcoming" solo
-// caen eventos published, y "Finalizado"/"Borrador" son más suaves que los
-// labels genéricos de eventStatusDisplay para este contexto de lista.
+// Color propio del tab activo (más suave que el pill genérico de
+// eventStatusDisplay, pensado para esta lista). El label de "upcoming"/"draft"
+// SÍ viene de la fuente única (dentro de "upcoming" solo caen eventos
+// published vía classifyEvent); "past" agrupa closed+cancelled bajo un copy
+// más suave ("Finalizado") — cancelled real se distingue abajo con su propio
+// color, así que este label solo aplica al caso "closed".
 const STATUS_CONFIG: Record<Variant, { label: string; className: string }> = {
   upcoming: {
-    label: "Publicado",
+    label: eventStatusLabel("published"),
     className: "bg-emerald-300/10 text-emerald-300 border-emerald-300/20",
   },
   past: {
@@ -22,7 +25,7 @@ const STATUS_CONFIG: Record<Variant, { label: string; className: string }> = {
     className: "bg-white/5 text-cart-ink-4 border-cart-line",
   },
   draft: {
-    label: "Borrador",
+    label: eventStatusLabel("draft"),
     className: "bg-white/5 text-cart-ink-3 border-cart-line",
   },
 };
