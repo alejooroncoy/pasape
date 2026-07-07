@@ -26,6 +26,16 @@ const templateName = (): string =>
   process.env.KAPSO_WA_TEMPLATE_NAME_V2 ??
   "ticket_delivery_v2";
 
+// Cuando la orden tiene >1 ticket agrupado en un mismo envío (ver
+// DispatchTicketDelivery), usamos un template con variable de cantidad —
+// pendiente de aprobación en Meta al momento de escribir esto. Mientras no
+// esté aprobado, sendTicketDelivery cae al template singular de siempre (un
+// solo envío igual, solo que el copy no menciona el número todavía).
+const multiTemplateName = (): string =>
+  process.env.WA_TEMPLATE_NAME_MULTI ??
+  process.env.KAPSO_WA_TEMPLATE_NAME_MULTI ??
+  "ticket_delivery_multi_v1";
+
 const templateLang = (): string =>
   process.env.WA_TEMPLATE_LANG ?? process.env.KAPSO_WA_TEMPLATE_LANG ?? "es";
 
@@ -167,6 +177,34 @@ export class WhatsAppNotificationSender implements NotificationSender {
     // El botón dinámico del template v2 apunta a `https://pasape.lat/order/{{1}}`,
     // así que el parámetro es el sufijo tras "/order/" ("<orderId>/<firma>").
     const buttonUrlSuffix = input.ticketUrl.split("/order/")[1] ?? input.ticketUrl;
+
+    if (input.ticketCount > 1) {
+      try {
+        await this.gateway.sendTemplate({
+          to: input.to.phone,
+          templateName: multiTemplateName(),
+          languageCode: templateLang(),
+          components: [
+            bodyComponent({
+              holder_name: humanizeName(input.holderName),
+              ticket_count: String(input.ticketCount),
+              event_title: input.eventTitle,
+              event_starts_at: formatDateForTemplate(input.eventStartsAt),
+            }),
+            urlButtonComponent(buttonUrlSuffix),
+          ],
+        });
+        return { emailSent: false, whatsappSent: true };
+      } catch (err) {
+        // Probable "template no aprobado aún" (ver ticket_delivery_multi_v1,
+        // pendiente en Meta) — cae al template singular de siempre. Sigue
+        // siendo UN solo envío, solo que el copy no menciona el número.
+        console.warn(
+          "[WhatsAppNotificationSender] template multi falló, uso singular:",
+          err,
+        );
+      }
+    }
 
     try {
       await this.gateway.sendTemplate({

@@ -43,16 +43,22 @@ export class ResendEmailSender implements NotificationSender {
         eventVenue: input.eventVenue,
         ticketUrl: input.ticketUrl,
         walletSignupUrl: input.walletSignupUrl,
+        ticketCount: input.ticketCount,
         appOrigin: APP_ORIGIN,
       };
       const html = await render(TicketDeliveryEmail(emailProps));
       const text = await render(TicketDeliveryEmail(emailProps), { plainText: true });
 
+      const subject =
+        input.ticketCount > 1
+          ? `Tus ${input.ticketCount} entradas para ${input.eventTitle}`
+          : `Tu entrada para ${input.eventTitle}`;
+
       const client = new mod.Resend(apiKey);
       await client.emails.send({
         from,
         to: input.to.email,
-        subject: `Tu entrada para ${input.eventTitle}`,
+        subject,
         html,
         text,
       });

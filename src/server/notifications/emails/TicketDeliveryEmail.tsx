@@ -31,6 +31,8 @@ export type TicketDeliveryEmailProps = {
   eventVenue: string | null;
   ticketUrl: string;
   walletSignupUrl: string;
+  /** Tickets agrupados en este mismo correo (ver DispatchTicketDelivery) — 1 = singular. */
+  ticketCount: number;
   appOrigin: string; // ej: https://pasape.lat
 };
 
@@ -75,9 +77,13 @@ export function TicketDeliveryEmail({
   eventVenue,
   ticketUrl,
   walletSignupUrl,
+  ticketCount,
   appOrigin,
 }: TicketDeliveryEmailProps) {
-  const previewText = `Tu entrada para ${eventTitle} ya está lista`;
+  const isMulti = ticketCount > 1;
+  const previewText = isMulti
+    ? `Tus ${ticketCount} entradas para ${eventTitle} ya están listas`
+    : `Tu entrada para ${eventTitle} ya está lista`;
   // Fallback para renders sin props (ej: `email export`), donde no llega appOrigin.
   const origin = (appOrigin || "https://pasape.lat").replace(/\/$/, "");
   const logoLight = `${origin}/icons/logo-icon-96.png`; // trazo morado — para fondo claro
@@ -119,12 +125,22 @@ export function TicketDeliveryEmail({
             </Section>
 
             <Heading className="p-ink mx-0 mt-[28px] mb-[8px] p-0 text-center font-normal text-[24px] text-[#241f2e]">
-              Tu entrada está <strong>lista</strong>
+              {isMulti ? (
+                <>
+                  Tus {ticketCount} entradas están <strong>listas</strong>
+                </>
+              ) : (
+                <>
+                  Tu entrada está <strong>lista</strong>
+                </>
+              )}
             </Heading>
 
             <Text className="p-muted mx-0 mt-[4px] mb-[28px] text-center text-[14px] text-[#6b6478] leading-[22px]">
-              Hola <strong className="p-ink text-[#241f2e]">{holderName}</strong>, ya
-              puedes acceder a tu entrada para el evento.
+              Hola <strong className="p-ink text-[#241f2e]">{holderName}</strong>,{" "}
+              {isMulti
+                ? `ya puedes acceder a tus ${ticketCount} entradas para el evento. Repártelas cuando quieras desde ahí.`
+                : "ya puedes acceder a tu entrada para el evento."}
             </Text>
 
             {/* Stub del ticket: borde superior punteado que evoca la línea de corte. */}
@@ -150,7 +166,7 @@ export function TicketDeliveryEmail({
                 className="rounded-full bg-[#7C3AED] px-8 py-[14px] text-center font-semibold text-[14px] text-white no-underline"
                 href={ticketUrl}
               >
-                Ver mi entrada
+                {isMulti ? "Ver mis entradas" : "Ver mi entrada"}
               </Button>
             </Section>
 
@@ -163,9 +179,9 @@ export function TicketDeliveryEmail({
             <Hr className="p-hr mx-0 mt-[28px] mb-[20px] w-full border border-[#eae6f2] border-solid" />
 
             <Text className="p-subtle m-0 text-[#9a93a8] text-[12px] leading-[20px]">
-              Muestra el QR directamente desde la página de tu entrada. No le tomes
-              captura de pantalla — el QR cambia cada pocos segundos y una captura no
-              sirve en la puerta.
+              {isMulti
+                ? "Muestra el QR de cada entrada directamente desde la página. No le tomes captura de pantalla — el QR cambia cada pocos segundos y una captura no sirve en la puerta."
+                : "Muestra el QR directamente desde la página de tu entrada. No le tomes captura de pantalla — el QR cambia cada pocos segundos y una captura no sirve en la puerta."}
             </Text>
             <Text className="p-subtle m-0 mt-[10px] text-[#9a93a8] text-[12px] leading-[20px]">
               ¿No abre el botón? Copia este enlace:{" "}
@@ -188,6 +204,7 @@ TicketDeliveryEmail.PreviewProps = {
   eventVenue: "Barranco, Lima",
   ticketUrl: "https://pasape.lat/es/order/abc123/tok456",
   walletSignupUrl: "https://pasape.lat/es/login?next=/es/tickets",
+  ticketCount: 1,
   appOrigin: "https://pasape.lat",
 } satisfies TicketDeliveryEmailProps;
 
