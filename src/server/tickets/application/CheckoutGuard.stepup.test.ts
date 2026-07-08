@@ -139,3 +139,53 @@ describe("CheckoutGuard step-up — no-replay en el reintento", () => {
     expect(consumeCheckoutToken).not.toHaveBeenCalled();
   });
 });
+
+describe("CheckoutGuard — barrera atómica del checkout-token", () => {
+  const cleanReq = (extra: Record<string, string> = {}): NextRequest =>
+    new NextRequest("http://localhost/api/tickets/buy", {
+      method: "POST",
+      headers: {
+        "x-device-hash": DEVICE,
+        "x-checkout-token": "tok-1",
+        "user-agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "sec-ch-ua": '"Chromium";v="120"',
+        "accept-language": "es-PE",
+        ...extra,
+      },
+    });
+
+  const lowRiskInput = {
+    phase: "buy" as const,
+    eventId: EVENT_ID,
+    ticketTypeIds: ["t1"],
+    qty: 1,
+    stockRemaining: null,
+    contact: "a@b.com",
+    dni: "12345678",
+  };
+
+  beforeEach(() => {
+    process.env.BOT_ENFORCEMENT = "shadow";
+    vi.mocked(consumeCheckoutToken).mockResolvedValue("fresh");
+  });
+
+  it("bloquea el buy si el token ya fue quemado (doble envío / carrera)", async () => {
+    vi.mocked(consumeCheckoutToken).mockResolvedValueOnce("replay");
+
+    const res = await assessCheckout({ req: cleanReq(), ...lowRiskInput });
+
+    expect(res.allowed).toBe(false);
+    expect(res.action).toBe("blocked");
+    expect(res.reasons).toContain("token_replay");
+    expect(consumeCheckoutToken).toHaveBeenCalledTimes(1);
+  });
+
+  it("procede y quema el token cuando consume devuelve fresh", async () => {
+    const res = await assessCheckout({ req: cleanReq(), ...lowRiskInput });
+
+    expect(res.allowed).toBe(true);
+    expect(res.challengeRequired).toBe(false);
+    expect(consumeCheckoutToken).toHaveBeenCalledTimes(1);
+  });
+});

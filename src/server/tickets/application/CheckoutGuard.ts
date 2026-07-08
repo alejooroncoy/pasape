@@ -265,15 +265,31 @@ export const assessCheckout = async (
     // válido para este intento, dejamos pasar (no re-desafiamos). El challenge ya
     // consumido es el peaje pagado. `action` refleja que hubo challenge resuelto.
     const challengeRequired = decision.challengeRequired && !stepUpSatisfied;
-    const proceeding = decision.allowed && !challengeRequired;
-    const action: SignalAction =
+    let proceeding = decision.allowed && !challengeRequired;
+    let allowed = decision.allowed;
+    let action: SignalAction =
       decision.challengeRequired && stepUpSatisfied ? "challenge" : decision.action;
+    let finalReasons = reasons;
 
-    // Confirmación single-use: SOLO cuando la compra realmente procede se quema el
-    // checkout-token (una compra = un token). Al responder challenge_required NO se
-    // quema, así el reintento con solución no se cuenta como replay.
+    // Confirmación single-use ATÓMICA: el peek de arriba alimenta el score, pero dos
+    // /buy paralelos con el mismo token pueden pasar el peek antes de que el primero
+    // queme (TOCTOU). Consumimos CON AWAIT aquí como barrera real antes de crear la
+    // orden. Al responder challenge_required NO se quema, así el reintento con
+    // solución no cuenta como replay.
+    //
+    //   replay  → duplicado (doble clic / bot en paralelo): NO fail-open — evita 2
+    //             órdenes con un solo render de página.
+    //   unknown → sin Redis / error de red: fail-open, procede.
     if (proceeding && phase === "buy" && checkoutTokenOk && rawToken) {
-      void consumeCheckoutToken(rawToken);
+      const consumeOutcome = await consumeCheckoutToken(rawToken);
+      if (consumeOutcome === "replay") {
+        proceeding = false;
+        allowed = false;
+        action = "blocked";
+        finalReasons = reasons.includes("token_replay")
+          ? reasons
+          : [...reasons, "token_replay"];
+      }
     }
 
     // Mint del challenge a devolver en el 428 (dificultad escalada por el score).
@@ -309,7 +325,7 @@ export const assessCheckout = async (
         checkoutTokenOk,
         msSinceMount,
         botScore: score,
-        reasons,
+        reasons: finalReasons,
         enforcementMode: mode,
         actionTaken: action,
       }),
@@ -317,7 +333,7 @@ export const assessCheckout = async (
         serverEvents.botSignal(input.buyerId ?? deviceHash ?? ip ?? "anonymous", {
           phase,
           bot_score: score,
-          reasons,
+          reasons: finalReasons,
           action,
           enforcement_mode: mode,
           event_id: eventId,
@@ -329,11 +345,11 @@ export const assessCheckout = async (
     ]);
 
     return {
-      allowed: decision.allowed,
+      allowed,
       action,
       delayMs: decision.delayMs,
       score,
-      reasons,
+      reasons: finalReasons,
       signalId,
       challengeRequired,
       challenge,
