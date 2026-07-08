@@ -11,13 +11,13 @@ export function FormSection({ waHref }: { waHref: string }) {
       <div className="relative z-[1] mx-auto w-full max-w-[760px] px-[22px] text-center md:px-8">
         <SectionHeader
           align="center"
-          eyebrow="¿Tienes una fiesta próxima?"
+          eyebrow="¿Tienes un evento próximo?"
           title={
             <>
-              Probemos Pasape <em>sin costo fijo.</em>
+              Pongamos tu evento <em>en orden.</em>
             </>
           }
-          lede="Escríbenos por WhatsApp y vemos si tu evento calza para el piloto. Te respondemos directo, sin formularios largos."
+          lede="Cuéntanos qué estás produciendo y vemos si Pasape encaja para ordenar tu venta, tus QR, tu equipo y tu puerta desde un solo lugar."
         />
 
         <div className="mt-9 flex w-full flex-col items-center gap-3.5">

@@ -5,9 +5,9 @@ import { FeatureCard } from "./ui/feature-card";
 
 const FEATURES = [
   {
-    tag: "Promotores",
-    title: "Cada promotor con su link. Atribución sin discusión.",
-    payoff: 'Cero "vendí más de lo que dice el sistema"',
+    tag: "Ventas y promotores",
+    title: "Cada canal con su link. Atribución sin discusión.",
+    payoff: "Ventas atribuidas por link o código, visibles en el panel",
     icon: <Icon name="link" width={18} height={18} />,
     accent: true,
     wide: true,
@@ -32,9 +32,9 @@ const FEATURES = [
     ),
   },
   {
-    tag: "Combos 2x1 · 3x2",
+    tag: "Tickets y combos",
     title: "Una compra, varias entradas. Cada una con su QR.",
-    payoff: "Sin reenviar capturas ni cobrar mitades en puerta",
+    payoff: "Compra simple para el cliente, control claro para tu equipo",
     icon: <Icon name="qr" width={18} height={18} />,
     visual: (
       <div className="flex gap-1.5">
@@ -53,9 +53,9 @@ const FEATURES = [
     ),
   },
   {
-    tag: "Box",
-    title: "Comprás el espacio, invitás por link. Cada uno con su QR.",
-    payoff: "Sin capturas ni lista en el grupo",
+    tag: "Boxes y espacios",
+    title: "Vende el espacio, invita por link y controla cada acceso.",
+    payoff: "El host compra el box y cada invitado entra con QR propio",
     icon: <Icon name="users" width={18} height={18} />,
     visual: (
       <div className="rounded-lg border border-dashed border-accent/30 bg-accent/[0.06] px-3 py-2.5 text-center font-mono text-[11px] text-ink-2">
@@ -65,8 +65,8 @@ const FEATURES = [
   },
   {
     tag: "Preventa",
-    title: "Precio bajo al inicio. Sube solo cuando toca.",
-    payoff: "Sin cambiar precios a mano en WhatsApp",
+    title: "Precios por etapa sin cambios manuales.",
+    payoff: "Preventa, general y últimas entradas configuradas desde el evento",
     icon: <Icon name="chart" width={18} height={18} />,
     visual: (
       <div className="flex items-center gap-2 font-mono text-[11px]">
@@ -77,9 +77,9 @@ const FEATURES = [
     ),
   },
   {
-    tag: "Entrada liberada",
-    title: "Gratis hasta la hora que digas. Luego vuelve al precio.",
-    payoff: 'Cero "¿ya no es gratis?"',
+    tag: "Cortesías",
+    title: "Invitados, pases gratis y QR sin comisión.",
+    payoff: "Cortesías ordenadas sin listas paralelas ni capturas",
     icon: <Icon name="gift" width={18} height={18} />,
     visual: (
       <div className="flex items-center justify-between rounded-lg border border-line bg-bg/40 px-3 py-2 font-mono text-[11px]">
@@ -105,10 +105,10 @@ export function Promos() {
           eyebrow="Lo que ya puedes usar"
           title={
             <>
-              Todo lo que armamos. <em>Listo para tu evento.</em>
+              Todo tu evento, <em>en un solo sistema.</em>
             </>
           }
-          lede="Combos, preventas, boxes y promotores — configurado una vez, corre solo. Sin capturas, sin Excel, sin el mismo DM diez veces."
+          lede="Pasape une venta de tickets, pagos, QR, boxes, cortesías, promotores y control de acceso para que tu operación no dependa de Excel, WhatsApp y capturas."
         />
 
         <div className="mt-10 grid grid-cols-1 gap-4 md:grid-cols-6 md:gap-5">

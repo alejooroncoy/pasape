@@ -1,36 +1,72 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-
-const SITE_URL = "https://pasa.pe";
-const DESCRIPTION =
-  "Tu pase a los eventos que valen la pena en Lima. Entradas digitales con QR, combos y promotores.";
+import { JsonLd } from "@/components/seo/JsonLd";
+import { organizationJsonLd, websiteJsonLd } from "@/lib/seo/jsonld";
+import {
+  DEFAULT_DESCRIPTION,
+  DEFAULT_OG_IMAGE,
+  SITE_NAME,
+  SITE_URL,
+  absoluteUrl,
+} from "@/lib/seo/site";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: "Pasape | Entradas para eventos en Lima",
-    template: "%s · Pasape",
+    default: `${SITE_NAME} | Entradas para eventos en Lima`,
+    template: `%s · ${SITE_NAME}`,
   },
-  description: DESCRIPTION,
+  description: DEFAULT_DESCRIPTION,
+  keywords: [
+    "entradas eventos lima",
+    "eventos peru",
+    "tickets digitales",
+    "pasape",
+    "eventos con qr",
+  ],
   manifest: "/manifest.json",
-  applicationName: "Pasape",
+  applicationName: SITE_NAME,
+  category: "events",
+  alternates: {
+    canonical: "/",
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+      "max-video-preview": -1,
+    },
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Pasape",
+    title: SITE_NAME,
   },
   openGraph: {
     type: "website",
     locale: "es_PE",
     url: SITE_URL,
-    siteName: "Pasape",
-    title: "Pasape | Entradas para eventos en Lima",
-    description: DESCRIPTION,
+    siteName: SITE_NAME,
+    title: `${SITE_NAME} | Entradas para eventos en Lima`,
+    description: DEFAULT_DESCRIPTION,
+    images: [
+      {
+        url: absoluteUrl(DEFAULT_OG_IMAGE),
+        width: 1200,
+        height: 630,
+        alt: `${SITE_NAME} | Entradas para eventos en Lima`,
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Pasape | Entradas para eventos en Lima",
-    description: DESCRIPTION,
+    title: `${SITE_NAME} | Entradas para eventos en Lima`,
+    description: DEFAULT_DESCRIPTION,
+    images: [absoluteUrl(DEFAULT_OG_IMAGE)],
   },
 };
 
@@ -58,8 +94,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="Pasape" />
+        <link rel="alternate" type="text/plain" href="/llms.txt" title="LLM site summary" />
       </head>
-      <body className="min-h-full">{children}</body>
+      <body className="min-h-full">
+        <JsonLd data={[organizationJsonLd(), websiteJsonLd()]} />
+        {children}
+      </body>
     </html>
   );
 }

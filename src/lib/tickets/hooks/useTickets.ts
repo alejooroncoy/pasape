@@ -1,7 +1,13 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/_shared/api-client";
+import { api, resolveUrl } from "@/lib/_shared/api-client";
+import {
+  checkoutSignalHeaders,
+  refreshCheckoutToken,
+  solvePow,
+  type Challenge,
+} from "@/lib/tickets/checkoutSignals";
 import { PERSIST_GC_TIME_MS } from "@/lib/_shared/query-client-config";
 import { useSessionReady } from "@/lib/identity/hooks/useSessionReady";
 import { currentUserKey } from "@/lib/identity/hooks/useCurrentUser";
@@ -103,15 +109,61 @@ export type BuyResult = {
 // ("Dinero: nunca reimplementar la fórmula en el frontend").
 export const useOrderQuote = () =>
   useMutation({
-    mutationFn: (input: { eventId: string; items: Array<{ ticketTypeId: string; qty: number }> }) =>
-      api.post<OrderQuote>("/api/tickets/quote", input),
+    mutationFn: async (input: { eventId: string; items: Array<{ ticketTypeId: string; qty: number }> }) =>
+      api.post<OrderQuote>("/api/tickets/quote", input, {
+        headers: await checkoutSignalHeaders(input.eventId),
+      }),
   });
+
+// POST /buy con fetch manual (no api.post) para poder LEER el body del 428
+// challenge_required sin que el cliente lance. Devuelve status + payload crudo.
+const postBuy = async (
+  input: BuyInput,
+  headers: Record<string, string>,
+): Promise<{ status: number; ok: boolean; payload: { data?: BuyResult; error?: string; challenge?: Challenge } }> => {
+  const res = await fetch(resolveUrl("/api/tickets/buy"), {
+    method: "POST",
+    headers: { "content-type": "application/json", ...headers },
+    body: JSON.stringify(input),
+    credentials: "same-origin",
+  });
+  const payload = await res.json().catch(() => ({}));
+  return { status: res.status, ok: res.ok, payload };
+};
 
 export const useBuyTickets = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: BuyInput) =>
-      api.post<BuyResult>("/api/tickets/buy", input),
+    mutationFn: async (input: BuyInput): Promise<BuyResult> => {
+      const headers = await checkoutSignalHeaders(input.eventId);
+      try {
+        let attempt = await postBuy(input, headers);
+
+        // Step-up challenge TRANSPARENTE: si el server responde 428 pidiendo un PoW,
+        // lo resolvemos en background (invisible para el humano) y reintentamos UNA
+        // vez con la solución en x-cx-stepup, reusando el MISMO token (el 428 no lo
+        // quemó). Un bot masivo paga este trabajo por cada intento sospechoso.
+        if (attempt.status === 428 && attempt.payload.challenge) {
+          const number = await solvePow(attempt.payload.challenge);
+          if (number != null) {
+            const stepup = JSON.stringify({ ...attempt.payload.challenge, number });
+            attempt = await postBuy(input, { ...headers, "x-cx-stepup": stepup });
+          }
+        }
+
+        if (!attempt.ok || attempt.payload.error) {
+          throw new Error(attempt.payload.error ?? `HTTP ${attempt.status}`);
+        }
+        return attempt.payload.data as BuyResult;
+      } finally {
+        // El server puede haber quemado el token single-use aunque la respuesta
+        // nunca llegue al cliente (fetch abortado/timeout tras procesar). Renovamos
+        // SIEMPRE — éxito, error de validación, o fallo de red — para que un
+        // reintento legítimo del usuario nunca reuse un token ya consumido y se
+        // marque como token_replay.
+        refreshCheckoutToken(input.eventId);
+      }
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: myTicketsKey }),
   });
 };

@@ -10,10 +10,10 @@ export function Price({ waHref }: { waHref: string }) {
           eyebrow="Precio"
           title={
             <>
-              Tú no pagas. <em>El comprador asume el servicio.</em>
+              Empieza sin costo fijo. <em>Escala cuando vendas.</em>
             </>
           }
-          lede="Sin costo fijo ni implementación. Y si entras al piloto ahora, va S/0 — buscamos eventos seleccionados para validar juntos."
+          lede="Pasape se alinea con tu venta: no pagas implementación ni mensualidad para lanzar. En pilotos seleccionados, validamos juntos la operación completa."
         />
 
         <div className="mt-10 grid grid-cols-1 gap-4 md:mt-12 md:grid-cols-[1fr_1.1fr] md:gap-[22px]">
@@ -41,7 +41,8 @@ export function Price({ waHref }: { waHref: string }) {
             <p className="relative z-[1] m-0 text-[15px] leading-normal text-ink-2 md:text-base">
               Buscamos{" "}
               <b className="font-semibold text-ink">eventos seleccionados</b>{" "}
-              para validar juntos. Sin costo, sin letra chica.
+              para optimizar ventas, pagos, QR, accesos y reportes junto a
+              organizadores reales.
             </p>
 
             <div className="relative z-[1]">
@@ -53,7 +54,7 @@ export function Price({ waHref }: { waHref: string }) {
                 trailingIcon={<Icon name="arrow-right" width={16} height={16} />}
                 className="w-full justify-center sm:w-auto"
               >
-                Postular mi evento
+                Quiero hacer un piloto
               </Button>
             </div>
           </div>

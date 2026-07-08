@@ -14,12 +14,12 @@ import { WaFloat } from "./components/wa-float";
 import { WA_HREF } from "./components/wa";
 import "./landing.css";
 
-const SITE_URL = "https://pasa.pe";
+const SITE_URL = "https://pasape.lat";
 
 export const metadata: Metadata = {
-  title: "Pasape | Entradas digitales para organizadores",
+  title: "Pasape | Sistema operativo para eventos",
   description:
-    "Vende entradas, combos, preventas y boxes sin responder un solo DM. Mide a tus promotores en tiempo real.",
+    "Vende entradas, gestiona pagos, QR, boxes, cortesías, reportes y control de acceso desde un solo lugar.",
 };
 
 export default function OrganizadoresPage() {
@@ -32,7 +32,7 @@ export default function OrganizadoresPage() {
         url: SITE_URL,
         logo: `${SITE_URL}/icon`,
         description:
-          "Entradas digitales con QR, combos y medición de promotores para fiestas y eventos en Perú.",
+          "Sistema operativo para vender, gestionar y controlar eventos con entradas digitales, pagos, QR, boxes, cortesías y reportes.",
         areaServed: "PE",
       },
       {

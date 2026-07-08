@@ -44,7 +44,7 @@ export const claimPromoter = async (
   // Setear phone en el perfil desde el whatsapp del org_promoter si todavía
   // está vacío. No machacamos un phone existente.
   const db = supabaseAdmin();
-  const whatsapp = consumeResult.value.whatsapp || previewResult.ok ? consumeResult.value.whatsapp : "";
+  const whatsapp = consumeResult.value.whatsapp || (previewResult.ok ? previewResult.value.whatsapp : "");
   if (whatsapp) {
     await db
       .from("profiles")
