@@ -1,13 +1,14 @@
 import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { ok, fail } from "@/server/_shared/http";
-import { createRateLimiter } from "@/server/_shared/rateLimit";
+import { createRateLimiter, ipOf } from "@/server/_shared/rateLimit";
 import { signCheckoutToken } from "@/server/tickets/domain/CheckoutToken";
 import {
   makeChallenge,
+  mintDifficulty,
   verifyChallengeSolution,
 } from "@/server/tickets/domain/CheckoutChallenge";
-import { consumeChallenge } from "@/server/tickets/infrastructure/checkoutNonce";
+import { bumpMintCount, consumeChallenge } from "@/server/tickets/infrastructure/checkoutNonce";
 
 // Minteo del checkout-token con proof-of-work (anti-automatización P0/P1):
 //   GET  → emite un CHALLENGE firmado, atado al eventId + device del solicitante.
@@ -34,7 +35,13 @@ export const GET = async (req: NextRequest) => {
     eventId: req.nextUrl.searchParams.get("eventId"),
   });
   if (!parsed.success) return fail("invalid_input");
-  return ok({ challenge: makeChallenge(parsed.data.eventId, deviceHashOf(req)) });
+  const deviceHash = deviceHashOf(req);
+  // PoW ESCALADO ("captcha invisible"): la dificultad crece con cuántos tokens
+  // ya minteó este device/IP en la última hora. Humano (1-2) → trivial; bot que
+  // necesita muchos → peaje creciente por cada uno.
+  const recentMints = await bumpMintCount(deviceHash, ipOf(req));
+  const difficulty = mintDifficulty(recentMints);
+  return ok({ challenge: makeChallenge(parsed.data.eventId, deviceHash, difficulty) });
 };
 
 const solutionSchema = z.object({

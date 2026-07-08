@@ -44,3 +44,30 @@ export const consumeCheckoutToken = (token: string): Promise<NonceOutcome> =>
  */
 export const consumeChallenge = (salt: string): Promise<NonceOutcome> =>
   consumeOnce("cxchal", salt);
+
+/**
+ * Cuenta cuántos tokens ha minteado recientemente un device/IP (ventana ~1 h),
+ * incrementando un contador atómico. Alimenta el PoW ESCALADO: mientras más
+ * tokens pide una misma entidad, más caro se vuelve el siguiente (el bot que
+ * necesita 20 tokens paga un peaje creciente; el humano pide 1-2). Fail-open:
+ * sin Redis devuelve 0 (PoW base). No identificatorio.
+ */
+export const bumpMintCount = async (deviceHash: string, ip: string): Promise<number> => {
+  if (!redis) return 0;
+  const ttl = 60 * 60; // 1 h
+  try {
+    const counts = await Promise.all(
+      [deviceHash ? `mint:dev:${deviceHash}` : null, ip ? `mint:ip:${ip}` : null]
+        .filter((k): k is string => !!k)
+        .map(async (k) => {
+          const n = await redis!.incr(k);
+          if (n === 1) await redis!.expire(k, ttl);
+          return n;
+        }),
+    );
+    return counts.length ? Math.max(...counts) : 0;
+  } catch (e) {
+    console.warn("[antibot] fallo contando minteos (fail-open):", e);
+    return 0;
+  }
+};

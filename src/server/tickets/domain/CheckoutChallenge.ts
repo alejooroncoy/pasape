@@ -30,9 +30,25 @@ const secret = (): string => {
 
 // ~maxnumber/2 hashes esperados en el cliente. 20000 ≈ 10k hashes ≈ décimas de
 // segundo en WebCrypto, invisible al montar la página mientras se llena el form.
-const MAX_NUMBER = 20_000;
+export const DEFAULT_MAX_NUMBER = 20_000;
+// Techo del escalado: 32× la base ≈ ~320k hashes ≈ pocos segundos. Un device muy
+// sospechoso paga esto por cada token; un humano nunca llega ahí. Cap para que un
+// bug jamás congele el checkout de nadie.
+const MAX_ESCALATED = DEFAULT_MAX_NUMBER * 32;
 const SIG_HEX_LENGTH = 32; // 128 bits: la firma protege la integridad del challenge
 const CHALLENGE_TTL_MS = 10 * 60 * 1000; // 10 min para resolver y canjear
+
+/**
+ * Dificultad del PoW (maxnumber) según cuántos tokens minteó recientemente la
+ * entidad. El "captcha invisible" que solo los bots sienten: la base es trivial
+ * (humano no nota nada); a partir de ~4 minteos escala exponencialmente hasta el
+ * techo. PURA y determinista (testeable).
+ */
+export const mintDifficulty = (recentMints: number): number => {
+  if (recentMints <= 3) return DEFAULT_MAX_NUMBER;
+  const steps = Math.min(5, Math.floor((recentMints - 1) / 3)); // 4-6→1, 7-9→2, … 16+→5
+  return Math.min(MAX_ESCALATED, DEFAULT_MAX_NUMBER * 2 ** steps);
+};
 
 const sha256hex = (s: string): string => createHash("sha256").update(s).digest("hex");
 
@@ -54,13 +70,21 @@ const signPayload = (c: Omit<Challenge, "signature">): string =>
     .digest("hex")
     .slice(0, SIG_HEX_LENGTH);
 
-/** Crea un challenge firmado atado al evento y al device del solicitante. */
-export const makeChallenge = (eventId: string, deviceHash: string): Challenge => {
+/**
+ * Crea un challenge firmado atado al evento y al device del solicitante.
+ * `maxNumber` escala la dificultad (ver mintDifficulty); default = base trivial.
+ */
+export const makeChallenge = (
+  eventId: string,
+  deviceHash: string,
+  maxNumber: number = DEFAULT_MAX_NUMBER,
+): Challenge => {
+  const maxnumber = Math.max(DEFAULT_MAX_NUMBER, Math.min(MAX_ESCALATED, Math.round(maxNumber)));
   const salt = randomBytes(12).toString("hex");
-  const number = randomInt(0, MAX_NUMBER + 1); // solución secreta (existe seguro)
+  const number = randomInt(0, maxnumber + 1); // solución secreta (existe seguro)
   const target = sha256hex(salt + number);
   const issuedAt = Date.now();
-  const base = { eventId, deviceHash, salt, target, maxnumber: MAX_NUMBER, issuedAt };
+  const base = { eventId, deviceHash, salt, target, maxnumber, issuedAt };
   return { ...base, signature: signPayload(base) };
 };
 
