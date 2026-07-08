@@ -2,13 +2,18 @@
 
 import { use, useState } from "react";
 import { useRouter } from "@/i18n/navigation";
-import { Btn, C, Field, FONT_DISPLAY, Phone } from "@/components/design";
+import { Btn, C, Field, FONT_DISPLAY, PhoneField } from "@/components/design";
+import {
+  PromoCallout,
+  PromoFeedback,
+  PromoGhostLink,
+  PromoHeroBanner,
+} from "@/components/promoters/PromoInviteUI";
+import { PromoInviteFooter, PromoInviteShell } from "@/components/promoters/PromoInviteShell";
 import { useApplyByLink, useResolveInvite } from "@/lib/promoters/hooks/usePromoter";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import type { CommissionConfig } from "@/server/promoters/domain/OrgPromoter";
 
-// Pitch de comisión según el esquema REAL del evento (heredado). Dos ejes: % por
-// venta + metas, pueden coexistir. Si no hay nada definido, avisamos.
 function commissionPitch(pct: number, config: CommissionConfig): string {
   const hasMetas = !!config && config.milestones.length > 0;
   if (pct > 0 && hasMetas) return `y gana ${pct}% por venta y premios al llegar a tus metas.`;
@@ -16,10 +21,6 @@ function commissionPitch(pct: number, config: CommissionConfig): string {
   if (hasMetas) return "y gana premios al llegar a tus metas de venta.";
   return "El organizador definirá la comisión muy pronto.";
 }
-
-const Dot = ({ color }: { color: string }) => (
-  <span style={{ width: 10, height: 10, borderRadius: 999, background: color, boxShadow: `0 0 10px ${color}`, display: "inline-block" }} />
-);
 
 type Props = { params: Promise<{ token: string }> };
 
@@ -34,6 +35,8 @@ export default function PromoApplyByLinkPage({ params }: Props) {
   const name = nameDraft ?? me.data?.user?.fullName ?? "";
   const phone = phoneDraft ?? me.data?.user?.phone ?? "";
 
+  const goHome = () => router.push("/" as never);
+
   const onApply = async () => {
     if (!resolved.data) return;
     await apply.mutateAsync({
@@ -47,84 +50,98 @@ export default function PromoApplyByLinkPage({ params }: Props) {
 
   if (resolved.isLoading) {
     return (
-      <Phone>
-        <div style={{ padding: 28, color: C.dim }}>Cargando invitación…</div>
-      </Phone>
+      <PromoInviteShell>
+        <PromoFeedback
+          variant="loading"
+          eyebrow="◆ CARGANDO"
+          title="Preparando tu invitación…"
+          footer={<PromoGhostLink onClick={goHome}>Volver a inicio</PromoGhostLink>}
+        />
+      </PromoInviteShell>
     );
   }
 
   if (resolved.error || !resolved.data) {
     return (
-      <Phone>
-        <div style={{ padding: 28, color: C.red }}>Esta invitación no es válida.</div>
-      </Phone>
+      <PromoInviteShell>
+        <PromoFeedback
+          variant="error"
+          eyebrow="◆ LINK INVÁLIDO"
+          title="Esta invitación no es válida."
+          body="Pídele al organizador un link nuevo o revisa que lo hayas copiado completo."
+          footer={<PromoGhostLink onClick={goHome}>Volver a inicio</PromoGhostLink>}
+        />
+      </PromoInviteShell>
     );
   }
 
+  const data = resolved.data;
+
   return (
-    <Phone>
-      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 250, overflow: "hidden" }}>
-        <div
-          style={{
-            width: "100%",
-            height: "100%",
-            background: "linear-gradient(135deg, #4B1F9A 0%, #7C3AED 50%, #FF4D5E 110%)",
-            position: "relative",
-          }}
-        >
-          <div style={{ position: "absolute", inset: 0, backgroundImage: "radial-gradient(60% 50% at 30% 30%, rgba(255,255,255,0.25), transparent 60%), radial-gradient(60% 50% at 80% 80%, rgba(0,0,0,0.45), transparent 60%)" }} />
-          <div style={{ position: "absolute", bottom: -1, left: 0, right: 0, height: 60, background: `linear-gradient(to bottom, transparent, ${C.bg})` }} />
-        </div>
-      </div>
+    <PromoInviteShell>
+      <PromoHeroBanner />
 
-      <div style={{ position: "relative", padding: "230px 22px 140px", zIndex: 1 }}>
-        <div style={{ fontSize: 11, letterSpacing: "0.14em", color: C.purple, fontWeight: 700, marginBottom: 10 }}>
-          ★ TE INVITAN A SER PROMOTOR
-        </div>
-        <div style={{ fontFamily: FONT_DISPLAY, fontSize: 24, fontWeight: 700, letterSpacing: "-0.025em", lineHeight: 1 }}>
-          Vende para <span style={{ color: C.purple }}>{resolved.data.orgName}</span>
-          <br />
-          {commissionPitch(resolved.data.commissionPct, resolved.data.commissionConfig)}
-        </div>
-        <div style={{ fontSize: 13, color: C.dim, marginTop: 10, lineHeight: 1.4 }}>
-          {resolved.data.eventTitle}
-        </div>
-
-        <div
-          style={{
-            marginTop: 18,
-            padding: "12px 14px",
-            borderRadius: 14,
-            background: C.yellowSoft,
-            boxShadow: "0 0 0 1px rgba(255,206,59,0.3) inset",
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-          }}
-        >
-          <Dot color={C.yellow} />
-          <div style={{ fontSize: 12, color: "rgba(255,255,255,0.85)", lineHeight: 1.4 }}>
-            El organizador revisa tu solicitud y te avisa por WhatsApp.
+      <div className="relative z-[1] flex flex-1 flex-col">
+        <div className="flex-1 px-[22px] pb-4 pt-[230px]">
+          <div style={{ fontSize: 11, letterSpacing: "0.14em", color: C.purple, fontWeight: 700, marginBottom: 10 }}>
+            ★ TE INVITAN A SER PROMOTOR
           </div>
-        </div>
-
-        <div style={{ marginTop: 18 }}>
-          <Field label="Tu nombre" value={name} onChange={(e) => setNameDraft(e.target.value)} active={name.length > 0} />
-          <Field label="WhatsApp" value={phone} onChange={(e) => setPhoneDraft(e.target.value)} active={phone.length > 0} mono />
-        </div>
-
-        {apply.error && (
-          <div style={{ marginTop: 8, fontSize: 12, color: C.red }}>
-            {(apply.error as Error).message}
+          <div
+            style={{
+              fontFamily: FONT_DISPLAY,
+              fontSize: 24,
+              fontWeight: 700,
+              letterSpacing: "-0.025em",
+              lineHeight: 1,
+            }}
+          >
+            Vende para <span style={{ color: C.purple }}>{data.orgName}</span>
+            <br />
+            {commissionPitch(data.commissionPct, data.commissionConfig)}
           </div>
-        )}
-      </div>
+          <div style={{ fontSize: 13, color: C.dim, marginTop: 10, lineHeight: 1.4 }}>{data.eventTitle}</div>
 
-      <div style={{ position: "fixed", bottom: 32, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 390, padding: "0 22px" }}>
-        <Btn onClick={onApply} disabled={apply.isPending || !name}>
-          {apply.isPending ? "Enviando…" : "Quiero ser promotor"}
-        </Btn>
+          <PromoCallout>El organizador revisa tu solicitud y te avisa por WhatsApp.</PromoCallout>
+
+          <div style={{ marginTop: 18 }}>
+            <Field
+              label="Tu nombre"
+              value={name}
+              onChange={(e) => setNameDraft(e.target.value)}
+              active={name.length > 0}
+            />
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 11, color: C.dimmer, letterSpacing: "0.06em", marginBottom: 6 }}>
+                WHATSAPP
+              </div>
+              <PhoneField value={phone} onChange={(v) => setPhoneDraft(v)} />
+              <div style={{ fontSize: 11, color: C.dimmer, marginTop: 6 }}>Por aquí te avisan si te aprueban.</div>
+            </div>
+          </div>
+
+          {apply.error && (
+            <div
+              style={{
+                marginTop: 8,
+                padding: "10px 12px",
+                borderRadius: 12,
+                background: C.redSoft,
+                boxShadow: `0 0 0 1px rgba(255,77,94,0.25) inset`,
+                fontSize: 12,
+                color: C.red,
+              }}
+            >
+              {(apply.error as Error).message}
+            </div>
+          )}
+        </div>
+
+        <PromoInviteFooter>
+          <Btn onClick={onApply} disabled={apply.isPending || !name.trim()}>
+            {apply.isPending ? "Enviando…" : "Quiero ser promotor"}
+          </Btn>
+        </PromoInviteFooter>
       </div>
-    </Phone>
+    </PromoInviteShell>
   );
 }

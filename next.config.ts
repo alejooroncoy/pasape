@@ -35,6 +35,7 @@ const nextConfig: NextConfig = {
     "*.ngrok-free.dev",
     "*.ngrok.io",
     "*.ngrok.app",
+    "192.168.18.167"
   ],
   // La ruta opengraph-image lee el logo desde public/ con fs en runtime; el
   // tracer no detecta esa lectura dinámica, así que forzamos su inclusión en

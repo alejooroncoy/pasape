@@ -2,12 +2,20 @@
 
 import { use, useEffect } from "react";
 import { useRouter } from "@/i18n/navigation";
-import { C, CloseBtn, FONT_BODY, FONT_DISPLAY, Phone } from "@/components/design";
+import { C } from "@/components/design";
+import {
+  PromoBody,
+  PromoEyebrow,
+  PromoFeedback,
+  PromoGhostLink,
+  PromoPill,
+  PromoStatusContent,
+  PromoStatusIcon,
+  PromoStatusLayout,
+  PromoTitle,
+} from "@/components/promoters/PromoInviteUI";
+import { PromoInviteShell } from "@/components/promoters/PromoInviteShell";
 import { useResolveInvite, useApplicationStatus, useRealtimePromoterApplications } from "@/lib/promoters/hooks/usePromoter";
-
-const Dot = ({ color }: { color: string }) => (
-  <span style={{ width: 10, height: 10, borderRadius: 999, background: color, boxShadow: `0 0 10px ${color}`, display: "inline-block" }} />
-);
 
 type Props = { params: Promise<{ token: string }> };
 
@@ -25,116 +33,74 @@ export default function PromoAppliedWaitingPage({ params }: Props) {
     }
   }, [status.data?.status, router]);
 
-  // "rejected"/"cancelled" no tienen pantalla de destino propia (a diferencia
-  // de approved → /promo/accepted): sin este chequeo el postulante rechazado
-  // se queda viendo "en revisión" para siempre, esperando un WhatsApp que
-  // nunca llega.
+  const goHome = () => router.push("/" as never);
+
+  if (resolved.isLoading) {
+    return (
+      <PromoInviteShell>
+        <PromoFeedback
+          variant="loading"
+          eyebrow="◆ EN ESPERA"
+          title="Verificando tu solicitud…"
+          footer={<PromoGhostLink onClick={goHome}>Volver a inicio</PromoGhostLink>}
+        />
+      </PromoInviteShell>
+    );
+  }
+
+  if (resolved.error || !resolved.data) {
+    return (
+      <PromoInviteShell>
+        <PromoFeedback
+          variant="error"
+          eyebrow="◆ LINK INVÁLIDO"
+          title="Esta invitación no es válida."
+          body="Si ya enviaste tu postulación, espera el WhatsApp del organizador."
+          footer={<PromoGhostLink onClick={goHome}>Volver a inicio</PromoGhostLink>}
+        />
+      </PromoInviteShell>
+    );
+  }
+
   const isClosedOut = status.data?.status === "rejected" || status.data?.status === "cancelled";
 
   return (
-    <Phone>
-      <div style={{ position: "absolute", inset: 0, background: "radial-gradient(70% 50% at 50% 30%, rgba(255,206,59,0.18), transparent 70%)", pointerEvents: "none" }} />
-
-      <div style={{ position: "relative", padding: 22, flex: 1, display: "flex", flexDirection: "column" }}>
-        <div style={{ display: "flex", justifyContent: "flex-end" }}>
-          <CloseBtn href="/" />
-        </div>
-
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", textAlign: "center" }}>
-          <div
-            style={{
-              width: 120,
-              height: 120,
-              borderRadius: 36,
-              background: isClosedOut
-                ? "linear-gradient(135deg, #6B7280, #4B5563)"
-                : "linear-gradient(135deg, #FFCE3B, #FF9B3B)",
-              boxShadow: isClosedOut
-                ? "0 30px 60px -10px rgba(75,85,99,0.5), 0 0 0 6px rgba(107,114,128,0.12)"
-                : "0 30px 60px -10px rgba(255,206,59,0.5), 0 0 0 6px rgba(255,206,59,0.12)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 8,
-            }}
-          >
-            {isClosedOut
-              ? "✕"
-              : [0, 1, 2].map((i) => (
-                  <div
-                    key={i}
-                    style={{
-                      width: 12,
-                      height: 12,
-                      borderRadius: 999,
-                      background: "#1a1200",
-                      animation: "pulse 1.4s ease-in-out infinite",
-                      animationDelay: `${i * 0.2}s`,
-                    }}
-                  />
-                ))}
-          </div>
+    <PromoInviteShell>
+      <PromoStatusLayout
+        glow={isClosedOut ? "neutral" : "yellow"}
+        footer={<PromoGhostLink onClick={goHome}>Volver a inicio</PromoGhostLink>}
+      >
+        <PromoStatusContent>
+          <PromoStatusIcon variant={isClosedOut ? "rejected" : "waiting"} />
 
           {isClosedOut ? (
             <>
-              <div style={{ fontSize: 11, letterSpacing: "0.18em", color: C.dim, fontWeight: 700, marginTop: 26 }}>
-                ◆ SOLICITUD CERRADA
-              </div>
-              <div style={{ fontFamily: FONT_DISPLAY, fontSize: 32, fontWeight: 700, letterSpacing: "-0.035em", lineHeight: 0.95, marginTop: 10 }}>
-                El organizador no<br />aprobó tu solicitud esta vez.
-              </div>
-              <div style={{ fontSize: 14, color: C.dim, marginTop: 14, lineHeight: 1.5, maxWidth: 280 }}>
+              <PromoEyebrow color={C.dim}>◆ SOLICITUD CERRADA</PromoEyebrow>
+              <PromoTitle>
+                El organizador no
+                <br />
+                aprobó tu solicitud esta vez.
+              </PromoTitle>
+              <PromoBody>
                 No te va a llegar el link de venta para este evento. Puedes postular a otro evento cuando quieras.
-              </div>
+              </PromoBody>
             </>
           ) : (
             <>
-              <div style={{ fontSize: 11, letterSpacing: "0.18em", color: C.yellow, fontWeight: 700, marginTop: 26 }}>
-                ◆ EN ESPERA
-              </div>
-              <div style={{ fontFamily: FONT_DISPLAY, fontSize: 32, fontWeight: 700, letterSpacing: "-0.035em", lineHeight: 0.95, marginTop: 10 }}>
-                Tu solicitud<br />ya está en revisión.
-              </div>
-              <div style={{ fontSize: 14, color: C.dim, marginTop: 14, lineHeight: 1.5, maxWidth: 280 }}>
+              <PromoEyebrow color={C.yellow}>◆ EN ESPERA</PromoEyebrow>
+              <PromoTitle>
+                Tu solicitud
+                <br />
+                ya está en revisión.
+              </PromoTitle>
+              <PromoBody>
                 En cuanto te aprueben, vas a poder vender desde el panel de promotor con tu link único.
-              </div>
-
-              <div
-                style={{
-                  marginTop: 26,
-                  padding: "10px 16px",
-                  borderRadius: 999,
-                  background: "rgba(255,255,255,0.06)",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  fontSize: 12,
-                  color: C.dim,
-                }}
-              >
-                <Dot color={C.yellow} /> Suele responder en 1-2 horas
-              </div>
+              </PromoBody>
+              <PromoPill>Suele responder en 1-2 horas</PromoPill>
             </>
           )}
-        </div>
-
-        <button
-          type="button"
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          onClick={() => router.push("/" as any)}
-          style={{
-            background: "transparent",
-            border: 0,
-            color: C.dim,
-            fontFamily: FONT_BODY,
-            fontSize: 13,
-            paddingBottom: 16,
-            cursor: "pointer",
-          }}
-        >
-          Volver a inicio
-        </button>
-      </div>
-    </Phone>
+        </PromoStatusContent>
+      </PromoStatusLayout>
+    </PromoInviteShell>
   );
 }
