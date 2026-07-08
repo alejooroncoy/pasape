@@ -170,13 +170,13 @@ describe("CheckoutGuard — barrera atómica del checkout-token", () => {
     vi.mocked(consumeCheckoutToken).mockResolvedValue("fresh");
   });
 
-  it("bloquea el buy si el token ya fue quemado (doble envío / carrera)", async () => {
+  it("en shadow NO bloquea replay: registra would_block y deja pasar", async () => {
     vi.mocked(consumeCheckoutToken).mockResolvedValueOnce("replay");
 
     const res = await assessCheckout({ req: cleanReq(), ...lowRiskInput });
 
-    expect(res.allowed).toBe(false);
-    expect(res.action).toBe("blocked");
+    expect(res.allowed).toBe(true);
+    expect(res.action).toBe("would_block");
     expect(res.reasons).toContain("token_replay");
     expect(consumeCheckoutToken).toHaveBeenCalledTimes(1);
   });
@@ -187,5 +187,16 @@ describe("CheckoutGuard — barrera atómica del checkout-token", () => {
     expect(res.allowed).toBe(true);
     expect(res.challengeRequired).toBe(false);
     expect(consumeCheckoutToken).toHaveBeenCalledTimes(1);
+  });
+
+  it("en soft sí bloquea replay para evitar doble envío paralelo", async () => {
+    process.env.BOT_ENFORCEMENT = "soft";
+    vi.mocked(consumeCheckoutToken).mockResolvedValueOnce("replay");
+
+    const res = await assessCheckout({ req: cleanReq(), ...lowRiskInput });
+
+    expect(res.allowed).toBe(false);
+    expect(res.action).toBe("blocked");
+    expect(res.reasons).toContain("token_replay");
   });
 });

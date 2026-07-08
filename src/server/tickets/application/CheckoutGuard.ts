@@ -283,9 +283,13 @@ export const assessCheckout = async (
     if (proceeding && phase === "buy" && checkoutTokenOk && rawToken) {
       const consumeOutcome = await consumeCheckoutToken(rawToken);
       if (consumeOutcome === "replay") {
-        proceeding = false;
-        allowed = false;
-        action = "blocked";
+        // Shadow conserva su promesa de "nunca bloquear": registra que habría
+        // bloqueado, pero deja pasar. Soft/hard sí bloquean el replay para cerrar
+        // la carrera de doble envío paralelo con el mismo token.
+        const shadow = mode === "shadow";
+        proceeding = shadow;
+        allowed = shadow;
+        action = shadow ? "would_block" : "blocked";
         finalReasons = reasons.includes("token_replay")
           ? reasons
           : [...reasons, "token_replay"];
