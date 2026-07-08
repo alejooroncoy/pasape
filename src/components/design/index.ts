@@ -1,5 +1,4 @@
 export * from "./tokens";
-export * from "./Phone";
 export * from "./Btn";
 export * from "./GoogleBtn";
 export * from "./PhoneField";

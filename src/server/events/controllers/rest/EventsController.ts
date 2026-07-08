@@ -314,10 +314,6 @@ export const EventsController = {
     return deleteZoneSvc(guard.value.event.id, zoneId);
   },
 
-  async listByOrgSlug(slug: string): Promise<Result<Event[]>> {
-    return ok(await repo.listByOrgSlug(slug));
-  },
-
   async createTicketType(slug: string, input: unknown): Promise<Result<TicketType>> {
     const guard = await guardEventMember(slug, ["owner", "admin", "editor"]);
     if (!guard.ok) return err(guard.error);

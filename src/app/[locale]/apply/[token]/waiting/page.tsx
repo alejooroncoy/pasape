@@ -1,13 +1,9 @@
 "use client";
 
 import { use, useEffect } from "react";
+import { motion } from "motion/react";
 import { useRouter } from "@/i18n/navigation";
-import { C, CloseBtn, FONT_BODY, FONT_DISPLAY, Phone } from "@/components/design";
 import { useResolveInvite, useApplicationStatus, useRealtimePromoterApplications } from "@/lib/promoters/hooks/usePromoter";
-
-const Dot = ({ color }: { color: string }) => (
-  <span style={{ width: 10, height: 10, borderRadius: 999, background: color, boxShadow: `0 0 10px ${color}`, display: "inline-block" }} />
-);
 
 type Props = { params: Promise<{ token: string }> };
 
@@ -20,8 +16,7 @@ export default function PromoAppliedWaitingPage({ params }: Props) {
 
   useEffect(() => {
     if (status.data?.status === "approved") {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      router.replace("/promo/accepted" as any);
+      router.replace("/promo/accepted" as never);
     }
   }, [status.data?.status, router]);
 
@@ -32,109 +27,110 @@ export default function PromoAppliedWaitingPage({ params }: Props) {
   const isClosedOut = status.data?.status === "rejected" || status.data?.status === "cancelled";
 
   return (
-    <Phone>
-      <div style={{ position: "absolute", inset: 0, background: "radial-gradient(70% 50% at 50% 30%, rgba(255,206,59,0.18), transparent 70%)", pointerEvents: "none" }} />
+    <div className="bg-cart-bg text-white lg:grid lg:min-h-dvh lg:place-items-center lg:p-8">
+    <div className="relative flex min-h-dvh flex-col overflow-hidden bg-cart-bg text-white lg:min-h-[560px] lg:w-full lg:max-w-[540px] lg:rounded-3xl lg:border lg:border-cart-line lg:bg-cart-bg-elev/30 lg:shadow-[0_40px_120px_-30px_rgba(0,0,0,0.85)]">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-[420px]"
+        style={{
+          background: isClosedOut
+            ? "radial-gradient(70% 55% at 50% 25%, rgba(94,94,112,0.22), transparent 70%)"
+            : "radial-gradient(70% 55% at 50% 25%, rgba(255,206,59,0.16), transparent 70%)",
+        }}
+      />
 
-      <div style={{ position: "relative", padding: 22, flex: 1, display: "flex", flexDirection: "column" }}>
-        <div style={{ display: "flex", justifyContent: "flex-end" }}>
-          <CloseBtn href="/" />
-        </div>
+      <div className="relative z-[1] flex justify-end px-5 pt-4">
+        <CloseButton onClick={() => router.push("/" as never)} />
+      </div>
 
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", textAlign: "center" }}>
-          <div
-            style={{
-              width: 120,
-              height: 120,
-              borderRadius: 36,
-              background: isClosedOut
-                ? "linear-gradient(135deg, #6B7280, #4B5563)"
-                : "linear-gradient(135deg, #FFCE3B, #FF9B3B)",
-              boxShadow: isClosedOut
-                ? "0 30px 60px -10px rgba(75,85,99,0.5), 0 0 0 6px rgba(107,114,128,0.12)"
-                : "0 30px 60px -10px rgba(255,206,59,0.5), 0 0 0 6px rgba(255,206,59,0.12)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 8,
-            }}
-          >
-            {isClosedOut
-              ? "✕"
-              : [0, 1, 2].map((i) => (
-                  <div
-                    key={i}
-                    style={{
-                      width: 12,
-                      height: 12,
-                      borderRadius: 999,
-                      background: "#1a1200",
-                      animation: "pulse 1.4s ease-in-out infinite",
-                      animationDelay: `${i * 0.2}s`,
-                    }}
-                  />
-                ))}
-          </div>
-
+      <main className="relative z-[1] mx-auto flex w-full max-w-[440px] flex-1 flex-col items-center justify-center px-5 pb-10 text-center">
+        <motion.div
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ type: "spring", stiffness: 240, damping: 18 }}
+          className="grid size-[104px] place-items-center rounded-[32px]"
+          style={{
+            background: isClosedOut
+              ? "linear-gradient(135deg, #6B7280, #4B5563)"
+              : "linear-gradient(135deg, #FFCE3B, #FF9B3B)",
+            boxShadow: isClosedOut
+              ? "0 26px 54px -12px rgba(75,85,99,0.5), 0 0 0 6px rgba(107,114,128,0.12)"
+              : "0 26px 54px -12px rgba(255,206,59,0.5), 0 0 0 6px rgba(255,206,59,0.12)",
+          }}
+        >
           {isClosedOut ? (
-            <>
-              <div style={{ fontSize: 11, letterSpacing: "0.18em", color: C.dim, fontWeight: 700, marginTop: 26 }}>
-                ◆ SOLICITUD CERRADA
-              </div>
-              <div style={{ fontFamily: FONT_DISPLAY, fontSize: 32, fontWeight: 700, letterSpacing: "-0.035em", lineHeight: 0.95, marginTop: 10 }}>
-                El organizador no<br />aprobó tu solicitud esta vez.
-              </div>
-              <div style={{ fontSize: 14, color: C.dim, marginTop: 14, lineHeight: 1.5, maxWidth: 280 }}>
-                No te va a llegar el link de venta para este evento. Puedes postular a otro evento cuando quieras.
-              </div>
-            </>
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" className="text-black/80">
+              <path d="M7 7l10 10M17 7L7 17" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
+            </svg>
           ) : (
-            <>
-              <div style={{ fontSize: 11, letterSpacing: "0.18em", color: C.yellow, fontWeight: 700, marginTop: 26 }}>
-                ◆ EN ESPERA
-              </div>
-              <div style={{ fontFamily: FONT_DISPLAY, fontSize: 32, fontWeight: 700, letterSpacing: "-0.035em", lineHeight: 0.95, marginTop: 10 }}>
-                Tu solicitud<br />ya está en revisión.
-              </div>
-              <div style={{ fontSize: 14, color: C.dim, marginTop: 14, lineHeight: 1.5, maxWidth: 280 }}>
-                En cuanto te aprueben, vas a poder vender desde el panel de promotor con tu link único.
-              </div>
-
-              <div
-                style={{
-                  marginTop: 26,
-                  padding: "10px 16px",
-                  borderRadius: 999,
-                  background: "rgba(255,255,255,0.06)",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  fontSize: 12,
-                  color: C.dim,
-                }}
-              >
-                <Dot color={C.yellow} /> Suele responder en 1-2 horas
-              </div>
-            </>
+            <div className="flex gap-2">
+              {[0, 1, 2].map((i) => (
+                <span
+                  key={i}
+                  className="size-3 rounded-full bg-[#1a1200]"
+                  style={{ animation: "pulse 1.4s ease-in-out infinite", animationDelay: `${i * 0.2}s` }}
+                />
+              ))}
+            </div>
           )}
-        </div>
+        </motion.div>
 
+        {isClosedOut ? (
+          <>
+            <p className="mt-6 text-[11px] font-bold uppercase tracking-[0.18em] text-cart-ink-3">
+              ◆ Solicitud cerrada
+            </p>
+            <h1 className="mt-2.5 text-[27px] font-bold leading-[1.05] tracking-[-0.03em]">
+              El organizador no aprobó tu solicitud esta vez.
+            </h1>
+            <p className="mt-3.5 max-w-[300px] text-[14px] leading-relaxed text-cart-ink-3">
+              No te va a llegar el link de venta para este evento. Puedes postular a otro evento cuando quieras.
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="mt-6 text-[11px] font-bold uppercase tracking-[0.18em] text-amber-300">
+              ◆ En espera
+            </p>
+            <h1 className="mt-2.5 text-[27px] font-bold leading-[1.05] tracking-[-0.03em]">
+              Tu solicitud ya está en revisión.
+            </h1>
+            <p className="mt-3.5 max-w-[300px] text-[14px] leading-relaxed text-cart-ink-3">
+              En cuanto te aprueben, vas a poder vender desde el panel de promotor con tu link único.
+            </p>
+            <div className="mt-6 inline-flex items-center gap-2 rounded-full bg-white/6 px-4 py-2.5 text-[12px] text-cart-ink-3">
+              <span className="size-2.5 rounded-full bg-amber-400 shadow-[0_0_10px_var(--color-warning)]" />
+              Suele responder en 1-2 horas
+            </div>
+          </>
+        )}
+      </main>
+
+      <div className="relative z-[1] mx-auto w-full max-w-[440px] px-5 pb-6 text-center">
         <button
           type="button"
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          onClick={() => router.push("/" as any)}
-          style={{
-            background: "transparent",
-            border: 0,
-            color: C.dim,
-            fontFamily: FONT_BODY,
-            fontSize: 13,
-            paddingBottom: 16,
-            cursor: "pointer",
-          }}
+          onClick={() => router.push("/" as never)}
+          className="py-2.5 text-[13.5px] font-medium text-cart-ink-3 transition hover:text-white"
         >
           Volver a inicio
         </button>
       </div>
-    </Phone>
+    </div>
+    </div>
+  );
+}
+
+function CloseButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label="Cerrar"
+      className="grid size-9 place-items-center rounded-full bg-cart-bg-elev text-cart-ink-2 transition hover:bg-cart-bg-elev-2 hover:text-white"
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+        <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      </svg>
+    </button>
   );
 }

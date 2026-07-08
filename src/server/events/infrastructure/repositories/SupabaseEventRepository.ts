@@ -422,23 +422,6 @@ export const supabaseEventRepository: EventRepository = {
     return ok({ event: toEvent(current), transitioned: false });
   },
 
-  async listByOrgSlug(orgSlug) {
-    const db = supabaseAdmin();
-    const { data: org } = await db
-      .from("organizations")
-      .select("id")
-      .eq("slug", orgSlug)
-      .maybeSingle<{ id: string }>();
-    if (!org) return [];
-    const { data } = await db
-      .from("events")
-      .select("*")
-      .eq("organization_id", org.id)
-      .in("status", ["published", "closed"])
-      .order("starts_at", { ascending: true });
-    return (data as EventRow[] | null)?.map(toEvent) ?? [];
-  },
-
   async listPublishedByOrgSlug(orgSlug) {
     const db = supabaseAdmin();
     const { data: org } = await db
