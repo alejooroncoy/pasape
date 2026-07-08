@@ -10,10 +10,10 @@ export function PanelReporte() {
           eyebrow="Panel en vivo"
           title={
             <>
-              Tu fiesta en tiempo real. <em>No al día siguiente.</em>
+              Decide con datos. <em>No al día siguiente.</em>
             </>
           }
-          lede="Ventas, accesos, combos y promotores corriendo en vivo. Al cierre tienes un reporte — no capturas sueltas ni un Excel a las 4 a.m."
+          lede="Ventas, accesos, tickets, boxes, cortesías y promotores corriendo en vivo. Si una etapa no avanza, lo ves a tiempo y puedes actuar antes del cierre."
         />
 
         <div className="reveal relative mt-10">
@@ -29,7 +29,7 @@ export function PanelReporte() {
           </div>
         </div>
         <p className="reveal mt-3 text-center font-mono text-[10.5px] uppercase tracking-[0.1em] text-ink-4">
-          El panel real de organizador · evento de prueba
+          Centro de control del organizador · evento de prueba
         </p>
       </div>
     </section>
