@@ -3,6 +3,7 @@
 import { use, useState } from "react";
 import { useRouter } from "@/i18n/navigation";
 import { PhoneField } from "@/components/design/PhoneField";
+import { SignInButton } from "@/components/auth/SignInButton";
 import { useApplyByLink, useResolveInvite } from "@/lib/promoters/hooks/usePromoter";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import type { CommissionConfig } from "@/server/promoters/domain/OrgPromoter";
@@ -30,6 +31,19 @@ export default function PromoApplyByLinkPage({ params }: Props) {
   const name = nameDraft ?? me.data?.user?.fullName ?? "";
   // PhoneField trabaja en E.164; el teléfono de la cuenta ya viene en ese formato.
   const phone = phoneDraft ?? me.data?.user?.phone ?? "";
+
+  // Postular EXIGE sesión: el promotor se vuelve una cuenta real (panel, links,
+  // ganancias), así que el API atribuye la solicitud al profileId logueado. Gate
+  // suave: mostramos el pitch igual, pero la ACCIÓN pide login con Google y
+  // vuelve a este mismo link. "loading" evita el flash de Google mientras
+  // resolvemos la sesión de un usuario que ya estaba logueado.
+  const sessionReady = !me.isPending;
+  const loggedIn = !!me.data?.user;
+  const mode: "loading" | "form" | "signin" = !sessionReady
+    ? "loading"
+    : loggedIn
+      ? "form"
+      : "signin";
 
   const onApply = async () => {
     if (!resolved.data) return;
@@ -125,50 +139,85 @@ export default function PromoApplyByLinkPage({ params }: Props) {
         {/* ── Formulario: abajo en mobile, panel derecho en desktop ── */}
         <section className="flex flex-1 flex-col lg:w-[55%] lg:justify-center lg:bg-cart-bg-elev/30">
           <div className="px-5 pb-32 pt-6 lg:px-12 lg:py-12">
-            <h2 className="hidden text-[16px] font-semibold lg:block">Completa tus datos</h2>
-            <p className="mb-5 hidden text-[13px] text-cart-ink-3 lg:block">Toma 30 segundos.</p>
-
-            <div className="space-y-4">
-              <Field label="Tu nombre" value={name} onChange={setNameDraft} placeholder="Juan Pérez" />
-              <label className="block">
-                <span className="text-[11.5px] font-semibold uppercase tracking-[0.12em] text-cart-ink-3">
-                  WhatsApp
-                </span>
-                <div className="mt-1.5">
-                  <PhoneField value={phone} onChange={setPhoneDraft} />
-                </div>
-                <span className="mt-1.5 block text-[11.5px] text-cart-ink-4">
-                  Por aquí te avisan si te aprueban.
-                </span>
-              </label>
-            </div>
-
-            {apply.error && (
-              <p className="mt-3 text-[12.5px] text-rose-300">{(apply.error as Error).message}</p>
+            {mode === "form" && (
+              <>
+                <h2 className="hidden text-[16px] font-semibold lg:block">Completa tus datos</h2>
+                <p className="mb-5 hidden text-[13px] text-cart-ink-3 lg:block">Toma 30 segundos.</p>
+              </>
             )}
 
-            {/* CTA desktop (inline dentro del panel) */}
-            <button
-              type="button"
-              onClick={onApply}
-              disabled={apply.isPending || !name.trim()}
-              className="mt-7 hidden w-full rounded-full bg-cart-accent py-3.5 text-[14.5px] font-semibold text-cart-bg shadow-[0_8px_24px_-6px_var(--color-cart-accent-glow)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:bg-cart-bg-elev-2 disabled:text-cart-ink-3 disabled:shadow-none lg:block"
-            >
-              {apply.isPending ? "Enviando…" : "Quiero ser promotor"}
-            </button>
+            {mode === "form" ? (
+              <>
+                <div className="space-y-4">
+                  <Field label="Tu nombre" value={name} onChange={setNameDraft} placeholder="Juan Pérez" />
+                  <label className="block">
+                    <span className="text-[11.5px] font-semibold uppercase tracking-[0.12em] text-cart-ink-3">
+                      WhatsApp
+                    </span>
+                    <div className="mt-1.5">
+                      <PhoneField value={phone} onChange={setPhoneDraft} />
+                    </div>
+                    <span className="mt-1.5 block text-[11.5px] text-cart-ink-4">
+                      Por aquí te avisan si te aprueban.
+                    </span>
+                  </label>
+                </div>
+
+                {apply.error && (
+                  <p className="mt-3 text-[12.5px] text-rose-300">{(apply.error as Error).message}</p>
+                )}
+
+                {/* CTA desktop (inline dentro del panel) */}
+                <button
+                  type="button"
+                  onClick={onApply}
+                  disabled={apply.isPending || !name.trim()}
+                  className="mt-7 hidden w-full rounded-full bg-cart-accent py-3.5 text-[14.5px] font-semibold text-cart-bg shadow-[0_8px_24px_-6px_var(--color-cart-accent-glow)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:bg-cart-bg-elev-2 disabled:text-cart-ink-3 disabled:shadow-none lg:block"
+                >
+                  {apply.isPending ? "Enviando…" : "Quiero ser promotor"}
+                </button>
+              </>
+            ) : mode === "signin" ? (
+              <>
+                <p className="text-[13.5px] leading-snug text-cart-ink-2">
+                  Inicia sesión con Google para postular. Creamos tu panel de promotor con
+                  tu link de venta — en un toque, sin contraseña.
+                </p>
+                {/* CTA desktop */}
+                <SignInButton
+                  redirectTo={`/apply/${token}`}
+                  className="mt-6 hidden w-full rounded-full bg-cart-accent py-3.5 text-[14.5px] font-semibold text-cart-bg shadow-[0_8px_24px_-6px_var(--color-cart-accent-glow)] transition hover:brightness-110 lg:block"
+                >
+                  Continuar con Google
+                </SignInButton>
+              </>
+            ) : (
+              <div className="mt-2 hidden h-[52px] w-full animate-pulse rounded-full bg-cart-bg-elev/60 lg:block" />
+            )}
           </div>
 
           {/* CTA mobile (fijo abajo) */}
           <div className="sticky bottom-0 z-[2] border-t border-cart-line bg-cart-bg/85 backdrop-blur-md lg:hidden">
             <div className="mx-auto w-full max-w-[440px] px-5 py-4">
-              <button
-                type="button"
-                onClick={onApply}
-                disabled={apply.isPending || !name.trim()}
-                className="w-full rounded-full bg-cart-accent py-3.5 text-[14.5px] font-semibold text-cart-bg shadow-[0_8px_24px_-6px_var(--color-cart-accent-glow)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:bg-cart-bg-elev-2 disabled:text-cart-ink-3 disabled:shadow-none"
-              >
-                {apply.isPending ? "Enviando…" : "Quiero ser promotor"}
-              </button>
+              {mode === "form" ? (
+                <button
+                  type="button"
+                  onClick={onApply}
+                  disabled={apply.isPending || !name.trim()}
+                  className="w-full rounded-full bg-cart-accent py-3.5 text-[14.5px] font-semibold text-cart-bg shadow-[0_8px_24px_-6px_var(--color-cart-accent-glow)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:bg-cart-bg-elev-2 disabled:text-cart-ink-3 disabled:shadow-none"
+                >
+                  {apply.isPending ? "Enviando…" : "Quiero ser promotor"}
+                </button>
+              ) : mode === "signin" ? (
+                <SignInButton
+                  redirectTo={`/apply/${token}`}
+                  className="w-full rounded-full bg-cart-accent py-3.5 text-[14.5px] font-semibold text-cart-bg shadow-[0_8px_24px_-6px_var(--color-cart-accent-glow)] transition hover:brightness-110"
+                >
+                  Continuar con Google
+                </SignInButton>
+              ) : (
+                <div className="h-[52px] w-full animate-pulse rounded-full bg-cart-bg-elev/60" />
+              )}
             </div>
           </div>
         </section>
