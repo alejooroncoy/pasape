@@ -58,7 +58,7 @@ export const getDeviceHash = (): string | null => {
 // y no se bloquea, por diseño del scorer).
 const tokenByEvent = new Map<string, Promise<string | null>>();
 
-type Challenge = {
+export type Challenge = {
   eventId: string;
   deviceHash: string;
   salt: string;
@@ -78,7 +78,7 @@ const sha256hex = async (s: string): Promise<string> => {
 // Resuelve el PoW estilo ALTCHA: busca el número i en [0, maxnumber] tal que
 // SHA256(salt+i) === target. Coste acotado (~maxnumber/2 hashes). Invisible para
 // una compra; se multiplica por N si un bot quiere N tokens.
-const solvePow = async (c: Challenge): Promise<number | null> => {
+export const solvePow = async (c: Challenge): Promise<number | null> => {
   for (let i = 0; i <= c.maxnumber; i++) {
     if ((await sha256hex(c.salt + i)) === c.target) return i;
   }

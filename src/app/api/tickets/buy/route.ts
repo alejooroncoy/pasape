@@ -20,8 +20,18 @@ export const POST = async (req: NextRequest) => {
   // como 429 genérico; el tarpit ralentiza al sospechoso sin revelar la detección.
   const assessment = await assessCheckout({ req, phase: "buy", ...purchaseSignalFields(body) });
   if (!assessment.allowed) return NextResponse.json({ error: "rate_limited" }, { status: 429 });
-  // Tarpit: al device sospechoso se le inyecta latencia creciente antes de
-  // procesar. Mata la economía de la compra masiva sin bloquear al humano.
+  // Step-up challenge: el intento cae en zona sospechosa y aún no adjuntó una
+  // solución válida. Respondemos 428 con un PoW (dificultad escalada por el score);
+  // el cliente lo resuelve en background (invisible al humano) y reintenta con la
+  // solución en x-cx-stepup. El bot masivo paga este peaje por cada intento.
+  if (assessment.challengeRequired && assessment.challenge) {
+    return NextResponse.json(
+      { error: "challenge_required", challenge: assessment.challenge },
+      { status: 428 },
+    );
+  }
+  // Tarpit heredado (hoy delayMs siempre 0: el step-up lo reemplaza). Se conserva
+  // por si una futura política vuelve a inyectar latencia.
   if (assessment.delayMs > 0) await new Promise((r) => setTimeout(r, assessment.delayMs));
 
   const result = await TicketsController.buy(body);
