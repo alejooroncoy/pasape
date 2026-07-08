@@ -39,15 +39,21 @@ export const getActiveOrgSlug = async (): Promise<string | null> => {
   return store.get(ACTIVE_ORG_COOKIE)?.value ?? null;
 };
 
+// Solo escribe cache de lectura — nunca la fuente de verdad. Se llama tanto
+// desde route handlers (donde escribir cookies es válido) como desde el
+// render de páginas (donde Next.js lanza "Cookies can only be modified in a
+// Server Action or Route Handler"). Un fallo acá no debe romper el render.
 const writeActiveCookie = async (slug: string) => {
-  const store = await cookies();
-  store.set(ACTIVE_ORG_COOKIE, slug, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 365,
-  });
+  try {
+    const store = await cookies();
+    store.set(ACTIVE_ORG_COOKIE, slug, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 365,
+    });
+  } catch {}
 };
 
 /**

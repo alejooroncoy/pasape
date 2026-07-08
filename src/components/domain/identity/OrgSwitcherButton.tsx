@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useIsRestoring } from "@tanstack/react-query";
 import { useMyOrgs } from "@/lib/identity/organizations/hooks/useMyOrgs";
 import { useLegalEntities } from "@/lib/identity/organizations/hooks/useLegalEntities";
 import { useSwitchOrg } from "@/lib/identity/organizations/hooks/useSwitchOrg";
@@ -27,8 +28,14 @@ export const OrgSwitcherButton = ({ onBeforeOpen }: Props = {}) => {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  // El cache de `identity` se persiste a IndexedDB (ver query-client.tsx) y se
+  // restaura async tras el mount. Mientras restaura, tratar `data` como
+  // ausente evita el hydration mismatch: el server siempre renderiza sin
+  // sesión, así el primer paint del cliente coincide sin importar el timing
+  // de la restauración.
+  const isRestoring = useIsRestoring();
 
-  if (!me.data || !orgs.data) return null;
+  if (isRestoring || !me.data || !orgs.data) return null;
 
   if (orgs.data.length === 0) {
     return (
