@@ -4,17 +4,22 @@
 // Modos (env BOT_ENFORCEMENT, default 'shadow'):
 //   shadow → NUNCA bloquea ni ralentiza. Solo registra qué habría hecho
 //            ('would_block' / 'would_throttle'). Es el modo de calibración.
-//   soft   → NUNCA bloquea; TARPIT progresivo desde SOFT_THRESHOLD (latencia
-//            creciente al sospechoso). Cero ventas perdidas, cero falso positivo
-//            duro: al humano (score < SOFT) no lo toca; al bot lo vuelve lento.
-//            Esta es la defensa clave para compra masiva guest (sin login previo).
-//   hard   → BLOQUEA lo flagrante (score >= HARD_THRESHOLD) y aplica tarpit a la
-//            zona sospechosa (SOFT..HARD). Agresivo.
+//   soft   → NUNCA bloquea; exige un STEP-UP CHALLENGE (proof-of-work) desde
+//            SOFT_THRESHOLD en adelante (incluido >= HARD). Cero ventas perdidas,
+//            cero falso positivo duro: al humano (score < SOFT) no lo toca; el
+//            bot masivo paga un PoW por cada intento sospechoso. Es la defensa
+//            clave para compra masiva guest (sin login previo).
+//   hard   → BLOQUEA lo flagrante (score >= HARD_THRESHOLD) y exige step-up
+//            challenge en la zona sospechosa (SOFT..HARD). Agresivo.
 //
-// Por qué el tarpit es la mejor arma contra el bot sin-login: no hay identidad
-// previa que verificar, así que en vez de un muro (que arriesga falsos positivos)
-// se destruye la ECONOMÍA del ataque. Un bot que necesita 500 compras/min y ahora
-// tarda 8 s por intento deja de ser rentable, sin que un humano note nada.
+// Por qué el step-up (PoW invisible) es la mejor arma contra el bot sin-login: no
+// hay identidad previa que verificar, así que en vez de un muro (que arriesga
+// falsos positivos) se destruye la ECONOMÍA del ataque. El humano resuelve el PoW
+// en background sin notar nada; el bot masivo paga el peaje de CPU + el round-trip
+// firmado single-use por CADA intento sospechoso, y deja de ser rentable.
+//
+// (El tarpit progresivo `tarpitDelayMs` se conserva como utilidad pura testeable,
+// pero el enforcement ya no lo emite: el step-up challenge lo reemplaza.)
 //
 // CIRCUIT BREAKER (por qué un bug no puede tumbar tus ventas): si en la ventana
 // reciente la fracción de intentos bloqueados supera CIRCUIT_MAX_BLOCK_RATE, el
@@ -35,7 +40,14 @@ export const enforcementMode = (): EnforcementMode => {
   return m === "soft" || m === "hard" ? m : "shadow";
 };
 
-export type SignalAction = "logged" | "would_block" | "would_throttle" | "throttled" | "blocked";
+export type SignalAction =
+  | "logged"
+  | "would_block"
+  | "would_throttle"
+  | "would_challenge"
+  | "throttled"
+  | "challenge"
+  | "blocked";
 
 // ── Tarpit (latencia progresiva al sospechoso) ──────────────────────────────
 const TARPIT_MIN_MS = 600;
@@ -94,41 +106,58 @@ const recordSample = (blocked: boolean) => {
   prune(now);
 };
 
-export type EnforcementDecision = { allowed: boolean; action: SignalAction; delayMs: number };
+export type EnforcementDecision = {
+  allowed: boolean;
+  action: SignalAction;
+  delayMs: number;
+  /**
+   * true = el intento cae en zona sospechosa y, para proceder, debe resolver un
+   * step-up challenge (PoW). El route responde 428 con el challenge si el cliente
+   * aún no adjuntó una solución válida. Nunca true en modo shadow.
+   */
+  challengeRequired: boolean;
+};
 
 /**
  * Decide la acción a partir del score y el modo vigente, respetando el circuit
- * breaker. `deviceAttemptsShort` escala el tarpit por reincidencia. Registra la
- * muestra del breaker. `allowed=false` (bloqueo) solo ocurre en modo 'hard',
- * sobre HARD_THRESHOLD y con el breaker cerrado; en 'soft' nunca se bloquea.
+ * breaker.
+ *
+ *   shadow → nunca actúa: solo registra qué HABRÍA hecho (would_block /
+ *            would_challenge). challengeRequired siempre false.
+ *   soft   → zona sospechosa [SOFT, ∞) → challenge. Nunca bloquea (nunca 429).
+ *   hard   → [SOFT, HARD) → challenge; >= HARD → block (breaker cerrado). Si el
+ *            breaker está abierto, el bloqueo degrada a challenge (fail-open).
+ *
+ * PURA respecto al score/modo; su único efecto es alimentar el circuit breaker.
+ * (El tarpit ya no se emite; el step-up challenge lo reemplaza, por eso ya no
+ * necesita `deviceAttemptsShort`.)
  */
-export const decideEnforcement = (
-  score: number,
-  deviceAttemptsShort = 0,
-): EnforcementDecision => {
+export const decideEnforcement = (score: number): EnforcementDecision => {
   const mode = enforcementMode();
   const wouldBlock = score >= HARD_THRESHOLD;
-  const wouldThrottle = score >= SOFT_THRESHOLD;
+  const wouldChallenge = score >= SOFT_THRESHOLD; // zona sospechosa (incluye HARD)
 
   if (mode === "shadow") {
-    recordSample(false); // en shadow nunca bloqueamos, no contamina el breaker
+    recordSample(false); // en shadow nunca actuamos, no contamina el breaker
     return {
       allowed: true,
       delayMs: 0,
-      action: wouldBlock ? "would_block" : wouldThrottle ? "would_throttle" : "logged",
+      challengeRequired: false,
+      action: wouldBlock ? "would_block" : wouldChallenge ? "would_challenge" : "logged",
     };
   }
 
   // Bloqueo duro: solo en modo 'hard', para lo flagrante, con el breaker cerrado.
   const shouldBlock = mode === "hard" && wouldBlock && !breakerOpen();
   recordSample(shouldBlock);
-  if (shouldBlock) return { allowed: false, action: "blocked", delayMs: 0 };
+  if (shouldBlock) return { allowed: false, action: "blocked", delayMs: 0, challengeRequired: false };
 
-  // Zona sospechosa (>= SOFT y no bloqueada): tarpit. Permite, pero lento.
-  if (wouldThrottle) {
-    return { allowed: true, action: "throttled", delayMs: tarpitDelayMs(score, deviceAttemptsShort) };
+  // Zona sospechosa no bloqueada (soft en todo [SOFT,∞); hard en [SOFT,HARD); o
+  // hard >=HARD con el breaker abierto que degrada a challenge): step-up PoW.
+  if (wouldChallenge) {
+    return { allowed: true, action: "challenge", delayMs: 0, challengeRequired: true };
   }
-  return { allowed: true, action: "logged", delayMs: 0 };
+  return { allowed: true, action: "logged", delayMs: 0, challengeRequired: false };
 };
 
 // ── Anti-multicuenta por tarjeta (misma tarjeta, muchos DNIs) ────────────────

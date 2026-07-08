@@ -3,10 +3,12 @@ import { createHash } from "crypto";
 import {
   makeChallenge,
   mintDifficulty,
+  stepUpDifficulty,
   verifyChallengeSolution,
   DEFAULT_MAX_NUMBER,
   type Challenge,
 } from "./CheckoutChallenge";
+import { SOFT_THRESHOLD, HARD_THRESHOLD } from "./botScore";
 
 // El challenge firma con TICKET_LINK_SECRET; lo fijamos para el test.
 beforeAll(() => {
@@ -73,5 +75,29 @@ describe("CheckoutChallenge — proof-of-work del minteo", () => {
     // re-firmar para un test honesto: en su lugar validamos que un issuedAt
     // manipulado (sin re-firmar) cae por firma inválida.
     expect(verifyChallengeSolution({ ...c, issuedAt: c.issuedAt - 11 * 60_000, number })).toBe(false);
+  });
+});
+
+describe("stepUpDifficulty — dificultad del step-up escalada por score", () => {
+  it("en el piso de la zona (score = SOFT) es la base trivial", () => {
+    expect(stepUpDifficulty(SOFT_THRESHOLD)).toBe(DEFAULT_MAX_NUMBER);
+    // Por debajo de SOFT no debería llegar aquí, pero es defensivo (no negativo).
+    expect(stepUpDifficulty(0)).toBe(DEFAULT_MAX_NUMBER);
+  });
+
+  it("crece monótonamente con el score", () => {
+    expect(stepUpDifficulty(HARD_THRESHOLD)).toBeGreaterThan(stepUpDifficulty(SOFT_THRESHOLD));
+    expect(stepUpDifficulty(100)).toBeGreaterThanOrEqual(stepUpDifficulty(HARD_THRESHOLD));
+  });
+
+  it("tiene techo (un bug jamás congela a nadie)", () => {
+    expect(stepUpDifficulty(100)).toBeLessThanOrEqual(DEFAULT_MAX_NUMBER * 32);
+    expect(stepUpDifficulty(9999)).toBeLessThanOrEqual(DEFAULT_MAX_NUMBER * 32);
+  });
+
+  it("un challenge de step-up escalado sigue verificando", () => {
+    const c = makeChallenge("11111111-1111-4111-8111-111111111111", "dev", stepUpDifficulty(65));
+    const number = solve(c);
+    expect(verifyChallengeSolution({ ...c, number })).toBe(true);
   });
 });

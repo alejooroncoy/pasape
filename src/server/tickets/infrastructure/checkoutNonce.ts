@@ -33,10 +33,28 @@ const consumeOnce = async (ns: string, key: string): Promise<NonceOutcome> => {
 
 /**
  * Quema el checkout-token en la fase de compra (una compra = un token). "replay"
- * si ya se usó — señal fuerte de automatización.
+ * si ya se usó — señal fuerte de automatización. Se quema SOLO cuando la compra
+ * realmente procede (no al responder un challenge_required): así el reintento del
+ * step-up con el mismo token no se cuenta como replay.
  */
 export const consumeCheckoutToken = (token: string): Promise<NonceOutcome> =>
   consumeOnce("cxnonce", token);
+
+/**
+ * Inspección NO destructiva del checkout-token: "replay" si YA fue quemado por
+ * una compra anterior, "fresh" si no. Alimenta el score sin consumir el token, de
+ * modo que decidir "challenge vs proceder" no lo gaste: el token solo se quema al
+ * confirmar la compra. Fail-open ("unknown" sin Redis o ante error).
+ */
+export const peekCheckoutToken = async (token: string): Promise<NonceOutcome> => {
+  if (!redis) return "unknown";
+  try {
+    return (await redis.exists(`cxnonce:${token}`)) ? "replay" : "fresh";
+  } catch (e) {
+    console.warn("[antibot] fallo inspeccionando checkout-token (fail-open):", e);
+    return "unknown";
+  }
+};
 
 /**
  * Quema el salt de un challenge de PoW al canjearlo. "replay" = intento de

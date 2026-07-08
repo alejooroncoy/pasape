@@ -1,8 +1,13 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/_shared/api-client";
-import { checkoutSignalHeaders, refreshCheckoutToken } from "@/lib/tickets/checkoutSignals";
+import { api, resolveUrl } from "@/lib/_shared/api-client";
+import {
+  checkoutSignalHeaders,
+  refreshCheckoutToken,
+  solvePow,
+  type Challenge,
+} from "@/lib/tickets/checkoutSignals";
 import { PERSIST_GC_TIME_MS } from "@/lib/_shared/query-client-config";
 import { useSessionReady } from "@/lib/identity/hooks/useSessionReady";
 import { currentUserKey } from "@/lib/identity/hooks/useCurrentUser";
@@ -110,16 +115,50 @@ export const useOrderQuote = () =>
       }),
   });
 
+// POST /buy con fetch manual (no api.post) para poder LEER el body del 428
+// challenge_required sin que el cliente lance. Devuelve status + payload crudo.
+const postBuy = async (
+  input: BuyInput,
+  headers: Record<string, string>,
+): Promise<{ status: number; ok: boolean; payload: { data?: BuyResult; error?: string; challenge?: Challenge } }> => {
+  const res = await fetch(resolveUrl("/api/tickets/buy"), {
+    method: "POST",
+    headers: { "content-type": "application/json", ...headers },
+    body: JSON.stringify(input),
+    credentials: "same-origin",
+  });
+  const payload = await res.json().catch(() => ({}));
+  return { status: res.status, ok: res.ok, payload };
+};
+
 export const useBuyTickets = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: BuyInput) => {
+    mutationFn: async (input: BuyInput): Promise<BuyResult> => {
       const headers = await checkoutSignalHeaders(input.eventId);
-      // El server quema el token al usarlo (single-use). Renovamos para que un
-      // reintento legítimo (p.ej. tras pago fallido) tenga token fresco y no se
-      // puntúe como replay.
+      let attempt = await postBuy(input, headers);
+
+      // Step-up challenge TRANSPARENTE: si el server responde 428 pidiendo un PoW,
+      // lo resolvemos en background (invisible para el humano) y reintentamos UNA
+      // vez con la solución en x-cx-stepup, reusando el MISMO token (el 428 no lo
+      // quemó). Un bot masivo paga este trabajo por cada intento sospechoso.
+      if (attempt.status === 428 && attempt.payload.challenge) {
+        const number = await solvePow(attempt.payload.challenge);
+        if (number != null) {
+          const stepup = JSON.stringify({ ...attempt.payload.challenge, number });
+          attempt = await postBuy(input, { ...headers, "x-cx-stepup": stepup });
+        }
+      }
+
+      // El server quema el token solo cuando la compra procede (single-use).
+      // Renovamos para que la SIGUIENTE compra tenga token fresco y no se puntúe
+      // como replay.
       refreshCheckoutToken(input.eventId);
-      return api.post<BuyResult>("/api/tickets/buy", input, { headers });
+
+      if (!attempt.ok || attempt.payload.error) {
+        throw new Error(attempt.payload.error ?? `HTTP ${attempt.status}`);
+      }
+      return attempt.payload.data as BuyResult;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: myTicketsKey }),
   });

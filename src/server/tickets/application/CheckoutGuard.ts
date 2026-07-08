@@ -11,8 +11,19 @@ import {
   type SignalAction,
 } from "../domain/botEnforcement";
 import { purchaseSignalsRepo } from "../infrastructure/PurchaseSignalsRepo";
-import { consumeCheckoutToken } from "../infrastructure/checkoutNonce";
+import {
+  consumeCheckoutToken,
+  peekCheckoutToken,
+  consumeChallenge,
+} from "../infrastructure/checkoutNonce";
 import { armTarpit } from "../infrastructure/tarpitStore";
+import {
+  makeChallenge,
+  verifyChallengeSolution,
+  stepUpDifficulty,
+  type Challenge,
+  type SolutionInput,
+} from "../domain/CheckoutChallenge";
 
 // Orquestador anti-bot del checkout (capa de aplicación). Lo llaman los route
 // handlers en cada fase (quote/buy/card/webhook). Hace, en orden:
@@ -93,6 +104,14 @@ export type CheckoutGuardResult = {
   delayMs: number;
   /** id de la fila de señal, para adjuntarle el order_id tras crear la orden. */
   signalId: string | null;
+  /**
+   * true = el intento debe resolver un step-up challenge para proceder y aún no
+   * adjuntó una solución válida. El route responde 428 con `challenge`. Nunca en
+   * modo shadow (ahí solo se registra `would_challenge`).
+   */
+  challengeRequired: boolean;
+  /** Challenge firmado a devolver en el 428 (solo cuando challengeRequired). */
+  challenge: Challenge | null;
 };
 
 const ALLOW_ON_ERROR: CheckoutGuardResult = {
@@ -102,6 +121,34 @@ const ALLOW_ON_ERROR: CheckoutGuardResult = {
   reasons: [],
   delayMs: 0,
   signalId: null,
+  challengeRequired: false,
+  challenge: null,
+};
+
+// Parsea la solución del step-up challenge que el cliente adjunta al reintentar
+// tras un 428 (header x-cx-stepup = JSON del challenge + number). Acotado y
+// defensivo: cualquier cosa rara → null (se trata como "sin solución").
+const parseStepUp = (req: NextRequest): SolutionInput | null => {
+  const raw = req.headers.get("x-cx-stepup");
+  if (!raw || raw.length > 2048) return null;
+  try {
+    const o = JSON.parse(raw) as Record<string, unknown>;
+    if (
+      typeof o.eventId === "string" &&
+      typeof o.deviceHash === "string" &&
+      typeof o.salt === "string" &&
+      typeof o.target === "string" &&
+      typeof o.maxnumber === "number" &&
+      typeof o.issuedAt === "number" &&
+      typeof o.signature === "string" &&
+      typeof o.number === "number"
+    ) {
+      return o as unknown as SolutionInput;
+    }
+  } catch {
+    /* JSON inválido → sin solución */
+  }
+  return null;
 };
 
 export const assessCheckout = async (
@@ -147,16 +194,45 @@ export const assessCheckout = async (
         enforcementMode: mode,
         actionTaken: "logged",
       });
-      return { allowed: true, action: "logged", score: 0, reasons: [], delayMs: 0, signalId };
+      return {
+        allowed: true,
+        action: "logged",
+        score: 0,
+        reasons: [],
+        delayMs: 0,
+        signalId,
+        challengeRequired: false,
+        challenge: null,
+      };
     }
 
-    // Single-use (P0 anti-automatización): en la fase de compra el token se
-    // QUEMA — un render de página = una orden. Reusarlo delata scripting. Quote
-    // no consume (se llama varias veces con el mismo token legítimamente).
+    // ── Step-up challenge: ¿el cliente adjuntó una solución válida? ───────────
+    // Si el intento anterior fue "challenge_required" (428), el cliente resuelve
+    // el PoW y reintenta con la solución en x-cx-stepup. Verificamos firma +
+    // frescura + que reproduce el target, que va atada a ESTE evento/device, y
+    // consumimos su nonce single-use (un challenge resuelto no se canjea 2 veces).
+    const stepUp = phase === "buy" ? parseStepUp(req) : null;
+    let stepUpSatisfied = false;
+    if (
+      stepUp &&
+      eventId &&
+      stepUp.eventId === eventId &&
+      stepUp.deviceHash === (deviceHash ?? "") &&
+      verifyChallengeSolution(stepUp)
+    ) {
+      // "replay" ⇒ ya se canjeó ese challenge; "unknown" (sin Redis) ⇒ fail-open.
+      stepUpSatisfied = (await consumeChallenge(stepUp.salt)) !== "replay";
+    }
+
+    // Single-use (P0 anti-automatización): un render de página = una orden. NO se
+    // quema aquí — solo se INSPECCIONA (peek, no destructivo) para el score. El
+    // token se quema únicamente al confirmar la compra (más abajo), de modo que
+    // el reintento del step-up con el mismo token no cuente como replay (el 428
+    // previo no lo quemó). Quote nunca consume.
     const rawToken = req.headers.get("x-checkout-token");
     const tokenReplay =
       phase === "buy" && checkoutTokenOk && !!rawToken
-        ? (await consumeCheckoutToken(rawToken)) === "replay"
+        ? (await peekCheckoutToken(rawToken)) === "replay"
         : false;
 
     const agg = await purchaseSignalsRepo.aggregates({ deviceHash, ip, contactHash, dniHash });
@@ -176,12 +252,35 @@ export const assessCheckout = async (
       ...agg,
     });
 
-    const decision = decideEnforcement(score, agg.deviceAttemptsShort);
+    const decision = decideEnforcement(score);
 
-    // Tarpit DIFERIDO: en vez de dormir aquí (ocuparía la función serverless de
-    // compra), armamos el peaje para device/IP en Redis. El proxy lo lee y aplica
-    // la latencia en el siguiente request de esa entidad, ANTES de la función.
-    // Fire-and-forget: no añade latencia al handler. Ver tarpitStore.ts.
+    // Si el enforcement pide un step-up pero el cliente ya resolvió un challenge
+    // válido para este intento, dejamos pasar (no re-desafiamos). El challenge ya
+    // consumido es el peaje pagado. `action` refleja que hubo challenge resuelto.
+    const challengeRequired = decision.challengeRequired && !stepUpSatisfied;
+    const proceeding = decision.allowed && !challengeRequired;
+    const action: SignalAction =
+      decision.challengeRequired && stepUpSatisfied ? "challenge" : decision.action;
+
+    // Confirmación single-use: SOLO cuando la compra realmente procede se quema el
+    // checkout-token (una compra = un token). Al responder challenge_required NO se
+    // quema, así el reintento con solución no se cuenta como replay.
+    if (proceeding && phase === "buy" && checkoutTokenOk && rawToken) {
+      void consumeCheckoutToken(rawToken);
+    }
+
+    // Mint del challenge a devolver en el 428 (dificultad escalada por el score).
+    const challenge =
+      challengeRequired && eventId
+        ? makeChallenge(eventId, deviceHash ?? "", stepUpDifficulty(score))
+        : null;
+
+    // Tarpit DIFERIDO (capa de respaldo, hoy inerte): decideEnforcement ya no
+    // emite delayMs>0 en el camino normal — la zona sospechosa la cubre el
+    // step-up challenge (PoW), que es estrictamente mejor aquí: no mantiene la
+    // función serverless viva, cuesta CPU real al cliente, y escala con el score.
+    // Se conserva este armado (Redis + proxy, ver tarpitStore.ts / src/proxy.ts)
+    // por si una futura política de enforcement reintroduce un delay puro.
     if (decision.delayMs > 0) {
       void armTarpit(deviceHash, ip === "unknown" ? null : ip, decision.delayMs);
     }
@@ -205,14 +304,14 @@ export const assessCheckout = async (
         botScore: score,
         reasons,
         enforcementMode: mode,
-        actionTaken: decision.action,
+        actionTaken: action,
       }),
       Promise.resolve(
         serverEvents.botSignal(input.buyerId ?? deviceHash ?? ip ?? "anonymous", {
           phase,
           bot_score: score,
           reasons,
-          action: decision.action,
+          action,
           enforcement_mode: mode,
           event_id: eventId,
           order_id: input.orderId ?? null,
@@ -224,11 +323,13 @@ export const assessCheckout = async (
 
     return {
       allowed: decision.allowed,
-      action: decision.action,
+      action,
       delayMs: decision.delayMs,
       score,
       reasons,
       signalId,
+      challengeRequired,
+      challenge,
     };
   } catch (e) {
     console.warn("[antibot] assessCheckout falló (fail-open, se permite la compra):", e);

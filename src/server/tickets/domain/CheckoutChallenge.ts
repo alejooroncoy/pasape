@@ -1,4 +1,5 @@
 import { createHmac, createHash, randomBytes, randomInt, timingSafeEqual } from "crypto";
+import { SOFT_THRESHOLD } from "./botScore";
 
 // Proof-of-work invisible para MINTAR el checkout-token (P0/P1 del research
 // anti-automatización). Convierte el minteo de "un GET gratis" en un protocolo
@@ -47,6 +48,20 @@ const CHALLENGE_TTL_MS = 10 * 60 * 1000; // 10 min para resolver y canjear
 export const mintDifficulty = (recentMints: number): number => {
   if (recentMints <= 3) return DEFAULT_MAX_NUMBER;
   const steps = Math.min(5, Math.floor((recentMints - 1) / 3)); // 4-6→1, 7-9→2, … 16+→5
+  return Math.min(MAX_ESCALATED, DEFAULT_MAX_NUMBER * 2 ** steps);
+};
+
+/**
+ * Dificultad del STEP-UP challenge (maxnumber) según el bot-score del intento.
+ * A diferencia de `mintDifficulty` (que escala por # de minteos), esto escala por
+ * qué tan sospechoso es ESTE intento: en el piso de la zona (score = SOFT) el PoW
+ * es la base trivial (invisible aun para un humano falso-positivo raro); mientras
+ * más alto el score, más caro el peaje que paga el bot por cada compra. PURA y
+ * determinista (testeable). Cap en MAX_ESCALATED para que un bug no congele a nadie.
+ */
+export const stepUpDifficulty = (score: number): number => {
+  const over = Math.max(0, Math.round(score) - SOFT_THRESHOLD); // 0..(100-SOFT)
+  const steps = Math.min(5, Math.floor(over / 10)); // cada +10 de score dobla el costo
   return Math.min(MAX_ESCALATED, DEFAULT_MAX_NUMBER * 2 ** steps);
 };
 

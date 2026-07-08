@@ -20,12 +20,21 @@ export const POST = async (req: NextRequest) => {
   // como 429 genérico; el tarpit ralentiza al sospechoso sin revelar la detección.
   const assessment = await assessCheckout({ req, phase: "buy", ...purchaseSignalFields(body) });
   if (!assessment.allowed) return NextResponse.json({ error: "rate_limited" }, { status: 429 });
-  // Tarpit: NO se duerme aquí. Dormir dentro de la función mantendría vivo su
-  // slot de concurrencia (Vercel Fluid Compute) y bajo un flood agotaría la
-  // capacidad del handler de compra. En su lugar, assessCheckout ARMA el peaje
-  // (device/IP → delay) en Redis y el proxy lo aplica ANTES de llegar aquí, en la
-  // capa barata. Ver tarpitStore.ts y src/proxy.ts. `assessment.delayMs` se
-  // conserva solo para telemetría/correlación.
+  // Step-up challenge: el intento cae en zona sospechosa y aún no adjuntó una
+  // solución válida. Respondemos 428 con un PoW (dificultad escalada por el score);
+  // el cliente lo resuelve en background (invisible al humano) y reintenta con la
+  // solución en x-cx-stepup. El bot masivo paga este peaje por cada intento.
+  if (assessment.challengeRequired && assessment.challenge) {
+    return NextResponse.json(
+      { error: "challenge_required", challenge: assessment.challenge },
+      { status: 428 },
+    );
+  }
+  // Tarpit: NO se duerme aquí. El step-up challenge ya cubre toda la zona
+  // sospechosa (decideEnforcement no vuelve a emitir delayMs>0 en ese camino),
+  // así que este bloque es hoy inerte; se deja como capa de respaldo (armada vía
+  // Redis en assessCheckout y leída por el proxy) por si una futura política
+  // reintroduce delay puro. Ver tarpitStore.ts y src/proxy.ts.
 
   const result = await TicketsController.buy(body);
   if (result.ok) {
