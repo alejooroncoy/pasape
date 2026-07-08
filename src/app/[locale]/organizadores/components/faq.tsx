@@ -8,7 +8,7 @@ export const FAQS = [
   },
   {
     q: "¿Cuánto cuesta el piloto?",
-    a: "Sin costo fijo. Solo cobramos 10% (tope S/15) por entrada pagada vendida por Pasape.",
+    a: "Sin costo fijo. Cobramos 10% por entrada de pago (mínimo S/3), y baja a 5% en la parte que supere S/300. Lo paga el comprador, tú recibes el 100% de tu precio.",
   },
   {
     q: "¿Los pases gratis pagan comisión?",
@@ -24,7 +24,7 @@ export const FAQS = [
   },
   {
     q: "¿Cómo se valida en puerta?",
-    a: "Desde web, escaneando el QR. Si alguien no encuentra su QR, el staff puede buscar por nombre, DNI o teléfono.",
+    a: "Con la app del portero, que funciona incluso sin internet. Si alguien no encuentra su QR, el staff puede buscarlo por nombre o DNI.",
   },
   {
     q: "¿Cualquiera puede publicar un evento?",
