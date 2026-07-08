@@ -81,6 +81,31 @@ const distinctInWindow = async (
 
 export const purchaseSignalsRepo = {
   /**
+   * Stock restante MÍNIMO entre los ticket_types de la compra (capacity - sold),
+   * para alimentar la señal `bulk_stock_grab` del scorer. Usa las columnas crudas
+   * de `ticket_types` (no el dominio TicketType) — suficiente para este chequeo:
+   * un box siempre compra qty=1 (AGENTS.md: "el box se vende entero"), y
+   * `bulk_stock_grab` ya exige qty>=4, así que nunca dispara para boxes aunque
+   * "capacity" ahí signifique asientos, no stock. Null si falla o no hay ids
+   * (fail-open: el scorer simplemente no suma esta señal).
+   */
+  async minStockRemaining(ticketTypeIds: string[] | null): Promise<number | null> {
+    if (!ticketTypeIds?.length) return null;
+    try {
+      const { data } = await supabaseAdmin()
+        .from("ticket_types")
+        .select("capacity, sold")
+        .in("id", ticketTypeIds);
+      if (!data?.length) return null;
+      const remainings = data.map((r) => Math.max(0, (r.capacity ?? 0) - (r.sold ?? 0)));
+      return Math.min(...remainings);
+    } catch (e) {
+      console.warn("[antibot] fallo leyendo stock remanente (fail-open):", e);
+      return null;
+    }
+  },
+
+  /**
    * Agrega las señales de volumen/correlación para este intento. Corre las
    * consultas en paralelo; un fallo de una sub-consulta no debe tumbar la
    * compra (devuelve 0 en esa dimensión — degrada a menos señales, nunca a

@@ -110,7 +110,7 @@ export const payWithCard = async (
   let email = order.guest_email ?? null;
   let fullName = order.guest_name ?? null;
   let phone = order.guest_phone ?? null;
-  const dni = decryptDni(order.guest_dni_enc) ?? order.guest_dni ?? null;
+  let dni = decryptDni(order.guest_dni_enc) ?? order.guest_dni ?? null;
   if (order.buyer_id) {
     const { data: profile } = await db
       .from("profiles")
@@ -120,6 +120,19 @@ export const payWithCard = async (
     email = email ?? profile?.email ?? null;
     fullName = fullName ?? profile?.full_name ?? null;
     phone = phone ?? profile?.phone ?? null;
+    // El DNI de un comprador LOGUEADO no vive en orders.guest_* (esas columnas
+    // solo se pueblan en checkout de invitado) sino en kyc_documents. Sin esto,
+    // el anti-multicuenta por tarjeta (card_many_dni) queda ciego para cualquier
+    // atacante que use cuentas logueadas en vez de guest checkout.
+    if (!dni) {
+      const { data: kyc } = await db
+        .from("kyc_documents")
+        .select("doc_number")
+        .eq("profile_id", order.buyer_id)
+        .eq("doc_kind", "dni")
+        .maybeSingle<{ doc_number: string }>();
+      dni = kyc?.doc_number ?? null;
+    }
   }
   const phoneParsed = phone ? parseE164(phone) : null;
   if (!email) return err("payer_email_missing");
@@ -209,8 +222,14 @@ export const payWithCard = async (
   // degrada a solo-observación post-cobro (nunca cobramos-y-revertimos a un
   // comprador posiblemente legítimo). Ver decideCardEnforcement para cómo una
   // familia (varios DNIs, 1 device) queda protegida.
+  //
+  // Gate por modo: en shadow este bloque NUNCA bloquea (decideCardEnforcement lo
+  // garantiza), así que el peek —una llamada de red real a MP, hasta 5s— no
+  // aporta nada salvo latencia. Se salta por completo; la telemetría de shadow
+  // la sigue cubriendo el recordCard post-cobro (fire-and-forget, más abajo).
   let cardAssessed = false;
-  const peek = await peekCardToken(input.token);
+  const cardEnforcementMode = enforcementMode();
+  const peek = cardEnforcementMode !== "shadow" ? await peekCardToken(input.token) : null;
   if (peek) {
     const cardHash = signalHash("card", `${peek.bin}${peek.last4}:${peek.cardholderName}`);
     const dniHash = signalHash("dni", dni);
@@ -223,7 +242,7 @@ export const payWithCard = async (
       });
       if (assessment) {
         cardAssessed = true;
-        const mode = enforcementMode();
+        const mode = cardEnforcementMode;
         const decision = enforceCardDecision(
           decideCardEnforcement(
             { distinctDnis: assessment.distinctDnis, distinctDevices: assessment.distinctDevices },

@@ -69,7 +69,11 @@ const automationHintsOf = (req: NextRequest): string[] => {
 const serverHintsOf = (req: NextRequest): string[] => {
   const hints: string[] = [];
   const ua = req.headers.get("user-agent") ?? "";
-  const isChromium = /chrome|chromium|crios|edg\//i.test(ua);
+  // "crios" (Chrome-iOS) queda EXCLUIDO a propósito: por mandato de Apple corre
+  // sobre WebKit, no sobre Blink/Chromium, y por eso NUNCA manda Client Hints —
+  // penalizarlo sería un falso positivo sistemático contra todo usuario real de
+  // Chrome en iPhone.
+  const isChromium = /chrome|chromium|edg\//i.test(ua) && !/crios/i.test(ua);
   // Todo Chromium moderno manda sec-ch-ua por HTTPS. UA Chromium sin él = el
   // "navegador" no es Chromium (cliente HTTP falseando el UA).
   if (isChromium && !req.headers.get("sec-ch-ua")) hints.push("chromium_no_client_hints");
@@ -229,13 +233,16 @@ export const assessCheckout = async (
     // token se quema únicamente al confirmar la compra (más abajo), de modo que
     // el reintento del step-up con el mismo token no cuente como replay (el 428
     // previo no lo quemó). Quote nunca consume.
+    //
+    // El peek (Redis) y los agregados (Supabase) son independientes entre sí —
+    // van en paralelo para no sumar sus latencias.
     const rawToken = req.headers.get("x-checkout-token");
-    const tokenReplay =
+    const [tokenReplay, agg] = await Promise.all([
       phase === "buy" && checkoutTokenOk && !!rawToken
-        ? (await peekCheckoutToken(rawToken)) === "replay"
-        : false;
-
-    const agg = await purchaseSignalsRepo.aggregates({ deviceHash, ip, contactHash, dniHash });
+        ? peekCheckoutToken(rawToken).then((r) => r === "replay")
+        : Promise.resolve(false),
+      purchaseSignalsRepo.aggregates({ deviceHash, ip, contactHash, dniHash }),
+    ]);
 
     const { score, reasons } = botScore({
       phase,

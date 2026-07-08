@@ -136,29 +136,33 @@ export const useBuyTickets = () => {
   return useMutation({
     mutationFn: async (input: BuyInput): Promise<BuyResult> => {
       const headers = await checkoutSignalHeaders(input.eventId);
-      let attempt = await postBuy(input, headers);
+      try {
+        let attempt = await postBuy(input, headers);
 
-      // Step-up challenge TRANSPARENTE: si el server responde 428 pidiendo un PoW,
-      // lo resolvemos en background (invisible para el humano) y reintentamos UNA
-      // vez con la solución en x-cx-stepup, reusando el MISMO token (el 428 no lo
-      // quemó). Un bot masivo paga este trabajo por cada intento sospechoso.
-      if (attempt.status === 428 && attempt.payload.challenge) {
-        const number = await solvePow(attempt.payload.challenge);
-        if (number != null) {
-          const stepup = JSON.stringify({ ...attempt.payload.challenge, number });
-          attempt = await postBuy(input, { ...headers, "x-cx-stepup": stepup });
+        // Step-up challenge TRANSPARENTE: si el server responde 428 pidiendo un PoW,
+        // lo resolvemos en background (invisible para el humano) y reintentamos UNA
+        // vez con la solución en x-cx-stepup, reusando el MISMO token (el 428 no lo
+        // quemó). Un bot masivo paga este trabajo por cada intento sospechoso.
+        if (attempt.status === 428 && attempt.payload.challenge) {
+          const number = await solvePow(attempt.payload.challenge);
+          if (number != null) {
+            const stepup = JSON.stringify({ ...attempt.payload.challenge, number });
+            attempt = await postBuy(input, { ...headers, "x-cx-stepup": stepup });
+          }
         }
-      }
 
-      // El server quema el token solo cuando la compra procede (single-use).
-      // Renovamos para que la SIGUIENTE compra tenga token fresco y no se puntúe
-      // como replay.
-      refreshCheckoutToken(input.eventId);
-
-      if (!attempt.ok || attempt.payload.error) {
-        throw new Error(attempt.payload.error ?? `HTTP ${attempt.status}`);
+        if (!attempt.ok || attempt.payload.error) {
+          throw new Error(attempt.payload.error ?? `HTTP ${attempt.status}`);
+        }
+        return attempt.payload.data as BuyResult;
+      } finally {
+        // El server puede haber quemado el token single-use aunque la respuesta
+        // nunca llegue al cliente (fetch abortado/timeout tras procesar). Renovamos
+        // SIEMPRE — éxito, error de validación, o fallo de red — para que un
+        // reintento legítimo del usuario nunca reuse un token ya consumido y se
+        // marque como token_replay.
+        refreshCheckoutToken(input.eventId);
       }
-      return attempt.payload.data as BuyResult;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: myTicketsKey }),
   });

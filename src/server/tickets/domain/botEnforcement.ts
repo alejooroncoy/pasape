@@ -68,43 +68,62 @@ export const tarpitDelayMs = (score: number, deviceAttemptsShort: number): numbe
 };
 
 // ── Circuit breaker (ventana deslizante simple in-memory) ───────────────────
+// Namespaceado por dominio: el enforcement de bot-score (scalping) y el de
+// tarjeta (carding/multicuenta) son amenazas DISTINTAS y no deben compartir el
+// mismo presupuesto de tolerancia a falsos positivos — un pico de bloqueos de
+// tarjeta (p.ej. muchas familias con tarjeta compartida en un evento masivo) no
+// debe poder degradar silenciosamente el bloqueo duro de un ataque de scalping
+// real en curso, ni viceversa.
 const CIRCUIT_WINDOW_MS = 60_000;
 const CIRCUIT_MIN_SAMPLES = 20; // no abrir por 1-2 casos: exige volumen
 const CIRCUIT_MAX_BLOCK_RATE = 0.15; // si >15% del tráfico se bloquea, algo huele mal
 
 type Sample = { at: number; blocked: boolean };
-let samples: Sample[] = [];
-let breakerOpenLoggedAt = 0;
 
-const prune = (now: number) => {
-  const cutoff = now - CIRCUIT_WINDOW_MS;
-  if (samples.length && samples[0]!.at < cutoff) {
-    samples = samples.filter((s) => s.at >= cutoff);
-  }
+const makeCircuitBreaker = (label: string) => {
+  let samples: Sample[] = [];
+  let breakerOpenLoggedAt = 0;
+
+  const prune = (now: number) => {
+    const cutoff = now - CIRCUIT_WINDOW_MS;
+    if (samples.length && samples[0]!.at < cutoff) {
+      samples = samples.filter((s) => s.at >= cutoff);
+    }
+  };
+
+  /** true si el breaker está abierto → NO se debe bloquear (fail-open). */
+  const breakerOpen = (): boolean => {
+    const now = Date.now();
+    prune(now);
+    if (samples.length < CIRCUIT_MIN_SAMPLES) return false;
+    const blocked = samples.reduce((n, s) => n + (s.blocked ? 1 : 0), 0);
+    const rate = blocked / samples.length;
+    const open = rate > CIRCUIT_MAX_BLOCK_RATE;
+    if (open && now - breakerOpenLoggedAt > CIRCUIT_WINDOW_MS) {
+      breakerOpenLoggedAt = now;
+      console.warn(
+        `[antibot:${label}] circuit breaker ABIERTO: ${(rate * 100).toFixed(0)}% de ${samples.length} intentos bloqueados en 60s — fail-open activo (no se bloquea). Revisar calibración/tráfico.`,
+      );
+    }
+    return open;
+  };
+
+  const recordSample = (blocked: boolean) => {
+    const now = Date.now();
+    samples.push({ at: now, blocked });
+    prune(now);
+  };
+
+  return { breakerOpen, recordSample };
 };
 
-/** true si el breaker está abierto → NO se debe bloquear (fail-open). */
-export const breakerOpen = (): boolean => {
-  const now = Date.now();
-  prune(now);
-  if (samples.length < CIRCUIT_MIN_SAMPLES) return false;
-  const blocked = samples.reduce((n, s) => n + (s.blocked ? 1 : 0), 0);
-  const rate = blocked / samples.length;
-  const open = rate > CIRCUIT_MAX_BLOCK_RATE;
-  if (open && now - breakerOpenLoggedAt > CIRCUIT_WINDOW_MS) {
-    breakerOpenLoggedAt = now;
-    console.warn(
-      `[antibot] circuit breaker ABIERTO: ${(rate * 100).toFixed(0)}% de ${samples.length} intentos bloqueados en 60s — fail-open activo (no se bloquea). Revisar calibración/tráfico.`,
-    );
-  }
-  return open;
-};
+const botBreaker = makeCircuitBreaker("bot-score");
+const cardBreaker = makeCircuitBreaker("card");
 
-const recordSample = (blocked: boolean) => {
-  const now = Date.now();
-  samples.push({ at: now, blocked });
-  prune(now);
-};
+// Se conservan exportadas (mismo nombre) para no romper callers/tests del
+// enforcement principal — apuntan al breaker de bot-score.
+export const breakerOpen = botBreaker.breakerOpen;
+const recordSample = botBreaker.recordSample;
 
 export type EnforcementDecision = {
   allowed: boolean;
@@ -235,21 +254,23 @@ export const decideCardEnforcement = (
 
 /**
  * Aplica el circuit breaker (fail-open) a un bloqueo de tarjeta y registra la
- * muestra en la ventana del breaker. Si el breaker está abierto (demasiados
- * bloqueos recientes → posible mala calibración o pico legítimo), degrada el
- * bloqueo a "would_block" para no arriesgar ventas. La decisión de bloquear NO
- * contamina el breaker con la misma severidad que el flujo principal, pero sí
- * cuenta: un bug que dispare bloqueos de tarjeta en masa abre el breaker igual.
+ * muestra en SU PROPIA ventana — aislada de la del bot-score (`cardBreaker`, no
+ * `botBreaker`), para que un pico de bloqueos de tarjeta (p.ej. familias con
+ * tarjeta compartida en un evento masivo) no pueda degradar silenciosamente el
+ * bloqueo duro de un ataque de scalping real en curso, ni viceversa. Si el
+ * breaker está abierto (demasiados bloqueos recientes → posible mala
+ * calibración o pico legítimo), degrada el bloqueo a "would_block" para no
+ * arriesgar ventas.
  */
 export const enforceCardDecision = (decision: CardEnforcementDecision): CardEnforcementDecision => {
   if (!decision.block) {
-    recordSample(false);
+    cardBreaker.recordSample(false);
     return decision;
   }
-  if (breakerOpen()) {
-    recordSample(false);
+  if (cardBreaker.breakerOpen()) {
+    cardBreaker.recordSample(false);
     return { block: false, action: "would_block", reason: decision.reason };
   }
-  recordSample(true);
+  cardBreaker.recordSample(true);
   return decision;
 };

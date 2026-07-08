@@ -75,12 +75,20 @@ const sha256hex = async (s: string): Promise<string> => {
     .join("");
 };
 
+// Cede el hilo principal cada tanto: crypto.subtle.digest ya es async, pero
+// encadenar cientos de miles de microtasks sin ceder al render congela la UI
+// perceptiblemente. Con dificultad escalada (hasta 640k iteraciones) esto evita
+// que el checkout se sienta trabado en el peor caso.
+const YIELD_EVERY = 500;
+const yieldToMainThread = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
+
 // Resuelve el PoW estilo ALTCHA: busca el número i en [0, maxnumber] tal que
 // SHA256(salt+i) === target. Coste acotado (~maxnumber/2 hashes). Invisible para
 // una compra; se multiplica por N si un bot quiere N tokens.
 export const solvePow = async (c: Challenge): Promise<number | null> => {
   for (let i = 0; i <= c.maxnumber; i++) {
     if ((await sha256hex(c.salt + i)) === c.target) return i;
+    if (i > 0 && i % YIELD_EVERY === 0) await yieldToMainThread();
   }
   return null;
 };

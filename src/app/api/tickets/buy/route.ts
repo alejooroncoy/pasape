@@ -14,11 +14,15 @@ const limiter = createRateLimiter("tickets:buy", 10);
 export const POST = async (req: NextRequest) => {
   if (!(await limiter.check(req))) return limiter.response();
   const body = await req.json().catch(() => ({}));
+  const fields = purchaseSignalFields(body);
 
   // Anti-bot por comportamiento: puntúa el intento y decide según BOT_ENFORCEMENT.
   // En shadow (default) siempre permite; solo registra. El bloqueo se enmascara
   // como 429 genérico; el tarpit ralentiza al sospechoso sin revelar la detección.
-  const assessment = await assessCheckout({ req, phase: "buy", ...purchaseSignalFields(body) });
+  // stockRemaining alimenta bulk_stock_grab (vaciar stock de golpe) — sin esto la
+  // señal nunca dispara en producción.
+  const stockRemaining = await purchaseSignalsRepo.minStockRemaining(fields.ticketTypeIds);
+  const assessment = await assessCheckout({ req, phase: "buy", ...fields, stockRemaining });
   if (!assessment.allowed) return NextResponse.json({ error: "rate_limited" }, { status: 429 });
   // Step-up challenge: el intento cae en zona sospechosa y aún no adjuntó una
   // solución válida. Respondemos 428 con un PoW (dificultad escalada por el score);

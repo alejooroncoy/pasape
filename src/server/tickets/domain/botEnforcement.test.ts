@@ -118,6 +118,26 @@ describe("enforceCardDecision — circuit breaker fail-open", () => {
     expect(blocked.block).toBe(true);
   });
 
+  it("un pico de bloqueos de TARJETA no abre (ni contamina) el breaker de bot-score", () => {
+    // Reproduce el escenario del bug: muchas familias con tarjeta compartida
+    // cruzan el umbral soft y disparan bloqueos de tarjeta en ráfaga. Eso NO
+    // debe degradar el bloqueo duro de un ataque de scalping real (decideEnforcement
+    // en modo hard) que comparte módulo pero debe tener su propio breaker.
+    process.env.BOT_ENFORCEMENT = "hard";
+    for (let i = 0; i < 25; i++) {
+      enforceCardDecision({ block: true, action: "blocked", reason: "card_ring_multidevice" });
+    }
+    // El breaker de tarjeta ya debería estar abierto (>15% bloqueado, 25 muestras).
+    const degraded = enforceCardDecision({ block: true, action: "blocked", reason: "card_many_dni" });
+    expect(degraded.block).toBe(false); // el propio breaker de tarjeta se abrió
+
+    // Pero el bloqueo DURO del scoring de bots (dominio distinto) sigue intacto:
+    // un score flagrante todavía bloquea, porque su breaker nunca vio esas 25 muestras.
+    const botBlock = decideEnforcement(HARD_THRESHOLD + 10);
+    expect(botBlock).toMatchObject({ allowed: false, action: "blocked" });
+    delete process.env.BOT_ENFORCEMENT;
+  });
+
   it("no altera una decisión de no-bloqueo", () => {
     const allowed = enforceCardDecision({ block: false, action: "logged", reason: null });
     expect(allowed.block).toBe(false);
