@@ -132,7 +132,7 @@ export default function BuyerPayErrorPage({ params, searchParams }: Props) {
             {showRecover ? (
               <button
                 type="button"
-                onClick={() => router.push("/tickets/recover" as never)}
+                onClick={() => router.push("/recover-tickets" as never)}
                 className="w-full rounded-full border border-cart-line bg-cart-bg-elev py-3 text-[14px] font-semibold text-cart-ink-2 transition hover:border-cart-line-strong hover:text-white lg:bg-cart-bg-elev-2"
               >
                 Recuperar mis entradas

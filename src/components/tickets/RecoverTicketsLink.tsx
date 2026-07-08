@@ -12,7 +12,7 @@ export function RecoverTicketsLink({
 }) {
   return (
     <Link
-      href={"/tickets/recover" as never}
+      href={"/recover-tickets" as never}
       className={
         className ||
         "text-[13px] font-medium text-cart-ink-3 underline-offset-2 transition hover:text-white hover:underline"

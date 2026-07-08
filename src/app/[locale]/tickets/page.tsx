@@ -683,7 +683,7 @@ function EmptyState() {
         Cuando compres una, aparecerá aquí lista para mostrar en la puerta.
       </p>
       <Link
-        href={"/tickets/recover" as never}
+        href={"/recover-tickets" as never}
         className="mt-4 text-[13px] font-medium text-white/70 underline-offset-2 hover:text-white hover:underline"
       >
         ¿Compraste y no ves tu QR? Recuperar
