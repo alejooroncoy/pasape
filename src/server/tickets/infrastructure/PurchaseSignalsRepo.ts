@@ -196,6 +196,44 @@ export const purchaseSignalsRepo = {
     }
   },
 
+  /**
+   * ANTI-MULTICUENTA POR TARJETA: registra la correlación tarjeta↔DNI en la fase
+   * de pago (donde MP nos da BIN+últimos4 y la orden nos da el DNI). Devuelve
+   * cuántos DNIs DISTINTOS ha usado esa tarjeta en ~24 h — un scalper rota
+   * device/IP/correo/DNI pero rara vez 6+ tarjetas reales. No bloqueante.
+   */
+  async recordCard(row: {
+    orderId: string;
+    eventId: string | null;
+    cardHash: string;
+    dniHash: string | null;
+  }): Promise<number> {
+    try {
+      await supabaseAdmin().from("purchase_signals").insert({
+        phase: "card",
+        order_id: row.orderId,
+        event_id: row.eventId,
+        card_hash: row.cardHash,
+        dni_hash: row.dniHash,
+        checkout_token_ok: false,
+        enforcement_mode: enforcementMode(),
+        action_taken: "logged",
+      });
+      const { data } = await supabaseAdmin()
+        .from("purchase_signals")
+        .select("dni_hash")
+        .eq("card_hash", row.cardHash)
+        .not("dni_hash", "is", null)
+        .gte("created_at", iso(WINDOW_DAY_MS))
+        .limit(500);
+      const rows = (data ?? []) as unknown as Array<{ dni_hash: string | null }>;
+      return new Set(rows.map((r) => r.dni_hash).filter((v): v is string => !!v)).size;
+    } catch (e) {
+      console.warn("[antibot] fallo registrando correlación de tarjeta (ignorado):", e);
+      return 0;
+    }
+  },
+
   /** Adjunta el order_id a una señal ya registrada (tras crear la orden). */
   async attachOrder(signalId: string, orderId: string): Promise<void> {
     try {

@@ -36,6 +36,7 @@ create table if not exists purchase_signals (
   buyer_id uuid,           -- id interno del profile (placeholder para guest)
   contact_hash text,       -- HMAC del email/teléfono del comprador (no PII cruda)
   dni_hash text,           -- HMAC del DNI (ancla de identidad; anti-multicuentas)
+  card_hash text,          -- HMAC de BIN+últimos4+titular (anti-multicuenta por tarjeta)
 
   -- Señales de comportamiento crudas.
   checkout_token_ok boolean,  -- true=token de sesión válido; false=ausente/inválido (automatización)
@@ -61,6 +62,7 @@ create index if not exists purchase_signals_device_idx on purchase_signals (devi
 create index if not exists purchase_signals_ip_idx on purchase_signals (ip, created_at desc);
 create index if not exists purchase_signals_contact_idx on purchase_signals (contact_hash, created_at desc);
 create index if not exists purchase_signals_dni_idx on purchase_signals (dni_hash, created_at desc);
+create index if not exists purchase_signals_card_idx on purchase_signals (card_hash, created_at desc);
 create index if not exists purchase_signals_event_idx on purchase_signals (event_id, created_at desc);
 create index if not exists purchase_signals_order_idx on purchase_signals (order_id);
 

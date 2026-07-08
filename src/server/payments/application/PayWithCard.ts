@@ -13,6 +13,14 @@ import { settleApprovedPayment } from "./settleApprovedPayment";
 import { acquireOrderPaymentLock, releaseOrderPaymentLock } from "./acquireOrderPaymentLock";
 import { parseE164 } from "@/lib/phone/countries";
 import { decryptDni } from "@/server/_shared/crypto/dni";
+import { signalHash } from "@/server/tickets/domain/signalHash";
+import { purchaseSignalsRepo } from "@/server/tickets/infrastructure/PurchaseSignalsRepo";
+import { serverEvents } from "@/lib/analytics/serverEvents";
+
+// Anti-multicuenta por tarjeta: a partir de cuántos DNIs distintos comparten una
+// misma tarjeta consideramos anillo. Tolerante a la familia (un papá paga las
+// entradas de sus hijos con su tarjeta = varios DNIs legítimos).
+const CARD_RING_THRESHOLD = 6;
 
 // Why: en prod, si MP_ACCESS_TOKEN no arranca con "APP_USR-" (o sea, parece
 // ser de sandbox tipo "TEST-...") cobraríamos con dinero real usando
@@ -208,6 +216,12 @@ export const payWithCard = async (
     error?: string;
     transaction_amount?: number;
     three_ds_info?: { external_resource_url?: string; creq?: string };
+    // MP devuelve el BIN + últimos 4 + titular de la tarjeta usada.
+    card?: {
+      first_six_digits?: string | null;
+      last_four_digits?: string | null;
+      cardholder?: { name?: string | null } | null;
+    };
   };
   type CreateBody = Parameters<Payment["create"]>[0]["body"];
 
@@ -246,6 +260,37 @@ export const payWithCard = async (
 
   const paymentId = String(data.id ?? "");
   const status = (data.status ?? "rejected") as string;
+
+  // Anti-multicuenta por tarjeta (shadow): correlaciona la tarjeta usada con el
+  // DNI del comprador. Un scalper rota device/IP/correo/DNI pero rara vez muchas
+  // tarjetas reales. Fire-and-forget: jamás debe afectar el cobro.
+  const bin = data.card?.first_six_digits ?? "";
+  const last4 = data.card?.last_four_digits ?? "";
+  if (bin && last4) {
+    const cardHash = signalHash("card", `${bin}${last4}:${data.card?.cardholder?.name ?? ""}`);
+    const dniHash = signalHash("dni", dni);
+    if (cardHash) {
+      void purchaseSignalsRepo
+        .recordCard({ orderId: order.id, eventId: order.event_id, cardHash, dniHash })
+        .then((distinctDnis) => {
+          if (distinctDnis >= CARD_RING_THRESHOLD) {
+            serverEvents.botSignal(order.buyer_id ?? order.id, {
+              phase: "card",
+              bot_score: 100,
+              reasons: ["card_many_dni"],
+              action: "logged",
+              enforcement_mode: "shadow",
+              event_id: order.event_id,
+              order_id: order.id,
+              checkout_token_ok: false,
+            });
+            console.warn(
+              `[antibot] posible multicuenta por tarjeta: ${distinctDnis} DNIs distintos con la misma tarjeta (order ${order.id}).`,
+            );
+          }
+        });
+    }
+  }
 
   const patch: Record<string, unknown> = {
     mp_payment_id: paymentId,

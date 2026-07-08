@@ -1,8 +1,8 @@
 import "server-only";
-import { createHmac } from "crypto";
 import type { NextRequest } from "next/server";
 import { ipOf } from "@/server/_shared/rateLimit";
 import { serverEvents } from "@/lib/analytics/serverEvents";
+import { signalHash } from "../domain/signalHash";
 import { verifyCheckoutToken } from "../domain/CheckoutToken";
 import { botScore, type PurchasePhase } from "../domain/botScore";
 import {
@@ -23,16 +23,6 @@ import { consumeCheckoutToken } from "../infrastructure/checkoutNonce";
 //
 // NUNCA lanza: si algo falla, permite la compra (fail-open). Anti-bots no debe
 // poder tumbar ventas.
-
-// El email/teléfono se guarda como HMAC (no PII cruda) — solo sirve para
-// correlacionar "mismo contacto/patrón". Reusa el secret con prefijo propio.
-const hmacHash = (domain: string, value: string | null | undefined): string | null => {
-  const v = value?.trim().toLowerCase();
-  if (!v) return null;
-  const secret = process.env.TICKET_LINK_SECRET;
-  if (!secret) return null;
-  return createHmac("sha256", secret).update(`${domain}:${v}`).digest("hex").slice(0, 32);
-};
 
 const deviceHashOf = (req: NextRequest): string | null => {
   const h = req.headers.get("x-device-hash")?.trim();
@@ -121,8 +111,8 @@ export const assessCheckout = async (
     const ip = ipOf(req);
     const userAgent = req.headers.get("user-agent");
     const deviceHash = deviceHashOf(req);
-    const contactHash = hmacHash("contact", input.contact);
-    const dniHash = hmacHash("dni", input.dni);
+    const contactHash = signalHash("contact", input.contact);
+    const dniHash = signalHash("dni", input.dni);
 
     // Coherencia de sesión + velocidad (medida por el server vía el token). El
     // token está atado al deviceHash: si el device actual no coincide con el que
