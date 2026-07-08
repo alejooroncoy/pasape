@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
-import { Plus, Link2, Smartphone, Copy, Check, X, MessageCircle } from "lucide-react";
+import { Plus, Link2, Smartphone, Copy, Check, X, MessageCircle, ChevronRight } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "@/i18n/navigation";
 import { QrSquare } from "@/components/design";
@@ -91,11 +91,25 @@ function TicketDetailInner({ id }: { id: string }) {
   // QR firmado (ECDSA): clave no-extraíble en el device + cert del evento.
   // Genera el QR rotativo 100% offline tras la primera carga. Si el ticket está
   // used/void, null evita carga.
-  // Tickets hermanos: otras entradas activas del mismo evento (excluye la actual).
-  // Es presentación pura: alimenta el banner "Tienes X entradas más" (no el carrusel).
+  // Host del box actual (si aplica): el propio ticket si es el host, o el
+  // referenciado si estás viendo un acompañante. listMine colapsa los
+  // acompañantes que sostiene el host (no tienen fila propia en el wallet) —
+  // así que al ver el QR de un acompañante, el host SÍ queda suelto en
+  // myTickets y hay que excluirlo aparte para no contarlo dos veces junto al
+  // carrusel del box (que ya lo muestra).
+  const isBoxTicket = !!data?.boxLabel;
+  const currentBoxHostId = isBoxTicket ? data?.boxHostTicketId ?? activeId : null;
+
+  // Tickets hermanos: otras entradas activas del mismo evento, fuera del box
+  // actual (sus QR ya se navegan por el carrusel de arriba). Es presentación
+  // pura: alimenta el banner "Tienes X entradas más" (no el carrusel).
   const myTickets = useMyTickets();
   const siblingTickets = (myTickets.data ?? []).filter(
-    (t) => t.event.id === data?.event.id && t.id !== activeId && t.status === "active",
+    (t) =>
+      t.event.id === data?.event.id &&
+      t.id !== activeId &&
+      t.id !== currentBoxHostId &&
+      t.status === "active",
   );
   // Scope del carrusel: calculado por el backend (lógica de negocio).
   // `eventTicketCount` es el conteo event-scoped (no del box) para el link "Ver todas".
@@ -162,17 +176,21 @@ function TicketDetailInner({ id }: { id: string }) {
     });
   }, [activeTicketId, qrRetryNonce, rotating.loading, rotating.payload, rotating.error]);
 
-  const isBoxTicket = !!data?.boxLabel;
   const isHost = isBoxTicket && !data?.boxHostTicketId;
   // Id del ticket host del box, estés en el host o en un acompañante que llevas:
   // así el carrusel del box sigue disponible al saltar entre sus QR.
-  const boxHostId = isHost ? activeId : isBoxTicket ? data?.boxHostTicketId ?? null : null;
+  const boxHostId = currentBoxHostId;
   // El box se crea en el backend al confirmarse el pago (un box es una compra), y
   // como red de seguridad la propia lectura lo crea si faltara. Aquí el wallet solo
   // LEE — sin POST ni reintentos desde el cliente (eso generaba boxes duplicados).
   const boxQuery = useBoxForTicket(boxHostId ?? "");
   const box = boxQuery.data ?? null;
   useRealtimeBox(box?.inviteToken);
+  // El viewer controla el box (es su host) tanto viendo su propio QR como el de
+  // cualquier acompañante que sostiene — el panel de gestión debe verse en ambos,
+  // no solo en el QR del host, para poder navegar de QR en QR desde el roster.
+  const controlsBox =
+    isHost || (isBoxTicket && (box?.members.find((m) => m.ticketId === activeId)?.heldByHost ?? false));
 
   // El nudge flotante "comparte tu box" se oculta apenas el panel entra en
   // pantalla (ya bajaste, ya lo ves → sobra). IntersectionObserver sobre #box-panel.
@@ -620,9 +638,13 @@ function TicketDetailInner({ id }: { id: string }) {
 
         {/* Panel del box (host) — invitar inline, debajo del QR (columna única
             centrada, igual en mobile y desktop). Si aún se crea, placeholder. */}
-        {isHost && data.status === "active" && (
+        {controlsBox && data.status === "active" && (
           box ? (
-            <BoxPanel box={box} />
+            <BoxPanel
+              box={box}
+              activeTicketId={activeId}
+              onNavigate={(tid) => goToTicket(tid, tid === boxHostId ? -1 : 1)}
+            />
           ) : (
             <div className="mt-4 rounded-2xl border border-cart-line bg-cart-bg-elev px-4 py-4 text-[13px] text-cart-ink-3">
               Preparando tu box…
@@ -860,8 +882,15 @@ function CountdownRing({ seconds }: { seconds: number }) {
 // Gestión inline del box para el host: invitar (link + WhatsApp), ver quién
 // entró y quitar a alguien. Resuelve las dudas del usuario con copy claro:
 // el QR ya sirve, cada uno recibe el suyo, y los asientos vacíos dicen "Libre".
-function BoxPanel({ box }: { box: Box }) {
-  const router = useRouter();
+function BoxPanel({
+  box,
+  activeTicketId,
+  onNavigate,
+}: {
+  box: Box;
+  activeTicketId: string;
+  onNavigate: (ticketId: string) => void;
+}) {
   const removeMember = useRemoveBoxMember();
   const addCompanion = useAddBoxCompanion();
   const [copied, setCopied] = useState(false);
@@ -964,16 +993,24 @@ function BoxPanel({ box }: { box: Box }) {
       <div className="mt-2">
         <div className="divide-y divide-cart-line">
           {box.members.map((m) => {
-            const you = m.profileId === host?.profileId;
+            const isHostMember = m.profileId === host?.profileId;
             // Lo "llevas tú" si su QR lo sostiene el host (acompañante sin cel):
             // el backend lo marca comparando current_holder con el dueño del box.
-            const heldByYou = !you && m.heldByHost;
+            const heldByYou = !isHostMember && m.heldByHost;
+            // Navegable = es un QR que el viewer controla (el suyo propio como
+            // host, o el de un acompañante que sostiene) — nunca el de alguien
+            // que se unió por su cuenta (ese QR no es tuyo para mostrar).
+            const navigable = !!m.ticketId && (isHostMember || heldByYou);
+            const isActive = navigable && m.ticketId === activeTicketId;
             const confirming = confirmId === m.profileId;
             const initial = (m.name?.[0] ?? "?").toUpperCase();
             return (
               <div
                 key={m.profileId}
-                className="flex w-full items-center gap-3 py-2.5 text-left"
+                className={
+                  "flex w-full items-center gap-3 rounded-xl py-2.5 text-left transition " +
+                  (isActive ? "-mx-2 bg-cart-accent/[0.08] px-2" : "")
+                }
               >
                 {confirming ? (
                   <button
@@ -988,7 +1025,7 @@ function BoxPanel({ box }: { box: Box }) {
                   <span
                     className={
                       "grid size-9 shrink-0 place-items-center rounded-[10px] text-[14px] font-bold transition " +
-                      (you
+                      (isHostMember
                         ? "bg-cart-accent text-cart-bg"
                         : heldByYou
                           ? "bg-gradient-to-br from-cart-accent to-cart-accent-2 text-white"
@@ -998,23 +1035,26 @@ function BoxPanel({ box }: { box: Box }) {
                     {initial}
                   </span>
                 )}
-                {/* Nombre: solo navega si su QR lo llevas tú (acompañante). */}
-                {heldByYou ? (
+                {/* Nombre: navega directo a ese QR si es un QR que controlas
+                    (el tuyo o el de un acompañante que llevas) y no es el que
+                    ya estás viendo. Chevron marca que se puede tocar. */}
+                {navigable && !isActive ? (
                   <button
                     type="button"
-                    onClick={() => router.push(`/tickets/${m.ticketId}` as never)}
-                    className="flex-1 truncate text-left text-[14px] font-semibold"
+                    onClick={() => onNavigate(m.ticketId as string)}
+                    className="flex flex-1 items-center gap-1 truncate text-left text-[14px] font-semibold text-white transition active:scale-[0.99]"
                   >
-                    {m.name}
+                    <span className="truncate">{confirming ? `¿Quitar a ${m.name}?` : isHostMember ? "Tú" : m.name}</span>
+                    <ChevronRight size={14} strokeWidth={2.4} className="shrink-0 text-white/35" />
                   </button>
                 ) : (
                   <span className="flex-1 truncate text-[14px] font-semibold">
-                    {confirming ? `¿Quitar a ${m.name}?` : you ? "Tú" : m.name}
+                    {confirming ? `¿Quitar a ${m.name}?` : isHostMember ? "Tú" : m.name}
                   </span>
                 )}
                 {/* Acción a la derecha: estado + X explícita para quitar. */}
-                {you ? (
-                  <span className="shrink-0 text-[11px] font-medium text-white/40">tu QR ↑</span>
+                {isActive ? (
+                  <span className="shrink-0 text-[11px] font-medium text-cart-accent">Viendo ahora</span>
                 ) : confirming ? (
                   <button
                     type="button"
