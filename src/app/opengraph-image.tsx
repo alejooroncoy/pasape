@@ -91,7 +91,7 @@ export default async function OpengraphImage() {
                 borderRadius: 999,
               }}
             >
-              pasa.pe
+              pasape.lat
             </span>
             <span style={{ fontSize: 28, color: "#8e8ea1" }}>
               Entradas digitales con QR · combos · promotores

@@ -14,7 +14,7 @@ import { WaFloat } from "./components/wa-float";
 import { WA_HREF } from "./components/wa";
 import "./landing.css";
 
-const SITE_URL = "https://pasa.pe";
+const SITE_URL = "https://pasape.lat";
 
 export const metadata: Metadata = {
   title: "Pasape | Entradas digitales para organizadores",
