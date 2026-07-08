@@ -96,4 +96,23 @@ export const serverEvents = {
     distinctId: string,
     properties: { order_id: string; tickets_claimed: number; event_slug: string },
   ) => capture(distinctId, "order_claimed", properties),
+
+  // Señal anti-bot: un evento por intento evaluado. En shadow mode alimenta los
+  // dashboards para calibrar umbrales antes de activar fricción. La métrica de
+  // salud vive aquí: cruzar bot_signal (action='would_block') con payment_completed
+  // por order_id revela cuántos pagos exitosos (≈ humanos) tocaría el enforcement.
+  botSignal: (
+    distinctId: string,
+    properties: {
+      phase: string;
+      bot_score: number;
+      reasons: string[];
+      action: string;
+      enforcement_mode: string;
+      event_id?: string | null;
+      order_id?: string | null;
+      checkout_token_ok: boolean;
+      ms_since_mount?: number | null;
+    },
+  ) => capture(distinctId, "bot_signal", properties),
 };

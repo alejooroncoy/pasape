@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/_shared/api-client";
+import { checkoutSignalHeaders, refreshCheckoutToken } from "@/lib/tickets/checkoutSignals";
 import { PERSIST_GC_TIME_MS } from "@/lib/_shared/query-client-config";
 import { useSessionReady } from "@/lib/identity/hooks/useSessionReady";
 import { currentUserKey } from "@/lib/identity/hooks/useCurrentUser";
@@ -103,15 +104,23 @@ export type BuyResult = {
 // ("Dinero: nunca reimplementar la fórmula en el frontend").
 export const useOrderQuote = () =>
   useMutation({
-    mutationFn: (input: { eventId: string; items: Array<{ ticketTypeId: string; qty: number }> }) =>
-      api.post<OrderQuote>("/api/tickets/quote", input),
+    mutationFn: async (input: { eventId: string; items: Array<{ ticketTypeId: string; qty: number }> }) =>
+      api.post<OrderQuote>("/api/tickets/quote", input, {
+        headers: await checkoutSignalHeaders(input.eventId),
+      }),
   });
 
 export const useBuyTickets = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: BuyInput) =>
-      api.post<BuyResult>("/api/tickets/buy", input),
+    mutationFn: async (input: BuyInput) => {
+      const headers = await checkoutSignalHeaders(input.eventId);
+      // El server quema el token al usarlo (single-use). Renovamos para que un
+      // reintento legítimo (p.ej. tras pago fallido) tenga token fresco y no se
+      // puntúe como replay.
+      refreshCheckoutToken(input.eventId);
+      return api.post<BuyResult>("/api/tickets/buy", input, { headers });
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: myTicketsKey }),
   });
 };
