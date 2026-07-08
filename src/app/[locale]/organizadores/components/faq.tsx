@@ -3,12 +3,16 @@ import { SectionHeader } from "./ui/section-header";
 
 export const FAQS = [
   {
-    q: "¿Necesito descargar una app?",
-    a: "No. Pasape es 100% web. El organizador, staff y asistente pueden usarlo desde el navegador, en celular o laptop.",
+    q: "¿Pasape es solo una ticketera?",
+    a: "No. Pasape vende entradas, pero está pensado como sistema operativo del evento: pagos, QR, boxes, cortesías, promotores, reportes y control de acceso en un solo lugar.",
   },
   {
     q: "¿Cuánto cuesta el piloto?",
     a: "Sin costo fijo. Cobramos 10% por entrada de pago (mínimo S/3), y baja a 5% en la parte que supere S/300. Lo paga el comprador, tú recibes el 100% de tu precio.",
+  },
+  {
+    q: "¿Necesito descargar una app?",
+    a: "No. Pasape es 100% web. El organizador, staff y asistente pueden usarlo desde el navegador, en celular o laptop.",
   },
   {
     q: "¿Los pases gratis pagan comisión?",
@@ -19,8 +23,12 @@ export const FAQS = [
     a: "Una persona compra el combo y Pasape genera QR separados para cada amigo. Cada QR se valida por separado en puerta.",
   },
   {
-    q: "¿Cómo mido a mis promotores?",
-    a: "Cada promotor tiene su link único y su código. Toda venta que entre por ahí queda atribuida a él, sin discutir. Y si no tienes promotores, vendes solo con el link de tu evento.",
+    q: "¿Me ayuda a vender más?",
+    a: "Pasape no garantiza ventas ni llena eventos por sí solo. Lo que sí hace es reducir fricción en la compra, ordenar tus canales y darte datos para decidir mejor.",
+  },
+  {
+    q: "¿Cómo mido mis canales o promotores?",
+    a: "Cada canal o promotor puede tener su link único y su código. Toda venta que entre por ahí queda atribuida, sin discutir. Y si no tienes promotores, vendes solo con el link de tu evento.",
   },
   {
     q: "¿Cómo se valida en puerta?",

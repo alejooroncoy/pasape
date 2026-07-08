@@ -5,34 +5,32 @@ const PROBLEMAS: { text: ReactNode }[] = [
   {
     text: (
       <>
-        ¿Cuántas veces respondiste <span className="hl">el mismo DM</span>{" "}
-        explicando el precio de preventa o cómo funciona el combo?
+        Tienes entradas, boxes, cortesías y promotores, pero cada cosa termina
+        en <span className="hl">un archivo o chat distinto</span>.
       </>
     ),
   },
   {
     text: (
       <>
-        Alguien compra un combo <span className="hl">3x2</span> y te pide
-        reenviar las entradas de sus amigos. Las buscas, las reenvías, rezas
-        para que no se pierdan en el chat.
+        El comprador pregunta por precio, stock o QR porque la información no
+        está clara en <span className="hl">un solo link de compra</span>.
       </>
     ),
   },
   {
     text: (
       <>
-        Tus promotores dicen que vendieron{" "}
-        <span className="hl">más de lo que vendieron</span>. Al cierre nadie
-        sabe quién trajo a quién.
+        Para saber cómo va el evento tienes que cruzar ventas, listas,
+        promotores y pagos <span className="hl">a mano</span>.
       </>
     ),
   },
   {
     text: (
       <>
-        QR repetidos, nombres en lista y gente{" "}
-        <span className="hl">sin batería</span> frenando la puerta.
+        En puerta necesitas validar rápido, ver quién ya entró y evitar que un
+        QR o una lista <span className="hl">se use dos veces</span>.
       </>
     ),
   },
@@ -49,10 +47,10 @@ export function Problema() {
           eyebrow="El problema"
           title={
             <>
-              Organizar una fiesta no debería ser <em>un caos.</em>
+              Tu evento necesita una operación clara, <em>no más parches.</em>
             </>
           }
-          lede="Entre WhatsApp, capturas, listas, combos y puerta — vender entradas en Lima se vuelve un trabajo aparte. Y cuando llega la noche, la mitad se cae por la grieta."
+          lede="Pasape no promete llenar tu evento. Te da la infraestructura para cobrar, emitir QR, ordenar invitados, medir canales y controlar accesos desde el mismo panel."
         />
         <div className="mt-10 grid grid-cols-1 gap-3.5 md:grid-cols-2 md:gap-[18px]">
           {PROBLEMAS.map((p, i) => (

@@ -2,16 +2,16 @@ import { SectionHeader } from "./ui/section-header";
 
 const STEPS = [
   {
-    t: "Crea tu evento y comparte el link",
-    d: "Nombre, fecha, entradas, combos y preventa. Obtienes un link público para WhatsApp, Instagram o bio.",
+    t: "Lanza tu evento con todo configurado",
+    d: "Entradas, precios, preventas, boxes, cortesías y links listos para compartir en Instagram, WhatsApp o bio.",
   },
   {
-    t: "Vende sin responder DMs",
-    d: "Cada entrada lleva su QR único. Los combos se reparten solos y cada promotor vende con su propio link.",
+    t: "Reduce pasos entre interés y compra",
+    d: "El cliente compra desde el celular, paga online y recibe su QR. Cada canal y promotor queda medido desde el panel.",
   },
   {
-    t: "Valida en puerta y mira todo en vivo",
-    d: "Escanea desde nuestra app. Ventas, accesos y promotores corren en tu panel en tiempo real.",
+    t: "Controla la puerta y aprende para el siguiente",
+    d: "Escanea desde nuestra app, valida accesos y revisa ventas en vivo. Al cierre queda el reporte de lo que pasó.",
   },
 ];
 
@@ -23,7 +23,7 @@ export function ComoFunciona() {
           eyebrow="Cómo funciona"
           title={
             <>
-              Así funciona <em>de principio a fin.</em>
+              De la primera venta <em>hasta la puerta.</em>
             </>
           }
         />
