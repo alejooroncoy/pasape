@@ -1,12 +1,95 @@
 import { HydrationBoundary, dehydrate } from "@tanstack/react-query";
+import type { Metadata } from "next";
 import { makeQueryClient } from "@/lib/_shared/query-client-config";
 import { serverApiGet } from "@/lib/_shared/server-api";
 import type { MeResponse } from "@/lib/identity/hooks/useCurrentUser";
 import { IdentityController } from "@/server/identity/controllers/rest/IdentityController";
 import type { Event, Promo, TicketType } from "@/server/events/domain/Event";
+import { JsonLd } from "@/components/seo/JsonLd";
+import { eventJsonLd } from "@/lib/seo/jsonld";
+import {
+  DEFAULT_DESCRIPTION,
+  DEFAULT_LOCALE,
+  SITE_NAME,
+  SITE_URL,
+  SUPPORTED_LOCALES,
+  absoluteUrl,
+  localePath,
+} from "@/lib/seo/site";
 import { EventDetailClient } from "./EventDetailClient";
 
 type EventDetailResponse = { event: Event; ticketTypes: TicketType[]; promos: Promo[] };
+
+type Params = Promise<{ slug: string; locale: string }>;
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Params;
+}): Promise<Metadata> {
+  const { slug, locale } = await params;
+  const resolvedLocale = SUPPORTED_LOCALES.includes(locale as (typeof SUPPORTED_LOCALES)[number])
+    ? locale
+    : DEFAULT_LOCALE;
+
+  try {
+    const { event } = await serverApiGet<EventDetailResponse>(`/api/events/${slug}`);
+    const title = `${event.title} | ${SITE_NAME}`;
+    const description =
+      event.description?.trim() ||
+      `Compra entradas para ${event.title} en ${SITE_NAME}. Tickets digitales con QR al instante.`;
+    const canonicalPath = localePath(resolvedLocale, `/events/${event.slug}`);
+    const imagePath = localePath(resolvedLocale, `/events/${event.slug}/opengraph-image`);
+    const url = absoluteUrl(canonicalPath);
+
+    return {
+      title,
+      description,
+      alternates: {
+        canonical: canonicalPath,
+        languages: {
+          "es-PE": localePath("es", `/events/${event.slug}`),
+          en: localePath("en", `/events/${event.slug}`),
+        },
+      },
+      openGraph: {
+        type: "website",
+        url,
+        siteName: SITE_NAME,
+        title,
+        description,
+        locale: resolvedLocale === "en" ? "en_US" : "es_PE",
+        images: [
+          {
+            url: absoluteUrl(imagePath),
+            width: 1200,
+            height: 630,
+            alt: event.title,
+          },
+        ],
+      },
+      twitter: {
+        card: "summary_large_image",
+        title,
+        description,
+        images: [absoluteUrl(imagePath)],
+      },
+    };
+  } catch {
+    const canonicalPath = localePath(resolvedLocale, `/events/${slug}`);
+    return {
+      title: `Evento | ${SITE_NAME}`,
+      description: DEFAULT_DESCRIPTION,
+      alternates: { canonical: canonicalPath },
+      openGraph: {
+        type: "website",
+        url: new URL(canonicalPath, SITE_URL).toString(),
+        title: `Evento | ${SITE_NAME}`,
+        description: DEFAULT_DESCRIPTION,
+      },
+    };
+  }
+}
 
 // Comprar SIEMPRE requiere internet (pago), así que no hay ganancia en cargar
 // esta página offline-first — a diferencia de home/wallet, acá conviene
@@ -24,16 +107,16 @@ type EventDetailResponse = { event: Event; ticketTypes: TicketType[]; promos: Pr
 export default async function EventDetailPage({
   params,
 }: {
-  params: Promise<{ slug: string }>;
+  params: Params;
 }) {
-  const { slug } = await params;
+  const { slug, locale } = await params;
+  const resolvedLocale = SUPPORTED_LOCALES.includes(locale as (typeof SUPPORTED_LOCALES)[number])
+    ? locale
+    : DEFAULT_LOCALE;
 
   const qc = makeQueryClient();
-  await Promise.all([
-    qc.prefetchQuery({
-      queryKey: ["events", "detail", slug],
-      queryFn: () => serverApiGet<EventDetailResponse>(`/api/events/${slug}`),
-    }),
+  const [detail] = await Promise.all([
+    serverApiGet<EventDetailResponse>(`/api/events/${slug}`),
     qc.prefetchQuery({
       // Array literal propio (no el `currentUserKey` importado del hook): al
       // referenciar el mismo array module-level, el serializador RSC lo
@@ -49,9 +132,14 @@ export default async function EventDetailPage({
     }),
   ]);
 
+  qc.setQueryData(["events", "detail", slug], detail);
+
   return (
-    <HydrationBoundary state={dehydrate(qc)}>
-      <EventDetailClient slug={slug} />
-    </HydrationBoundary>
+    <>
+      <JsonLd data={eventJsonLd(detail.event, detail.ticketTypes, resolvedLocale)} />
+      <HydrationBoundary state={dehydrate(qc)}>
+        <EventDetailClient slug={slug} />
+      </HydrationBoundary>
+    </>
   );
 }
