@@ -9,7 +9,7 @@ import { Redis } from "@upstash/redis";
 // (dev local sin Redis). El in-memory NO sirve en serverless multi-instancia —
 // por eso producción DEBE tener las env de Upstash.
 
-const ipOf = (req: NextRequest): string =>
+export const ipOf = (req: NextRequest): string =>
   // `x-real-ip` lo fija la plataforma (Vercel) con la IP real de conexión y el
   // cliente no puede sobrescribirlo — preferirlo cierra el spoof trivial en que
   // un atacante manda `X-Forwarded-For: <ip-aleatoria>` para obtener un bucket

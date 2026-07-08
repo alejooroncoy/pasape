@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { handleMpWebhook } from "@/server/payments/application/HandleWebhook";
 import { getOrderBuyerId } from "@/lib/posthog-server";
 import { serverEvents } from "@/lib/analytics/serverEvents";
+import { purchaseSignalsRepo } from "@/server/tickets/infrastructure/PurchaseSignalsRepo";
 
 // Why: MP reintenta si no recibe 2xx en pocos segundos. Mantenemos la
 // respuesta liviana: si algo falla downstream (Supabase, fetch del payment),
@@ -25,8 +26,9 @@ export const POST = async (req: NextRequest) => {
     return NextResponse.json({ error: result.error }, { status });
   }
   if (result.value?.orderId && (result.value.mapped === "paid" || result.value.mapped === "failed")) {
+    const paid = result.value.mapped === "paid";
     const distinctId = (await getOrderBuyerId(result.value.orderId)) ?? result.value.orderId;
-    if (result.value.mapped === "paid") {
+    if (paid) {
       serverEvents.paymentCompleted(distinctId, { order_id: result.value.orderId });
     } else {
       serverEvents.paymentFailed(distinctId, {
@@ -35,6 +37,9 @@ export const POST = async (req: NextRequest) => {
         mp_status: result.value.status,
       });
     }
+    // Anti-bot (carding): registra el desenlace para que los rechazos cuenten
+    // contra el device/ip real del comprador. No bloqueante.
+    void purchaseSignalsRepo.recordPaymentOutcome(result.value.orderId, paid);
   }
   return NextResponse.json({ ok: true });
 };

@@ -12,6 +12,7 @@ import { useRouter } from "@/i18n/navigation";
 import { UserHeader } from "@/app/[locale]/_home/UserHeader";
 import { useEvent } from "@/lib/events/hooks/useEvents";
 import { useBuyTickets, useOrderQuote } from "@/lib/tickets/hooks/useTickets";
+import { primeCheckoutToken } from "@/lib/tickets/checkoutSignals";
 import type { OrderQuote } from "@/server/tickets/domain/Ticket";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { useDniLookup } from "@/lib/identity/hooks/useDniLookup";
@@ -230,6 +231,14 @@ function BuyFlowInner({ params }: Props) {
       setPromoCode(next);
     }
   }, [slug, search]);
+
+  // Anti-bot: pide el token de coherencia de sesión AL MONTAR (no al comprar),
+  // para que el server mida el tiempo REAL de permanencia en el checkout como
+  // señal de velocidad. Idempotente por eventId. Ver checkoutSignals.ts.
+  useEffect(() => {
+    const eventId = data?.event?.id;
+    if (eventId) primeCheckoutToken(eventId);
+  }, [data?.event?.id]);
 
    
   const clearCheckoutOrder = (oid: string | null) => {

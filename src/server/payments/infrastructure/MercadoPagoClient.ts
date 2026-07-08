@@ -52,6 +52,45 @@ export const refundMpPayment = async (paymentId: string | number) => {
   return new PaymentRefund(mpClient()).create({ payment_id: paymentId });
 };
 
+// Lee BIN (primeros 6) + últimos 4 + titular de un card token SIN consumirlo:
+// un GET no gasta el token (lo consume el POST /v1/payments). Nos permite
+// correlacionar la tarjeta con el DNI ANTES de cobrar y bloquear una
+// multicuenta sin mover dinero. Best-effort y fail-open: si MP no responde, no
+// devuelve BIN, o el token ya expiró, devolvemos null y el pago sigue su curso
+// normal (el enforcement de tarjeta cae a solo-observación; jamás tumba una
+// venta por un problema del anti-bot).
+export type CardTokenPeek = { bin: string; last4: string; cardholderName: string };
+
+export const peekCardToken = async (token: string): Promise<CardTokenPeek | null> => {
+  const accessToken = process.env.MP_ACCESS_TOKEN;
+  if (!accessToken || !token) return null;
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    let res: Response;
+    try {
+      res = await fetch(
+        `https://api.mercadopago.com/v1/card_tokens/${encodeURIComponent(token)}`,
+        { headers: { Authorization: `Bearer ${accessToken}` }, signal: controller.signal },
+      );
+    } finally {
+      clearTimeout(timer);
+    }
+    if (!res.ok) return null;
+    const data = (await res.json()) as {
+      first_six_digits?: string | null;
+      last_four_digits?: string | null;
+      cardholder?: { name?: string | null } | null;
+    };
+    const bin = data.first_six_digits ?? "";
+    const last4 = data.last_four_digits ?? "";
+    if (!bin || !last4) return null;
+    return { bin, last4, cardholderName: data.cardholder?.name ?? "" };
+  } catch {
+    return null;
+  }
+};
+
 export const mpWebhookSecret = (): string => {
   const s = process.env.MP_WEBHOOK_SECRET || "";
   if (!s) throw new Error("missing_mp_webhook_secret");

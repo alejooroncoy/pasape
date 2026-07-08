@@ -5,7 +5,7 @@ import { MercadoPagoConfig, Payment } from "mercadopago";
 import * as Sentry from "@sentry/nextjs";
 import { err, ok, type Result } from "@/server/_shared/result";
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
-import { appBaseUrl, isPublicBaseUrl, buildOrderItems, mpPeruIdentification } from "../infrastructure/MercadoPagoClient";
+import { appBaseUrl, isPublicBaseUrl, buildOrderItems, mpPeruIdentification, peekCardToken } from "../infrastructure/MercadoPagoClient";
 import { reportMpError } from "../infrastructure/reportMpError";
 import { assertOrderPaymentAccess } from "./assertOrderPaymentAccess";
 import { validateMpPaymentAmount } from "./validateMpPaymentAmount";
@@ -13,6 +13,15 @@ import { settleApprovedPayment } from "./settleApprovedPayment";
 import { acquireOrderPaymentLock, releaseOrderPaymentLock } from "./acquireOrderPaymentLock";
 import { parseE164 } from "@/lib/phone/countries";
 import { decryptDni } from "@/server/_shared/crypto/dni";
+import { signalHash } from "@/server/tickets/domain/signalHash";
+import { purchaseSignalsRepo } from "@/server/tickets/infrastructure/PurchaseSignalsRepo";
+import {
+  CARD_RING_DNI_THRESHOLD,
+  decideCardEnforcement,
+  enforceCardDecision,
+  enforcementMode,
+} from "@/server/tickets/domain/botEnforcement";
+import { serverEvents } from "@/lib/analytics/serverEvents";
 
 // Why: en prod, si MP_ACCESS_TOKEN no arranca con "APP_USR-" (o sea, parece
 // ser de sandbox tipo "TEST-...") cobraríamos con dinero real usando
@@ -101,7 +110,7 @@ export const payWithCard = async (
   let email = order.guest_email ?? null;
   let fullName = order.guest_name ?? null;
   let phone = order.guest_phone ?? null;
-  const dni = decryptDni(order.guest_dni_enc) ?? order.guest_dni ?? null;
+  let dni = decryptDni(order.guest_dni_enc) ?? order.guest_dni ?? null;
   if (order.buyer_id) {
     const { data: profile } = await db
       .from("profiles")
@@ -111,6 +120,19 @@ export const payWithCard = async (
     email = email ?? profile?.email ?? null;
     fullName = fullName ?? profile?.full_name ?? null;
     phone = phone ?? profile?.phone ?? null;
+    // El DNI de un comprador LOGUEADO no vive en orders.guest_* (esas columnas
+    // solo se pueblan en checkout de invitado) sino en kyc_documents. Sin esto,
+    // el anti-multicuenta por tarjeta (card_many_dni) queda ciego para cualquier
+    // atacante que use cuentas logueadas en vez de guest checkout.
+    if (!dni) {
+      const { data: kyc } = await db
+        .from("kyc_documents")
+        .select("doc_number")
+        .eq("profile_id", order.buyer_id)
+        .eq("doc_kind", "dni")
+        .maybeSingle<{ doc_number: string }>();
+      dni = kyc?.doc_number ?? null;
+    }
   }
   const phoneParsed = phone ? parseE164(phone) : null;
   if (!email) return err("payer_email_missing");
@@ -191,6 +213,76 @@ export const payWithCard = async (
     await releaseOrderPaymentLock(order.id);
   };
 
+  // ── Enforcement anti-multicuenta por tarjeta (PRE-COBRO) ────────────────────
+  // Correlacionamos la tarjeta con el DNI ANTES de cobrar. El BIN+últimos4 se
+  // leen del card token con un GET (que NO lo consume: lo gasta el POST /payments
+  // de más abajo), así podemos rechazar un anillo sin mover un centavo. Todo el
+  // bloque es best-effort y fail-open: si el peek no trae BIN, o la correlación
+  // falla, `cardAssessed` queda false y el pago sigue su curso — el enforcement
+  // degrada a solo-observación post-cobro (nunca cobramos-y-revertimos a un
+  // comprador posiblemente legítimo). Ver decideCardEnforcement para cómo una
+  // familia (varios DNIs, 1 device) queda protegida.
+  //
+  // Gate por modo: en shadow este bloque NUNCA bloquea (decideCardEnforcement lo
+  // garantiza), así que el peek —una llamada de red real a MP, hasta 5s— no
+  // aporta nada salvo latencia. Se salta por completo; la telemetría de shadow
+  // la sigue cubriendo el recordCard post-cobro (fire-and-forget, más abajo).
+  let cardAssessed = false;
+  const cardEnforcementMode = enforcementMode();
+  const peek = cardEnforcementMode !== "shadow" ? await peekCardToken(input.token) : null;
+  if (peek) {
+    const cardHash = signalHash("card", `${peek.bin}${peek.last4}:${peek.cardholderName}`);
+    const dniHash = signalHash("dni", dni);
+    if (cardHash) {
+      const assessment = await purchaseSignalsRepo.assessCard({
+        orderId: order.id,
+        eventId: order.event_id,
+        cardHash,
+        dniHash,
+      });
+      if (assessment) {
+        cardAssessed = true;
+        const mode = cardEnforcementMode;
+        const decision = enforceCardDecision(
+          decideCardEnforcement(
+            { distinctDnis: assessment.distinctDnis, distinctDevices: assessment.distinctDevices },
+            mode,
+          ),
+        );
+        if (decision.reason) {
+          serverEvents.botSignal(order.buyer_id ?? order.id, {
+            phase: "card",
+            bot_score: 100,
+            reasons: [decision.reason],
+            action: decision.action,
+            enforcement_mode: mode,
+            event_id: order.event_id,
+            order_id: order.id,
+            checkout_token_ok: false,
+          });
+        }
+        if (decision.block) {
+          if (assessment.signalId) {
+            await purchaseSignalsRepo.markCardBlocked(
+              assessment.signalId,
+              decision.reason ?? "card_multiaccount",
+            );
+          }
+          console.warn(
+            `[antibot] multicuenta por tarjeta BLOQUEADA antes de cobrar: ${assessment.distinctDnis} DNIs / ${assessment.distinctDevices} devices con la misma tarjeta (order ${order.id}, modo ${mode}).`,
+          );
+          await revertLock();
+          return err("card_multiaccount");
+        }
+        if (decision.reason === "card_many_dni") {
+          console.warn(
+            `[antibot] posible multicuenta por tarjeta: ${assessment.distinctDnis} DNIs distintos con la misma tarjeta (order ${order.id}, modo ${mode}, no bloqueado).`,
+          );
+        }
+      }
+    }
+  }
+
   // Idempotency key determinística: hash de orderId + token de tarjeta. Un
   // reintento del MISMO request (mismo token) reusa la key y MP lo dedupea de
   // verdad; un intento nuevo (nuevo token, p.ej. tras un fallo) genera una key
@@ -208,6 +300,12 @@ export const payWithCard = async (
     error?: string;
     transaction_amount?: number;
     three_ds_info?: { external_resource_url?: string; creq?: string };
+    // MP devuelve el BIN + últimos 4 + titular de la tarjeta usada.
+    card?: {
+      first_six_digits?: string | null;
+      last_four_digits?: string | null;
+      cardholder?: { name?: string | null } | null;
+    };
   };
   type CreateBody = Parameters<Payment["create"]>[0]["body"];
 
@@ -246,6 +344,42 @@ export const payWithCard = async (
 
   const paymentId = String(data.id ?? "");
   const status = (data.status ?? "rejected") as string;
+
+  // Anti-multicuenta por tarjeta (FALLBACK post-cobro, solo-observación): si el
+  // peek pre-cobro no pudo leer el BIN del token (MP no lo devolvió, token
+  // expirado…), aún registramos la correlación con el BIN+últimos4 que MP sí
+  // trae en la respuesta del pago. Aquí NO bloqueamos: el pago ya se ejecutó, y
+  // cobrar-y-revertir a un comprador posiblemente legítimo es peor que observar.
+  // El enforcement real es el pre-cobro de arriba. Fire-and-forget.
+  if (!cardAssessed) {
+    const bin = data.card?.first_six_digits ?? "";
+    const last4 = data.card?.last_four_digits ?? "";
+    if (bin && last4) {
+      const cardHash = signalHash("card", `${bin}${last4}:${data.card?.cardholder?.name ?? ""}`);
+      const dniHash = signalHash("dni", dni);
+      if (cardHash) {
+        void purchaseSignalsRepo
+          .recordCard({ orderId: order.id, eventId: order.event_id, cardHash, dniHash })
+          .then((distinctDnis) => {
+            if (distinctDnis >= CARD_RING_DNI_THRESHOLD) {
+              serverEvents.botSignal(order.buyer_id ?? order.id, {
+                phase: "card",
+                bot_score: 100,
+                reasons: ["card_many_dni"],
+                action: "would_block",
+                enforcement_mode: enforcementMode(),
+                event_id: order.event_id,
+                order_id: order.id,
+                checkout_token_ok: false,
+              });
+              console.warn(
+                `[antibot] posible multicuenta por tarjeta (post-cobro, sin peek): ${distinctDnis} DNIs distintos con la misma tarjeta (order ${order.id}).`,
+              );
+            }
+          });
+      }
+    }
+  }
 
   const patch: Record<string, unknown> = {
     mp_payment_id: paymentId,
