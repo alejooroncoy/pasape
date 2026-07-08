@@ -81,8 +81,9 @@ export default function PromoApplyByLinkPage({ params }: Props) {
     <PromoInviteShell>
       <PromoHeroBanner />
 
-      <div className="relative z-[1] flex flex-1 flex-col">
-        <div className="flex-1 px-[22px] pb-4 pt-[230px]">
+      <div className="relative z-1 flex min-h-full flex-col">
+        {/* pb extra en lg: espacio para scrollear el dropdown del PhoneField (~288px) sin recorte. */}
+        <div className="flex-1 px-[22px] pb-4 pt-[230px] lg:pb-56">
           <div style={{ fontSize: 11, letterSpacing: "0.14em", color: C.purple, fontWeight: 700, marginBottom: 10 }}>
             ★ TE INVITAN A SER PROMOTOR
           </div>

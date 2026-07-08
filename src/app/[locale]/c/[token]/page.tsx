@@ -141,7 +141,7 @@ export default function PromoterClaimPage({ params }: { params: Params }) {
   return (
     <PromoInviteShell>
       <PromoGlow tone="purple" />
-      <div className="relative z-[1] flex flex-1 flex-col justify-center px-[22px] py-8">
+      <div className="relative z-1 flex min-h-full flex-col justify-center px-[22px] py-8">
         <div>
           {phase === "loading" && (
             <ClaimCard>
