@@ -4,22 +4,27 @@
 //
 // === Template requerido (registrar/aprobar en el dashboard del proveedor) ===
 //
-//   Nombre:   promoter_approved_v1   (override WA_PROMOTER_APPROVED_TEMPLATE_NAME)
+//   Nombre:   promoter_approved_v2   (override WA_PROMOTER_APPROVED_TEMPLATE_NAME)
 //   Idioma:   es                     (override WA_PROMOTER_APPROVED_TEMPLATE_LANG)
 //   Tipo:     UTILITY  ·  parameter_format: NAMED
 //
 //   BODY:
-//     "¡Felicidades {{promoter_name}}! 🎉\n\nLa marca {{org_name}} te aprobó como
-//      promotor de {{event_title}}. Ya puedes vender y ganar tu comisión.\n\nAbre
-//      tu panel para copiar tu link de venta y seguir tus ventas."
+//     "Hola {{promoter_name}}, tu solicitud como promotor de {{event_title}} fue
+//      aprobada por {{org_name}}. Ingresa a tu panel para ver los detalles."
 //   FOOTER: "Pasape"
 //   BOTÓN URL (estático): "Abrir mi panel" → https://pasape.lat/es/promo
+//
+// v1 quedó descartado: Meta lo reclasificó de UTILITY a MARKETING por el tono
+// promocional ("Ya puedes vender y ganar tu comisión... copiar tu link de
+// venta"). v2 usa tono puramente informacional (aviso de estado, sin incentivo
+// de venta) — mismo patrón que los templates UTILITY ya aprobados en la cuenta
+// (event_cancelled_v7, ticket_transferred_in_v7).
 //
 // Notas de FORMATO Meta (heredadas de promoter_invite_v15, para no repetir
 // rechazos INVALID_FORMAT):
 //   · parameter_format NAMED con variables nombradas (no POSITIONAL).
 //   · sin variables adosadas (siempre texto entre ellas) y ninguna al final del
-//     body — por eso el body cierra con "...seguir tus ventas.".
+//     body — por eso el body cierra con "...ver los detalles.".
 //   · botón URL ESTÁTICO a pasape.lat (no lleva variable) → no se pasa
 //     urlButtonComponent, solo el body.
 
@@ -40,7 +45,7 @@ export class PromoterApprovedWhatsAppSender {
     const templateName =
       process.env.WA_PROMOTER_APPROVED_TEMPLATE_NAME ??
       process.env.KAPSO_WA_PROMOTER_APPROVED_TEMPLATE_NAME ??
-      "promoter_approved_v1";
+      "promoter_approved_v2";
     const templateLang =
       process.env.WA_PROMOTER_APPROVED_TEMPLATE_LANG ??
       process.env.KAPSO_WA_PROMOTER_APPROVED_TEMPLATE_LANG ??
