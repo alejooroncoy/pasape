@@ -130,3 +130,97 @@ export const decideEnforcement = (
   }
   return { allowed: true, action: "logged", delayMs: 0 };
 };
+
+// ── Anti-multicuenta por tarjeta (misma tarjeta, muchos DNIs) ────────────────
+//
+// El falso positivo a evitar es UNA FAMILIA. Un papá que paga las entradas de
+// sus hijos usa 1 tarjeta con varios DNIs, desde 1 (a lo sumo 2) dispositivos,
+// en una sola sesión. Un anillo de reventa, en cambio, rota device/IP/correo/DNI
+// pero comparte pocas tarjetas reales: la MISMA tarjeta aparece desde MUCHOS
+// dispositivos distintos. Ese contraste (pocos devices = familia, muchos = anillo)
+// es lo que usamos para no castigar jamás a la familia.
+//
+// Por eso el bloqueo por tarjeta es escalonado y CORROBORADO:
+//   - hard  → bloquea por conteo de DNIs solo, con un umbral ALTO (6). Aun así,
+//             una familia de 6+ hijos con DNI propio pagados desde el mismo
+//             celular es rarísima; `hard` es opt-in y agresivo por diseño.
+//   - soft  → NUNCA bloquea por conteo solo. Exige un umbral AÚN más alto (8) Y
+//             una segunda señal de anillo: la misma tarjeta vista desde >= 3
+//             dispositivos distintos. Una familia (1 device) jamás cruza esa
+//             segunda condición → imposible de bloquear en soft.
+//   - shadow→ nunca bloquea; solo marca 'would_block' para calibrar.
+//
+// La decisión es PURA (mode + señales → decisión). El circuit breaker (fail-open)
+// y el registro de la muestra los aplica el caller vía `enforceCardDecision`,
+// igual que el flujo principal.
+
+export const CARD_RING_DNI_THRESHOLD = 6; // hard: bloqueo por conteo de DNIs
+export const CARD_RING_SOFT_DNI_THRESHOLD = 8; // soft: conteo mínimo (más alto)
+export const CARD_RING_SOFT_DEVICE_MIN = 3; // soft: corroboración de multidispositivo
+
+export type CardRiskSignals = {
+  /** DNIs DISTINTOS que usaron esta tarjeta en ~24h (incluye el intento actual). */
+  distinctDnis: number;
+  /** Dispositivos DISTINTOS que usaron esta tarjeta en ~24h (incluye el actual). */
+  distinctDevices: number;
+};
+
+export type CardEnforcementDecision = {
+  /** true → rechazar el pago ANTES de cobrar. */
+  block: boolean;
+  action: SignalAction;
+  reason: string | null;
+};
+
+/**
+ * Decide si una tarjeta con muchos DNIs debe bloquearse. PURA: no lee env ni
+ * estado — el `mode` y las señales entran como argumentos, así que es trivial de
+ * testear (incluida la familia legítima que NUNCA se bloquea). El caller aplica
+ * el circuit breaker (fail-open) con `enforceCardDecision`.
+ */
+export const decideCardEnforcement = (
+  signals: CardRiskSignals,
+  mode: EnforcementMode,
+): CardEnforcementDecision => {
+  const { distinctDnis, distinctDevices } = signals;
+  const overHardCount = distinctDnis >= CARD_RING_DNI_THRESHOLD;
+  const marked: CardEnforcementDecision = {
+    block: false,
+    action: overHardCount ? "would_block" : "logged",
+    reason: overHardCount ? "card_many_dni" : null,
+  };
+
+  if (mode === "shadow") return marked;
+
+  if (mode === "hard") {
+    if (overHardCount) return { block: true, action: "blocked", reason: "card_many_dni" };
+    return marked;
+  }
+
+  // soft: umbral más alto + corroboración de anillo (multidispositivo, no familia).
+  const ringLikely =
+    distinctDnis >= CARD_RING_SOFT_DNI_THRESHOLD && distinctDevices >= CARD_RING_SOFT_DEVICE_MIN;
+  if (ringLikely) return { block: true, action: "blocked", reason: "card_ring_multidevice" };
+  return marked;
+};
+
+/**
+ * Aplica el circuit breaker (fail-open) a un bloqueo de tarjeta y registra la
+ * muestra en la ventana del breaker. Si el breaker está abierto (demasiados
+ * bloqueos recientes → posible mala calibración o pico legítimo), degrada el
+ * bloqueo a "would_block" para no arriesgar ventas. La decisión de bloquear NO
+ * contamina el breaker con la misma severidad que el flujo principal, pero sí
+ * cuenta: un bug que dispare bloqueos de tarjeta en masa abre el breaker igual.
+ */
+export const enforceCardDecision = (decision: CardEnforcementDecision): CardEnforcementDecision => {
+  if (!decision.block) {
+    recordSample(false);
+    return decision;
+  }
+  if (breakerOpen()) {
+    recordSample(false);
+    return { block: false, action: "would_block", reason: decision.reason };
+  }
+  recordSample(true);
+  return decision;
+};

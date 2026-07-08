@@ -234,6 +234,85 @@ export const purchaseSignalsRepo = {
     }
   },
 
+  /**
+   * ANTI-MULTICUENTA POR TARJETA (PRE-COBRO): registra la correlación tarjeta↔DNI
+   * ANTES de llamar a MP y devuelve las señales para decidir el bloqueo sin mover
+   * dinero. Enriquece la fila con el device_hash/ip del intento de compra
+   * original (buy) para poder corroborar "misma tarjeta desde muchos devices"
+   * (anillo) vs "muchos DNIs desde 1 device" (familia). Fail-open: si algo falla
+   * devuelve null y el caller deja pasar el pago (nunca bloquea por un error).
+   */
+  async assessCard(row: {
+    orderId: string;
+    eventId: string | null;
+    cardHash: string;
+    dniHash: string | null;
+  }): Promise<{ distinctDnis: number; distinctDevices: number; signalId: string | null } | null> {
+    try {
+      // device/ip reales del comprador (la fase 'buy' los guardó por order_id).
+      const { data: origin } = await supabaseAdmin()
+        .from("purchase_signals")
+        .select("device_hash, ip")
+        .eq("order_id", row.orderId)
+        .eq("phase", "buy")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle<{ device_hash: string | null; ip: string | null }>();
+
+      const { data: inserted } = await supabaseAdmin()
+        .from("purchase_signals")
+        .insert({
+          phase: "card",
+          order_id: row.orderId,
+          event_id: row.eventId,
+          card_hash: row.cardHash,
+          dni_hash: row.dniHash,
+          device_hash: origin?.device_hash ?? null,
+          ip: origin?.ip ?? null,
+          checkout_token_ok: false,
+          enforcement_mode: enforcementMode(),
+          action_taken: "logged",
+        })
+        .select("id")
+        .single<{ id: string }>();
+
+      // Traemos dni_hash + device_hash de todas las filas de esta tarjeta en 24h
+      // (incluye la recién insertada) y contamos distintos en memoria.
+      const { data } = await supabaseAdmin()
+        .from("purchase_signals")
+        .select("dni_hash, device_hash")
+        .eq("card_hash", row.cardHash)
+        .gte("created_at", iso(WINDOW_DAY_MS))
+        .limit(500);
+      const rows = (data ?? []) as unknown as Array<{
+        dni_hash: string | null;
+        device_hash: string | null;
+      }>;
+      const distinctDnis = new Set(
+        rows.map((r) => r.dni_hash).filter((v): v is string => !!v),
+      ).size;
+      const distinctDevices = new Set(
+        rows.map((r) => r.device_hash).filter((v): v is string => !!v),
+      ).size;
+      return { distinctDnis, distinctDevices, signalId: inserted?.id ?? null };
+    } catch (e) {
+      console.warn("[antibot] fallo evaluando tarjeta pre-cobro (fail-open, se deja pasar):", e);
+      return null;
+    }
+  },
+
+  /** Marca una señal de tarjeta como bloqueada (tras decidir el enforcement). */
+  async markCardBlocked(signalId: string, reason: string): Promise<void> {
+    try {
+      await supabaseAdmin()
+        .from("purchase_signals")
+        .update({ action_taken: "blocked", reasons: [reason] })
+        .eq("id", signalId);
+    } catch (e) {
+      console.warn("[antibot] fallo marcando tarjeta bloqueada (ignorado):", e);
+    }
+  },
+
   /** Adjunta el order_id a una señal ya registrada (tras crear la orden). */
   async attachOrder(signalId: string, orderId: string): Promise<void> {
     try {
