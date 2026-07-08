@@ -78,12 +78,10 @@ export function Price({ waHref }: { waHref: string }) {
             </div>
 
             <p className="m-0 text-[15px] leading-normal text-ink-2 md:text-base">
-              Cargo al <b className="font-semibold text-ink">comprador</b>, no al local. Tú
-              defines tu precio y recibes siempre el{" "}
-              <b className="font-semibold text-ink">100% de ese monto</b>. El cargo de Pasape
-              se suma aparte para el comprador: mínimo{" "}
-              <b className="font-semibold text-ink">S/3</b>, y en entradas de más de S/300 baja a{" "}
-              <b className="font-semibold text-ink">5%</b> sobre el excedente.
+              Paga quien compra, no tú: recibes el{" "}
+              <b className="font-semibold text-ink">100% de tu precio</b>. Pasape cobra aparte al
+              comprador, desde <b className="font-semibold text-ink">S/3</b>, y baja a{" "}
+              <b className="font-semibold text-ink">5%</b> en entradas de más de S/300.
             </p>
             <p className="m-0 text-[13px] leading-normal text-ink-3">
               En los pilotos 2026 el 10% aplica solo a{" "}

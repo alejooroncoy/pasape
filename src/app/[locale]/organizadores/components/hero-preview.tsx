@@ -6,12 +6,12 @@ export function HeroPreview() {
   return (
     <div className="hero-preview reveal in">
       <div className="hero-preview-in-anim">
-        <div className="md:hidden">
+        <div className="lg:hidden">
           <BrowserFrame url="pasape.lat" device="phone">
             <PanelDemo layout="stacked" />
           </BrowserFrame>
         </div>
-        <div className="hidden md:block">
+        <div className="hidden lg:block">
           <BrowserFrame url="pasape.lat/org/events/evento-demo">
             <PanelDemo layout="hero" />
           </BrowserFrame>

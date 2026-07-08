@@ -68,7 +68,6 @@ html {
   color-scheme: dark;
 }
 body {
-  overflow-x: hidden;
   position: relative;
   font-size: 17px;
   line-height: 1.55;
@@ -134,7 +133,7 @@ input, select, textarea { font: inherit; color: inherit; }
   position: absolute;
   top: 38%;
   left: 50%;
-  width: 1600px;
+  width: min(100%, 1600px);
   height: 1400px;
   transform: translate(-50%, -50%);
   background: radial-gradient(ellipse closest-side, rgba(184, 124, 255, 0.18) 0%, rgba(168, 85, 247, 0.07) 45%, rgba(124, 58, 237, 0.03) 70%, transparent 90%);
@@ -152,20 +151,6 @@ input, select, textarea { font: inherit; color: inherit; }
   mix-blend-mode: screen;
   clip-path: inset(0);
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='hn'><feTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.78  0 0 0 0 0.55  0 0 0 0 1  0 0 0 0.9 0'/></filter><rect width='240' height='240' filter='url(%23hn)'/></svg>");
-}
-@utility hero-noise-spill {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -360px;
-  height: 380px;
-  pointer-events: none;
-  z-index: 1;
-  opacity: 0.08;
-  mix-blend-mode: overlay;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='hn'><feTurbulence type='fractalNoise' baseFrequency='1.4' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.72  0 0 0 0 0.48  0 0 0 0 1  0 0 0 0.9 0'/></filter><rect width='220' height='220' filter='url(%23hn)'/></svg>");
-  -webkit-mask-image: linear-gradient(to bottom, black 0%, black 18%, transparent 100%);
-          mask-image: linear-gradient(to bottom, black 0%, black 18%, transparent 100%);
 }
 
 @utility hero-bleed {
@@ -203,7 +188,7 @@ input, select, textarea { font: inherit; color: inherit; }
   max-width: min(290px, 82vw);
   margin-inline: auto;
 }
-@media (min-width: 768px) {
+@media (min-width: 1024px) {
   .hero-preview {
     max-width: 500px;
   }

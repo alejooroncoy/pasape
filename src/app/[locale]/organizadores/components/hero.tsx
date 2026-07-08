@@ -7,13 +7,12 @@ export function Hero({ waHref }: { waHref: string }) {
   return (
     <section
       id="top"
-      className="hero relative isolate overflow-visible pt-28 pb-16 md:flex md:min-h-dvh md:items-center md:py-24"
+      className="hero relative w-full max-w-dvw isolate overflow-hidden pt-28 pb-16 lg:flex lg:min-h-dvh lg:items-center lg:py-24"
     >
       <div className="hero-bleed" aria-hidden="true" />
-      <div className="hero-noise-spill" aria-hidden="true" />
 
-      <div className="relative z-10 mx-auto grid w-full max-w-[1160px] grid-cols-1 items-center gap-14 px-[22px] md:grid-cols-2 md:gap-12 md:px-8 lg:gap-16">
-        <div className="flex flex-col items-center text-center md:items-start md:text-left">
+      <div className="relative z-10 mx-auto grid w-full max-w-[1160px] grid-cols-1 items-center gap-14 px-[22px] lg:grid-cols-2 lg:gap-16 lg:px-8">
+        <div className="flex flex-col items-center text-center lg:items-start lg:text-left">
           <Eyebrow withDot>Pilotos abiertos para eventos seleccionados</Eyebrow>
           <h1 className="reveal in m-0 mt-7 max-w-[12ch] text-balance font-display text-[clamp(44px,6.8vw,80px)] font-semibold leading-[0.98] tracking-[-0.035em] text-ink [&_em]:font-serif [&_em]:font-normal [&_em]:italic [&_em]:tracking-[-0.02em] [&_em]:text-accent [&_em]:[text-shadow:0_0_32px_var(--color-accent-glow)]">
             Vende entradas.
@@ -25,7 +24,7 @@ export function Hero({ waHref }: { waHref: string }) {
             promotores en tiempo real desde el panel.
           </p>
 
-          <div className="reveal in mt-9 flex w-full max-w-[320px] flex-col items-stretch gap-3 sm:max-w-none sm:flex-row sm:flex-wrap sm:items-center sm:justify-center md:justify-start">
+          <div className="reveal in mt-9 flex w-full max-w-[320px] flex-col items-stretch gap-3 sm:max-w-none sm:flex-row sm:flex-wrap sm:items-center sm:justify-center lg:justify-start">
             <Button
               href={waHref}
               target="_blank"
@@ -45,7 +44,7 @@ export function Hero({ waHref }: { waHref: string }) {
           </p>
         </div>
 
-        <div className="reveal in flex justify-center md:justify-end">
+        <div className="reveal in flex justify-center lg:justify-end">
           <HeroPreview />
         </div>
       </div>
