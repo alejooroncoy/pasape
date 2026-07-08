@@ -310,7 +310,7 @@ export default function OrderPage(props: Props) {
             <p className="mx-auto mt-2 max-w-[34ch] text-[13.5px] leading-snug text-cart-ink-3">{errorMsg}</p>
             {isAlreadyClaimed ? (
               <Link
-                href="/tickets/recover"
+                href="/recover-tickets"
                 className="mt-6 inline-block text-[13.5px] font-semibold text-cart-accent underline"
               >
                 ¿No fuiste tú? Recupera tus entradas
