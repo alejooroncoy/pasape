@@ -319,15 +319,8 @@ export const PromoStatusLayout = ({
   <>
     <PromoGlow tone={glow} />
     <div
-      style={{
-        position: "relative",
-        padding: 22,
-        flex: 1,
-        display: "flex",
-        flexDirection: "column",
-        zIndex: 1,
-        minHeight: 0,
-      }}
+      className="relative z-1 flex min-h-full flex-1 flex-col"
+      style={{ padding: 22, minHeight: 0 }}
     >
       <div style={{ display: "flex", justifyContent: "flex-end", flexShrink: 0 }}>
         <CloseBtn href={closeHref} />
@@ -340,6 +333,8 @@ export const PromoStatusLayout = ({
           justifyContent: "center",
           alignItems: "center",
           padding: "12px 0 24px",
+          minHeight: 0,
+          overflowY: "auto",
         }}
       >
         {children}

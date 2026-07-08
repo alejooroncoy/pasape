@@ -18,7 +18,10 @@ export const PromoInviteShell = ({ children }: Props) => (
       className="relative mx-auto flex min-h-dvh w-full max-w-[480px] flex-col overflow-hidden bg-bg lg:min-h-[640px] lg:max-h-[min(88dvh,760px)] lg:rounded-[28px] lg:border lg:border-white/10 lg:shadow-[0_40px_80px_-40px_rgba(124,58,237,0.35)]"
       style={{ fontFamily: FONT_BODY, color: C.text }}
     >
-      {children}
+      {/* min-h-0 + overflow-y-auto: en desktop la tarjeta tiene max-height; sin esto el contenido queda recortado. */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
+        {children}
+      </div>
     </div>
   </div>
 );
