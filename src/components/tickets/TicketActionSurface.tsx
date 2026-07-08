@@ -36,7 +36,6 @@ export function TicketActionSurface({
             <Popover.Portal forceMount>
               <div className="fixed inset-0 z-[70]" onClick={onClose} aria-hidden />
               <Popover.Content
-                asChild
                 side={side}
                 align={align}
                 sideOffset={8}
