@@ -1,7 +1,6 @@
 import { Button } from "./ui/button";
 import { Eyebrow } from "./ui/eyebrow";
 import { Icon } from "./icons";
-import { HeroPreview } from "./hero-preview";
 
 export function Hero({ waHref }: { waHref: string }) {
   return (
@@ -11,8 +10,8 @@ export function Hero({ waHref }: { waHref: string }) {
     >
       <div className="hero-bleed" aria-hidden="true" />
 
-      <div className="relative z-10 mx-auto grid w-full max-w-[1160px] grid-cols-1 items-center gap-14 px-[22px] lg:grid-cols-2 lg:gap-16 lg:px-8">
-        <div className="flex flex-col items-center text-center lg:items-start lg:text-left">
+      <div className="relative z-10 mx-auto w-full max-w-[1160px] px-[22px] lg:px-8">
+        <div className="mx-auto flex max-w-[640px] flex-col items-center text-center">
           <Eyebrow withDot>Pilotos abiertos para eventos seleccionados</Eyebrow>
           <h1 className="reveal in m-0 mt-7 max-w-[12ch] text-balance font-display text-[clamp(44px,6.8vw,80px)] font-semibold leading-[0.98] tracking-[-0.035em] text-ink [&_em]:font-serif [&_em]:font-normal [&_em]:italic [&_em]:tracking-[-0.02em] [&_em]:text-accent [&_em]:[text-shadow:0_0_32px_var(--color-accent-glow)]">
             Vende entradas.
@@ -24,7 +23,7 @@ export function Hero({ waHref }: { waHref: string }) {
             promotores en tiempo real desde el panel.
           </p>
 
-          <div className="reveal in mt-9 flex w-full max-w-[320px] flex-col items-stretch gap-3 sm:max-w-none sm:flex-row sm:flex-wrap sm:items-center sm:justify-center lg:justify-start">
+          <div className="reveal in mt-9 flex w-full max-w-[320px] flex-col items-stretch gap-3 sm:max-w-none sm:flex-row sm:flex-wrap sm:items-center sm:justify-center">
             <Button
               href={waHref}
               target="_blank"
@@ -42,10 +41,6 @@ export function Hero({ waHref }: { waHref: string }) {
             Sin app <span className="not-italic text-accent opacity-80 mx-2">·</span> Sin listas{" "}
             <span className="not-italic text-accent opacity-80 mx-2">·</span> 100% web
           </p>
-        </div>
-
-        <div className="reveal in flex justify-center lg:justify-end">
-          <HeroPreview />
         </div>
       </div>
     </section>

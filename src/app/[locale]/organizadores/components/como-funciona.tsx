@@ -11,7 +11,7 @@ const STEPS = [
   },
   {
     t: "Valida en puerta y mira todo en vivo",
-    d: "Escanea desde la web. Ventas, accesos y promotores corren en tu panel en tiempo real.",
+    d: "Escanea desde nuestra app. Ventas, accesos y promotores corren en tu panel en tiempo real.",
   },
 ];
 
