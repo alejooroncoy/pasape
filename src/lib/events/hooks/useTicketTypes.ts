@@ -42,6 +42,7 @@ export type UpdateTicketTypePayload = {
 const invalidate = (qc: ReturnType<typeof useQueryClient>, slug: string) => {
   qc.invalidateQueries({ queryKey: ["events", "detail", slug] });
   qc.invalidateQueries({ queryKey: ["events", "mine"] });
+  qc.invalidateQueries({ queryKey: ["events", "stats", slug] });
 };
 
 export const useCreateTicketType = (slug: string) => {

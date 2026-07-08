@@ -12,6 +12,7 @@ export const useUpdateEvent = (slug: string) => {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["events", "detail", slug] });
       qc.invalidateQueries({ queryKey: ["events", "mine"] });
+      qc.invalidateQueries({ queryKey: ["events", "stats", slug] });
     },
   });
 };
