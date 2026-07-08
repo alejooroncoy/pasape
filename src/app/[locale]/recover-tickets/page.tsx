@@ -26,7 +26,7 @@ const REASSURANCES = [
 // verdad.
 const isEmailValid = (s: string): boolean => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s.trim());
 
-type StartResp = { identifierKind: "phone" | "email"; devCode?: string };
+type StartResp = { devCode?: string };
 type VerifyResp = {
   profileId: string | null;
   tickets: Array<{ id: string; event: { title: string } }>;

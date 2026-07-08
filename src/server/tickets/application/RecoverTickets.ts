@@ -1,61 +1,62 @@
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
+import { getRedis } from "@/server/_shared/redis";
 import { err, ok, type Result } from "@/server/_shared/result";
 import type { WalletTicket } from "../domain/Ticket";
 import { supabaseTicketRepository } from "../infrastructure/repositories/SupabaseTicketRepository";
 import { signOrderLink } from "@/server/notifications/domain/OrderLinkToken";
+import { sendRecoveryOtpEmail } from "@/server/notifications/infrastructure/ResendRecoveryOtpSender";
+
+// Recuperación de entradas: solo por correo. No hay proveedor de SMS/WhatsApp
+// OTP contratado (Twilio y la plantilla "Authentication" de WhatsApp piden
+// verificación de negocio o cuestan por envío — ver research), así que pedir
+// "celular" acá prometería una vía que el backend no puede entregar de
+// verdad. El código vive en Redis (Upstash) con TTL — nada que limpiar a mano.
 
 const OTP_TTL_MIN = 10;
+const OTP_TTL_SECONDS = OTP_TTL_MIN * 60;
 const MAX_ATTEMPTS = 5;
 const MAX_STARTS_PER_HOUR = 5;
+const STARTS_WINDOW_SECONDS = 60 * 60;
 
-const isEmail = (s: string): boolean => /@/.test(s);
-const normalizePhone = (s: string): string => s.replace(/[^\d+]/g, "");
+const normalizeEmail = (s: string): string => s.trim().toLowerCase();
+const isValidEmail = (s: string): boolean => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s);
+const generateCode = (): string => String(Math.floor(100000 + Math.random() * 900000));
+
+type OtpRecord = { code: string; attempts: number };
+
+const otpKey = (email: string): string => `recover:otp:${email}`;
+const startsKey = (email: string): string => `recover:starts:${email}`;
 
 export type StartRecoveryInput = { identifier: string };
-export type StartRecoveryResult = {
-  identifierKind: "phone" | "email";
-  devCode?: string;
-};
-
-const generateCode = (): string =>
-  String(Math.floor(100000 + Math.random() * 900000));
+export type StartRecoveryResult = { devCode?: string };
 
 export const startTicketRecovery = async (
   input: StartRecoveryInput,
 ): Promise<Result<StartRecoveryResult>> => {
-  const raw = input.identifier.trim();
-  if (!raw) return err("identifier_required");
-  const kind: "phone" | "email" = isEmail(raw) ? "email" : "phone";
-  const identifier = kind === "email" ? raw.toLowerCase() : normalizePhone(raw);
-  if (kind === "phone" && identifier.length < 7) return err("invalid_phone");
-  if (kind === "email" && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(identifier))
-    return err("invalid_email");
+  const email = normalizeEmail(input.identifier);
+  if (!email) return err("identifier_required");
+  if (!isValidEmail(email)) return err("invalid_email");
 
-  const db = supabaseAdmin();
+  const redis = getRedis();
+  if (!redis) return err("recovery_not_configured");
 
-  const since = new Date(Date.now() - 60 * 60_000).toISOString();
-  const { count: recentStarts } = await db
-    .from("ticket_recovery_otp")
-    .select("id", { count: "exact", head: true })
-    .eq("identifier", identifier)
-    .gte("created_at", since);
-  if ((recentStarts ?? 0) >= MAX_STARTS_PER_HOUR) return err("too_many_attempts");
+  const starts = await redis.incr(startsKey(email));
+  if (starts === 1) await redis.expire(startsKey(email), STARTS_WINDOW_SECONDS);
+  if (starts > MAX_STARTS_PER_HOUR) return err("too_many_attempts");
 
   const code = generateCode();
-  const expiresAt = new Date(Date.now() + OTP_TTL_MIN * 60_000).toISOString();
+  const record: OtpRecord = { code, attempts: 0 };
+  await redis.set(otpKey(email), record, { ex: OTP_TTL_SECONDS });
 
-  const { error: insertErr } = await db.from("ticket_recovery_otp").insert({
-    identifier,
-    identifier_kind: kind,
-    profile_id: null,
-    code,
-    expires_at: expiresAt,
-  });
-  if (insertErr) return err(insertErr.message);
+  const { sent } = await sendRecoveryOtpEmail({ to: email, code, ttlMinutes: OTP_TTL_MIN });
+  // En prod el correo es el único canal — si no salió, que el usuario lo sepa
+  // en vez de esperar un código que nunca va a llegar. En dev seguimos aunque
+  // falle Resend (sin envs locales) porque `devCode` cubre el flujo.
+  if (!sent && process.env.NODE_ENV === "production") return err("email_send_failed");
 
-  console.log(`[ticket-recovery] OTP for ${identifier}: ${code}`);
+  console.log(`[ticket-recovery] OTP for ${email}: ${code}`);
 
-  const out: StartRecoveryResult = { identifierKind: kind };
+  const out: StartRecoveryResult = {};
   if (process.env.NODE_ENV !== "production") out.devCode = code;
   return ok(out);
 };
@@ -71,67 +72,38 @@ export type VerifyRecoveryResult = {
 export const verifyTicketRecovery = async (
   input: VerifyRecoveryInput,
 ): Promise<Result<VerifyRecoveryResult>> => {
-  const raw = input.identifier.trim();
+  const email = normalizeEmail(input.identifier);
   const code = input.code.trim();
-  if (!raw || code.length !== 6) return err("invalid_input");
-  const kind: "phone" | "email" = isEmail(raw) ? "email" : "phone";
-  const identifier = kind === "email" ? raw.toLowerCase() : normalizePhone(raw);
+  if (!email || code.length !== 6) return err("invalid_input");
 
-  const db = supabaseAdmin();
+  const redis = getRedis();
+  if (!redis) return err("recovery_not_configured");
 
-  const since = new Date(Date.now() - 60 * 60_000).toISOString();
-  const { data: attemptRows } = await db
-    .from("ticket_recovery_otp")
-    .select("attempts")
-    .eq("identifier", identifier)
-    .gte("created_at", since);
-  const totalAttempts = (attemptRows ?? []).reduce(
-    (sum, r) => sum + ((r as { attempts: number }).attempts ?? 0),
-    0,
-  );
-  if (totalAttempts >= MAX_ATTEMPTS * MAX_STARTS_PER_HOUR) return err("too_many_attempts");
+  const record = await redis.get<OtpRecord>(otpKey(email));
+  // Sin registro = nunca se pidió, o ya venció el TTL (10 min) — mismo error,
+  // el usuario resuelve igual: pide un código nuevo.
+  if (!record) return err("code_not_found");
+  if (record.attempts >= MAX_ATTEMPTS) return err("too_many_attempts");
 
-  const { data: row } = await db
-    .from("ticket_recovery_otp")
-    .select("id, code, attempts, consumed_at, expires_at")
-    .eq("identifier", identifier)
-    .is("consumed_at", null)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle<{
-      id: string;
-      code: string;
-      attempts: number;
-      consumed_at: string | null;
-      expires_at: string;
-    }>();
-
-  if (!row) return err("code_not_found");
-  if (new Date(row.expires_at).getTime() < Date.now()) return err("code_expired");
-  if (row.attempts >= MAX_ATTEMPTS) return err("too_many_attempts");
-
-  if (row.code !== code) {
-    await db
-      .from("ticket_recovery_otp")
-      .update({ attempts: row.attempts + 1 })
-      .eq("id", row.id);
+  if (record.code !== code) {
+    const ttl = await redis.ttl(otpKey(email));
+    await redis.set(otpKey(email), { ...record, attempts: record.attempts + 1 }, {
+      ex: ttl > 0 ? ttl : OTP_TTL_SECONDS,
+    });
     return err("invalid_code");
   }
 
-  await db
-    .from("ticket_recovery_otp")
-    .update({ consumed_at: new Date().toISOString() })
-    .eq("id", row.id);
+  await redis.del(otpKey(email));
+
+  const db = supabaseAdmin();
 
   // Fuente de verdad: contacto guest en orders (no profiles.email sintético).
-  let orderQuery = db.from("orders").select("id, buyer_id").eq("status", "paid");
-  if (kind === "email") {
-    orderQuery = orderQuery.ilike("guest_email", identifier);
-  } else {
-    const digits = identifier.replace(/\D/g, "");
-    orderQuery = orderQuery.or(`guest_phone.ilike.%${digits}%,guest_phone.eq.${identifier}`);
-  }
-  const { data: orders } = await orderQuery.returns<Array<{ id: string; buyer_id: string | null }>>();
+  const { data: orders } = await db
+    .from("orders")
+    .select("id, buyer_id")
+    .eq("status", "paid")
+    .ilike("guest_email", email)
+    .returns<Array<{ id: string; buyer_id: string | null }>>();
   if (!orders?.length) return ok({ profileId: null, tickets: [], orderLinks: [] });
 
   const orderIds = orders.map((o) => o.id);
