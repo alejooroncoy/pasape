@@ -32,6 +32,7 @@ export const KNOWN_CHECKOUT_CODES = new Set([
   "order_create_failed",
   "tickets_create_failed",
   "order_already_processing",
+  "card_multiaccount",
 ]);
 
 export const PAY_ERROR_REASONS: Record<string, PayErrorReason> = {
@@ -116,6 +117,14 @@ export const PAY_ERROR_REASONS: Record<string, PayErrorReason> = {
     title: "Pago en proceso",
     body: "Ya hay un intento de pago en curso para esta orden. Esperá unos minutos antes de reintentar.",
     note: "Si cerraste la app a mitad del pago, el bloqueo se libera solo en unos minutos.",
+  },
+  // Anti-multicuenta por tarjeta. Copy deliberadamente suave y no acusatorio: si
+  // fuera un falso positivo (una familia numerosa), no queremos avergonzar a
+  // nadie. No se cobró nada — el bloqueo ocurre ANTES del cargo.
+  card_multiaccount: {
+    title: "No pudimos procesar esta tarjeta",
+    body: "Esta tarjeta se usó para muchas compras distintas en poco tiempo. No se te cobró nada. Prueba con otra tarjeta o escríbenos si crees que es un error.",
+    note: null,
   },
 };
 
