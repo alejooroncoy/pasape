@@ -20,9 +20,12 @@ export const POST = async (req: NextRequest) => {
   // como 429 genérico; el tarpit ralentiza al sospechoso sin revelar la detección.
   const assessment = await assessCheckout({ req, phase: "buy", ...purchaseSignalFields(body) });
   if (!assessment.allowed) return NextResponse.json({ error: "rate_limited" }, { status: 429 });
-  // Tarpit: al device sospechoso se le inyecta latencia creciente antes de
-  // procesar. Mata la economía de la compra masiva sin bloquear al humano.
-  if (assessment.delayMs > 0) await new Promise((r) => setTimeout(r, assessment.delayMs));
+  // Tarpit: NO se duerme aquí. Dormir dentro de la función mantendría vivo su
+  // slot de concurrencia (Vercel Fluid Compute) y bajo un flood agotaría la
+  // capacidad del handler de compra. En su lugar, assessCheckout ARMA el peaje
+  // (device/IP → delay) en Redis y el proxy lo aplica ANTES de llegar aquí, en la
+  // capa barata. Ver tarpitStore.ts y src/proxy.ts. `assessment.delayMs` se
+  // conserva solo para telemetría/correlación.
 
   const result = await TicketsController.buy(body);
   if (result.ok) {

@@ -12,6 +12,7 @@ import {
 } from "../domain/botEnforcement";
 import { purchaseSignalsRepo } from "../infrastructure/PurchaseSignalsRepo";
 import { consumeCheckoutToken } from "../infrastructure/checkoutNonce";
+import { armTarpit } from "../infrastructure/tarpitStore";
 
 // Orquestador anti-bot del checkout (capa de aplicación). Lo llaman los route
 // handlers en cada fase (quote/buy/card/webhook). Hace, en orden:
@@ -176,6 +177,14 @@ export const assessCheckout = async (
     });
 
     const decision = decideEnforcement(score, agg.deviceAttemptsShort);
+
+    // Tarpit DIFERIDO: en vez de dormir aquí (ocuparía la función serverless de
+    // compra), armamos el peaje para device/IP en Redis. El proxy lo lee y aplica
+    // la latencia en el siguiente request de esa entidad, ANTES de la función.
+    // Fire-and-forget: no añade latencia al handler. Ver tarpitStore.ts.
+    if (decision.delayMs > 0) {
+      void armTarpit(deviceHash, ip === "unknown" ? null : ip, decision.delayMs);
+    }
 
     // Registrar (no bloqueante) + telemetría, en paralelo.
     const [signalId] = await Promise.all([
