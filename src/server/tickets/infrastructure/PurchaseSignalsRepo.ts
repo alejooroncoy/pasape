@@ -17,6 +17,7 @@ export type SignalAggregates = {
   deviceContactsDay: number;
   deviceDnisDay: number;
   dniDevicesDay: number;
+  deviceIpsHour: number;
   deviceQuotesShort: number;
   ipAttemptsShort: number;
   contactAttemptsShort: number;
@@ -29,6 +30,7 @@ const EMPTY_AGG: SignalAggregates = {
   deviceContactsDay: 0,
   deviceDnisDay: 0,
   dniDevicesDay: 0,
+  deviceIpsHour: 0,
   deviceQuotesShort: 0,
   ipAttemptsShort: 0,
   contactAttemptsShort: 0,
@@ -60,14 +62,15 @@ const countBy = async (
 const distinctInWindow = async (
   matchCol: "device_hash" | "dni_hash",
   matchVal: string,
-  distinctCol: "contact_hash" | "dni_hash" | "device_hash",
+  distinctCol: "contact_hash" | "dni_hash" | "device_hash" | "ip",
+  windowMs: number = WINDOW_DAY_MS,
 ): Promise<number> => {
   const { data } = await supabaseAdmin()
     .from("purchase_signals")
     .select(distinctCol)
     .eq(matchCol, matchVal)
     .not(distinctCol, "is", null)
-    .gte("created_at", iso(WINDOW_DAY_MS))
+    .gte("created_at", iso(windowMs))
     .limit(500);
   if (!data) return 0;
   // El select de columna dinámica confunde el tipado de PostgREST (union); las
@@ -96,6 +99,7 @@ export const purchaseSignalsRepo = {
         deviceContactsDay,
         deviceDnisDay,
         dniDevicesDay,
+        deviceIpsHour,
         deviceQuotesShort,
         ipAttemptsShort,
         contactAttemptsShort,
@@ -109,6 +113,9 @@ export const purchaseSignalsRepo = {
         // Anti-multicuenta: desde cuántos devices distintos apareció este DNI
         // (un DNI reusado a través de una granja de devices rotados).
         dniHash ? distinctInWindow("dni_hash", dniHash, "device_hash") : 0,
+        // Anti-multiproxy: cuántas IPs distintas usó este device en ~1 h. Un
+        // device que salta de muchas IPs está rotando proxies (un humano usa 1-3).
+        deviceHash ? distinctInWindow("device_hash", deviceHash, "ip", WINDOW_HOUR_MS) : 0,
         // Quotes previos del device (ventana media): si es 0 al comprar, el
         // flujo humano (cotizar antes de pagar) se saltó.
         deviceHash ? countBy("device_hash", deviceHash, WINDOW_FLOW_MS, "quote") : 0,
@@ -122,6 +129,7 @@ export const purchaseSignalsRepo = {
         deviceContactsDay,
         deviceDnisDay,
         dniDevicesDay,
+        deviceIpsHour,
         deviceQuotesShort,
         ipAttemptsShort,
         contactAttemptsShort,

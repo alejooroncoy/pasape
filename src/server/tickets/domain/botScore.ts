@@ -62,6 +62,7 @@ export type BotSignalInput = {
   deviceContactsDay: number;      // contactos DISTINTOS desde el mismo device en ~24 h
   deviceDnisDay: number;          // DNIs DISTINTOS desde el mismo device en ~24 h (multicuenta)
   dniDevicesDay: number;          // devices DISTINTOS que usaron el mismo DNI en ~24 h
+  deviceIpsHour: number;          // IPs DISTINTAS desde el mismo device en ~1 h (multiproxy)
   ipAttemptsShort: number;        // intentos desde la misma IP en ~60 s
   contactAttemptsShort: number;   // intentos desde el mismo contacto en ~60 s
   ipFailedPaymentsHour: number;   // pagos rechazados desde la IP en ~1 h (carding)
@@ -166,6 +167,15 @@ export const botScore = (s: BotSignalInput): BotAssessment => {
   // través de una granja de devices rotados (el caso "rota también el device").
   if (s.dniDevicesDay >= 4) {
     add(Math.min(40, 20 + (s.dniDevicesDay - 4) * 6), "dni_many_devices");
+  }
+
+  // ── MULTIPROXY: un device saltando de muchas IPs = rotación de proxies ────
+  // La rotación de proxies (que evade el rate-limit por IP) se vuelve EN CONTRA
+  // del atacante: un device desde 6+ IPs en una hora es proxy rotativo. Umbral
+  // alto y peso moderado porque el CGNAT móvil puede cambiar la IP visible de un
+  // humano real varias veces — necesita corroboración, no bloquea solo.
+  if (s.deviceIpsHour >= 6) {
+    add(Math.min(35, 18 + (s.deviceIpsHour - 6) * 4), "device_many_ips");
   }
 
   // Ráfaga de intentos desde el mismo device en segundos: scripting.

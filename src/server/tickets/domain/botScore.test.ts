@@ -22,6 +22,7 @@ const human = (over: Partial<BotSignalInput> = {}): BotSignalInput => ({
   deviceContactsDay: 1,
   deviceDnisDay: 1,
   dniDevicesDay: 1,
+  deviceIpsHour: 1,
   ipAttemptsShort: 1,
   contactAttemptsShort: 1,
   ipFailedPaymentsHour: 0,
@@ -55,6 +56,11 @@ describe("botScore — humanos NO se bloquean (protección contra falsos positiv
   it("muchos humanos tras el mismo WiFi/NAT (IP compartida): no se bloquea", () => {
     // Universidad/oficina: ráfaga por IP pero cada quien su device y contacto.
     const { score } = botScore(human({ ipAttemptsShort: 10 }));
+    expect(score).toBeLessThan(SOFT_THRESHOLD);
+  });
+
+  it("móvil real con CGNAT que cambia de IP un par de veces: no se bloquea", () => {
+    const { score } = botScore(human({ deviceIpsHour: 4 }));
     expect(score).toBeLessThan(SOFT_THRESHOLD);
   });
 
@@ -189,6 +195,15 @@ describe("botScore — multicuenta (N DNIs desde un device / DNI farmeado)", () 
   it("multicuenta rápida (8 DNIs + velocidad) → HARD", () => {
     const { score } = botScore(human({ deviceDnisDay: 8, msSinceMount: 600 }));
     expect(score).toBeGreaterThanOrEqual(HARD_THRESHOLD);
+  });
+
+  it("multiproxy: un device desde 12 IPs marca, y la rotación se vuelve en contra", () => {
+    const solo = botScore(human({ deviceIpsHour: 12 }));
+    expect(solo.reasons).toContain("device_many_ips");
+    // El multiproxy sumado al multicuenta (mismo device, muchos DNIs) → HARD:
+    // rotar proxies no esconde la correlación por device, la agrava.
+    const combo = botScore(human({ deviceIpsHour: 12, deviceDnisDay: 8 }));
+    expect(combo.score).toBeGreaterThanOrEqual(HARD_THRESHOLD);
   });
 });
 
