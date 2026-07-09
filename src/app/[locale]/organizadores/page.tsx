@@ -21,7 +21,7 @@ type Props = {
   params: Promise<{ locale: string }>;
 };
 
-const ORG_TITLE = "Pasape | Sistema operativo para eventos";
+const ORG_TITLE = "Sistema operativo para eventos";
 const ORG_DESCRIPTION =
   "Vende entradas, gestiona pagos, QR, boxes, cortesías, reportes y control de acceso desde un solo lugar.";
 

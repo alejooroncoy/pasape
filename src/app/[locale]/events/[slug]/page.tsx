@@ -45,7 +45,7 @@ export async function generateMetadata({
     const url = absoluteUrl(canonicalPath);
 
     return {
-      title: { absolute: fullTitle },
+      title: event.title,
       description,
       alternates: {
         canonical: canonicalPath,
@@ -81,13 +81,13 @@ export async function generateMetadata({
     const canonicalPath = localePath(resolvedLocale, `/events/${slug}`);
     const fallbackTitle = brandedTitle("Evento");
     return {
-      title: { absolute: fallbackTitle },
+      title: "Evento",
       description: DEFAULT_DESCRIPTION,
       alternates: { canonical: canonicalPath },
       openGraph: {
         type: "website",
         url: new URL(canonicalPath, SITE_URL).toString(),
-        title: `Evento | ${SITE_NAME}`,
+        title: fallbackTitle,
         description: DEFAULT_DESCRIPTION,
       },
     };

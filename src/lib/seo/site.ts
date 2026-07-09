@@ -9,12 +9,17 @@ export const DEFAULT_DESCRIPTION =
 /** Título corto de home; el layout y buildPageMetadata agregan `| Pasape`. */
 export const HOME_TITLE = "Compra entradas para eventos en Perú";
 
-export function brandedTitle(title: string): string {
+export function pageTitle(input: string): string {
   const suffix = ` | ${SITE_NAME}`;
-  let base = title.trim();
+  let base = input.trim();
   if (base.endsWith(suffix)) base = base.slice(0, -suffix.length);
   if (base.startsWith(`${SITE_NAME} | `)) base = base.slice(`${SITE_NAME} | `.length);
-  return `${base} | ${SITE_NAME}`;
+  return base;
+}
+
+/** Formato canónico: `<página> | Pasape` */
+export function brandedTitle(input: string): string {
+  return `${pageTitle(input)} | ${SITE_NAME}`;
 }
 
 export const DEFAULT_OG_IMAGE = "/opengraph-image";

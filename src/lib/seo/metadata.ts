@@ -6,6 +6,7 @@ import {
   absoluteUrl,
   brandedTitle,
   localePath,
+  pageTitle,
 } from "./site";
 
 type PageMetaInput = {
@@ -26,10 +27,11 @@ export function buildPageMetadata({
   const canonicalPath = localePath(locale, path);
   const url = absoluteUrl(canonicalPath);
   const ogImage = absoluteUrl(DEFAULT_OG_IMAGE);
-  const fullTitle = brandedTitle(title);
+  const shortTitle = pageTitle(title);
+  const fullTitle = brandedTitle(shortTitle);
 
   return {
-    title: { absolute: fullTitle },
+    title: shortTitle,
     description,
     alternates: {
       canonical: canonicalPath,
