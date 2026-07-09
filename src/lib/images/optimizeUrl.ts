@@ -10,9 +10,11 @@ type Preset = {
 const PRESETS = {
   /** Card del hero móvil (~256 px lógicos × 2 retina). */
   "hero-lcp": { width: 512, quality: 75, format: "webp" },
-  /** Fondo difuminado desktop — a 200px con blur(32px) conserva el gradiente
-   *  de luces del flyer (a 64px se veía plano/monocromático). */
-  "hero-blur": { width: 200, quality: 60, format: "webp" },
+  /** Fondo difuminado desktop — no es el LCP (lazy + fetchPriority=low, solo
+   *  desktop), así que hay margen para más resolución sin pegarle a
+   *  Performance. 200px se veía plano; 500px conserva el detalle/riqueza de
+   *  color del blur original sin bajar el archivo completo. */
+  "hero-blur": { width: 500, quality: 70, format: "webp" },
   /** Cards horizontales del listado (~240 px). */
   card: { width: 480, quality: 75, format: "webp" },
   /** Medir aspect ratio sin bajar el original. */
