@@ -16,9 +16,11 @@ export function PageViewTracker() {
     posthog.capture("page_view", { page_path: path });
     trackPageView(path);
 
-    // TikTok va en lazyOnload — un reintento evita perder el pageview inicial.
-    const deferred = window.setTimeout(() => trackDeferredPageView(), 3000);
-    return () => window.clearTimeout(deferred);
+    // TikTok va en lazyOnload — reintento solo si aún no cargó.
+    if (!trackDeferredPageView()) {
+      const deferred = window.setTimeout(() => trackDeferredPageView(), 3000);
+      return () => window.clearTimeout(deferred);
+    }
   }, [pathname, searchParams]);
 
   return null;

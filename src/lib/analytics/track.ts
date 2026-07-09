@@ -35,9 +35,11 @@ export function trackPageView(path: string) {
   }
 }
 
-/** Pixels diferidos (lazyOnload). Reintentar una vez cuando el script ya cargó. */
-export function trackDeferredPageView() {
+/** Pixels diferidos (lazyOnload). Retorna true si TikTok ya estaba listo. */
+export function trackDeferredPageView(): boolean {
   if (typeof window !== "undefined" && window.ttq?.page) {
     window.ttq.page();
+    return true;
   }
+  return false;
 }
