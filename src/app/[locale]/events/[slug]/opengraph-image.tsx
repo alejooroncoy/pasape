@@ -16,6 +16,7 @@ export default async function EventOgImage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
+  const [logoSrc, fonts] = await Promise.all([loadLogo(), loadFonts()]);
 
   let title = "Evento en Pasape";
   let venue = "Lima";
@@ -41,6 +42,7 @@ export default async function EventOgImage({
           background: "#08070f",
           overflow: "hidden",
           color: "#fff",
+          fontFamily: "Pasape Sans",
         }}
       >
         {coverUrl ? (
@@ -93,16 +95,31 @@ export default async function EventOgImage({
                 display: "flex",
                 alignSelf: "flex-start",
                 alignItems: "center",
-                gap: 10,
-                padding: "10px 16px",
+                gap: 12,
+                padding: "10px 18px",
                 borderRadius: 999,
                 border: "1px solid rgba(255,255,255,0.20)",
-                background: "rgba(16,14,28,0.56)",
-                fontSize: 26,
+                background: "rgba(16,14,28,0.50)",
+                fontSize: 24,
                 fontWeight: 700,
                 color: "#F3ECFF",
               }}
             >
+              {logoSrc ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={logoSrc} width={30} height={30} alt="" />
+              ) : (
+                <span
+                  style={{
+                    width: 10,
+                    height: 10,
+                    borderRadius: 10,
+                    background: "#B87CFF",
+                    boxShadow: "0 0 20px rgba(184,124,255,0.8)",
+                    display: "flex",
+                  }}
+                />
+              )}
               {SITE_NAME}
             </div>
 
@@ -142,9 +159,10 @@ export default async function EventOgImage({
                   padding: "14px 26px",
                   borderRadius: 999,
                   border: "1px solid rgba(255,255,255,0.26)",
-                  background: "rgba(255,255,255,0.10)",
+                  background:
+                    "linear-gradient(120deg, rgba(255,255,255,0.14), rgba(255,255,255,0.05))",
                   color: "#FFFFFF",
-                  fontSize: 30,
+                  fontSize: 29,
                   fontWeight: 700,
                   letterSpacing: 0.2,
                 }}
@@ -166,7 +184,7 @@ export default async function EventOgImage({
               style={{
                 width: 420,
                 height: 520,
-                borderRadius: 34,
+                borderRadius: 44,
                 border: "1px solid rgba(255,255,255,0.16)",
                 background:
                   "linear-gradient(180deg, rgba(13,11,24,0.60), rgba(13,11,24,0.82))",
@@ -180,7 +198,7 @@ export default async function EventOgImage({
                 style={{
                   height: 352,
                   width: "100%",
-                  background: "rgba(255,255,255,0.06)",
+                  background: "rgba(255,255,255,0.05)",
                   display: "flex",
                 }}
               >
@@ -213,7 +231,8 @@ export default async function EventOgImage({
                   display: "flex",
                   flexDirection: "column",
                   gap: 8,
-                  padding: "18px 22px",
+                  padding: "20px 24px",
+                  borderTop: "1px solid rgba(255,255,255,0.08)",
                 }}
               >
                 <span
@@ -242,6 +261,46 @@ export default async function EventOgImage({
         </div>
       </div>
     ),
-    { ...size },
+    { ...size, fonts },
   );
+}
+
+async function loadLogo(): Promise<string | null> {
+  try {
+    const { readFile } = await import("node:fs/promises");
+    const { join } = await import("node:path");
+    const buf = await readFile(
+      join(process.cwd(), "public/icons/logo-icon-min-512.png"),
+    );
+    return `data:image/png;base64,${buf.toString("base64")}`;
+  } catch {
+    return null;
+  }
+}
+
+async function loadFonts() {
+  const { readFile } = await import("node:fs/promises");
+  const { join } = await import("node:path");
+  const fontPath = (...parts: string[]) =>
+    join(process.cwd(), "public/fonts", ...parts);
+
+  const [sans, sansBold] = await Promise.all([
+    readFile(fontPath("geist-sans-latin-400-normal.woff")),
+    readFile(fontPath("geist-sans-latin-700-normal.woff")),
+  ]);
+
+  return [
+    {
+      name: "Pasape Sans",
+      data: sans,
+      style: "normal" as const,
+      weight: 400 as const,
+    },
+    {
+      name: "Pasape Sans",
+      data: sansBold,
+      style: "normal" as const,
+      weight: 700 as const,
+    },
+  ];
 }
