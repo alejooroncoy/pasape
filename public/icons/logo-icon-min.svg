@@ -13,8 +13,9 @@
 -48 71 -29 39 -75 108 -103 155 -55 91 -104 148 -154 180 -41 26 -129 34 -172
 15z"/>
     </g>
-    <!-- Figura principal: fill blanco + stroke blanco para engrosar las líneas -->
-    <g fill="#FFFFFF" stroke="#FFFFFF" stroke-width="35" stroke-linejoin="round">
+    <!-- Figura principal: fill oscuro + stroke oscuro para engrosar las líneas
+         (icono estático para fondos claros — sin CSS que lo adapte). -->
+    <g fill="#1A0A2E" stroke="#1A0A2E" stroke-width="35" stroke-linejoin="round">
       <path d="M6175 9844 c-689 -80 -1212 -491 -1419 -1114 -75 -226 -70 -132 -73
 -1352 -4 -1098 -4 -1098 -31 -1112 -90 -47 -115 -111 -120 -304 -6 -212 17
 -286 109 -346 39 -26 39 -26 41 -658 3 -610 4 -633 22 -636 33 -7 36 18 36
