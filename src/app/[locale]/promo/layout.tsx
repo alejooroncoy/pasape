@@ -1,7 +1,11 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import type { ReactNode } from "react";
 import { getAuthContext } from "@/server/_shared/AuthContext";
+import { NOINDEX_METADATA } from "@/lib/seo/metadata";
+
+export const metadata: Metadata = NOINDEX_METADATA;
 
 // Guard server-side de /promo/*. Sin sesión Supabase → /login con ?next= a la
 // ruta actual para que después del Google sign-in vuelva exactamente acá.

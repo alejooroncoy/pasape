@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import { Logo } from "@/components/brand/Logo";
 
 export function Footer() {
@@ -18,23 +18,22 @@ export function Footer() {
             </p>
           </div>
           <FootCol title="Explorar" links={[
-            ["Conciertos", "/events"],
-            ["Fiestas", "/events"],
-            ["Festivales", "/events"],
-            ["Comedia", "/events"],
+            ["Conciertos", "/eventos/conciertos"],
+            ["Fiestas", "/eventos/fiestas"],
+            ["Festivales", "/eventos/festivales"],
+            ["Comedia", "/eventos/comedia"],
           ]} />
           <FootCol title="Organizadores" links={[
             ["Crear evento", "/organizadores"],
             ["Precios", "/organizadores#precio"],
-            ["App de puerta", "#"],
-            ["Centro de ayuda", "#"],
+            ["Eventos en Lima", "/eventos/lima"],
+            ["Centro de ayuda", "/ayuda"],
           ]} />
           <FootCol title="Pasape" links={[
-            ["Sobre nosotros", "#"],
-            ["Ayuda", "#"],
-            ["Contacto", "#"],
-            ["Términos", "#"],
-            ["Privacidad", "#"],
+            ["Todos los eventos", "/eventos"],
+            ["Ayuda", "/ayuda"],
+            ["Organizadores", "/organizadores"],
+            ["Libro de reclamaciones", "/complaints"],
           ]} />
         </div>
         <div className="mt-10 flex flex-wrap items-center justify-between gap-3 border-t border-cart-line-2 pt-[22px] text-[12.5px] text-cart-ink-4">
@@ -64,9 +63,9 @@ function FootCol({ title, links }: { title: string; links: Array<[string, string
       <ul className="m-0 flex list-none flex-col gap-2 p-0">
         {links.map(([label, href]) => (
           <li key={label}>
-            <a href={href} className="transition-colors hover:text-white">
+            <Link href={href} className="transition-colors hover:text-white">
               {label}
-            </a>
+            </Link>
           </li>
         ))}
       </ul>

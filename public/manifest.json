@@ -2,7 +2,7 @@
   "name": "Pasape — Tus entradas",
   "short_name": "Pasape",
   "description": "Tus entradas con QR, listas para mostrar en la puerta — incluso sin conexión.",
-  "start_url": "/es/tickets",
+  "start_url": "/es",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",

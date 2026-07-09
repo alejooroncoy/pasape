@@ -1,15 +1,24 @@
 import "server-only";
 import { getPostHogClient } from "@/lib/posthog-server";
 
-// Un método por evento server-side: los route handlers llaman a estos en vez
-// de armar `ph.capture({...})` a mano — nombres y properties quedan en un solo
-// lugar, así un cambio de shape no obliga a tocar cada ruta.
 const capture = (
   distinctId: string,
   event: string,
   properties?: Record<string, unknown>,
 ) => {
   getPostHogClient().capture({ distinctId, event, properties });
+};
+
+const captureCanonical = (
+  distinctId: string,
+  event: string,
+  aliases: string[],
+  properties?: Record<string, unknown>,
+) => {
+  capture(distinctId, event, properties);
+  for (const alias of aliases) {
+    if (alias !== event) capture(distinctId, alias, properties);
+  }
 };
 
 export const serverEvents = {
@@ -19,7 +28,7 @@ export const serverEvents = {
   ) => getPostHogClient().identify({ distinctId, properties }),
 
   userSignedIn: (distinctId: string, properties: { provider: string }) =>
-    capture(distinctId, "user_signed_in", properties),
+    captureCanonical(distinctId, "user_signed_in", ["login"], properties),
 
   newsletterSubscribed: (distinctId: string, properties: { source: string }) =>
     capture(distinctId, "newsletter_subscribed", properties),
@@ -79,7 +88,7 @@ export const serverEvents = {
   ) => capture(distinctId, "payment_failed", properties),
 
   paymentCompleted: (distinctId: string, properties: { order_id: string }) =>
-    capture(distinctId, "payment_completed", properties),
+    captureCanonical(distinctId, "payment_completed", ["purchase"], properties),
 
   ticketTransferStarted: (distinctId: string, properties: { ticket_id: string }) =>
     capture(distinctId, "ticket_transfer_started", properties),

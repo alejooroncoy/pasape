@@ -1,21 +1,20 @@
 import type { MetadataRoute } from "next";
+import { SITEMAP_STATIC_PATHS } from "@/lib/seo/pages";
 import { listPublishedEvents } from "@/server/events/application/ListPublishedEvents";
 import { supabaseEventRepository as repo } from "@/server/events/infrastructure/repositories/SupabaseEventRepository";
 import { SITE_URL, SUPPORTED_LOCALES, localePath } from "@/lib/seo/site";
-
-const STATIC_PUBLIC_PATHS = ["/", "/events", "/organizadores", "/complaints"] as const;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
   const pages: MetadataRoute.Sitemap = [];
 
   for (const locale of SUPPORTED_LOCALES) {
-    for (const path of STATIC_PUBLIC_PATHS) {
+    for (const path of SITEMAP_STATIC_PATHS) {
       pages.push({
         url: new URL(localePath(locale, path), SITE_URL).toString(),
         lastModified: now,
         changeFrequency: path === "/" ? "daily" : "weekly",
-        priority: path === "/" ? 1 : 0.7,
+        priority: path === "/" ? 1 : path.startsWith("/eventos") ? 0.85 : 0.7,
       });
     }
   }

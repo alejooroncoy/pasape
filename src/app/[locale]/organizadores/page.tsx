@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { setRequestLocale } from "next-intl/server";
 import { ComoFunciona } from "./components/como-funciona";
 import { Faq, FAQS } from "./components/faq";
 import { SiteFooter } from "./components/footer";
@@ -12,17 +13,32 @@ import { Promos } from "./components/promos";
 import { RevealObserver } from "./components/reveal-observer";
 import { WaFloat } from "./components/wa-float";
 import { WA_HREF } from "./components/wa";
+import { buildPageMetadata } from "@/lib/seo/metadata";
+import { SITE_URL } from "@/lib/seo/site";
 import "./landing.css";
 
-const SITE_URL = "https://pasape.lat";
-
-export const metadata: Metadata = {
-  title: "Pasape | Sistema operativo para eventos",
-  description:
-    "Vende entradas, gestiona pagos, QR, boxes, cortesías, reportes y control de acceso desde un solo lugar.",
+type Props = {
+  params: Promise<{ locale: string }>;
 };
 
-export default function OrganizadoresPage() {
+const ORG_TITLE = "Pasape | Sistema operativo para eventos";
+const ORG_DESCRIPTION =
+  "Vende entradas, gestiona pagos, QR, boxes, cortesías, reportes y control de acceso desde un solo lugar.";
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { locale } = await params;
+  return buildPageMetadata({
+    title: ORG_TITLE,
+    description: ORG_DESCRIPTION,
+    locale,
+    path: "/organizadores",
+  });
+}
+
+export default async function OrganizadoresPage({ params }: Props) {
+  const { locale } = await params;
+  setRequestLocale(locale);
+
   const jsonLd = {
     "@context": "https://schema.org",
     "@graph": [

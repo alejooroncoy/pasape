@@ -3,9 +3,28 @@ import {
   DEFAULT_DESCRIPTION,
   SITE_NAME,
   SITE_URL,
+  SOCIAL_SAME_AS,
   absoluteUrl,
   localePath,
 } from "./site";
+
+export type BreadcrumbItem = {
+  name: string;
+  path: string;
+};
+
+export function breadcrumbJsonLd(items: BreadcrumbItem[], locale = "es") {
+  return {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: items.map((item, index) => ({
+      "@type": "ListItem",
+      position: index + 1,
+      name: item.name,
+      item: absoluteUrl(localePath(locale, item.path)),
+    })),
+  };
+}
 
 export function organizationJsonLd() {
   return {
@@ -19,7 +38,7 @@ export function organizationJsonLd() {
       "@type": "Country",
       name: "Perú",
     },
-    sameAs: [SITE_URL],
+    sameAs: SOCIAL_SAME_AS,
   };
 }
 
@@ -35,7 +54,7 @@ export function websiteJsonLd() {
       "@type": "SearchAction",
       target: {
         "@type": "EntryPoint",
-        urlTemplate: `${SITE_URL}/es/events?q={search_term_string}`,
+        urlTemplate: `${SITE_URL}/es/eventos?q={search_term_string}`,
       },
       "query-input": "required name=search_term_string",
     },
@@ -112,4 +131,22 @@ export function eventJsonLd(
   }
 
   return jsonLd;
+}
+
+export function itemListJsonLd(
+  events: Event[],
+  listName: string,
+  locale = "es",
+): Record<string, unknown> {
+  return {
+    "@context": "https://schema.org",
+    "@type": "ItemList",
+    name: listName,
+    itemListElement: events.map((event, index) => ({
+      "@type": "ListItem",
+      position: index + 1,
+      url: absoluteUrl(localePath(locale, `/events/${event.slug}`)),
+      name: event.title,
+    })),
+  };
 }

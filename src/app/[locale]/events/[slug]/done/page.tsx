@@ -1,9 +1,10 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
-import { useSearchParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { motion } from "motion/react";
 import { useRouter } from "@/i18n/navigation";
+import { clientEvents } from "@/lib/analytics/clientEvents";
 import { useSessionReady } from "@/lib/identity/hooks/useSessionReady";
 import { UserHeader } from "@/app/[locale]/_home/UserHeader";
 import { HolderEditSheet } from "@/components/tickets/HolderEditSheet";
@@ -28,8 +29,10 @@ export default function PurchaseDonePage() {
 function Inner() {
   const router = useRouter();
   const search = useSearchParams();
+  const params = useParams<{ slug: string }>();
   const orderId = search.get("order");
   const expectedN = Math.max(0, parseInt(search.get("n") ?? "0", 10));
+  const checkoutTracked = useRef(false);
   const { sessionReady, loggedIn } = useSessionReady();
   const { data: ticketData, isLoading, refetch } = useMyTickets();
   const [mounted, setMounted] = useState(false);
@@ -45,6 +48,15 @@ function Inner() {
   );
 
   const hasOrderTickets = mine.length > 0;
+
+  useEffect(() => {
+    if (!hasOrderTickets || checkoutTracked.current || !params.slug) return;
+    checkoutTracked.current = true;
+    clientEvents.checkoutCompleted({
+      event_slug: params.slug,
+      order_id: orderId ?? undefined,
+    });
+  }, [hasOrderTickets, params.slug, orderId]);
 
   // Solo se llega acá desde /order, que ya reclamó la compra (o confirmó que
   // ya era tuya) antes de mandarte para acá — ver goToWallet() en
