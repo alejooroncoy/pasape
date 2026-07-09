@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { HydrationBoundary, dehydrate } from "@tanstack/react-query";
 import { notFound } from "next/navigation";
 import { setRequestLocale } from "next-intl/server";
 import { Breadcrumbs } from "@/components/seo/Breadcrumbs";
@@ -10,6 +11,7 @@ import {
   EVENTOS_LANDING_BY_SLUG,
   type EventosLandingSlug,
 } from "@/lib/seo/pages";
+import { makeQueryClient } from "@/lib/_shared/query-client-config";
 import { listPublishedEvents } from "@/server/events/application/ListPublishedEvents";
 import { supabaseEventRepository as repo } from "@/server/events/infrastructure/repositories/SupabaseEventRepository";
 import { getSessionUser } from "@/server/identity/application/GetSessionUser";
@@ -42,11 +44,16 @@ export default async function EventosCategoryPage({ params }: Props) {
 
   setRequestLocale(locale);
 
-  const user = await getSessionUser();
-  const events = await listPublishedEvents(
-    { repo },
-    { limit: 100, category: landing.category },
-  );
+  const [user, events, allEvents] = await Promise.all([
+    getSessionUser(),
+    listPublishedEvents({ repo }, { limit: 100, category: landing.category }),
+    listPublishedEvents({ repo }, { limit: 50 }),
+  ]);
+
+  const qc = makeQueryClient();
+  qc.setQueryData(["events", "browse", landing.category], events);
+  // Pills de categoría en HomeClient leen useBrowseEvents(null)
+  qc.setQueryData(["events", "browse", null], allEvents);
 
   const breadcrumbs = [
     { name: "Inicio", path: "/" },
@@ -56,18 +63,20 @@ export default async function EventosCategoryPage({ params }: Props) {
   return (
     <>
       <JsonLd data={itemListJsonLd(events, landing.h1, locale)} />
-      <HomeClient
-        user={user ? { fullName: user.fullName, avatarUrl: user.avatarUrl } : null}
-        initialCategory={landing.category}
-        showHero={false}
-        searchLocation={`eventos-${landing.slug}`}
-        seoLead={{
-          h1: landing.h1,
-          description: landing.description,
-          breadcrumbs: <Breadcrumbs items={breadcrumbs} />,
-          category: landing.category,
-        }}
-      />
+      <HydrationBoundary state={dehydrate(qc)}>
+        <HomeClient
+          user={user ? { fullName: user.fullName, avatarUrl: user.avatarUrl } : null}
+          initialCategory={landing.category}
+          showHero={false}
+          searchLocation={`eventos-${landing.slug}`}
+          seoLead={{
+            h1: landing.h1,
+            description: landing.description,
+            breadcrumbs: <Breadcrumbs items={breadcrumbs} />,
+            category: landing.category,
+          }}
+        />
+      </HydrationBoundary>
     </>
   );
 }

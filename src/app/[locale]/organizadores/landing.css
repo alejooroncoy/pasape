@@ -32,11 +32,11 @@
   --radius-md: 14px;
   --radius-lg: 24px;
 
-  /* Fonts */
-  --font-display: "General Sans", system-ui, -apple-system, sans-serif;
-  --font-body: "General Sans", system-ui, -apple-system, sans-serif;
-  --font-serif: var(--font-instrument-serif), "Instrument Serif", "Times New Roman", serif;
-  --font-mono: "General Sans", system-ui, sans-serif;
+  /* Fonts — heredan variables de next/font del layout raíz */
+  --font-display: var(--font-general-sans), system-ui, -apple-system, sans-serif;
+  --font-body: var(--font-general-sans), system-ui, -apple-system, sans-serif;
+  --font-serif: var(--font-instrument-serif), "Times New Roman", serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
 
   /* Shadows */
   --shadow-glow: 0 0 0 1px rgba(184, 124, 255, 0.3), 0 12px 32px -12px rgba(184, 124, 255, 0.45);

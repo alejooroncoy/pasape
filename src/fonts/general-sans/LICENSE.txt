@@ -1,0 +1,5 @@
+General Sans — Indian Type Foundry (via Fontshare)
+https://www.fontshare.com/fonts/general-sans
+
+Self-hosted woff2 files for next/font (performance). Verify current
+Fontshare/ITF license terms for self-hosting in production.

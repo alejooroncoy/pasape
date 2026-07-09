@@ -209,7 +209,7 @@ export default function PromoterClaimPage({ params }: { params: Params }) {
                     </>
                   )}
                   . Vas a ganar{" "}
-                  <span style={{ fontFamily: "JetBrains Mono, monospace", fontWeight: 600, color: "#fff" }}>
+                  <span style={{ fontFamily: "var(--font-jetbrains-mono), monospace", fontWeight: 600, color: "#fff" }}>
                     {preview.defaultCommissionPct}%
                   </span>{" "}
                   por entrada vendida con tu link.

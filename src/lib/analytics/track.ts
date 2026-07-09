@@ -33,7 +33,10 @@ export function trackPageView(path: string) {
   if (typeof window !== "undefined" && typeof window.fbq === "function") {
     window.fbq("track", "PageView");
   }
+}
 
+/** Pixels diferidos (lazyOnload). Reintentar una vez cuando el script ya cargó. */
+export function trackDeferredPageView() {
   if (typeof window !== "undefined" && window.ttq?.page) {
     window.ttq.page();
   }
