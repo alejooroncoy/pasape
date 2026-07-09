@@ -2,6 +2,7 @@
 
 import { Link } from "@/i18n/navigation";
 import { useBrowseEvents } from "@/lib/events/hooks/useEvents";
+import { optimizeImageUrl } from "@/lib/images/optimizeUrl";
 import { useSaveEvent } from "@/lib/identity/hooks/useSaveEvent";
 import type { Event, EventCategory } from "@/server/events/domain/Event";
 import { CATEGORIES } from "./categories";
@@ -77,8 +78,10 @@ function EventCard({ event }: { event: Event }) {
         {event.coverUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={event.coverUrl}
+            src={optimizeImageUrl(event.coverUrl, "card") ?? event.coverUrl}
             alt={event.title}
+            loading="lazy"
+            decoding="async"
             className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
           />
         ) : (

@@ -23,7 +23,10 @@ Sentry.init({
   replaysOnErrorSampleRate: 1.0,
   enableLogs: true,
   beforeSend: (event) => scrubSentryEvent(event),
-  integrations: [Sentry.replayIntegration()],
+  // Session Replay en el bundle inicial penaliza Lighthouse (~50 KiB + main thread).
+  // Los errores siguen capturándose; el replay on-error se puede reactivar luego
+  // con lazy import si hace falta en prod.
+  integrations: [],
 });
 
 // Requerido por Next para instrumentar las transiciones del App Router.
@@ -42,4 +45,7 @@ posthog.init(process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN!, {
   session_recording: {
     maskAllInputs: true,
   },
+  // Recorder + surveys suman ~75 KiB en el critical path sin aportar al primer paint.
+  disable_session_recording: true,
+  disable_surveys: true,
 });

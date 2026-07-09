@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import dynamic from "next/dynamic";
 import type { EventCategory } from "@/server/events/domain/Event";
 import { clientEvents } from "@/lib/analytics/clientEvents";
 import { Nav, type NavUser } from "./Nav";
@@ -8,12 +9,19 @@ import { NextEventHero } from "./NextEventHero";
 import { HeroCarousel } from "./HeroCarousel";
 import { EventsSection } from "./EventsSection";
 import { Footer } from "./Footer";
-import { WaFloat } from "./WaFloat";
 import { AmbientGlow } from "./AmbientGlow";
 import { SeoBrowseLead } from "@/components/seo/SeoBrowseLead";
 import { UserTabbar } from "@/components/layout/UserTabbar";
-import { SideDrawer } from "./SideDrawer";
-import { SignInDrawer } from "./SignInDrawer";
+
+const SideDrawer = dynamic(() => import("./SideDrawer").then((m) => ({ default: m.SideDrawer })), {
+  ssr: false,
+});
+const SignInDrawer = dynamic(() => import("./SignInDrawer").then((m) => ({ default: m.SignInDrawer })), {
+  ssr: false,
+});
+const WaFloat = dynamic(() => import("./WaFloat").then((m) => ({ default: m.WaFloat })), {
+  ssr: false,
+});
 
 export type SeoLead = {
   h1: string;

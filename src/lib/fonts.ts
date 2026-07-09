@@ -30,7 +30,7 @@ export const instrumentSerif = Instrument_Serif({
   style: ["normal", "italic"],
   variable: "--font-instrument-serif",
   display: "swap",
-  preload: true,
+  preload: false,
 });
 
 export const fontVariables = `${generalSans.variable} ${jetbrainsMono.variable} ${instrumentSerif.variable}`;
