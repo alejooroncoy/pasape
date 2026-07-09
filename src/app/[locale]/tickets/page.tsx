@@ -117,7 +117,7 @@ function EventCard({
         )}
         {today && (
           <div className="absolute inset-0 flex items-end p-2">
-            <span className="inline-flex items-center gap-1 rounded-full bg-cart-accent/90 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white backdrop-blur-sm">
+            <span className="inline-flex items-center gap-1 rounded-full bg-cart-accent-strong/90 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white backdrop-blur-sm">
               <span className="size-1 animate-pulse rounded-full bg-white" /> Hoy
             </span>
           </div>

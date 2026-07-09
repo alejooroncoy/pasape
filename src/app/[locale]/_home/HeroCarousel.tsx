@@ -19,7 +19,13 @@ const shortDate = (iso: string, tz: string) =>
     month: "short",
     hour: "2-digit",
     minute: "2-digit",
-  }).format(new Date(iso));
+  })
+    .format(new Date(iso))
+    // El ICU de Node y el del navegador difieren en el espacio que ponen antes
+    // de "p. m." (U+202F vs U+00A0), lo que rompía la hidratación. Normalizamos
+    // cualquier espacio angosto/duro a un espacio normal para que SSR y cliente
+    // produzcan exactamente el mismo string.
+    .replace(/[\u202f\u00a0]/g, " ");
 
 /* ─── Skeleton ───────────────────────────────────────────────────────────── */
 function Skeleton() {
@@ -134,24 +140,35 @@ export function HeroCarousel() {
           {/* Fondo difuminado — solo desktop. En móvil esta capa era el LCP
               (1.4 MB full-res + blur) y penalizaba PageSpeed sin aportar UX. */}
           <div className="absolute inset-0 z-[1] hidden sm:block" aria-hidden>
-            {ev.coverUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={optimizeImageUrl(ev.coverUrl, "hero-blur") ?? ev.coverUrl}
-                alt=""
-                loading="lazy"
-                fetchPriority="low"
-                decoding="async"
-                className="absolute inset-0 h-full w-full object-cover"
-                style={{ filter: "blur(32px) saturate(1.3)", transform: "scale(1.08)" }}
-              />
-            ) : (
-              <div
+            <AnimatePresence initial={false}>
+              <motion.div
+                key={ev.id}
                 className="absolute inset-0"
-                style={{ background: "linear-gradient(150deg,#0f0020 0%,#3b0764 40%,#7c3aed 100%)" }}
-              />
-            )}
-            <div className="absolute inset-0" style={{ background: "rgba(4,4,8,0.78)" }} />
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.9, ease: "easeInOut" }}
+              >
+                {ev.coverUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={optimizeImageUrl(ev.coverUrl, "hero-blur") ?? ev.coverUrl}
+                    alt=""
+                    loading="lazy"
+                    fetchPriority="low"
+                    decoding="async"
+                    className="absolute inset-0 h-full w-full object-cover"
+                    style={{ filter: "blur(32px) saturate(1.3)", transform: "scale(1.08)" }}
+                  />
+                ) : (
+                  <div
+                    className="absolute inset-0"
+                    style={{ background: "linear-gradient(150deg,#0f0020 0%,#3b0764 40%,#7c3aed 100%)" }}
+                  />
+                )}
+                <div className="absolute inset-0" style={{ background: "rgba(4,4,8,0.78)" }} />
+              </motion.div>
+            </AnimatePresence>
           </div>
           {/* Móvil: gradiente estático — sin imagen de fondo pesada */}
           <div
@@ -233,7 +250,7 @@ export function HeroCarousel() {
               <Link
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 href={`/events/${ev.slug}` as any}
-                className="inline-flex w-fit items-center gap-2.5 rounded-full bg-cart-accent px-6 py-3 text-[13.5px] font-bold text-white transition-[filter] hover:brightness-110"
+                className="inline-flex w-fit items-center gap-2.5 rounded-full bg-cart-accent-strong px-6 py-3 text-[13.5px] font-bold text-white transition-[filter] hover:brightness-110"
                 style={{ boxShadow: "0 6px 24px -6px var(--color-cart-accent-glow-strong)" }}
               >
                 Comprar entradas
@@ -288,7 +305,7 @@ export function HeroCarousel() {
                   <Link
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     href={`/events/${ev.slug}` as any}
-                    className="mt-1 inline-flex items-center gap-2 rounded-full bg-cart-accent px-6 py-2.5 text-[13px] font-bold text-white"
+                    className="mt-1 inline-flex items-center gap-2 rounded-full bg-cart-accent-strong px-6 py-2.5 text-[13px] font-bold text-white"
                     style={{ boxShadow: "0 6px 24px -6px var(--color-cart-accent-glow-strong)" }}
                   >
                     Comprar entradas

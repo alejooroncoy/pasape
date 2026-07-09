@@ -290,7 +290,7 @@ export function CitySelector({ className = "" }: { className?: string }) {
         type="button"
         onClick={() => setShowSoon((v) => !v)}
         aria-expanded={showSoon}
-        aria-label="Cambiar ciudad — disponible pronto"
+        aria-label="Lima — cambiar ciudad (disponible pronto)"
         whileHover={{ y: -1 }}
         whileTap={{ scale: 0.95 }}
         transition={{ type: "spring", stiffness: 500, damping: 30 }}

@@ -46,13 +46,13 @@ export function Footer() {
             ]}
           />
           <div>
-            <h5 className="m-0 mb-3.5 text-[11.5px] font-medium uppercase tracking-[0.1em] text-cart-ink-2">
+            <h2 className="m-0 mb-3.5 text-[11.5px] font-medium uppercase tracking-[0.1em] text-cart-ink-2">
               Libro de reclamaciones
-            </h5>
+            </h2>
             <LibroReclamacionesFooterLink />
           </div>
         </div>
-        <div className="mt-10 flex flex-wrap items-center justify-between gap-3 border-t border-cart-line-2 pt-[22px] text-[12.5px] text-cart-ink-4">
+        <div className="mt-10 flex flex-wrap items-center justify-between gap-3 border-t border-cart-line-2 pt-[22px] text-[12.5px] text-cart-ink-3">
           <span>© 2026 Pasape S.A.C. — Lima, Perú.</span>
           <span>Hecho con ☕ en Perú.</span>
         </div>
@@ -64,9 +64,9 @@ export function Footer() {
 function FootCol({ title, links }: { title: string; links: Array<[string, string]> }) {
   return (
     <div>
-      <h5 className="m-0 mb-3.5 text-[11.5px] font-medium uppercase tracking-[0.1em] text-cart-ink-2">
+      <h2 className="m-0 mb-3.5 text-[11.5px] font-medium uppercase tracking-[0.1em] text-cart-ink-2">
         {title}
-      </h5>
+      </h2>
       <ul className="m-0 flex list-none flex-col gap-2 p-0">
         {links.map(([label, href]) => (
           <li key={label}>
