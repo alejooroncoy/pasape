@@ -1,0 +1,34 @@
+name: WA template status check
+
+on:
+  workflow_dispatch:
+    inputs:
+      filter:
+        description: "Substring to filter template names (empty = all)"
+        required: false
+        default: ""
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: List template statuses from Meta
+        env:
+          META_WHATSAPP_TOKEN: ${{ secrets.META_WHATSAPP_TOKEN }}
+          WABA_ID: "1461892809283783"
+          FILTER: ${{ inputs.filter }}
+        run: |
+          if [ -z "${META_WHATSAPP_TOKEN}" ]; then
+            echo "::error::Falta META_WHATSAPP_TOKEN"; exit 1
+          fi
+          curl -sS -G "https://graph.facebook.com/v24.0/${WABA_ID}/message_templates" \
+            --data-urlencode "fields=name,status,category,language" \
+            --data-urlencode "limit=200" \
+            -H "Authorization: Bearer ${META_WHATSAPP_TOKEN}" \
+            | jq -r --arg f "${FILTER}" '
+              .data
+              | if $f == "" then . else map(select(.name | contains($f))) end
+              | sort_by(.name)
+              | .[]
+              | "\(.name)\t\(.status)\t\(.category // "-")\t\(.language // "-")"
+            '
