@@ -108,8 +108,7 @@ export async function createDefaultOgImage() {
               <span
                 style={{
                   color: "#B87CFF",
-                  fontFamily: "Pasape Serif",
-                  fontStyle: "italic",
+                  fontFamily: "Pasape Sans",
                   fontWeight: 400,
                   letterSpacing: -1.2,
                   textShadow: "0 0 34px rgba(184,124,255,0.42)",
@@ -647,27 +646,28 @@ async function loadLogo(): Promise<string | null> {
 }
 
 async function loadFonts() {
-  try {
-    const { readFile } = await import("node:fs/promises");
-    const sans = await readFile("/System/Library/Fonts/Supplemental/Arial.ttf");
-    const sansBold = await readFile(
-      "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
-    );
-    const serifItalic = await readFile(
-      "/System/Library/Fonts/Supplemental/Georgia Italic.ttf",
-    );
+  const { readFile } = await import("node:fs/promises");
+  const { join } = await import("node:path");
+  const fontPath = (...parts: string[]) =>
+    join(process.cwd(), "public/fonts", ...parts);
 
-    return [
-      { name: "Pasape Sans", data: sans, style: "normal" as const, weight: 400 as const },
-      { name: "Pasape Sans", data: sansBold, style: "normal" as const, weight: 700 as const },
-      {
-        name: "Pasape Serif",
-        data: serifItalic,
-        style: "italic" as const,
-        weight: 400 as const,
-      },
-    ];
-  } catch {
-    return [];
-  }
+  const [sans, sansBold] = await Promise.all([
+    readFile(fontPath("geist-sans-latin-400-normal.woff")),
+    readFile(fontPath("geist-sans-latin-700-normal.woff")),
+  ]);
+
+  return [
+    {
+      name: "Pasape Sans",
+      data: sans,
+      style: "normal" as const,
+      weight: 400 as const,
+    },
+    {
+      name: "Pasape Sans",
+      data: sansBold,
+      style: "normal" as const,
+      weight: 700 as const,
+    },
+  ];
 }
