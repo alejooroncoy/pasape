@@ -69,7 +69,7 @@ export default function BuyerTicketsPastPage() {
             Próximas
             <span className="rounded-full bg-white/8 px-1.5 py-px text-[10.5px] font-bold text-white/50">{upcomingCount}</span>
           </button>
-          <span className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-cart-accent py-2 text-[13.5px] font-semibold text-white shadow-[0_8px_24px_-12px_var(--color-cart-accent-glow)]">
+          <span className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-cart-accent-strong py-2 text-[13.5px] font-semibold text-white shadow-[0_8px_24px_-12px_var(--color-cart-accent-glow)]">
             Pasadas
             <span className="rounded-full bg-white/20 px-1.5 py-px text-[10.5px] font-bold">{past.length}</span>
           </span>

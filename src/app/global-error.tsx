@@ -32,7 +32,7 @@ export default function GlobalError({
           <button
             type="button"
             onClick={() => reset()}
-            className="mt-5 inline-flex h-11 items-center justify-center rounded-full bg-cart-accent px-6 text-[14px] font-semibold text-white"
+            className="mt-5 inline-flex h-11 items-center justify-center rounded-full bg-cart-accent-strong px-6 text-[14px] font-semibold text-white"
           >
             Reintentar
           </button>
