@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { EventCategory } from "@/server/events/domain/Event";
 import { clientEvents } from "@/lib/analytics/clientEvents";
 import { Nav, type NavUser } from "./Nav";
@@ -9,15 +9,36 @@ import { HeroCarousel } from "./HeroCarousel";
 import { EventsSection } from "./EventsSection";
 import { Footer } from "./Footer";
 import { WaFloat } from "./WaFloat";
+import { AmbientGlow } from "./AmbientGlow";
 import { UserTabbar } from "@/components/layout/UserTabbar";
 import { SideDrawer } from "./SideDrawer";
 import { SignInDrawer } from "./SignInDrawer";
 
-export function HomeClient({ user }: { user: NavUser | null }) {
+export type SeoLead = {
+  h1: string;
+  description: string;
+  breadcrumbs?: ReactNode;
+};
+
+type Props = {
+  user: NavUser | null;
+  initialCategory?: EventCategory | null;
+  showHero?: boolean;
+  seoLead?: SeoLead | null;
+  searchLocation?: string;
+};
+
+export function HomeClient({
+  user,
+  initialCategory = null,
+  showHero = true,
+  seoLead = null,
+  searchLocation = "home",
+}: Props) {
   const loggedIn = !!user;
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [signInOpen, setSignInOpen] = useState(false);
-  const [category, setCategory] = useState<EventCategory | null>(null);
+  const [category, setCategory] = useState<EventCategory | null>(initialCategory);
   const [search, setSearch] = useState("");
   const eventsSectionRef = useRef<HTMLElement>(null);
 
@@ -34,57 +55,57 @@ export function HomeClient({ user }: { user: NavUser | null }) {
     if (!q || q === lastSearchTracked.current) return;
     const timer = setTimeout(() => {
       lastSearchTracked.current = q;
-      clientEvents.search({ query: q, location: "home" });
+      clientEvents.search({ query: q, location: searchLocation });
     }, 600);
     return () => clearTimeout(timer);
-  }, [search]);
+  }, [search, searchLocation]);
 
   return (
     <div className="cart-grain relative min-h-screen overflow-hidden bg-cart-bg text-white font-sans">
-      {/* Underglow morado ambiente — vive detrás de todo el viewport y le da
-          la atmósfera "stained purple" que se ve en el diseño. */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute left-1/2 top-[-100px] z-0 h-[1000px] w-[1500px] -translate-x-1/2 blur-[80px]"
-        style={{
-          background:
-            "radial-gradient(closest-side, rgba(184,124,255,0.28), rgba(168,85,247,0.12) 40%, transparent 70%)",
-        }}
-      />
-      {/* Segundo glow más abajo para mantener atmosfera en el scroll */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute left-[80%] top-[60vh] z-0 h-[700px] w-[800px] -translate-x-1/2 blur-[100px]"
-        style={{
-          background:
-            "radial-gradient(closest-side, rgba(184,124,255,0.10), transparent 70%)",
-        }}
-      />
+      <AmbientGlow />
       <div className="relative z-[1]">
-      <Nav
-        user={user}
-        onOpenDrawer={() => setDrawerOpen(true)}
-        onOpenSignIn={() => setSignInOpen(true)}
-        onSearch={setSearch}
-        onSelectCategory={selectCategoryFromNav}
-        selectedCategory={category}
-      />
-      <main className="pb-[72px] lg:pb-0">
-        {loggedIn && <NextEventHero />}
-        <HeroCarousel />
-        <EventsSection sectionRef={eventsSectionRef} category={category} onCategoryChange={setCategory} search={search} />
-      </main>
-      <Footer />
-      <WaFloat />
-      <UserTabbar />
-      <SideDrawer
-        user={user}
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        onSignIn={() => setSignInOpen(true)}
-        onSelectCategory={selectCategoryFromNav}
-      />
-      <SignInDrawer open={signInOpen} onClose={() => setSignInOpen(false)} />
+        <Nav
+          user={user}
+          onOpenDrawer={() => setDrawerOpen(true)}
+          onOpenSignIn={() => setSignInOpen(true)}
+          onSearch={setSearch}
+          onSelectCategory={selectCategoryFromNav}
+          selectedCategory={category}
+        />
+        <main className="pb-[72px] lg:pb-0">
+          {showHero && loggedIn && <NextEventHero />}
+          {showHero && <HeroCarousel />}
+          {seoLead ? (
+            <section className="px-[clamp(20px,4vw,56px)] pt-6 lg:pt-8">
+              <div className="mx-auto max-w-[1320px]">
+                {seoLead.breadcrumbs}
+                <h1 className="mt-3 font-sans text-[clamp(26px,4vw,36px)] font-bold tracking-[-0.03em] text-white">
+                  {seoLead.h1}
+                </h1>
+                <p className="mt-2 max-w-[62ch] text-[15px] leading-relaxed text-cart-ink-3">
+                  {seoLead.description}
+                </p>
+              </div>
+            </section>
+          ) : null}
+          <EventsSection
+            sectionRef={eventsSectionRef}
+            category={category}
+            onCategoryChange={setCategory}
+            search={search}
+          />
+        </main>
+        <Footer />
+        <WaFloat />
+        <UserTabbar />
+        <SideDrawer
+          user={user}
+          open={drawerOpen}
+          onClose={() => setDrawerOpen(false)}
+          onSignIn={() => setSignInOpen(true)}
+          onSelectCategory={selectCategoryFromNav}
+        />
+        <SignInDrawer open={signInOpen} onClose={() => setSignInOpen(false)} />
       </div>
     </div>
   );

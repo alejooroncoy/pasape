@@ -30,7 +30,7 @@ export function Footer() {
             ["Centro de ayuda", "/ayuda"],
           ]} />
           <FootCol title="Pasape" links={[
-            ["Todos los eventos", "/eventos"],
+            ["Todos los eventos", "/"],
             ["Ayuda", "/ayuda"],
             ["Organizadores", "/organizadores"],
             ["Libro de reclamaciones", "/complaints"],

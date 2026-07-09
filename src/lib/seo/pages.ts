@@ -77,7 +77,6 @@ export const AYUDA_PAGE = {
 
 export const SITEMAP_STATIC_PATHS = [
   "/",
-  "/eventos",
   "/eventos/lima",
   ...EVENTOS_LANDINGS.map((p) => `/eventos/${p.slug}`),
   "/organizadores",
