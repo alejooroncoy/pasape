@@ -182,57 +182,60 @@ export default async function EventOgImage({
           >
             <div
               style={{
+                position: "relative",
                 width: 420,
                 height: 520,
                 borderRadius: 44,
-                border: "1px solid rgba(255,255,255,0.16)",
-                background:
-                  "linear-gradient(180deg, rgba(13,11,24,0.60), rgba(13,11,24,0.82))",
-                boxShadow: "0 34px 90px rgba(0,0,0,0.48)",
+                background: "#0D0B17",
+                boxShadow:
+                  "0 0 0 1px rgba(255,255,255,0.14), 0 34px 90px rgba(0,0,0,0.48)",
                 overflow: "hidden",
                 display: "flex",
                 flexDirection: "column",
               }}
             >
-              <div
-                style={{
-                  height: 352,
-                  width: "100%",
-                  background: "rgba(255,255,255,0.05)",
-                  display: "flex",
-                }}
-              >
-                {coverUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={coverUrl}
-                    alt=""
-                    style={{
-                      width: "100%",
-                      height: "100%",
-                      objectFit: "cover",
-                    }}
-                  />
-                ) : (
-                  <div
-                    style={{
-                      width: "100%",
-                      height: "100%",
-                      background:
-                        "linear-gradient(150deg,#0f0020 0%,#3b0764 40%,#7c3aed 100%)",
-                      display: "flex",
-                    }}
-                  />
-                )}
-              </div>
+              {coverUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={coverUrl}
+                  alt=""
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: 420,
+                    height: 360,
+                    objectFit: "cover",
+                    objectPosition: "center top",
+                    display: "flex",
+                  }}
+                />
+              ) : (
+                <div
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: 420,
+                    height: 360,
+                    background:
+                      "linear-gradient(150deg,#0f0020 0%,#3b0764 40%,#7c3aed 100%)",
+                    display: "flex",
+                  }}
+                />
+              )}
 
               <div
                 style={{
+                  position: "relative",
+                  marginTop: 352,
+                  flex: 1,
                   display: "flex",
                   flexDirection: "column",
                   gap: 8,
                   padding: "20px 24px",
-                  borderTop: "1px solid rgba(255,255,255,0.08)",
+                  background:
+                    "linear-gradient(180deg, rgba(13,11,23,0.72), rgba(13,11,23,0.96))",
                 }}
               >
                 <span
