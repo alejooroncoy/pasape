@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
 import { setRequestLocale } from "next-intl/server";
-import { EventosGrid } from "@/components/eventos/EventosGrid";
-import { EventosPageShell } from "@/components/eventos/EventosPageShell";
+import { Breadcrumbs } from "@/components/seo/Breadcrumbs";
 import { JsonLd } from "@/components/seo/JsonLd";
-import { itemListJsonLd } from "@/lib/seo/jsonld";
+import { HomeClient } from "@/app/[locale]/_home/HomeClient";
 import { buildPageMetadata } from "@/lib/seo/metadata";
-import { EVENTOS_HUB, EVENTOS_LIMA } from "@/lib/seo/pages";
+import { itemListJsonLd } from "@/lib/seo/jsonld";
+import { EVENTOS_LIMA } from "@/lib/seo/pages";
 import { listPublishedEvents } from "@/server/events/application/ListPublishedEvents";
 import { supabaseEventRepository as repo } from "@/server/events/infrastructure/repositories/SupabaseEventRepository";
+import { getSessionUser } from "@/server/identity/application/GetSessionUser";
 
 type Props = {
   params: Promise<{ locale: string }>;
@@ -27,21 +28,26 @@ export default async function EventosLimaPage({ params }: Props) {
   const { locale } = await params;
   setRequestLocale(locale);
 
+  const user = await getSessionUser();
   const events = await listPublishedEvents({ repo }, { limit: 100 });
+  const breadcrumbs = [
+    { name: "Inicio", path: "/" },
+    { name: "Lima", path: EVENTOS_LIMA.path },
+  ];
 
   return (
-    <EventosPageShell
-      locale={locale}
-      breadcrumbs={[
-        { name: "Inicio", path: "/" },
-        { name: "Eventos", path: EVENTOS_HUB.path },
-        { name: "Lima", path: EVENTOS_LIMA.path },
-      ]}
-      h1={EVENTOS_LIMA.h1}
-      description={EVENTOS_LIMA.description}
-    >
+    <>
       <JsonLd data={itemListJsonLd(events, EVENTOS_LIMA.h1, locale)} />
-      <EventosGrid events={events} />
-    </EventosPageShell>
+      <HomeClient
+        user={user ? { fullName: user.fullName, avatarUrl: user.avatarUrl } : null}
+        showHero={false}
+        searchLocation="eventos-lima"
+        seoLead={{
+          h1: EVENTOS_LIMA.h1,
+          description: EVENTOS_LIMA.description,
+          breadcrumbs: <Breadcrumbs items={breadcrumbs} />,
+        }}
+      />
+    </>
   );
 }

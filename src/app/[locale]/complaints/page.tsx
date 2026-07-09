@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 import { setRequestLocale } from "next-intl/server";
-import { LibroReclamacionesClient } from "./LibroReclamacionesClient";
+import { JsonLd } from "@/components/seo/JsonLd";
 import { buildPageMetadata } from "@/lib/seo/metadata";
+import { breadcrumbJsonLd } from "@/lib/seo/jsonld";
+import { getSessionUser } from "@/server/identity/application/GetSessionUser";
+import { LibroReclamacionesClient } from "./LibroReclamacionesClient";
 
 type Props = {
   params: Promise<{ locale: string }>;
@@ -24,5 +27,19 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function LibroDeReclamacionesPage({ params }: Props) {
   const { locale } = await params;
   setRequestLocale(locale);
-  return <LibroReclamacionesClient />;
+
+  const user = await getSessionUser();
+  const breadcrumbs = [
+    { name: "Inicio", path: "/" },
+    { name: "Libro de Reclamaciones", path: "/complaints" },
+  ];
+
+  return (
+    <>
+      <JsonLd data={breadcrumbJsonLd(breadcrumbs, locale)} />
+      <LibroReclamacionesClient
+        user={user ? { fullName: user.fullName, avatarUrl: user.avatarUrl } : null}
+      />
+    </>
+  );
 }
