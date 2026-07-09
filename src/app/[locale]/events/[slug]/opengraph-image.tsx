@@ -40,6 +40,7 @@ export default async function EventOgImage({
           position: "relative",
           background: "#08070f",
           overflow: "hidden",
+          color: "#fff",
         }}
       >
         {coverUrl ? (
@@ -53,8 +54,8 @@ export default async function EventOgImage({
               width: "100%",
               height: "100%",
               objectFit: "cover",
-              filter: "blur(24px) saturate(1.25)",
-              transform: "scale(1.08)",
+              filter: "blur(28px) saturate(1.2)",
+              transform: "scale(1.1)",
             }}
           />
         ) : null}
@@ -64,7 +65,7 @@ export default async function EventOgImage({
             position: "absolute",
             inset: 0,
             background:
-              "linear-gradient(120deg, rgba(8,7,15,0.88) 0%, rgba(12,10,24,0.80) 35%, rgba(84,36,160,0.42) 100%)",
+              "linear-gradient(112deg, rgba(8,7,15,0.95) 0%, rgba(10,8,20,0.82) 42%, rgba(78,33,150,0.52) 100%)",
           }}
         />
 
@@ -75,57 +76,169 @@ export default async function EventOgImage({
             width: "100%",
             height: "100%",
             display: "flex",
-            flexDirection: "column",
-            justifyContent: "space-between",
-            padding: "58px 64px",
+            padding: "54px 58px",
+            gap: 34,
           }}
         >
-          <div
+          <section
             style={{
+              width: 620,
               display: "flex",
-              alignSelf: "flex-start",
-              alignItems: "center",
-              padding: "10px 18px",
-              borderRadius: 999,
-              border: "1px solid rgba(255,255,255,0.24)",
-              color: "#f3ecff",
-              fontSize: 28,
-              fontWeight: 700,
-              background: "rgba(13,11,22,0.42)",
+              flexDirection: "column",
+              justifyContent: "space-between",
             }}
           >
-            {SITE_NAME}
-          </div>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <div
               style={{
-                fontSize: 70,
-                lineHeight: 1.05,
-                color: "#ffffff",
-                fontWeight: 800,
-                letterSpacing: "-0.03em",
-                maxWidth: 1050,
+                display: "flex",
+                alignSelf: "flex-start",
+                alignItems: "center",
+                gap: 10,
+                padding: "10px 16px",
+                borderRadius: 999,
+                border: "1px solid rgba(255,255,255,0.20)",
+                background: "rgba(16,14,28,0.56)",
+                fontSize: 26,
+                fontWeight: 700,
+                color: "#F3ECFF",
               }}
             >
-              {title}
+              {SITE_NAME}
             </div>
-            <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
-              <span
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <div
                 style={{
-                  fontSize: 28,
-                  fontWeight: 700,
-                  color: "#0f0d17",
-                  background: "#b87cff",
-                  borderRadius: 999,
-                  padding: "8px 18px",
+                  fontSize: 76,
+                  lineHeight: 0.98,
+                  fontWeight: 800,
+                  letterSpacing: -2.6,
+                  maxWidth: 610,
                 }}
               >
-                Evento
-              </span>
-              <span style={{ fontSize: 30, fontWeight: 500, color: "#d6d1e5" }}>{venue}</span>
+                {title}
+              </div>
+
+              <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                <span
+                  style={{
+                    fontSize: 26,
+                    fontWeight: 700,
+                    color: "#0D0B17",
+                    background: "#B87CFF",
+                    borderRadius: 999,
+                    padding: "8px 16px",
+                  }}
+                >
+                  {venue}
+                </span>
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  alignSelf: "flex-start",
+                  marginTop: 8,
+                  padding: "14px 26px",
+                  borderRadius: 999,
+                  border: "1px solid rgba(255,255,255,0.26)",
+                  background: "rgba(255,255,255,0.10)",
+                  color: "#FFFFFF",
+                  fontSize: 30,
+                  fontWeight: 700,
+                  letterSpacing: 0.2,
+                }}
+              >
+                Compra tu entrada
+              </div>
             </div>
-          </div>
+          </section>
+
+          <section
+            style={{
+              flex: 1,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <div
+              style={{
+                width: 420,
+                height: 520,
+                borderRadius: 34,
+                border: "1px solid rgba(255,255,255,0.16)",
+                background:
+                  "linear-gradient(180deg, rgba(13,11,24,0.60), rgba(13,11,24,0.82))",
+                boxShadow: "0 34px 90px rgba(0,0,0,0.48)",
+                overflow: "hidden",
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
+              <div
+                style={{
+                  height: 352,
+                  width: "100%",
+                  background: "rgba(255,255,255,0.06)",
+                  display: "flex",
+                }}
+              >
+                {coverUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={coverUrl}
+                    alt=""
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "cover",
+                    }}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      background:
+                        "linear-gradient(150deg,#0f0020 0%,#3b0764 40%,#7c3aed 100%)",
+                      display: "flex",
+                    }}
+                  />
+                )}
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 8,
+                  padding: "18px 22px",
+                }}
+              >
+                <span
+                  style={{
+                    color: "#BFB4D8",
+                    fontSize: 16,
+                    fontWeight: 600,
+                    letterSpacing: 0.5,
+                  }}
+                >
+                  EVENTO EN VIVO
+                </span>
+                <span
+                  style={{
+                    color: "#FFFFFF",
+                    fontSize: 32,
+                    lineHeight: 1.05,
+                    fontWeight: 700,
+                  }}
+                >
+                  {title}
+                </span>
+              </div>
+            </div>
+          </section>
         </div>
       </div>
     ),
