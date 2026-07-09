@@ -113,9 +113,16 @@ type Props = {
   category: EventCategory | null;
   onCategoryChange: (cat: EventCategory | null) => void;
   search?: string;
+  compactHeader?: boolean;
 };
 
-export function EventsSection({ sectionRef, category, onCategoryChange, search }: Props) {
+export function EventsSection({
+  sectionRef,
+  category,
+  onCategoryChange,
+  search,
+  compactHeader = false,
+}: Props) {
   const events = useBrowseEvents(category);
   // Siempre traemos todos para saber qué categorías tienen al menos 1 evento
   const allEvents = useBrowseEvents(null);
@@ -134,12 +141,21 @@ export function EventsSection({ sectionRef, category, onCategoryChange, search }
     : events.data;
 
   return (
-    <section ref={sectionRef} className="pt-[clamp(48px,6vw,80px)] pb-[clamp(32px,4vw,56px)]">
+    <section
+      ref={sectionRef}
+      className={compactHeader ? "pt-3 pb-[clamp(32px,4vw,56px)]" : "pt-[clamp(48px,6vw,80px)] pb-[clamp(32px,4vw,56px)]"}
+    >
       {/* Header + filtros */}
       <div className="mx-auto max-w-[1320px] px-[clamp(20px,4vw,56px)]">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="m-0 font-sans text-[clamp(18px,2.4vw,28px)] font-semibold tracking-[-0.02em] text-white/85">
-            Esta semana
+          <h2
+            className={
+              compactHeader
+                ? "m-0 font-sans text-[12px] font-medium uppercase tracking-[0.12em] text-white/35"
+                : "m-0 font-sans text-[clamp(18px,2.4vw,28px)] font-semibold tracking-[-0.02em] text-white/85"
+            }
+          >
+            {compactHeader ? "Disponibles ahora" : "Esta semana"}
           </h2>
           <Link
             // eslint-disable-next-line @typescript-eslint/no-explicit-any

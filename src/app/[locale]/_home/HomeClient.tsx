@@ -10,6 +10,7 @@ import { EventsSection } from "./EventsSection";
 import { Footer } from "./Footer";
 import { WaFloat } from "./WaFloat";
 import { AmbientGlow } from "./AmbientGlow";
+import { SeoBrowseLead } from "@/components/seo/SeoBrowseLead";
 import { UserTabbar } from "@/components/layout/UserTabbar";
 import { SideDrawer } from "./SideDrawer";
 import { SignInDrawer } from "./SignInDrawer";
@@ -18,6 +19,7 @@ export type SeoLead = {
   h1: string;
   description: string;
   breadcrumbs?: ReactNode;
+  category?: EventCategory | null;
 };
 
 type Props = {
@@ -76,23 +78,19 @@ export function HomeClient({
           {showHero && loggedIn && <NextEventHero />}
           {showHero && <HeroCarousel />}
           {seoLead ? (
-            <section className="px-[clamp(20px,4vw,56px)] pt-6 lg:pt-8">
-              <div className="mx-auto max-w-[1320px]">
-                {seoLead.breadcrumbs}
-                <h1 className="mt-3 font-sans text-[clamp(26px,4vw,36px)] font-bold tracking-[-0.03em] text-white">
-                  {seoLead.h1}
-                </h1>
-                <p className="mt-2 max-w-[62ch] text-[15px] leading-relaxed text-cart-ink-3">
-                  {seoLead.description}
-                </p>
-              </div>
-            </section>
+            <SeoBrowseLead
+              h1={seoLead.h1}
+              description={seoLead.description}
+              breadcrumbs={seoLead.breadcrumbs}
+              category={seoLead.category ?? initialCategory}
+            />
           ) : null}
           <EventsSection
             sectionRef={eventsSectionRef}
             category={category}
             onCategoryChange={setCategory}
             search={search}
+            compactHeader={!!seoLead}
           />
         </main>
         <Footer />
