@@ -16,17 +16,6 @@ const buttonStyle = {
   color: "#fff",
 } as const;
 
-export const BackBtn = () => {
-  const router = useRouter();
-  return (
-    <button type="button" aria-label="Volver" style={buttonStyle} onClick={() => router.back()}>
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-        <path d="M10 3l-5 5 5 5" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    </button>
-  );
-};
-
 export const CloseBtn = ({ href = "/" as string }) => {
   const router = useRouter();
   return (

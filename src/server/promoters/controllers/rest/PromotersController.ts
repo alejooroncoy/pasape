@@ -4,6 +4,7 @@ import { getAuthContext, resolveActiveOrgSlug } from "@/server/_shared/AuthConte
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
 import { supabaseOrganizationRepository } from "@/server/identity/organizations/infrastructure/repositories/SupabaseOrganizationRepository";
 import { supabasePromoterRepository as repo } from "../../infrastructure/repositories/SupabasePromoterRepository";
+import { notifyPromoterApproved } from "../../application/NotifyPromoterApproved";
 import {
   applyByLink,
   decideApplication,
@@ -145,7 +146,7 @@ export const PromotersController = {
     if (!(await hasWriteRole(org.id, auth.value.profileId))) return err("forbidden");
     const parsed = decideSchema.safeParse(input);
     if (!parsed.success) return err("invalid_input");
-    return decideApplication(
+    const result = await decideApplication(
       { repo },
       {
         applicationId: parsed.data.applicationId,
@@ -155,5 +156,22 @@ export const PromotersController = {
         commissionPct: parsed.data.commissionPct,
       },
     );
+
+    // Al aprobar, avisamos al promotor por WhatsApp + correo (fire-and-forget:
+    // la aprobación ya está guardada; el aviso no debe bloquear ni tumbar la
+    // respuesta). `link` solo viene cuando la decisión fue "approved".
+    if (result.ok && result.value.link) {
+      const link = result.value.link;
+      if (link.promoterId) {
+        void notifyPromoterApproved({
+          promoterId: link.promoterId,
+          orgName: org.name,
+          eventTitle: link.eventTitle,
+          promoterCode: link.code,
+        }).catch((e) => console.error("[PromotersController.decide] notify falló:", e));
+      }
+    }
+
+    return result;
   },
 };

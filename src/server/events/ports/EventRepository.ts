@@ -312,7 +312,6 @@ export type EventExportData = {
 export interface EventRepository {
   listPublished(limit: number, cursor: string | null, category?: EventCategory | null): Promise<Event[]>;
   listByOrganization(orgId: string): Promise<Event[]>;
-  listByOrgSlug(orgSlug: string): Promise<Event[]>;
   /** Solo eventos publicados de una org, ordenados por startsAt asc. */
   listPublishedByOrgSlug(orgSlug: string): Promise<Event[]>;
   getBySlug(
