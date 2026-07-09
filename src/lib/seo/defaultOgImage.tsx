@@ -62,7 +62,6 @@ export async function createDefaultOgImage() {
               display: "flex",
               flexDirection: "column",
               justifyContent: "center",
-              paddingBottom: 18,
             }}
           >
             <div
@@ -132,18 +131,6 @@ export async function createDefaultOgImage() {
               accesos y tomar decisiones con datos, sin cargarle más trabajo a
               tu equipo.
             </p>
-
-            <div
-              style={{
-                display: "flex",
-                gap: 12,
-                marginTop: 34,
-              }}
-            >
-              <Metric value="Venta" label="checkout y pagos" accent="#B87CFF" />
-              <Metric value="Acceso" label="QR y scanner" accent="#22D17F" />
-              <Metric value="Datos" label="panel en vivo" accent="#FFCE3B" />
-            </div>
           </section>
 
           <section
@@ -203,55 +190,6 @@ function BackgroundTexture() {
           display: "flex",
         }}
       />
-    </div>
-  );
-}
-
-function Metric({
-  value,
-  label,
-  accent,
-}: {
-  value: string;
-  label: string;
-  accent: string;
-}) {
-  return (
-    <div
-      style={{
-        width: 142,
-        display: "flex",
-        flexDirection: "column",
-        gap: 6,
-        padding: "14px 15px",
-        borderRadius: 18,
-        background: "rgba(255,255,255,0.055)",
-        border: "1px solid rgba(255,255,255,0.10)",
-      }}
-    >
-      <span
-        style={{
-          width: 24,
-          height: 4,
-          borderRadius: 99,
-          background: accent,
-          boxShadow: `0 0 16px ${accent}`,
-          display: "flex",
-        }}
-      />
-      <span
-        style={{
-          color: "#fff",
-          fontSize: 24,
-          lineHeight: 1,
-          fontWeight: 700,
-        }}
-      >
-        {value}
-      </span>
-      <span style={{ color: "#8E8EA1", fontSize: 13, fontWeight: 600 }}>
-        {label}
-      </span>
     </div>
   );
 }
