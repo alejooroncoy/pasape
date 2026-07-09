@@ -65,6 +65,7 @@ export default async function EventosCategoryPage({ params }: Props) {
           h1: landing.h1,
           description: landing.description,
           breadcrumbs: <Breadcrumbs items={breadcrumbs} />,
+          category: landing.category,
         }}
       />
     </>
