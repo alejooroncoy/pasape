@@ -10,7 +10,7 @@ type Props = {
   params: Promise<{ locale: string }>;
 };
 
-const TITLE = "Libro de Reclamaciones | Pasape";
+const TITLE = "Libro de Reclamaciones";
 const DESCRIPTION =
   "Registra tu reclamo o queja. Cumplimos con el Código de Protección y Defensa del Consumidor (Ley 29571). Te respondemos en un máximo de 15 días hábiles.";
 

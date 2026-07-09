@@ -15,6 +15,7 @@ import {
   SITE_URL,
   SUPPORTED_LOCALES,
   absoluteUrl,
+  brandedTitle,
   localePath,
 } from "@/lib/seo/site";
 import { EventDetailClient } from "./EventDetailClient";
@@ -35,7 +36,7 @@ export async function generateMetadata({
 
   try {
     const { event } = await serverApiGet<EventDetailResponse>(`/api/events/${slug}`);
-    const title = `${event.title} | ${SITE_NAME}`;
+    const fullTitle = brandedTitle(event.title);
     const description =
       event.description?.trim() ||
       `Compra entradas para ${event.title} en ${SITE_NAME}. Tickets digitales con QR al instante.`;
@@ -44,7 +45,7 @@ export async function generateMetadata({
     const url = absoluteUrl(canonicalPath);
 
     return {
-      title,
+      title: event.title,
       description,
       alternates: {
         canonical: canonicalPath,
@@ -57,7 +58,7 @@ export async function generateMetadata({
         type: "website",
         url,
         siteName: SITE_NAME,
-        title,
+        title: fullTitle,
         description,
         locale: resolvedLocale === "en" ? "en_US" : "es_PE",
         images: [
@@ -71,21 +72,22 @@ export async function generateMetadata({
       },
       twitter: {
         card: "summary_large_image",
-        title,
+        title: fullTitle,
         description,
         images: [absoluteUrl(imagePath)],
       },
     };
   } catch {
     const canonicalPath = localePath(resolvedLocale, `/events/${slug}`);
+    const fallbackTitle = brandedTitle("Evento");
     return {
-      title: `Evento | ${SITE_NAME}`,
+      title: "Evento",
       description: DEFAULT_DESCRIPTION,
       alternates: { canonical: canonicalPath },
       openGraph: {
         type: "website",
         url: new URL(canonicalPath, SITE_URL).toString(),
-        title: `Evento | ${SITE_NAME}`,
+        title: fallbackTitle,
         description: DEFAULT_DESCRIPTION,
       },
     };

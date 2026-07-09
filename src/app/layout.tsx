@@ -10,12 +10,15 @@ import {
   SITE_NAME,
   SITE_URL,
   absoluteUrl,
+  brandedTitle,
 } from "@/lib/seo/site";
+
+const HOME_FULL_TITLE = brandedTitle(HOME_TITLE);
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: HOME_TITLE,
+    default: HOME_FULL_TITLE,
     template: `%s | ${SITE_NAME}`,
   },
   description: DEFAULT_DESCRIPTION,
@@ -62,20 +65,20 @@ export const metadata: Metadata = {
     locale: "es_PE",
     url: SITE_URL,
     siteName: SITE_NAME,
-    title: HOME_TITLE,
+    title: HOME_FULL_TITLE,
     description: DEFAULT_DESCRIPTION,
     images: [
       {
         url: absoluteUrl(DEFAULT_OG_IMAGE),
         width: 1200,
         height: 630,
-        alt: HOME_TITLE,
+        alt: HOME_FULL_TITLE,
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: HOME_TITLE,
+    title: HOME_FULL_TITLE,
     description: DEFAULT_DESCRIPTION,
     images: [absoluteUrl(DEFAULT_OG_IMAGE)],
   },

@@ -4,7 +4,9 @@ import {
   DEFAULT_OG_IMAGE,
   SITE_NAME,
   absoluteUrl,
+  brandedTitle,
   localePath,
+  pageTitle,
 } from "./site";
 
 type PageMetaInput = {
@@ -25,9 +27,11 @@ export function buildPageMetadata({
   const canonicalPath = localePath(locale, path);
   const url = absoluteUrl(canonicalPath);
   const ogImage = absoluteUrl(DEFAULT_OG_IMAGE);
+  const shortTitle = pageTitle(title);
+  const fullTitle = brandedTitle(shortTitle);
 
   return {
-    title,
+    title: shortTitle,
     description,
     alternates: {
       canonical: canonicalPath,
@@ -40,7 +44,7 @@ export function buildPageMetadata({
       type: ogType,
       url,
       siteName: SITE_NAME,
-      title,
+      title: fullTitle,
       description,
       locale: locale === "en" ? "en_US" : "es_PE",
       images: [
@@ -48,13 +52,13 @@ export function buildPageMetadata({
           url: ogImage,
           width: 1200,
           height: 630,
-          alt: title,
+          alt: fullTitle,
         },
       ],
     },
     twitter: {
       card: "summary_large_image",
-      title,
+      title: fullTitle,
       description,
       images: [ogImage],
     },
