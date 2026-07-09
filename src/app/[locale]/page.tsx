@@ -6,6 +6,7 @@ import { buildPageMetadata } from "@/lib/seo/metadata";
 import { HOME_TITLE, DEFAULT_DESCRIPTION } from "@/lib/seo/site";
 import { getSessionUser } from "@/server/identity/application/GetSessionUser";
 import { makeQueryClient } from "@/lib/_shared/query-client-config";
+import { BROWSE_EVENTS_LIMIT } from "@/lib/events/constants";
 import { EventsController } from "@/server/events/controllers/rest/EventsController";
 
 type Props = {
@@ -28,7 +29,7 @@ export default async function HomePage({ params }: Props) {
 
   const [user, eventsResult] = await Promise.all([
     getSessionUser(),
-    EventsController.listPublic(),
+    EventsController.listPublic({ limit: BROWSE_EVENTS_LIMIT }),
   ]);
 
   const qc = makeQueryClient();

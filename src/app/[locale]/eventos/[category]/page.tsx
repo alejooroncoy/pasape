@@ -12,6 +12,7 @@ import {
   type EventosLandingSlug,
 } from "@/lib/seo/pages";
 import { makeQueryClient } from "@/lib/_shared/query-client-config";
+import { BROWSE_EVENTS_LIMIT } from "@/lib/events/constants";
 import { listPublishedEvents } from "@/server/events/application/ListPublishedEvents";
 import { supabaseEventRepository as repo } from "@/server/events/infrastructure/repositories/SupabaseEventRepository";
 import { getSessionUser } from "@/server/identity/application/GetSessionUser";
@@ -46,8 +47,8 @@ export default async function EventosCategoryPage({ params }: Props) {
 
   const [user, events, allEvents] = await Promise.all([
     getSessionUser(),
-    listPublishedEvents({ repo }, { limit: 100, category: landing.category }),
-    listPublishedEvents({ repo }, { limit: 50 }),
+    listPublishedEvents({ repo }, { limit: BROWSE_EVENTS_LIMIT, category: landing.category }),
+    listPublishedEvents({ repo }, { limit: BROWSE_EVENTS_LIMIT }),
   ]);
 
   const qc = makeQueryClient();

@@ -141,6 +141,9 @@ export function HeroCarousel() {
                 <img
                   src={e.coverUrl}
                   alt=""
+                  loading={i === cur ? "eager" : "lazy"}
+                  fetchPriority={i === cur ? "high" : "low"}
+                  decoding="async"
                   className="absolute inset-0 h-full w-full object-cover"
                   style={{ filter: "blur(32px) saturate(1.3)", transform: "scale(1.08)" }}
                 />
