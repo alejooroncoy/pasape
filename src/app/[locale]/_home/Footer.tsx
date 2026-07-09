@@ -1,5 +1,6 @@
 import { Link } from "@/i18n/navigation";
 import { Logo } from "@/components/brand/Logo";
+import { LibroReclamacionesFooterLink } from "@/components/legal/LibroReclamacionesFooterLink";
 
 export function Footer() {
   return (
@@ -29,25 +30,16 @@ export function Footer() {
             ["Eventos en Lima", "/eventos/lima"],
             ["Centro de ayuda", "/ayuda"],
           ]} />
-          <FootCol title="Pasape" links={[
-            ["Todos los eventos", "/"],
-            ["Ayuda", "/ayuda"],
-            ["Organizadores", "/organizadores"],
-            ["Libro de reclamaciones", "/complaints"],
-          ]} />
+          <div>
+            <h5 className="m-0 mb-3.5 text-[11.5px] font-medium uppercase tracking-[0.1em] text-cart-ink-2">
+              Libro de reclamaciones
+            </h5>
+            <LibroReclamacionesFooterLink />
+          </div>
         </div>
         <div className="mt-10 flex flex-wrap items-center justify-between gap-3 border-t border-cart-line-2 pt-[22px] text-[12.5px] text-cart-ink-4">
           <span>© 2026 Pasape S.A.C. — Lima, Perú.</span>
-          <div className="flex flex-wrap items-center gap-4">
-            <Link
-              href="/complaints"
-              className="inline-flex items-center gap-2 rounded-md border border-cart-line-2 px-3 py-1.5 text-cart-ink-3 transition-colors hover:border-white/40 hover:text-white"
-            >
-              <span aria-hidden className="text-[14px]">📖</span>
-              Libro de Reclamaciones
-            </Link>
-            <span>Hecho con ☕ en Perú.</span>
-          </div>
+          <span>Hecho con ☕ en Perú.</span>
         </div>
       </div>
     </footer>
