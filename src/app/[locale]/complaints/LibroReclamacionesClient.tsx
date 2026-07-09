@@ -1,8 +1,11 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import { useState, type ReactNode } from "react";
+import { PublicAppShell } from "../_home/PublicAppShell";
+import { Breadcrumbs } from "@/components/seo/Breadcrumbs";
+import type { NavUser } from "../_home/Nav";
 import { cn } from "@/lib/_shared/cn";
 import {
   PLAZO_RESPUESTA_DIAS_HABILES,
@@ -24,7 +27,7 @@ const inputCls =
 const areaCls =
   "min-h-28 w-full rounded-2xl border border-cart-line bg-cart-bg-elev p-4 text-base text-white placeholder:text-cart-ink-4 outline-none transition-colors focus:border-(--color-accent) resize-y";
 
-export function LibroReclamacionesClient() {
+export function LibroReclamacionesClient({ user }: { user: NavUser | null }) {
   const [tipo, setTipo] = useState<TipoReclamacion>("reclamo");
   const [tipoDocumento, setTipoDocumento] = useState<TipoDocumento>("dni");
   const [tipoBien, setTipoBien] = useState<TipoBien>("servicio");
@@ -87,23 +90,23 @@ export function LibroReclamacionesClient() {
   }
 
   if (constancia) {
-    return <ConstanciaView constancia={constancia} />;
+    return (
+      <PublicAppShell user={user} contentClassName="mx-auto w-full max-w-[480px]">
+        <ConstanciaView constancia={constancia} />
+      </PublicAppShell>
+    );
   }
 
-  return (
-    <main className="min-h-screen bg-cart-bg px-[clamp(20px,5vw,40px)] py-[clamp(28px,6vw,64px)] text-white">
-      <div className="mx-auto w-full max-w-[720px]">
-        <Link
-          href="/"
-          className="inline-flex items-center gap-1.5 text-sm text-cart-ink-3 transition-colors hover:text-white"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-            <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          Volver al inicio
-        </Link>
+  const breadcrumbs = [
+    { name: "Inicio", path: "/" },
+    { name: "Libro de Reclamaciones", path: "/complaints" },
+  ];
 
-        <header className="mt-6 flex items-center gap-4">
+  return (
+    <PublicAppShell user={user} contentClassName="mx-auto w-full max-w-[720px]">
+      <Breadcrumbs items={breadcrumbs} />
+
+      <header className="mt-6 flex items-center gap-4">
           <div className="shrink-0 overflow-hidden rounded-2xl bg-white p-2">
             <Image
               src="/libro-de-reclamaciones.png"
@@ -292,16 +295,14 @@ export function LibroReclamacionesClient() {
             Te responderemos en un plazo máximo de {PLAZO_RESPUESTA_DIAS_HABILES} días hábiles.
           </p>
         </form>
-      </div>
-    </main>
+    </PublicAppShell>
   );
 }
 
 function ConstanciaView({ constancia }: { constancia: Constancia }) {
   const { codigo, fecha, tipo, email } = constancia;
   return (
-    <main className="grid min-h-screen place-items-center bg-cart-bg px-6 py-16 text-white">
-      <div className="w-full max-w-[480px] text-center">
+    <div className="py-8 text-center">
         <div className="mx-auto grid size-16 place-items-center rounded-full bg-emerald-500/15">
           <svg width="34" height="34" viewBox="0 0 24 24" fill="none" aria-hidden>
             <path d="M20 6L9 17l-5-5" stroke="#34d399" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
@@ -349,8 +350,7 @@ function ConstanciaView({ constancia }: { constancia: Constancia }) {
         >
           Volver al inicio
         </Link>
-      </div>
-    </main>
+    </div>
   );
 }
 
