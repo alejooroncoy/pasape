@@ -33,8 +33,13 @@ export function trackPageView(path: string) {
   if (typeof window !== "undefined" && typeof window.fbq === "function") {
     window.fbq("track", "PageView");
   }
+}
 
+/** Pixels diferidos (lazyOnload). Retorna true si TikTok ya estaba listo. */
+export function trackDeferredPageView(): boolean {
   if (typeof window !== "undefined" && window.ttq?.page) {
     window.ttq.page();
+    return true;
   }
+  return false;
 }

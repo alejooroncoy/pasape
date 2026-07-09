@@ -349,7 +349,7 @@ const ONBOARDING_CSS = `
   min-height: 100dvh;
   background: #0a0a0f;
   color: #fff;
-  font-family: "General Sans", system-ui, -apple-system, sans-serif;
+  font-family: var(--font-general-sans), system-ui, -apple-system, sans-serif;
   display: flex;
   flex-direction: column;
   position: relative;

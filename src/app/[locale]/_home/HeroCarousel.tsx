@@ -141,6 +141,9 @@ export function HeroCarousel() {
                 <img
                   src={e.coverUrl}
                   alt=""
+                  loading={i === cur ? "eager" : "lazy"}
+                  fetchPriority={i === cur ? "high" : "low"}
+                  decoding="async"
                   className="absolute inset-0 h-full w-full object-cover"
                   style={{ filter: "blur(32px) saturate(1.3)", transform: "scale(1.08)" }}
                 />
@@ -187,6 +190,8 @@ export function HeroCarousel() {
                       <img
                         src={ev.coverUrl}
                         alt={ev.title}
+                        fetchPriority={cur === 0 ? "high" : "auto"}
+                        loading={cur === 0 ? "eager" : "lazy"}
                         onLoad={(imgEv) => {
                           const img = imgEv.currentTarget;
                           const ar = img.naturalWidth / img.naturalHeight;
@@ -252,7 +257,13 @@ export function HeroCarousel() {
                 <div className="aspect-[4/5] w-full max-w-[256px] overflow-hidden rounded-[16px] shadow-[0_16px_48px_-8px_rgba(0,0,0,0.7)]">
                   {ev.coverUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={ev.coverUrl} alt={ev.title} className="h-full w-full object-cover" />
+                    <img
+                      src={ev.coverUrl}
+                      alt={ev.title}
+                      fetchPriority={cur === 0 ? "high" : "auto"}
+                      loading={cur === 0 ? "eager" : "lazy"}
+                      className="h-full w-full object-cover"
+                    />
                   ) : (
                     <div
                       className="h-full w-full"

@@ -19,8 +19,10 @@ export const C = {
   yellowSoft: "rgba(255,206,59,0.14)",
 } as const;
 
+// Familias vía variables de next/font (layout raíz). No usar nombres literales
+// ("General Sans"): next/font registra familias ofuscadas y el literal cae a system-ui.
 export const FONT_DISPLAY =
-  '"General Sans", system-ui, -apple-system, sans-serif';
+  "var(--font-general-sans), system-ui, -apple-system, sans-serif";
 export const FONT_BODY = FONT_DISPLAY;
 export const FONT_MONO =
-  '"JetBrains Mono", ui-monospace, monospace';
+  "var(--font-jetbrains-mono), ui-monospace, monospace";

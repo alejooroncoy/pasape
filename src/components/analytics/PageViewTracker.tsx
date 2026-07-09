@@ -3,7 +3,7 @@
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 import posthog from "posthog-js";
-import { trackPageView } from "@/lib/analytics/track";
+import { trackPageView, trackDeferredPageView } from "@/lib/analytics/track";
 
 export function PageViewTracker() {
   const pathname = usePathname();
@@ -15,6 +15,12 @@ export function PageViewTracker() {
 
     posthog.capture("page_view", { page_path: path });
     trackPageView(path);
+
+    // TikTok va en lazyOnload — reintento solo si aún no cargó.
+    if (!trackDeferredPageView()) {
+      const deferred = window.setTimeout(() => trackDeferredPageView(), 3000);
+      return () => window.clearTimeout(deferred);
+    }
   }, [pathname, searchParams]);
 
   return null;
