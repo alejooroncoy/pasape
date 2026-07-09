@@ -19,7 +19,13 @@ const shortDate = (iso: string, tz: string) =>
     month: "short",
     hour: "2-digit",
     minute: "2-digit",
-  }).format(new Date(iso));
+  })
+    .format(new Date(iso))
+    // El ICU de Node y el del navegador difieren en el espacio que ponen antes
+    // de "p. m." (U+202F vs U+00A0), lo que rompía la hidratación. Normalizamos
+    // cualquier espacio angosto/duro a un espacio normal para que SSR y cliente
+    // produzcan exactamente el mismo string.
+    .replace(/[\u202f\u00a0]/g, " ");
 
 /* ─── Skeleton ───────────────────────────────────────────────────────────── */
 function Skeleton() {
@@ -233,7 +239,7 @@ export function HeroCarousel() {
               <Link
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 href={`/events/${ev.slug}` as any}
-                className="inline-flex w-fit items-center gap-2.5 rounded-full bg-cart-accent px-6 py-3 text-[13.5px] font-bold text-white transition-[filter] hover:brightness-110"
+                className="inline-flex w-fit items-center gap-2.5 rounded-full bg-cart-accent-strong px-6 py-3 text-[13.5px] font-bold text-white transition-[filter] hover:brightness-110"
                 style={{ boxShadow: "0 6px 24px -6px var(--color-cart-accent-glow-strong)" }}
               >
                 Comprar entradas
@@ -288,7 +294,7 @@ export function HeroCarousel() {
                   <Link
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     href={`/events/${ev.slug}` as any}
-                    className="mt-1 inline-flex items-center gap-2 rounded-full bg-cart-accent px-6 py-2.5 text-[13px] font-bold text-white"
+                    className="mt-1 inline-flex items-center gap-2 rounded-full bg-cart-accent-strong px-6 py-2.5 text-[13px] font-bold text-white"
                     style={{ boxShadow: "0 6px 24px -6px var(--color-cart-accent-glow-strong)" }}
                   >
                     Comprar entradas
