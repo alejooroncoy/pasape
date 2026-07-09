@@ -11,6 +11,45 @@ const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 // offline; los datos los aporta la persistencia de React Query.
 
 const nextConfig: NextConfig = {
+  async redirects() {
+    return [
+      { source: "/eventos", destination: "/es/eventos", permanent: true },
+      { source: "/eventos/:path*", destination: "/es/eventos/:path*", permanent: true },
+      { source: "/ayuda", destination: "/es/ayuda", permanent: true },
+      { source: "/evento/:slug", destination: "/es/events/:slug", permanent: true },
+    ];
+  },
+  async headers() {
+    return [
+      {
+        source: "/icons/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
+      },
+      {
+        source: "/:path*.webp",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
+      },
+      {
+        source: "/:path*.png",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
+      },
+    ];
+  },
   async rewrites() {
     return [
       {

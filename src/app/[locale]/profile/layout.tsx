@@ -1,8 +1,12 @@
+import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { UserHeader } from "../_home/UserHeader";
 import { UserSidebar } from "@/components/layout/UserSidebar";
 import { UserTabbar } from "@/components/layout/UserTabbar";
 import { MobileOnlyGuard } from "@/components/layout/MobileOnlyGuard";
+import { NOINDEX_METADATA } from "@/lib/seo/metadata";
+
+export const metadata: Metadata = NOINDEX_METADATA;
 
 export default function ProfileLayout({ children }: { children: ReactNode }) {
   return (

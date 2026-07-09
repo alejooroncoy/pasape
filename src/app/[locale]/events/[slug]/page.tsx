@@ -6,7 +6,8 @@ import type { MeResponse } from "@/lib/identity/hooks/useCurrentUser";
 import { IdentityController } from "@/server/identity/controllers/rest/IdentityController";
 import type { Event, Promo, TicketType } from "@/server/events/domain/Event";
 import { JsonLd } from "@/components/seo/JsonLd";
-import { eventJsonLd } from "@/lib/seo/jsonld";
+import { breadcrumbJsonLd, eventJsonLd } from "@/lib/seo/jsonld";
+import { CATEGORY_BY_ID } from "@/app/[locale]/_home/categories";
 import {
   DEFAULT_DESCRIPTION,
   DEFAULT_LOCALE,
@@ -134,9 +135,24 @@ export default async function EventDetailPage({
 
   qc.setQueryData(["events", "detail", slug], detail);
 
+  const category = detail.event.category;
+  const breadcrumbItems = [
+    { name: "Inicio", path: "/" },
+    { name: "Eventos", path: "/eventos" },
+    ...(category
+      ? [{ name: CATEGORY_BY_ID[category].label, path: `/eventos/${category}` }]
+      : []),
+    { name: detail.event.title, path: `/events/${detail.event.slug}` },
+  ];
+
   return (
     <>
-      <JsonLd data={eventJsonLd(detail.event, detail.ticketTypes, resolvedLocale)} />
+      <JsonLd
+        data={[
+          eventJsonLd(detail.event, detail.ticketTypes, resolvedLocale),
+          breadcrumbJsonLd(breadcrumbItems, resolvedLocale),
+        ]}
+      />
       <HydrationBoundary state={dehydrate(qc)}>
         <EventDetailClient slug={slug} />
       </HydrationBoundary>

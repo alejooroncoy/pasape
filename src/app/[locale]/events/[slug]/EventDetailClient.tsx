@@ -54,6 +54,14 @@ export function EventDetailClient({ slug }: { slug: string }) {
     api.post("/api/identity/category-view", { category }).catch(() => {});
   }, [slug, data?.event.category]);
 
+  const eventViewSent = useRef<string | null>(null);
+  useEffect(() => {
+    const event = data?.event;
+    if (!event || eventViewSent.current === slug) return;
+    eventViewSent.current = slug;
+    clientEvents.eventView({ event_slug: event.slug, event_id: event.id });
+  }, [slug, data?.event]);
+
   // Los 3 tonos los eligió el organizador al crear/editar el evento (o los
   // dejó extraídos del flyer) — viajan ya resueltos en `event.palette*`, sin
   // canvas ni decodificación de imagen en el cliente. Si NO personalizó nada

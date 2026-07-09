@@ -1,13 +1,15 @@
+import type { ReactNode } from "react";
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { NextIntlClientProvider, hasLocale } from "next-intl";
 import { setRequestLocale } from "next-intl/server";
-import type { ReactNode } from "react";
 import { Toaster } from "sonner";
 import { routing } from "@/i18n/routing";
 import { QueryProvider } from "@/lib/_shared/query-client";
 import { ServiceWorkerRegister } from "@/components/pwa/ServiceWorkerRegister";
 import { PostLoginRedirect } from "@/components/auth/PostLoginRedirect";
 import { PostHogIdentify } from "@/components/analytics/PostHogIdentify";
+import { PageViewTracker } from "@/components/analytics/PageViewTracker";
 
 export function generateStaticParams() {
   return routing.locales.map((locale) => ({ locale }));
@@ -29,6 +31,9 @@ export default async function LocaleLayout({ children, params }: Props) {
         {children}
         <PostLoginRedirect />
         <PostHogIdentify />
+        <Suspense fallback={null}>
+          <PageViewTracker />
+        </Suspense>
       </QueryProvider>
       <ServiceWorkerRegister />
       {/* Estilo alineado al sistema cart-*: tarjeta elevada sobria, sin los

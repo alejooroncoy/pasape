@@ -1,7 +1,8 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { EventCategory } from "@/server/events/domain/Event";
+import { clientEvents } from "@/lib/analytics/clientEvents";
 import { Nav, type NavUser } from "./Nav";
 import { NextEventHero } from "./NextEventHero";
 import { HeroCarousel } from "./HeroCarousel";
@@ -26,6 +27,17 @@ export function HomeClient({ user }: { user: NavUser | null }) {
       eventsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 50);
   };
+
+  const lastSearchTracked = useRef("");
+  useEffect(() => {
+    const q = search.trim();
+    if (!q || q === lastSearchTracked.current) return;
+    const timer = setTimeout(() => {
+      lastSearchTracked.current = q;
+      clientEvents.search({ query: q, location: "home" });
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   return (
     <div className="cart-grain relative min-h-screen overflow-hidden bg-cart-bg text-white font-sans">

@@ -6,5 +6,5 @@ type Props = {
 
 export default async function EventsBrowseRedirectPage({ params }: Props) {
   const { locale } = await params;
-  redirect({ href: "/", locale });
+  redirect({ href: "/eventos", locale });
 }

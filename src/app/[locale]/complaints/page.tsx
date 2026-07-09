@@ -1,13 +1,28 @@
 import type { Metadata } from "next";
+import { setRequestLocale } from "next-intl/server";
 import { LibroReclamacionesClient } from "./LibroReclamacionesClient";
+import { buildPageMetadata } from "@/lib/seo/metadata";
 
-export const metadata: Metadata = {
-  title: "Libro de Reclamaciones | Pasape",
-  description:
-    "Registra tu reclamo o queja. Cumplimos con el Código de Protección y Defensa del Consumidor (Ley 29571). Te respondemos en un máximo de 15 días hábiles.",
-  robots: { index: true, follow: true },
+type Props = {
+  params: Promise<{ locale: string }>;
 };
 
-export default function LibroDeReclamacionesPage() {
+const TITLE = "Libro de Reclamaciones | Pasape";
+const DESCRIPTION =
+  "Registra tu reclamo o queja. Cumplimos con el Código de Protección y Defensa del Consumidor (Ley 29571). Te respondemos en un máximo de 15 días hábiles.";
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { locale } = await params;
+  return buildPageMetadata({
+    title: TITLE,
+    description: DESCRIPTION,
+    locale,
+    path: "/complaints",
+  });
+}
+
+export default async function LibroDeReclamacionesPage({ params }: Props) {
+  const { locale } = await params;
+  setRequestLocale(locale);
   return <LibroReclamacionesClient />;
 }

@@ -1,14 +1,35 @@
+import type { Metadata } from "next";
+import { setRequestLocale } from "next-intl/server";
 import { HomeClient } from "./_home/HomeClient";
+import { buildPageMetadata } from "@/lib/seo/metadata";
+import { HOME_TITLE, DEFAULT_DESCRIPTION } from "@/lib/seo/site";
 import { getSessionUser } from "@/server/identity/application/GetSessionUser";
 
-// Server component: la sesión se resuelve en el server (sin flash) y baja al
-// cliente como prop. El Nav solo necesita nombre + avatar para decidir entre
-// "Ingresar" y el menú de cuenta.
-export default async function HomePage() {
+type Props = {
+  params: Promise<{ locale: string }>;
+};
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { locale } = await params;
+  return buildPageMetadata({
+    title: HOME_TITLE,
+    description: DEFAULT_DESCRIPTION,
+    locale,
+    path: "/",
+  });
+}
+
+export default async function HomePage({ params }: Props) {
+  const { locale } = await params;
+  setRequestLocale(locale);
+
   const user = await getSessionUser();
   return (
-    <HomeClient
-      user={user ? { fullName: user.fullName, avatarUrl: user.avatarUrl } : null}
-    />
+    <>
+      <h1 className="sr-only">Pasape — Compra entradas para eventos en Perú</h1>
+      <HomeClient
+        user={user ? { fullName: user.fullName, avatarUrl: user.avatarUrl } : null}
+      />
+    </>
   );
 }

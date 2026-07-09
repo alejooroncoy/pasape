@@ -1,10 +1,12 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { AnalyticsScripts } from "@/components/analytics/AnalyticsScripts";
 import { JsonLd } from "@/components/seo/JsonLd";
 import { organizationJsonLd, websiteJsonLd } from "@/lib/seo/jsonld";
 import {
   DEFAULT_DESCRIPTION,
   DEFAULT_OG_IMAGE,
+  HOME_TITLE,
   SITE_NAME,
   SITE_URL,
   absoluteUrl,
@@ -13,22 +15,31 @@ import {
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: `${SITE_NAME} | Entradas para eventos en Lima`,
-    template: `%s · ${SITE_NAME}`,
+    default: HOME_TITLE,
+    template: `%s | ${SITE_NAME}`,
   },
   description: DEFAULT_DESCRIPTION,
   keywords: [
     "entradas eventos lima",
     "eventos peru",
+    "comprar entradas",
     "tickets digitales",
     "pasape",
-    "eventos con qr",
+    "conciertos lima",
+    "festivales peru",
   ],
   manifest: "/manifest.json",
   applicationName: SITE_NAME,
   category: "events",
   alternates: {
     canonical: "/",
+  },
+  icons: {
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/icons/logo-icon-min-48.png", sizes: "48x48", type: "image/png" },
+    ],
+    apple: [{ url: "/icons/logo-dark-square-180.png", sizes: "180x180", type: "image/png" }],
   },
   robots: {
     index: true,
@@ -51,20 +62,20 @@ export const metadata: Metadata = {
     locale: "es_PE",
     url: SITE_URL,
     siteName: SITE_NAME,
-    title: `${SITE_NAME} | Entradas para eventos en Lima`,
+    title: HOME_TITLE,
     description: DEFAULT_DESCRIPTION,
     images: [
       {
         url: absoluteUrl(DEFAULT_OG_IMAGE),
         width: 1200,
         height: 630,
-        alt: `${SITE_NAME} | Entradas para eventos en Lima`,
+        alt: HOME_TITLE,
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: `${SITE_NAME} | Entradas para eventos en Lima`,
+    title: HOME_TITLE,
     description: DEFAULT_DESCRIPTION,
     images: [absoluteUrl(DEFAULT_OG_IMAGE)],
   },
@@ -95,6 +106,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="Pasape" />
         <link rel="alternate" type="text/plain" href="/llms.txt" title="LLM site summary" />
+        <AnalyticsScripts />
       </head>
       <body className="min-h-full">
         <JsonLd data={[organizationJsonLd(), websiteJsonLd()]} />

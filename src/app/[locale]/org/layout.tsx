@@ -1,6 +1,10 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { getAuthContext } from "@/server/_shared/AuthContext";
+import { NOINDEX_METADATA } from "@/lib/seo/metadata";
+
+export const metadata: Metadata = NOINDEX_METADATA;
 
 // Gate server-side de toda la zona /org/*. Sin sesión Supabase → /login.
 // Las decisiones más finas (sin marcas → /org/new) viven en cada page.tsx.
