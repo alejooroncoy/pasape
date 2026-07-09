@@ -6,6 +6,7 @@ import { ResendEmailSender } from "../infrastructure/ResendEmailSender";
 import { WhatsAppNotificationSender } from "../infrastructure/WhatsAppNotificationSender";
 import { signOrderLink } from "../domain/OrderLinkToken";
 import { resolveHolderEmail, resolveHolderPhone } from "@/server/_shared/crypto/holderContact";
+import { supabaseBoxRepository } from "@/server/boxes/infrastructure/repositories/SupabaseBoxRepository";
 
 // Despacha el QR del ticket por email + WhatsApp tras un pago exitoso.
 //
@@ -20,6 +21,7 @@ import { resolveHolderEmail, resolveHolderPhone } from "@/server/_shared/crypto/
 type Deps = {
   db?: SupabaseClient;
   sender?: NotificationSender;
+  whatsapp?: WhatsAppNotificationSender;
 };
 
 type OrderRow = {
@@ -53,6 +55,9 @@ type TicketRow = {
   holder_phone: string | null;
   holder_email_enc: string | null;
   holder_phone_enc: string | null;
+  box_label: string | null;
+  box_host_ticket_id: string | null;
+  ticket_type_id: string;
 };
 
 const defaultSender = (): NotificationSender =>
@@ -67,6 +72,7 @@ export const dispatchTicketDelivery = async (
 ): Promise<{ dispatched: number; emailSent: boolean; whatsappSent: boolean }> => {
   const db = deps.db ?? supabaseAdmin();
   const sender = deps.sender ?? defaultSender();
+  const whatsapp = deps.whatsapp ?? new WhatsAppNotificationSender();
 
   const { data: order, error: orderErr } = await db
     .from("orders")
@@ -100,7 +106,9 @@ export const dispatchTicketDelivery = async (
       .maybeSingle<EventRow>(),
     db
       .from("tickets")
-      .select("id, holder_name, holder_email, holder_phone, holder_email_enc, holder_phone_enc")
+      .select(
+        "id, holder_name, holder_email, holder_phone, holder_email_enc, holder_phone_enc, box_label, box_host_ticket_id, ticket_type_id",
+      )
       .eq("order_id", order.id)
       .returns<TicketRow[]>(),
   ]);
@@ -196,6 +204,43 @@ export const dispatchTicketDelivery = async (
       status: res.whatsappSent ? "sent" : waErr ? "failed" : "skipped",
       error: waErr,
     });
+  }
+
+  // Segundo WhatsApp, solo al host de un box (nunca a acompañantes): invita a
+  // compartir su link una vez que el QR normal ya salió. El box nace acá si
+  // aún no existe — es idempotente y ya se dispara en paralelo desde el
+  // handler de pago, pero sin garantía de orden respecto a este despacho, así
+  // que lo re-aseguramos antes de leer su invite_token.
+  const boxHostTickets = tickets.filter((t) => t.box_label && !t.box_host_ticket_id);
+  if (boxHostTickets.length > 0) {
+    await supabaseBoxRepository.ensureForOrder(order.id).catch((e) => {
+      console.error("[dispatchTicketDelivery] ensureForOrder (box invite) falló:", (e as Error).message);
+    });
+    for (const host of boxHostTickets) {
+      const group = [...groups.values()].find((g) => g.ticketIds.includes(host.id));
+      if (!group?.to.phone) continue;
+      const { data: box } = await db
+        .from("boxes")
+        .select("invite_token, box_number, capacity")
+        .eq("order_id", order.id)
+        .eq("ticket_type_id", host.ticket_type_id)
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle<{ invite_token: string; box_number: string | null; capacity: number }>();
+      if (!box || box.capacity <= 1) continue;
+      const boxLabel = box.box_number
+        ? /^box\b/i.test(box.box_number.trim())
+          ? box.box_number
+          : `Box ${box.box_number}`
+        : host.box_label ?? "tu box";
+      await whatsapp.sendBoxInvite({
+        phone: group.to.phone,
+        holderName: group.holderName,
+        boxLabel,
+        eventTitle: event.title,
+        shareToken: box.invite_token,
+      });
+    }
   }
 
   if (dispatches.length > 0) {

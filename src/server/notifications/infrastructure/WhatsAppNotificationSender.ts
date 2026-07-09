@@ -69,6 +69,12 @@ const paymentReviewTemplateName = (): string =>
 const paymentRejectedTemplateName = (): string =>
   process.env.WA_PAYMENT_REJECTED_TEMPLATE_NAME ?? "payment_rejected_v1";
 
+// El botón apunta a `https://pasape.lat/box/share/{{1}}` (dominio propio: Meta
+// no permite botones que enlacen directo a wa.me). Esa página puente redirige
+// al toque a WhatsApp con el mensaje de invitación ya armado.
+const boxInviteTemplateName = (): string =>
+  process.env.WA_BOX_INVITE_TEMPLATE_NAME ?? "ticket_box_invite_v1";
+
 const formatDateForTemplate = (iso: string): string => {
   try {
     return new Intl.DateTimeFormat("es-PE", {
@@ -225,6 +231,42 @@ export class WhatsAppNotificationSender implements NotificationSender {
       return true;
     } catch (err) {
       console.warn("[WhatsAppNotificationSender] aviso de pago falló (plantilla no aprobada?):", err);
+      return false;
+    }
+  }
+
+  // Segundo mensaje, solo para el host de un box (nunca acompañantes): el
+  // botón lo manda a la página puente `/box/share/{token}`, que redirige a
+  // WhatsApp con el link de invitación ya armado. Best-effort — si el
+  // template aún no está aprobado en Meta, no rompe la entrega normal.
+  async sendBoxInvite(input: {
+    phone: string;
+    holderName: string;
+    boxLabel: string;
+    eventTitle: string;
+    shareToken: string;
+  }): Promise<boolean> {
+    if (!this.gateway.configured() || !input.phone) return false;
+    try {
+      await this.gateway.sendTemplate({
+        to: input.phone,
+        templateName: boxInviteTemplateName(),
+        languageCode: templateLang(),
+        components: [
+          bodyComponent({
+            holder_name: humanizeName(input.holderName),
+            box_label: input.boxLabel,
+            event_title: input.eventTitle,
+          }),
+          urlButtonComponent(input.shareToken),
+        ],
+      });
+      return true;
+    } catch (err) {
+      console.warn(
+        "[WhatsAppNotificationSender] invitación al box falló (plantilla no aprobada aún?):",
+        err,
+      );
       return false;
     }
   }
