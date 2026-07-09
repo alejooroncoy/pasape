@@ -82,7 +82,8 @@ export default async function EventOgImage({
         >
           <div
             style={{
-              display: "inline-flex",
+              display: "flex",
+              alignSelf: "flex-start",
               alignItems: "center",
               padding: "10px 18px",
               borderRadius: 999,
