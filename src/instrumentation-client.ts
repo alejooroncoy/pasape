@@ -18,14 +18,14 @@ Sentry.init({
   environment: process.env.NEXT_PUBLIC_VERCEL_ENV ?? process.env.NODE_ENV ?? "development",
   // 100% de trazas en dev, 10% en producción (costo).
   tracesSampleRate: process.env.NODE_ENV === "development" ? 1.0 : 0.1,
-  // Session Replay: 10% de sesiones, 100% cuando hay error.
-  replaysSessionSampleRate: 0.1,
-  replaysOnErrorSampleRate: 1.0,
+  // Session Replay apagado a propósito: PostHog ya cubre replay de sesión
+  // (ver posthog.init abajo) y cargar dos SDKs de replay duplicaría el costo
+  // de bundle/runtime para el mismo propósito.
+  replaysSessionSampleRate: 0,
+  replaysOnErrorSampleRate: 0,
   enableLogs: true,
   beforeSend: (event) => scrubSentryEvent(event),
-  // Session Replay en el bundle inicial penaliza Lighthouse (~50 KiB + main thread).
-  // Los errores siguen capturándose; el replay on-error se puede reactivar luego
-  // con lazy import si hace falta en prod.
+  // Sin integración de Replay: los errores siguen capturándose igual.
   integrations: [],
 });
 
@@ -45,7 +45,9 @@ posthog.init(process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN!, {
   session_recording: {
     maskAllInputs: true,
   },
-  // Recorder + surveys suman ~75 KiB en el critical path sin aportar al primer paint.
-  disable_session_recording: true,
+  // Recorder ~50 KiB, pero carga lazy (no bloquea el primer paint) — el
+  // producto necesita ver sesiones reales de compra. Surveys se mantiene
+  // apagado (no se usa).
+  disable_session_recording: false,
   disable_surveys: true,
 });

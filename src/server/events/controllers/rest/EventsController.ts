@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { headers } from "next/headers";
+import { unstable_cache } from "next/cache";
 import { err, ok, type Result } from "@/server/_shared/result";
 import { getAuthContext, resolveActiveOrgSlug } from "@/server/_shared/AuthContext";
 import { supabaseEventRepository as repo } from "../../infrastructure/repositories/SupabaseEventRepository";
@@ -152,9 +153,26 @@ const createSchema = z.object({
     .min(1),
 });
 
+// La lista pública de eventos (home + browse) es data pública y cambia poco.
+// La cacheamos en el Data Cache de Next para sacar el round-trip a Supabase del
+// TTFB del render en cada request. El status lo mantiene pg_cron/repo; una
+// ventana de 60s de staleness en un listado de browse es aceptable (un evento
+// recién publicado o cerrado aparece/desaparece en ≤60s). listPublished usa
+// supabaseAdmin() (stateless, sin cookies) → seguro dentro de unstable_cache.
+const listPublicCached = unstable_cache(
+  (limit: number | null, cursor: string | null, category: EventCategory | null) =>
+    listPublishedEvents({ repo }, { limit: limit ?? undefined, cursor, category }),
+  ["events:list-public"],
+  { revalidate: 60, tags: ["events:browse"] },
+);
+
 export const EventsController = {
   async listPublic(opts: { limit?: number; cursor?: string | null; category?: EventCategory | null } = {}): Promise<Result<Event[]>> {
-    const events = await listPublishedEvents({ repo }, opts);
+    const events = await listPublicCached(
+      opts.limit ?? null,
+      opts.cursor ?? null,
+      opts.category ?? null,
+    );
     return ok(events);
   },
 
