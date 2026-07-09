@@ -5,7 +5,6 @@ import { AnimatePresence, motion } from "motion/react";
 import { Link } from "@/i18n/navigation";
 import { useBrowseEvents } from "@/lib/events/hooks/useEvents";
 import { optimizeImageUrl } from "@/lib/images/optimizeUrl";
-import type { Event } from "@/server/events/domain/Event";
 
 // Duración del auto-avance. La barra (.hero-progress-bar) anima de 0 a 100 % en
 // este tiempo y, al terminar, onAnimationEnd avanza el slide.
