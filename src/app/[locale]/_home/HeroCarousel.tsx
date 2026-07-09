@@ -10,40 +10,6 @@ import { optimizeImageUrl } from "@/lib/images/optimizeUrl";
 // este tiempo y, al terminar, onAnimationEnd avanza el slide.
 const DURATION_MS = 5000;
 
-// Extrae 2 colores promedio (mitad superior / inferior) del flyer ya cargado
-// para armar un gradiente CSS — evita bajar una segunda imagen (hero-blur)
-// solo para el fondo difuminado. Requiere que la imagen no esté "tainted"
-// (Supabase Storage manda `access-control-allow-origin: *`, ver crossOrigin
-// en el <img> de medición más abajo). Si falla (CORS, decode), devuelve null
-// y se usa el gradiente fijo de respaldo.
-function extractGradient(img: HTMLImageElement): string | null {
-  try {
-    const canvas = document.createElement("canvas");
-    canvas.width = 8;
-    canvas.height = 8;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return null;
-    ctx.drawImage(img, 0, 0, 8, 8);
-    const { data } = ctx.getImageData(0, 0, 8, 8);
-    const avg = (fromRow: number, toRow: number) => {
-      let r = 0, g = 0, b = 0, n = 0;
-      for (let y = fromRow; y < toRow; y++) {
-        for (let x = 0; x < 8; x++) {
-          const i = (y * 8 + x) * 4;
-          r += data[i];
-          g += data[i + 1];
-          b += data[i + 2];
-          n++;
-        }
-      }
-      return `rgb(${Math.round(r / n)}, ${Math.round(g / n)}, ${Math.round(b / n)})`;
-    };
-    return `linear-gradient(150deg, ${avg(0, 4)} 0%, ${avg(4, 8)} 100%)`;
-  } catch {
-    return null;
-  }
-}
-
 const shortDate = (iso: string, tz: string) =>
   new Intl.DateTimeFormat("es-PE", {
     timeZone: tz,
@@ -75,9 +41,6 @@ export function HeroCarousel() {
   // Ratio (ancho/alto) de cada flyer, medido al cargar. El marco del thumbnail
   // adopta el ratio del flyer actual → los horizontales llenan sin barras.
   const [ratios, setRatios] = useState<Record<string, number>>({});
-  // Gradiente CSS extraído del flyer (ver extractGradient) para el fondo
-  // difuminado del hero — reemplaza la imagen blureada.
-  const [bgGradients, setBgGradients] = useState<Record<string, string>>({});
   const list = events.data ?? [];
   const total = list.length;
 
@@ -108,15 +71,10 @@ export function HeroCarousel() {
       const thumb = optimizeImageUrl(e.coverUrl, "measure");
       if (!thumb) return;
       const img = new Image();
-      // Permite leer píxeles del canvas para extractGradient (Supabase Storage
-      // manda access-control-allow-origin: * en el endpoint de render).
-      img.crossOrigin = "anonymous";
       img.onload = () => {
         setRatios((r) =>
           r[e.id] ? r : { ...r, [e.id]: img.naturalWidth / img.naturalHeight },
         );
-        const gradient = extractGradient(img);
-        if (gradient) setBgGradients((g) => (g[e.id] ? g : { ...g, [e.id]: gradient }));
       };
       img.src = thumb;
     });
@@ -191,14 +149,23 @@ export function HeroCarousel() {
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.9, ease: "easeInOut" }}
               >
-                <div
-                  className="absolute inset-0"
-                  style={{
-                    background:
-                      bgGradients[ev.id] ??
-                      "linear-gradient(150deg,#0f0020 0%,#3b0764 40%,#7c3aed 100%)",
-                  }}
-                />
+                {ev.coverUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={optimizeImageUrl(ev.coverUrl, "hero-blur") ?? ev.coverUrl}
+                    alt=""
+                    loading="lazy"
+                    fetchPriority="low"
+                    decoding="async"
+                    className="absolute inset-0 h-full w-full object-cover"
+                    style={{ filter: "blur(32px) saturate(1.3)", transform: "scale(1.08)" }}
+                  />
+                ) : (
+                  <div
+                    className="absolute inset-0"
+                    style={{ background: "linear-gradient(150deg,#0f0020 0%,#3b0764 40%,#7c3aed 100%)" }}
+                  />
+                )}
                 <div className="absolute inset-0" style={{ background: "rgba(4,4,8,0.78)" }} />
               </motion.div>
             </AnimatePresence>
