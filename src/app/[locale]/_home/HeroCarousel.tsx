@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Link } from "@/i18n/navigation";
 import { useBrowseEvents } from "@/lib/events/hooks/useEvents";
+import { optimizeImageUrl } from "@/lib/images/optimizeUrl";
 import type { Event } from "@/server/events/domain/Event";
 
 // Duración del auto-avance. La barra (.hero-progress-bar) anima de 0 a 100 % en
@@ -62,13 +63,14 @@ export function HeroCarousel() {
   // correcta antes del fade (evita un salto de tamaño al cargar la imagen).
   useEffect(() => {
     list.forEach((e) => {
-      if (!e.coverUrl) return;
+      const thumb = optimizeImageUrl(e.coverUrl, "measure");
+      if (!thumb) return;
       const img = new Image();
       img.onload = () =>
         setRatios((r) =>
           r[e.id] ? r : { ...r, [e.id]: img.naturalWidth / img.naturalHeight },
         );
-      img.src = e.coverUrl;
+      img.src = thumb;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [total]);
@@ -129,33 +131,35 @@ export function HeroCarousel() {
           onTouchStart={onTouchStart}
           onTouchEnd={onTouchEnd}
         >
-          {/* Fondo: flyer difuminado como atmósfera */}
-          {list.map((e, i) => (
-            <div
-              key={e.id}
-              className={`absolute inset-0 transition-opacity duration-[900ms] ${i === cur ? "opacity-100 z-[1]" : "opacity-0 z-0"}`}
-              aria-hidden
-            >
-              {e.coverUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={e.coverUrl}
-                  alt=""
-                  loading={i === cur ? "eager" : "lazy"}
-                  fetchPriority={i === cur ? "high" : "low"}
-                  decoding="async"
-                  className="absolute inset-0 h-full w-full object-cover"
-                  style={{ filter: "blur(32px) saturate(1.3)", transform: "scale(1.08)" }}
-                />
-              ) : (
-                <div
-                  className="absolute inset-0"
-                  style={{ background: "linear-gradient(150deg,#0f0020 0%,#3b0764 40%,#7c3aed 100%)" }}
-                />
-              )}
-              <div className="absolute inset-0" style={{ background: "rgba(4,4,8,0.78)" }} />
-            </div>
-          ))}
+          {/* Fondo difuminado — solo desktop. En móvil esta capa era el LCP
+              (1.4 MB full-res + blur) y penalizaba PageSpeed sin aportar UX. */}
+          <div className="absolute inset-0 z-[1] hidden sm:block" aria-hidden>
+            {ev.coverUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={optimizeImageUrl(ev.coverUrl, "hero-blur") ?? ev.coverUrl}
+                alt=""
+                loading="lazy"
+                fetchPriority="low"
+                decoding="async"
+                className="absolute inset-0 h-full w-full object-cover"
+                style={{ filter: "blur(32px) saturate(1.3)", transform: "scale(1.08)" }}
+              />
+            ) : (
+              <div
+                className="absolute inset-0"
+                style={{ background: "linear-gradient(150deg,#0f0020 0%,#3b0764 40%,#7c3aed 100%)" }}
+              />
+            )}
+            <div className="absolute inset-0" style={{ background: "rgba(4,4,8,0.78)" }} />
+          </div>
+          {/* Móvil: gradiente estático — sin imagen de fondo pesada */}
+          <div
+            className="absolute inset-0 z-[1] sm:hidden"
+            aria-hidden
+            style={{ background: "linear-gradient(150deg,#0f0020 0%,#3b0764 40%,#7c3aed 100%)" }}
+          />
+          <div className="absolute inset-0 z-[1] sm:hidden" aria-hidden style={{ background: "rgba(4,4,8,0.78)" }} />
 
           {/* ===== DESKTOP: split flyer | info ===== El hover pausa SOLO aquí
               (contenido), no en el footer de flechas/contador. */}
@@ -188,7 +192,7 @@ export function HeroCarousel() {
                     {ev.coverUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
-                        src={ev.coverUrl}
+                        src={optimizeImageUrl(ev.coverUrl, "hero-lcp") ?? ev.coverUrl}
                         alt={ev.title}
                         fetchPriority={cur === 0 ? "high" : "auto"}
                         loading={cur === 0 ? "eager" : "lazy"}
@@ -258,7 +262,7 @@ export function HeroCarousel() {
                   {ev.coverUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={ev.coverUrl}
+                      src={optimizeImageUrl(ev.coverUrl, "hero-lcp") ?? ev.coverUrl}
                       alt={ev.title}
                       fetchPriority={cur === 0 ? "high" : "auto"}
                       loading={cur === 0 ? "eager" : "lazy"}

@@ -7,6 +7,7 @@ import { HOME_TITLE, DEFAULT_DESCRIPTION } from "@/lib/seo/site";
 import { getSessionUser } from "@/server/identity/application/GetSessionUser";
 import { makeQueryClient } from "@/lib/_shared/query-client-config";
 import { BROWSE_EVENTS_LIMIT } from "@/lib/events/constants";
+import { optimizeImageUrl } from "@/lib/images/optimizeUrl";
 import { EventsController } from "@/server/events/controllers/rest/EventsController";
 
 type Props = {
@@ -37,7 +38,9 @@ export default async function HomePage({ params }: Props) {
     qc.setQueryData(["events", "browse", null], eventsResult.value);
   }
 
-  const lcpCover = eventsResult.ok ? eventsResult.value[0]?.coverUrl : null;
+  const lcpCover = eventsResult.ok
+    ? optimizeImageUrl(eventsResult.value[0]?.coverUrl, "hero-lcp")
+    : null;
 
   return (
     <>
