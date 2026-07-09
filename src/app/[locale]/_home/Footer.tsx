@@ -6,7 +6,7 @@ export function Footer() {
   return (
     <footer className="mt-[clamp(64px,9vw,120px)] border-t border-cart-line px-[clamp(20px,4vw,56px)] py-12 text-[13.5px] text-cart-ink-3">
       <div className="mx-auto max-w-[1320px]">
-        <div className="grid grid-cols-[1.4fr_repeat(3,1fr)] gap-8 max-[900px]:grid-cols-2 max-[560px]:grid-cols-1">
+        <div className="grid grid-cols-[1.2fr_repeat(4,minmax(0,1fr))] gap-8 max-[1100px]:grid-cols-2 max-[560px]:grid-cols-1">
           <div>
             <Link href="/" className="inline-flex items-center gap-2.5 text-[19px] font-semibold tracking-[-0.01em] text-white">
               <span className="grid size-[34px] place-items-center">
@@ -18,18 +18,33 @@ export function Footer() {
               Tu pase a los eventos que valen la pena en Lima.
             </p>
           </div>
-          <FootCol title="Explorar" links={[
-            ["Conciertos", "/eventos/conciertos"],
-            ["Fiestas", "/eventos/fiestas"],
-            ["Festivales", "/eventos/festivales"],
-            ["Comedia", "/eventos/comedia"],
-          ]} />
-          <FootCol title="Organizadores" links={[
-            ["Crear evento", "/organizadores"],
-            ["Precios", "/organizadores#precio"],
-            ["Eventos en Lima", "/eventos/lima"],
-            ["Centro de ayuda", "/ayuda"],
-          ]} />
+          <FootCol
+            title="Explorar"
+            links={[
+              ["Todos los eventos", "/"],
+              ["Conciertos", "/eventos/conciertos"],
+              ["Fiestas", "/eventos/fiestas"],
+              ["Festivales", "/eventos/festivales"],
+              ["Comedia", "/eventos/comedia"],
+              ["Eventos en Lima", "/eventos/lima"],
+            ]}
+          />
+          <FootCol
+            title="Organizadores"
+            links={[
+              ["Crear evento", "/organizadores"],
+              ["Precios", "/organizadores#precio"],
+              ["Cómo funciona", "/organizadores#como-funciona"],
+            ]}
+          />
+          <FootCol
+            title="Ayuda"
+            links={[
+              ["Centro de ayuda", "/ayuda"],
+              ["Preguntas frecuentes", "/ayuda#faq-heading"],
+              ["Soy organizador", "/organizadores"],
+            ]}
+          />
           <div>
             <h5 className="m-0 mb-3.5 text-[11.5px] font-medium uppercase tracking-[0.1em] text-cart-ink-2">
               Libro de reclamaciones
