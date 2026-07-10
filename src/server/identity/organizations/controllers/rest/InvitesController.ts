@@ -7,10 +7,13 @@ import { supabaseInviteRepository } from "../../infrastructure/repositories/Supa
 import { supabaseMembershipRepository } from "../../infrastructure/repositories/SupabaseMembershipRepository";
 import { createInvite } from "../../application/CreateInvite";
 import { acceptInvite } from "../../application/AcceptInvite";
+import { sendInviteOtp } from "../../application/SendInviteOtp";
+import { verifyInviteOtp } from "../../application/VerifyInviteOtp";
 import { dispatchTeamInviteNotification } from "../../application/dispatchTeamInviteNotification";
 import { listInvites, type InviteWithStatus } from "../../application/ListInvites";
 import { revokeInvite } from "../../application/RevokeInvite";
 import { isTeamInviteWhatsAppEnabled } from "../../teamInviteChannels";
+import { otpGateway } from "@/server/notifications/infrastructure/otp";
 import { supabaseUserRepository } from "@/server/identity/infrastructure/repositories/SupabaseUserRepository";
 import { supabaseLegalEntityRepository } from "../../infrastructure/repositories/SupabaseLegalEntityRepository";
 import type { InvitableOrgRole, OrgInvitePreview, InviteScopeType } from "../../domain/Invite";
@@ -209,5 +212,20 @@ export const InvitesController = {
       profileId: auth.value.profileId,
       profileEmail: auth.value.email,
     });
+  },
+
+  // OTP del teléfono para invites por WhatsApp (creación hoy apagada por
+  // TEAM_INVITE_WHATSAPP_ENABLED — ver teamInviteChannels.ts). acceptInvite()
+  // exige phoneVerifiedAt para cualquier invite sin email, así que estos
+  // endpoints ya quedan listos para cuando se reactive el canal.
+  async sendOtp(token: string): Promise<Result<{ sent: boolean }>> {
+    return sendInviteOtp({ invites: supabaseInviteRepository, otp: otpGateway() }, { token });
+  },
+
+  async verifyOtp(token: string, code: string): Promise<Result<{ verified: true }>> {
+    return verifyInviteOtp(
+      { invites: supabaseInviteRepository, otp: otpGateway() },
+      { token, code },
+    );
   },
 };

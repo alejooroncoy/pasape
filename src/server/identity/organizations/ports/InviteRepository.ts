@@ -27,4 +27,13 @@ export interface InviteRepository {
   markAccepted(input: { id: string; acceptedBy: string }): Promise<Result<OrgInvite>>;
 
   revoke(input: { id: string; revokedBy: string }): Promise<Result<void>>;
+
+  /** Registra un envío de OTP: incrementa otp_send_count y marca otp_last_sent_at. */
+  recordOtpSent(id: string): Promise<Result<OrgInvite>>;
+
+  /** Registra un intento fallido de verificación: incrementa otp_attempts. */
+  recordOtpFailedAttempt(id: string): Promise<Result<OrgInvite>>;
+
+  /** Marca el teléfono como verificado (phone_verified_at = now()). */
+  markPhoneVerified(id: string): Promise<Result<OrgInvite>>;
 }

@@ -32,25 +32,34 @@ export const acceptInvite = async (
   if (invite.role === "door") return err("invite_role_deprecated");
 
   const invitedEmail = normEmail(invite.email);
-  if (!invitedEmail) {
-    // Invites legacy por WhatsApp — pedir reenvío por correo.
+  if (invitedEmail) {
+    // Invite por email: la cuenta de Google que acepta debe ser la invitada.
+    const accepterEmail =
+      normEmail(input.profileEmail) ??
+      normEmail(
+        (
+          await supabaseAdmin()
+            .from("profiles")
+            .select("email")
+            .eq("id", input.profileId)
+            .maybeSingle<{ email: string | null }>()
+        ).data?.email,
+      );
+
+    if (!accepterEmail) return err("invite_sign_in_with_email");
+    if (accepterEmail !== invitedEmail) return err("invite_wrong_account");
+  } else if (invite.phone) {
+    // Invite por WhatsApp (sin email): no hay cuenta con la que hacer match,
+    // así que la prueba de posesión del canal es el OTP del teléfono en vez
+    // del email. Hoy la creación de invites por WhatsApp está apagada por
+    // TEAM_INVITE_WHATSAPP_ENABLED — este branch queda listo para cuando se
+    // reactive (y cubre invites legacy que ya existan con solo teléfono).
+    if (!invite.phoneVerifiedAt) return err("phone_verification_required");
+  } else {
+    // No debería pasar (constraint DB: email o phone requerido), pero por
+    // las dudas no dejamos aceptar un invite sin ninguna prueba de posesión.
     return err("invite_email_required");
   }
-
-  const accepterEmail =
-    normEmail(input.profileEmail) ??
-    normEmail(
-      (
-        await supabaseAdmin()
-          .from("profiles")
-          .select("email")
-          .eq("id", input.profileId)
-          .maybeSingle<{ email: string | null }>()
-      ).data?.email,
-    );
-
-  if (!accepterEmail) return err("invite_sign_in_with_email");
-  if (accepterEmail !== invitedEmail) return err("invite_wrong_account");
 
   const upserted = await memberships.upsert({
     profileId: input.profileId,
