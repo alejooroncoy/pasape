@@ -16,7 +16,7 @@ import { primeCheckoutToken } from "@/lib/tickets/checkoutSignals";
 import type { OrderQuote } from "@/server/tickets/domain/Ticket";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { usePromoterDisplayName } from "@/lib/promoters/hooks/usePromoter";
-import { formatMoney, formatPrice } from "@/lib/_shared/format";
+import { formatMoney, formatPrice, eventDateTime } from "@/lib/_shared/format";
 import { checkoutSessionKey, openCheckoutSession, sealCheckoutSession } from "@/lib/_shared/checkoutSessionStorage";
 import {
   clearOrderToken,
@@ -2343,16 +2343,7 @@ function OrderSummary({
   const { data: promoterInfo } = usePromoterDisplayName(promo);
   const promoterLabel = promoterInfo?.name ?? promo;
   const lines = ticketTypes.filter((tt) => (qty[tt.id] ?? 0) > 0);
-  const startsAt = new Date(event.startsAt);
-  const dateLabel = new Intl.DateTimeFormat("es-PE", {
-    timeZone: event.timezone,
-    weekday: "short",
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(startsAt).replace(".", "");
+  const dateLabel = eventDateTime(event.startsAt, event.timezone);
 
   return (
     <div className="rounded-3xl border border-cart-line bg-cart-bg-elev p-5 shadow-[0_20px_60px_-20px_rgba(0,0,0,0.6)]">

@@ -4,6 +4,7 @@ import { Link } from "@/i18n/navigation";
 import { useBrowseEvents } from "@/lib/events/hooks/useEvents";
 import { optimizeImageUrl } from "@/lib/images/optimizeUrl";
 import { useSaveEvent } from "@/lib/identity/hooks/useSaveEvent";
+import { shortEventDate as shortDay } from "@/lib/_shared/format";
 import type { Event, EventCategory } from "@/server/events/domain/Event";
 import { CATEGORIES } from "./categories";
 
@@ -42,14 +43,6 @@ function SaveHeart({ eventId }: { eventId: string }) {
     </button>
   );
 }
-
-const shortDay = (iso: string, tz: string) =>
-  new Intl.DateTimeFormat("es-PE", {
-    timeZone: tz,
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-  }).format(new Date(iso));
 
 function CardSkeleton() {
   return (

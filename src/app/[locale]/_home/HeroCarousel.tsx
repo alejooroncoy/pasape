@@ -5,26 +5,11 @@ import { AnimatePresence, motion } from "motion/react";
 import { Link } from "@/i18n/navigation";
 import { useBrowseEvents } from "@/lib/events/hooks/useEvents";
 import { optimizeImageUrl } from "@/lib/images/optimizeUrl";
+import { eventDateTime as shortDate } from "@/lib/_shared/format";
 
 // Duración del auto-avance. La barra (.hero-progress-bar) anima de 0 a 100 % en
 // este tiempo y, al terminar, onAnimationEnd avanza el slide.
 const DURATION_MS = 5000;
-
-const shortDate = (iso: string, tz: string) =>
-  new Intl.DateTimeFormat("es-PE", {
-    timeZone: tz,
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  })
-    .format(new Date(iso))
-    // El ICU de Node y el del navegador difieren en el espacio que ponen antes
-    // de "p. m." (U+202F vs U+00A0), lo que rompía la hidratación. Normalizamos
-    // cualquier espacio angosto/duro a un espacio normal para que SSR y cliente
-    // produzcan exactamente el mismo string.
-    .replace(/[\u202f\u00a0]/g, " ");
 
 /* ─── Skeleton ───────────────────────────────────────────────────────────── */
 function Skeleton() {
@@ -236,7 +221,7 @@ export function HeroCarousel() {
               className="flex flex-1 flex-col justify-center pb-[60px]"
               style={{ paddingRight: "clamp(24px,4vw,56px)" }}
             >
-              <p className="m-0 mb-3 text-[clamp(10px,1.1vw,13px)] font-medium text-white/80 font-sans tracking-[0.04em] uppercase">
+              <p className="m-0 mb-3 text-[clamp(10px,1.1vw,13px)] font-medium text-white/80 font-sans tracking-[0.04em]">
                 {shortDate(ev.startsAt, ev.timezone)}
               </p>
               {ev.venue && (
@@ -293,7 +278,7 @@ export function HeroCarousel() {
                   )}
                 </div>
                 <div className="flex flex-col items-center">
-                  <p className="mb-1.5 text-[11px] font-medium uppercase tracking-[0.04em] text-white/80 font-sans">
+                  <p className="mb-1.5 text-[11px] font-medium tracking-[0.04em] text-white/80 font-sans">
                     {shortDate(ev.startsAt, ev.timezone)}
                   </p>
                   <h1 className="m-0 mb-1 line-clamp-2 max-w-[20ch] font-sans text-[21px] font-bold leading-[1.1] tracking-[-0.03em] text-white">
