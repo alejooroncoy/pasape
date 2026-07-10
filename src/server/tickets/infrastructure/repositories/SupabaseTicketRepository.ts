@@ -508,13 +508,6 @@ export const supabaseTicketRepository: TicketRepository = {
         guest_dni: null,
         guest_dni_enc: encryptDni(input.guest?.dni),
         guest_dni_last4: dniLast4(input.guest?.dni),
-        // Huella de contacto (email o teléfono) como hash HMAC no-PII: cierra el
-        // cap por contacto (mismo correo detrás de varios DNIs). card_hash se
-        // escribe al pagar (ver PayWithCard).
-        contact_hash: signalHash(
-          "contact",
-          (input.guest ?? input.buyer)?.email ?? (input.guest ?? input.buyer)?.phone,
-        ),
         // Solo en cortesías: así una compra normal no depende de la columna
         // (el default false lo pone la DB).
         ...(input.courtesy ? { is_courtesy: true } : {}),

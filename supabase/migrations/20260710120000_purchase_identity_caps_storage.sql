@@ -13,13 +13,14 @@
 -- DNI del holder como hash determinista, para contar por identidad en el evento.
 alter table tickets add column if not exists holder_dni_hash text;
 
--- Instrumento de pago (tarjeta / cuenta Yape) y contacto del comprador, como
--- hash, en la orden. card_hash / yape_hash se escriben al pagar (solo se conocen
--- ahí); contact_hash en buy(). Son la huella no-falsificable del pago: cortan
--- "N DNIs con un solo instrumento".
+-- Instrumento de pago (tarjeta / cuenta Yape) como hash, en la orden. Se escriben
+-- al pagar (solo se conocen ahí). Son la huella NO-falsificable del pago: cortan
+-- "N DNIs con un solo instrumento". Deliberadamente NO guardamos hash de contacto
+-- ni cap por cuenta/email: esas dimensiones son falsificables gratis (correos y
+-- cuentas desechables) → un tope ahí golpea a familias legítimas sin frenar al
+-- revendedor. El anti-abuso se ancla solo en lo no-falsificable (DNI + pago).
 alter table orders add column if not exists card_hash text;
 alter table orders add column if not exists yape_hash text;
-alter table orders add column if not exists contact_hash text;
 
 -- Índices para el conteo por identidad dentro de un evento.
 create index if not exists tickets_holder_dni_hash_idx
@@ -28,7 +29,3 @@ create index if not exists orders_event_card_hash_idx
   on orders (event_id, card_hash);
 create index if not exists orders_event_yape_hash_idx
   on orders (event_id, yape_hash);
-create index if not exists orders_event_contact_hash_idx
-  on orders (event_id, contact_hash);
-create index if not exists orders_event_buyer_idx
-  on orders (event_id, buyer_id);
