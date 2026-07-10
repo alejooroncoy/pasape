@@ -36,6 +36,7 @@ export function optimizeImageUrl(
     width: String(width),
     quality: String(quality),
     format,
+    resize: "contain",
   });
   return `${renderUrl}?${params}`;
 }

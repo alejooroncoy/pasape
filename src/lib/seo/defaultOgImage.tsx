@@ -33,7 +33,9 @@ export async function createDefaultOgImage() {
         >
           {logoSrc ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={logoSrc} width={44} height={44} alt="" />
+            // logo-mark no es cuadrado (viewBox 346x565, ratio ~0.61) — ancho
+            // derivado de la altura para no aplastarlo.
+            <img src={logoSrc} width={27} height={44} alt="" />
           ) : null}
           <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
             <span style={{ fontSize: 30, fontWeight: 700, lineHeight: 1 }}>
@@ -575,7 +577,7 @@ async function loadLogo(): Promise<string | null> {
     const { readFile } = await import("node:fs/promises");
     const { join } = await import("node:path");
     const buf = await readFile(
-      join(process.cwd(), "public/icons/logo-icon-min-512.png"),
+      join(process.cwd(), "public/icons/logo-mark-512.png"),
     );
     return `data:image/png;base64,${buf.toString("base64")}`;
   } catch {

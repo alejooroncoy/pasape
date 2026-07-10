@@ -2339,10 +2339,16 @@ function OrderSummary({
   return (
     <div className="rounded-3xl border border-cart-line bg-cart-bg-elev p-5 shadow-[0_20px_60px_-20px_rgba(0,0,0,0.6)]">
       <div className="flex items-center gap-3">
-        <div className="size-12 flex-shrink-0 overflow-hidden rounded-xl bg-cart-bg-elev-2">
+        <div className="relative size-12 flex-shrink-0 overflow-hidden rounded-xl bg-cart-bg-elev-2">
           {event.coverUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={event.coverUrl} alt="" className="size-full object-cover" />
+            <>
+              <div
+                className="absolute inset-0 scale-110 bg-cover bg-center blur-md"
+                style={{ backgroundImage: `url(${event.coverUrl})` }}
+              />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={event.coverUrl} alt="" className="relative size-full object-contain" />
+            </>
           ) : (
             <div className="size-full" style={{ background: "linear-gradient(135deg, #4B1F9A, #FF4D5E)" }} />
           )}
