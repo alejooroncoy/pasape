@@ -10,6 +10,9 @@ type Preset = {
 const PRESETS = {
   /** Card del hero móvil (~256 px lógicos × 2 retina). */
   "hero-lcp": { width: 512, quality: 75, format: "webp" },
+  /** Flyer grande del detalle de evento (~600 px lógicos × retina en desktop,
+   *  bastante más ancho que el thumbnail del carrusel del home). */
+  "event-hero": { width: 1080, quality: 78, format: "webp" },
   /** Fondo difuminado desktop — no es el LCP (lazy + fetchPriority=low, solo
    *  desktop), así que hay margen para más resolución sin pegarle a
    *  Performance. 200px se veía plano; 500px conserva el detalle/riqueza de
