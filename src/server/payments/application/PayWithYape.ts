@@ -12,6 +12,7 @@ import { validateMpPaymentAmount } from "./validateMpPaymentAmount";
 import { settleApprovedPayment } from "./settleApprovedPayment";
 import { acquireOrderPaymentLock, releaseOrderPaymentLock } from "./acquireOrderPaymentLock";
 import { decryptDni } from "@/server/_shared/crypto/dni";
+import { signalHash } from "@/server/tickets/domain/signalHash";
 
 // Why: en prod, si MP_ACCESS_TOKEN no arranca con "APP_USR-" (o sea, parece
 // ser de sandbox tipo "TEST-...") cobraríamos con dinero real usando
@@ -177,6 +178,31 @@ export const payWithYape = async (
     await releaseOrderPaymentLock(order.id);
   };
 
+  // ── CAP POR CUENTA YAPE (duro, pre-cobro, ATÓMICO) ──────────────────────────
+  // La cuenta Yape (un teléfono) es la huella no-falsificable del pago, igual que
+  // la tarjeta. Sin esto, el cap por tarjeta solo empuja al revendedor a Yape.
+  // Solo dígitos: el mismo número con/sin código de país o con espacios/guiones
+  // debe producir el MISMO hash, o la cuenta contaría como instrumentos distintos.
+  // Sella la huella ANTES de cobrar: ese UPDATE dispara el backstop atómico
+  // (instrument_event_usage); si la cuenta ya llegó al tope del evento, el CHECK
+  // aborta con 23514 y rechazamos antes de cobrar. Serializa órdenes concurrentes
+  // de la misma cuenta y cuenta aunque el pago se liquide asíncrono (webhook).
+  const yapeHash = signalHash("yape", input.phoneNumber.replace(/\D/g, ""));
+  if (yapeHash) {
+    const { error: sealErr } = await db
+      .from("orders")
+      .update({ yape_hash: yapeHash })
+      .eq("id", order.id);
+    if (sealErr) {
+      if (sealErr.code === "23514" && (sealErr.message ?? "").includes("instrument_event_usage")) {
+        console.warn(`[antibot] cap por cuenta Yape superado (atómico) — order ${order.id}.`);
+        await revertLock();
+        return err("max_per_card_exceeded");
+      }
+      console.warn(`[antibot] no se pudo sellar yape_hash (se continúa): ${sealErr.message}`);
+    }
+  }
+
   // Idempotency key determinística: hash de orderId + token de Yape. Un
   // reintento del MISMO request (mismo token) reusa la key y MP lo dedupea de
   // verdad; un intento nuevo (nuevo token, p.ej. tras un fallo) genera una key
@@ -259,6 +285,7 @@ export const payWithYape = async (
       await revertLock();
       return settled;
     }
+    // yape_hash ya se selló pre-cobro (arriba), cubre también el settle asíncrono.
   } else if (status === "rejected" || status === "cancelled") {
     patch.status = "failed";
     await db.from("orders").update(patch).eq("id", order.id);

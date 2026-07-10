@@ -223,17 +223,45 @@ export const payWithCard = async (
   // comprador posiblemente legítimo). Ver decideCardEnforcement para cómo una
   // familia (varios DNIs, 1 device) queda protegida.
   //
-  // Gate por modo: en shadow este bloque NUNCA bloquea (decideCardEnforcement lo
-  // garantiza), así que el peek —una llamada de red real a MP, hasta 5s— no
-  // aporta nada salvo latencia. Se salta por completo; la telemetría de shadow
-  // la sigue cubriendo el recordCard post-cobro (fire-and-forget, más abajo).
+  // Peek SIEMPRE (ya no solo en enforcement != shadow): además del detector de
+  // anillo, el cardHash alimenta el CAP POR TARJETA, que es una regla DURA de
+  // negocio (anti-sobrecompra), siempre activa e independiente de BOT_ENFORCEMENT.
+  // Tradeoff: un GET extra a MP antes del cobro; aceptable para no permitir que
+  // una sola tarjeta compre N×tope creando multicuentas.
   let cardAssessed = false;
   const cardEnforcementMode = enforcementMode();
-  const peek = cardEnforcementMode !== "shadow" ? await peekCardToken(input.token) : null;
-  if (peek) {
-    const cardHash = signalHash("card", `${peek.bin}${peek.last4}:${peek.cardholderName}`);
+  const peek = await peekCardToken(input.token);
+  const cardHash = peek
+    ? signalHash("card", `${peek.bin}${peek.last4}:${peek.cardholderName}`)
+    : null;
+  if (peek && cardHash) {
     const dniHash = signalHash("dni", dni);
-    if (cardHash) {
+
+    // ── CAP POR TARJETA (duro, pre-cobro, ATÓMICO) ───────────────────────────
+    // Sella la huella de la tarjeta en la orden ANTES de cobrar. Ese UPDATE
+    // dispara el backstop atómico (instrument_event_usage): si esta tarjeta ya
+    // llegó al tope del evento (2× el tope por persona), el CHECK aborta el
+    // UPDATE con 23514 y rechazamos ANTES de mover un centavo. Serializa órdenes
+    // concurrentes de la misma tarjeta — sin carrera. Y al sellarlo pre-cobro,
+    // cuenta aunque el pago se liquide asíncrono (3DS / webhook).
+    const { error: sealErr } = await db
+      .from("orders")
+      .update({ card_hash: cardHash })
+      .eq("id", order.id);
+    if (sealErr) {
+      if (sealErr.code === "23514" && (sealErr.message ?? "").includes("instrument_event_usage")) {
+        console.warn(`[antibot] cap por tarjeta superado (atómico) — order ${order.id}.`);
+        await revertLock();
+        return err("max_per_card_exceeded");
+      }
+      // Otro error al sellar: fail-open (no bloquear el cobro por un fallo de
+      // escritura del hash). Se loggea y sigue.
+      console.warn(`[antibot] no se pudo sellar card_hash (se continúa): ${sealErr.message}`);
+    }
+
+    // ── Anillo por tarjeta (heurística anti-multicuenta, gate por modo) ──────
+    // En shadow no bloquea; solo el recordCard post-cobro deja telemetría.
+    if (cardEnforcementMode !== "shadow") {
       const assessment = await purchaseSignalsRepo.assessCard({
         orderId: order.id,
         eventId: order.event_id,
@@ -355,11 +383,11 @@ export const payWithCard = async (
     const bin = data.card?.first_six_digits ?? "";
     const last4 = data.card?.last_four_digits ?? "";
     if (bin && last4) {
-      const cardHash = signalHash("card", `${bin}${last4}:${data.card?.cardholder?.name ?? ""}`);
+      const respCardHash = signalHash("card", `${bin}${last4}:${data.card?.cardholder?.name ?? ""}`);
       const dniHash = signalHash("dni", dni);
-      if (cardHash) {
+      if (respCardHash) {
         void purchaseSignalsRepo
-          .recordCard({ orderId: order.id, eventId: order.event_id, cardHash, dniHash })
+          .recordCard({ orderId: order.id, eventId: order.event_id, cardHash: respCardHash, dniHash })
           .then((distinctDnis) => {
             if (distinctDnis >= CARD_RING_DNI_THRESHOLD) {
               serverEvents.botSignal(order.buyer_id ?? order.id, {
@@ -408,6 +436,26 @@ export const payWithCard = async (
     if (!settled.ok) {
       await revertLock();
       return settled;
+    }
+    // Fallback: si el peek pre-cobro no pudo leer el BIN (cardHash null), no se
+    // selló arriba — lo sellamos ahora con el BIN+últimos4 que MP devolvió en la
+    // respuesta. Aquí el pago YA se ejecutó, así que si el backstop atómico
+    // rechaza (23514) lo ignoramos: cobrar-y-revertir a un comprador legítimo es
+    // peor que dejar una tarjeta sin contar (caso raro: solo cuando el peek falló).
+    if (!cardHash && data.card?.first_six_digits && data.card?.last_four_digits) {
+      const respHash = signalHash(
+        "card",
+        `${data.card.first_six_digits}${data.card.last_four_digits}:${data.card.cardholder?.name ?? ""}`,
+      );
+      if (respHash) {
+        const { error: fbErr } = await db
+          .from("orders")
+          .update({ card_hash: respHash })
+          .eq("id", order.id);
+        if (fbErr && fbErr.code !== "23514") {
+          console.warn(`[antibot] no se pudo sellar card_hash post-cobro: ${fbErr.message}`);
+        }
+      }
     }
   } else if (status === "rejected" || status === "cancelled") {
     patch.status = "failed";

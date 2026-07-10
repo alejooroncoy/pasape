@@ -21,6 +21,8 @@ import { resolveOrderFee } from "@/lib/tickets/serviceFee";
 import { dispatchTicketDelivery } from "@/server/notifications/application/DispatchTicketDelivery";
 import { supabaseBoxRepository } from "@/server/boxes/infrastructure/repositories/SupabaseBoxRepository";
 import { encryptDni, dniLast4, decryptDni, normalizeDni } from "@/server/_shared/crypto/dni";
+import { effectiveMaxPerPerson } from "@/server/tickets/domain/purchaseCaps";
+import { signalHash } from "@/server/tickets/domain/signalHash";
 import {
   encryptHolderEmail,
   encryptHolderPhone,
@@ -186,13 +188,15 @@ const priceOrder = async (
   // Tope de entradas por persona (por orden). El acumulado real entre compras se
   // valida en buy() con el DNI; acá solo cortamos que una sola orden pida más del
   // tope, para dar feedback en el checkout. Los boxes se venden enteros y no
-  // cuentan. Las cortesías del organizador quedan exentas.
-  if (!input.courtesy && evStatus.max_tickets_per_person != null) {
+  // cuentan. Las cortesías del organizador quedan exentas. NO es opt-in: si el
+  // organizador no fijó tope, aplica el default (ver purchaseCaps).
+  if (!input.courtesy) {
+    const maxPerPerson = effectiveMaxPerPerson(evStatus.max_tickets_per_person);
     const admissionQty = input.items.reduce((sum, item) => {
       const tt = tts.find((t) => t.id === item.ticketTypeId);
       return tt && tt.kind !== "box" ? sum + item.qty : sum;
     }, 0);
-    if (admissionQty > evStatus.max_tickets_per_person) return err("max_per_person_exceeded");
+    if (admissionQty > maxPerPerson) return err("max_per_person_exceeded");
   }
 
   // Promos activas del evento (2x1 / 3x2), aplicadas al total server-side.
@@ -442,10 +446,10 @@ export const supabaseTicketRepository: TicketRepository = {
     // comentario de arriba). El DNI se guarda cifrado con IV aleatorio (no es
     // consultable directo), así que filtramos por los últimos 4 dígitos y
     // desambiguamos descifrando los candidatos. Las cortesías quedan exentas.
-    const maxPerPerson = priced.value.evStatus.max_tickets_per_person;
+    const maxPerPerson = effectiveMaxPerPerson(priced.value.evStatus.max_tickets_per_person);
     const capAttendee = input.guest ?? input.buyer ?? null;
     const capDni = normalizeDni(capAttendee?.dni);
-    if (!input.courtesy && maxPerPerson != null && capDni) {
+    if (!input.courtesy && capDni) {
       const newAdmissionQty = input.items.reduce((sum, item) => {
         const tt = tts.find((t) => t.id === item.ticketTypeId);
         return tt && !tt.box_label ? sum + item.qty : sum;
@@ -576,6 +580,9 @@ export const supabaseTicketRepository: TicketRepository = {
         holder_dni_last2: attendee?.dni ? attendee.dni.slice(-2) : null,
         holder_dni_enc: encryptDni(attendee?.dni),
         holder_dni_last4: dniLast4(attendee?.dni),
+        // Hash determinista para el conteo atómico del cap por persona (trigger
+        // + CHECK en dni_event_usage). Se mantiene en sync al reasignar el holder.
+        holder_dni_hash: signalHash("dni", normalizeDni(attendee?.dni)),
         qr_code: generateQr(),
         current_holder: effectiveBuyerId,
         box_label: tt?.box_label ?? null,
@@ -598,7 +605,16 @@ export const supabaseTicketRepository: TicketRepository = {
       // segunda choca contra el constraint (23514) en vez de sobrevender.
       // La orden queda huérfana en 'pending' y expira sola (30min, ver
       // expire_stale_pending_orders).
-      if (tkErr?.code === "23514") return err("sold_out");
+      // Dos CHECK atómicos comparten el código 23514: el de stock
+      // (ticket_types_sold_le_capacity) y el del cap por persona
+      // (dni_event_usage_used_le_cap). Se distinguen por el nombre del constraint
+      // en el mensaje para devolver el error correcto al checkout.
+      if (tkErr?.code === "23514") {
+        if ((tkErr.message ?? "").includes("dni_event_usage")) {
+          return err("max_per_person_exceeded");
+        }
+        return err("sold_out");
+      }
       return err(tkErr?.message ?? "tickets_create_failed");
     }
 
@@ -903,6 +919,7 @@ export const supabaseTicketRepository: TicketRepository = {
       holder_dni_last2?: string | null;
       holder_dni_last4?: string | null;
       holder_dni_enc?: string | null;
+      holder_dni_hash?: string | null;
     } = {
       holder_name: input.holderName,
     };
@@ -910,6 +927,8 @@ export const supabaseTicketRepository: TicketRepository = {
       patch.holder_dni_enc = encryptDni(input.dni);
       patch.holder_dni_last4 = dniLast4(input.dni);
       patch.holder_dni_last2 = input.dni ? normalizeDni(input.dni).slice(-2) : null;
+      // Recalcula el conteo del cap por persona para el DNI viejo y el nuevo.
+      patch.holder_dni_hash = signalHash("dni", normalizeDni(input.dni));
     }
     const { data: updated, error: upErr } = await db
       .from("tickets")
@@ -1019,6 +1038,7 @@ export const supabaseTicketRepository: TicketRepository = {
       holder_dni_enc?: string | null;
       holder_dni_last4?: string | null;
       holder_dni_last2?: string | null;
+      holder_dni_hash?: string | null;
     } = {
       current_holder: input.toProfile,
       transfer_count: joined.transfer_count + 1,
@@ -1030,6 +1050,8 @@ export const supabaseTicketRepository: TicketRepository = {
       claimPatch.holder_dni_enc = encryptDni(input.dni);
       claimPatch.holder_dni_last4 = dniLast4(input.dni);
       claimPatch.holder_dni_last2 = normalizeDni(input.dni).slice(-2);
+      // Cap por persona: el DNI de quien reclama pasa a contar en el evento.
+      claimPatch.holder_dni_hash = signalHash("dni", normalizeDni(input.dni));
     }
 
     const { data: transferDone, error: trErr } = await db

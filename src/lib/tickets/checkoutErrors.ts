@@ -33,6 +33,7 @@ export const KNOWN_CHECKOUT_CODES = new Set([
   "tickets_create_failed",
   "order_already_processing",
   "card_multiaccount",
+  "max_per_card_exceeded",
 ]);
 
 export const PAY_ERROR_REASONS: Record<string, PayErrorReason> = {
@@ -124,6 +125,14 @@ export const PAY_ERROR_REASONS: Record<string, PayErrorReason> = {
   card_multiaccount: {
     title: "No pudimos procesar esta tarjeta",
     body: "Esta tarjeta se usó para muchas compras distintas en poco tiempo. No se te cobró nada. Prueba con otra tarjeta o escríbenos si crees que es un error.",
+    note: null,
+  },
+  // Cap por instrumento de pago (tarjeta o cuenta Yape): ya alcanzó el máximo de
+  // entradas del evento con ese medio. Copy suave: podría ser una familia que
+  // paga todo con una tarjeta. No se cobró nada — el tope corta ANTES del cargo.
+  max_per_card_exceeded: {
+    title: "Límite por medio de pago",
+    body: "Con este medio de pago ya se compró el máximo de entradas para este evento. No se te cobró nada. Prueba con otro medio de pago o escríbenos si crees que es un error.",
     note: null,
   },
 };
