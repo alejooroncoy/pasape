@@ -14,6 +14,8 @@ import { acquireOrderPaymentLock, releaseOrderPaymentLock } from "./acquireOrder
 import { parseE164 } from "@/lib/phone/countries";
 import { decryptDni } from "@/server/_shared/crypto/dni";
 import { signalHash } from "@/server/tickets/domain/signalHash";
+import { effectiveMaxPerCard } from "@/server/tickets/domain/purchaseCaps";
+import { countOrderAdmission, countPaidAdmissionByInstrument } from "./admissionCounts";
 import { purchaseSignalsRepo } from "@/server/tickets/infrastructure/PurchaseSignalsRepo";
 import {
   CARD_RING_DNI_THRESHOLD,
@@ -78,7 +80,7 @@ type OrderRow = {
 };
 
 type ProfileRow = { id: string; email: string | null; full_name: string | null; phone: string | null };
-type EventRow = { id: string; title: string };
+type EventRow = { id: string; title: string; max_tickets_per_person: number | null };
 
 export const payWithCard = async (
   input: PayWithCardInput,
@@ -139,7 +141,7 @@ export const payWithCard = async (
 
   const { data: event } = await db
     .from("events")
-    .select("id, title")
+    .select("id, title, max_tickets_per_person")
     .eq("id", order.event_id)
     .maybeSingle<EventRow>();
 
@@ -223,17 +225,43 @@ export const payWithCard = async (
   // comprador posiblemente legítimo). Ver decideCardEnforcement para cómo una
   // familia (varios DNIs, 1 device) queda protegida.
   //
-  // Gate por modo: en shadow este bloque NUNCA bloquea (decideCardEnforcement lo
-  // garantiza), así que el peek —una llamada de red real a MP, hasta 5s— no
-  // aporta nada salvo latencia. Se salta por completo; la telemetría de shadow
-  // la sigue cubriendo el recordCard post-cobro (fire-and-forget, más abajo).
+  // Peek SIEMPRE (ya no solo en enforcement != shadow): además del detector de
+  // anillo, el cardHash alimenta el CAP POR TARJETA, que es una regla DURA de
+  // negocio (anti-sobrecompra), siempre activa e independiente de BOT_ENFORCEMENT.
+  // Tradeoff: un GET extra a MP antes del cobro; aceptable para no permitir que
+  // una sola tarjeta compre N×tope creando multicuentas.
   let cardAssessed = false;
   const cardEnforcementMode = enforcementMode();
-  const peek = cardEnforcementMode !== "shadow" ? await peekCardToken(input.token) : null;
-  if (peek) {
-    const cardHash = signalHash("card", `${peek.bin}${peek.last4}:${peek.cardholderName}`);
+  const peek = await peekCardToken(input.token);
+  const cardHash = peek
+    ? signalHash("card", `${peek.bin}${peek.last4}:${peek.cardholderName}`)
+    : null;
+  if (peek && cardHash) {
     const dniHash = signalHash("dni", dni);
-    if (cardHash) {
+
+    // ── CAP POR TARJETA (duro, pre-cobro, siempre activo) ────────────────────
+    // Entradas individuales ya pagadas con esta tarjeta en el evento + las de
+    // esta orden. Si supera el tope (2× el tope por persona) rechazamos ANTES de
+    // cobrar. Corta el "N DNIs × tope c/u con una sola tarjeta".
+    const maxPerCard = effectiveMaxPerCard(event?.max_tickets_per_person ?? null);
+    const priorByCard = await countPaidAdmissionByInstrument(
+      db,
+      order.event_id,
+      "card_hash",
+      cardHash,
+    );
+    const thisOrderAdmission = await countOrderAdmission(db, order.id);
+    if (priorByCard + thisOrderAdmission > maxPerCard) {
+      console.warn(
+        `[antibot] cap por tarjeta superado: ${priorByCard}+${thisOrderAdmission} > ${maxPerCard} (order ${order.id}).`,
+      );
+      await revertLock();
+      return err("max_per_card_exceeded");
+    }
+
+    // ── Anillo por tarjeta (heurística anti-multicuenta, gate por modo) ──────
+    // En shadow no bloquea; solo el recordCard post-cobro deja telemetría.
+    if (cardEnforcementMode !== "shadow") {
       const assessment = await purchaseSignalsRepo.assessCard({
         orderId: order.id,
         eventId: order.event_id,
@@ -355,11 +383,11 @@ export const payWithCard = async (
     const bin = data.card?.first_six_digits ?? "";
     const last4 = data.card?.last_four_digits ?? "";
     if (bin && last4) {
-      const cardHash = signalHash("card", `${bin}${last4}:${data.card?.cardholder?.name ?? ""}`);
+      const respCardHash = signalHash("card", `${bin}${last4}:${data.card?.cardholder?.name ?? ""}`);
       const dniHash = signalHash("dni", dni);
-      if (cardHash) {
+      if (respCardHash) {
         void purchaseSignalsRepo
-          .recordCard({ orderId: order.id, eventId: order.event_id, cardHash, dniHash })
+          .recordCard({ orderId: order.id, eventId: order.event_id, cardHash: respCardHash, dniHash })
           .then((distinctDnis) => {
             if (distinctDnis >= CARD_RING_DNI_THRESHOLD) {
               serverEvents.botSignal(order.buyer_id ?? order.id, {
@@ -408,6 +436,20 @@ export const payWithCard = async (
     if (!settled.ok) {
       await revertLock();
       return settled;
+    }
+    // Sella la huella de la tarjeta en la orden pagada para que cuente en el cap
+    // por tarjeta de futuras compras. Usa el hash del peek o, si faltó, el del
+    // BIN+últimos4 que MP devolvió en la respuesta del pago. No-PII, irreversible.
+    const cardHashForOrder =
+      cardHash ??
+      (data.card?.first_six_digits && data.card?.last_four_digits
+        ? signalHash(
+            "card",
+            `${data.card.first_six_digits}${data.card.last_four_digits}:${data.card.cardholder?.name ?? ""}`,
+          )
+        : null);
+    if (cardHashForOrder) {
+      await db.from("orders").update({ card_hash: cardHashForOrder }).eq("id", order.id);
     }
   } else if (status === "rejected" || status === "cancelled") {
     patch.status = "failed";

@@ -12,6 +12,9 @@ import { validateMpPaymentAmount } from "./validateMpPaymentAmount";
 import { settleApprovedPayment } from "./settleApprovedPayment";
 import { acquireOrderPaymentLock, releaseOrderPaymentLock } from "./acquireOrderPaymentLock";
 import { decryptDni } from "@/server/_shared/crypto/dni";
+import { signalHash } from "@/server/tickets/domain/signalHash";
+import { effectiveMaxPerCard } from "@/server/tickets/domain/purchaseCaps";
+import { countOrderAdmission, countPaidAdmissionByInstrument } from "./admissionCounts";
 
 // Why: en prod, si MP_ACCESS_TOKEN no arranca con "APP_USR-" (o sea, parece
 // ser de sandbox tipo "TEST-...") cobraríamos con dinero real usando
@@ -64,7 +67,7 @@ type ProfileRow = {
   full_name: string | null;
 };
 
-type EventRow = { id: string; title: string };
+type EventRow = { id: string; title: string; max_tickets_per_person: number | null };
 
 export const payWithYape = async (
   input: PayWithYapeInput,
@@ -117,7 +120,7 @@ export const payWithYape = async (
 
   const { data: event } = await db
     .from("events")
-    .select("id, title")
+    .select("id, title, max_tickets_per_person")
     .eq("id", order.event_id)
     .maybeSingle<EventRow>();
 
@@ -176,6 +179,30 @@ export const payWithYape = async (
   const revertLock = async () => {
     await releaseOrderPaymentLock(order.id);
   };
+
+  // ── CAP POR CUENTA YAPE (duro, pre-cobro, siempre activo) ───────────────────
+  // La cuenta Yape (un teléfono) es la huella no-falsificable del pago, igual que
+  // la tarjeta. Sin esto, el cap por tarjeta solo empuja al revendedor a Yape. Se
+  // cuenta las entradas ya pagadas con esta cuenta en el evento + las de esta
+  // orden; si superan el tope (2× el tope por persona) se rechaza antes de cobrar.
+  const yapeHash = signalHash("yape", input.phoneNumber);
+  if (yapeHash) {
+    const maxPerYape = effectiveMaxPerCard(event?.max_tickets_per_person ?? null);
+    const priorByYape = await countPaidAdmissionByInstrument(
+      db,
+      order.event_id,
+      "yape_hash",
+      yapeHash,
+    );
+    const thisOrderAdmission = await countOrderAdmission(db, order.id);
+    if (priorByYape + thisOrderAdmission > maxPerYape) {
+      console.warn(
+        `[antibot] cap por cuenta Yape superado: ${priorByYape}+${thisOrderAdmission} > ${maxPerYape} (order ${order.id}).`,
+      );
+      await revertLock();
+      return err("max_per_card_exceeded");
+    }
+  }
 
   // Idempotency key determinística: hash de orderId + token de Yape. Un
   // reintento del MISMO request (mismo token) reusa la key y MP lo dedupea de
@@ -258,6 +285,11 @@ export const payWithYape = async (
     if (!settled.ok) {
       await revertLock();
       return settled;
+    }
+    // Sella la huella de la cuenta Yape en la orden pagada para el cap de futuras
+    // compras (no-PII, irreversible).
+    if (yapeHash) {
+      await db.from("orders").update({ yape_hash: yapeHash }).eq("id", order.id);
     }
   } else if (status === "rejected" || status === "cancelled") {
     patch.status = "failed";

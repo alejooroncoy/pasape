@@ -15,7 +15,6 @@ import { useBuyTickets, useOrderQuote } from "@/lib/tickets/hooks/useTickets";
 import { primeCheckoutToken } from "@/lib/tickets/checkoutSignals";
 import type { OrderQuote } from "@/server/tickets/domain/Ticket";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
-import { useDniLookup } from "@/lib/identity/hooks/useDniLookup";
 import { usePromoterDisplayName } from "@/lib/promoters/hooks/usePromoter";
 import { formatMoney, formatPrice } from "@/lib/_shared/format";
 import { checkoutSessionKey, openCheckoutSession, sealCheckoutSession } from "@/lib/_shared/checkoutSessionStorage";
@@ -160,19 +159,16 @@ function BuyFlowInner({ params }: Props) {
   const [guestName, setGuestName] = useState("");
   const [guestEmail, setGuestEmail] = useState("");
   const [guestDni, setGuestDni] = useState("");
-  // Extranjero: no tiene DNI peruano → usa pasaporte/documento (alfanumérico,
-  // sin RENIEC). El tipo para Mercado Pago se deduce del formato en el server.
+  // Extranjero: no tiene DNI peruano → usa pasaporte/documento (alfanumérico).
+  // El tipo para Mercado Pago se deduce del formato en el server.
   const [isForeigner, setIsForeigner] = useState(false);
   const [guestPhone, setGuestPhone] = useState("");
-  const nameTouchedRef = useRef(false);
   // LOW-8: guard sincrónico contra doble-tap. `buy.isPending` solo se vuelve
   // true DESPUÉS del re-render que sigue a mutateAsync — dos taps síncronos
   // (antes de ese re-render) igual disparan startPayment dos veces y crean
   // dos órdenes con reserva de stock. Este ref se setea de forma inmediata,
   // sin esperar al ciclo de render.
   const paymentInFlightRef = useRef(false);
-  const { lookup: dniLookup, pending: dniPending } = useDniLookup();
-  const [dniHint, setDniHint] = useState<"idle" | "not_found">("idle");
   // Última pausa antes de pagar: solo para guests (deslogueados), que el
   // WhatsApp/correo mal tecleado en un checkout apurado se detecte antes de
   // crear la orden, no después cuando el QR ya no tiene a dónde llegar.
@@ -187,31 +183,12 @@ function BuyFlowInner({ params }: Props) {
     if (!u || prefilledRef.current) return;
     prefilledRef.current = true;
     if (u.fullName) {
-      nameTouchedRef.current = true; // que RENIEC no pise el nombre de la cuenta
       setGuestName((prev) => prev || u.fullName!);
     }
     if (u.dni) setGuestDni((prev) => prev || u.dni!);
     if (u.phone) setGuestPhone((prev) => prev || u.phone!);
     if (u.email) setGuestEmail((prev) => prev || u.email!);
   }, [me.data?.user]);
-
-  useEffect(() => {
-    // Pasaporte extranjero: no hay RENIEC (es un padrón peruano) → sin lookup.
-    if (isForeigner || guestDni.length !== 8) {
-      setDniHint("idle");
-      return;
-    }
-    const t = setTimeout(async () => {
-      const res = await dniLookup(guestDni);
-      if (!res) {
-        setDniHint("not_found");
-        return;
-      }
-      setDniHint("idle");
-      if (!nameTouchedRef.current) setGuestName(res.fullName);
-    }, 600);
-    return () => clearTimeout(t);
-  }, [guestDni, dniLookup, isForeigner]);
 
   useEffect(() => {
     const key = `pasape:promo:${slug}`;
@@ -585,7 +562,7 @@ function BuyFlowInner({ params }: Props) {
   const phoneIsPeru = (parseE164(guestPhone).country?.code ?? "PE") === "PE";
   const phoneOk = phoneIsPeru ? phoneNational.length === 9 : phoneNational.length >= 6;
   // El portero valida por documento. Regla compartida con el backend: peruano =
-  // 8 dígitos (con RENIEC); extranjero = pasaporte/documento alfanumérico, sin RENIEC.
+  // 8 dígitos; extranjero = pasaporte/documento alfanumérico.
   const docValid = isValidDocument(guestDni, isForeigner);
   // Correo obligatorio solo para guests: logueados ya tienen su correo de
   // cuenta (Google) como canal de recuperación garantizado, así que no hace
@@ -833,26 +810,20 @@ function BuyFlowInner({ params }: Props) {
                 isForeigner={isForeigner}
                 setIsForeigner={setIsForeigner}
                 guestDni={guestDni}
-                setGuestDni={(v) => {
-                  nameTouchedRef.current = false;
+                setGuestDni={(v) =>
                   // Extranjero: alfanumérico (pasaporte). Peruano: solo 8 dígitos.
                   setGuestDni(
                     isForeigner
                       ? v.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 15)
                       : v.replace(/\D/g, "").slice(0, 8),
-                  );
-                }}
+                  )
+                }
                 guestName={guestName}
-                setGuestName={(v) => {
-                  nameTouchedRef.current = true;
-                  setGuestName(v);
-                }}
+                setGuestName={setGuestName}
                 guestPhone={guestPhone}
                 setGuestPhone={setGuestPhone}
                 guestEmail={guestEmail}
                 setGuestEmail={setGuestEmail}
-                dniHint={dniHint}
-                dniPending={dniPending}
               />
             ) : (
               <>
@@ -1453,8 +1424,6 @@ function DataPhase({
   setGuestPhone,
   guestEmail,
   setGuestEmail,
-  dniHint,
-  dniPending,
 }: {
   isLogged: boolean;
   userIdent: string | null;
@@ -1468,8 +1437,6 @@ function DataPhase({
   setGuestPhone: (v: string) => void;
   guestEmail: string;
   setGuestEmail: (v: string) => void;
-  dniHint: "idle" | "not_found";
-  dniPending: boolean;
 }) {
   return (
     <div className="flex flex-col gap-8">
@@ -1510,20 +1477,15 @@ function DataPhase({
             mono
             hint={
               isForeigner
-                ? "Con lo que te identificas en la puerta. Escribe tu nombre abajo."
-                : dniHint === "not_found"
-                  ? "No te encontramos en RENIEC — escribe tu nombre abajo."
-                  : isLogged && guestDni
-                    ? "Lo usa el portero para validar tu entrada."
-                    : "Lo buscamos en RENIEC y completamos tu nombre."
+                ? "Con lo que te identificas en la puerta."
+                : "Lo usa el portero para validar tu entrada."
             }
           />
           <Field
             label="Nombre completo"
             value={guestName}
             onChange={(v) => setGuestName(sanitizePersonNameLive(v))}
-            placeholder={dniPending ? "Buscando en RENIEC…" : "Juan Pérez García"}
-            disabled={dniPending}
+            placeholder="Juan Pérez García"
           />
           <label className="block">
             <span className="text-[11.5px] font-semibold uppercase tracking-[0.12em] text-cart-ink-3">
