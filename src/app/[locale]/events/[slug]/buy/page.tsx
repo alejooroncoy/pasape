@@ -267,6 +267,17 @@ function BuyFlowInner({ params }: Props) {
 
     const orderFromUrl = search.get("order");
     if (!orderFromUrl || restoreHandledRef.current) return;
+    if (orderFromUrl === orderId) {
+      // La acabamos de crear en este mismo flujo (startPayment ya hizo
+      // setOrderId antes de tocar la URL) — no es una restauración real, es
+      // el efecto reaccionando al history.replaceState de nuestra propia
+      // navegación. Si seguimos de largo, sessionStorage puede no tener
+      // todavía la sesión sellada (sealCheckoutSession es async/WebCrypto) y
+      // clearCheckoutOrder() borraría el ?order= de una orden válida,
+      // dejando el checkout colgado en "Preparando el checkout...".
+      restoreHandledRef.current = true;
+      return;
+    }
     restoreHandledRef.current = true;
 
     void (async () => {
@@ -286,10 +297,24 @@ function BuyFlowInner({ params }: Props) {
               }
             } catch {}
           }
-          clearCheckoutOrder(orderFromUrl);
-          if (orderStatus === "expired" || orderStatus === "failed") {
-            setResumeNotice("pick_again");
+          // No confiar en "falta el caché local" como sinónimo de "orden
+          // inválida" — eso destruía órdenes perfectamente válidas (pending
+          // o incluso paid) solo porque sessionStorage no llegó a
+          // escribirse a tiempo. Solo borramos cuando el servidor CONFIRMA
+          // que está vencida/fallida, o cuando no hay ningún token para
+          // siquiera verificarla (referencia huérfana real).
+          const definitivelyInvalid =
+            orderStatus === "expired" || orderStatus === "failed" || !tokenOnly;
+          if (!definitivelyInvalid) {
+            if (orderStatus === "paid" && tokenOnly) {
+              router.push(
+                `/events/${slug}/processing?${processingQuery(orderFromUrl, tokenOnly)}` as never,
+              );
+            }
+            return;
           }
+          clearCheckoutOrder(orderFromUrl);
+          setResumeNotice("pick_again");
           return;
         }
         const restored = (await openCheckoutSession(orderFromUrl, raw)) as {
@@ -642,9 +667,11 @@ function BuyFlowInner({ params }: Props) {
       setReservationExpired(false);
       setPhase("pay");
       try {
-        const url = new URL(window.location.href);
-        url.searchParams.set("order", res.order.id);
-        window.history.replaceState({}, "", url.toString());
+        // Sella la sesión ANTES de tocar la URL: el efecto de restaurar
+        // (más abajo) se dispara al ver cambiar `?order=`, así que si
+        // cambiáramos la URL primero, ese efecto podría encontrar
+        // sessionStorage todavía vacío (sealCheckoutSession usa WebCrypto,
+        // es async) y tratar una orden recién creada como inválida.
         const sealed = await sealCheckoutSession(res.order.id, {
           qty,
           payMethod,
@@ -656,6 +683,9 @@ function BuyFlowInner({ params }: Props) {
           reservedAt: reservedNow,
         });
         sessionStorage.setItem(checkoutSessionKey(res.order.id), sealed);
+        const url = new URL(window.location.href);
+        url.searchParams.set("order", res.order.id);
+        window.history.replaceState({}, "", url.toString());
       } catch {}
     } catch (e) {
       // Pedido gratis: nunca se intentó cobrar nada (falló crear la orden/los
