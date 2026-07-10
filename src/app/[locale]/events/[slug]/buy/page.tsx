@@ -1001,14 +1001,16 @@ function BuyFlowInner({ params }: Props) {
       )}
 
       {/* Última revisión de contacto antes de pagar — solo guests */}
-      {confirmContactOpen && (
-        <ContactConfirmModal
-          phone={guestPhone}
-          email={guestEmail}
-          onConfirm={confirmContactAndPay}
-          onEdit={() => setConfirmContactOpen(false)}
-        />
-      )}
+      <AnimatePresence>
+        {confirmContactOpen && (
+          <ContactConfirmModal
+            phone={guestPhone}
+            email={guestEmail}
+            onConfirm={confirmContactAndPay}
+            onEdit={() => setConfirmContactOpen(false)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -1029,8 +1031,32 @@ function ContactConfirmModal({
   const { country, national } = parseE164(phone);
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 px-6 backdrop-blur-sm">
-      <div className="w-full max-w-[400px] rounded-2xl border border-cart-line bg-cart-bg-elev p-6">
+    <motion.div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm lg:items-center lg:px-6"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      onClick={onEdit}
+    >
+      <motion.div
+        className="w-full max-w-[400px] touch-none rounded-t-2xl border border-cart-line bg-cart-bg-elev p-6 lg:rounded-2xl"
+        initial={{ y: "100%" }}
+        animate={{ y: 0 }}
+        exit={{ y: "100%" }}
+        transition={{ type: "spring", damping: 30, stiffness: 320, mass: 0.8 }}
+        onClick={(e) => e.stopPropagation()}
+        drag="y"
+        dragConstraints={{ top: 0, bottom: 0 }}
+        dragElastic={{ top: 0, bottom: 0.5 }}
+        onDragEnd={(_: unknown, info: { offset: { y: number }; velocity: { y: number } }) => {
+          if (info.offset.y > 120 || info.velocity.y > 800) onEdit();
+        }}
+      >
+        {/* Asa solo en móvil (bottom-sheet); en desktop es modal centrado. */}
+        <div className="mb-2 flex justify-center lg:hidden">
+          <div className="h-1 w-9 rounded-full bg-white/15" />
+        </div>
         <div className="grid size-12 place-items-center rounded-2xl bg-cart-accent-soft text-cart-accent">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
             <rect x="2.5" y="4.5" width="19" height="15" rx="3" />
@@ -1093,8 +1119,8 @@ function ContactConfirmModal({
         >
           Corregir datos
         </button>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
 
