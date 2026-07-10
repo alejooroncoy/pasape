@@ -10,9 +10,10 @@
 -- yape_hash comparten espacio de hash (prefijo de dominio distinto en signalHash)
 -- → nunca colisionan, una sola tabla keyed por instrument_hash sirve a ambos.
 --
--- cap = (max_tickets_per_person del evento, default 6) × 2. El ×2 refleja
--- CARD_CAP_MULTIPLIER en @/server/tickets/domain/purchaseCaps — si cambia allá,
--- cambiar acá.
+-- cap = (max_tickets_per_person del evento, default 6) × 2. El tope por
+-- instrumento es el doble del tope por persona (una familia paga varias entradas
+-- con una tarjeta; un anillo de decenas de DNIs por tarjeta no). Este ×2 es la
+-- fuente de verdad del cap por instrumento: se enforcea íntegramente acá.
 
 create table if not exists instrument_event_usage (
   event_id uuid not null references events(id) on delete cascade,

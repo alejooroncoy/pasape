@@ -10,19 +10,13 @@
 /** Tope por persona (DNI del holder) por evento cuando el organizador no lo fija. */
 export const DEFAULT_MAX_TICKETS_PER_PERSON = 6;
 
-/**
- * El tope por tarjeta es más alto que el de persona: una familia puede pagar
- * varias entradas legítimamente con una sola tarjeta, pero un anillo con decenas
- * de DNIs por tarjeta no. Multiplica el tope por persona vigente.
- */
-export const CARD_CAP_MULTIPLIER = 2;
-
 /** Tope por persona efectivo: el configurado por el organizador, o el default. */
 export function effectiveMaxPerPerson(configured: number | null | undefined): number {
   return configured != null && configured > 0 ? configured : DEFAULT_MAX_TICKETS_PER_PERSON;
 }
 
-/** Tope por tarjeta efectivo a partir del tope por persona vigente. */
-export function effectiveMaxPerCard(configured: number | null | undefined): number {
-  return effectiveMaxPerPerson(configured) * CARD_CAP_MULTIPLIER;
-}
+// El tope por INSTRUMENTO de pago (tarjeta / cuenta Yape) es el doble del tope
+// por persona (una familia puede pagar varias entradas con una sola tarjeta; un
+// anillo con decenas de DNIs por tarjeta no). Se aplica y calcula íntegramente
+// en la DB (migración instrument_event_usage): el ×2 vive allí, no en el
+// cliente, porque el enforcement es atómico vía trigger + CHECK.
