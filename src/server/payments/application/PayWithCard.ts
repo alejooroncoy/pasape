@@ -259,6 +259,12 @@ export const payWithCard = async (
       return err("max_per_card_exceeded");
     }
 
+    // Sella la huella de la tarjeta en la orden ANTES de cobrar, para que cuente
+    // en el cap aunque el pago se liquide asíncrono (3DS challenge / in_process
+    // vía webhook) y nunca pase por la rama `approved` de abajo. El conteo filtra
+    // status='paid', así que una orden que luego falle/expire no suma.
+    await db.from("orders").update({ card_hash: cardHash }).eq("id", order.id);
+
     // ── Anillo por tarjeta (heurística anti-multicuenta, gate por modo) ──────
     // En shadow no bloquea; solo el recordCard post-cobro deja telemetría.
     if (cardEnforcementMode !== "shadow") {
@@ -437,19 +443,18 @@ export const payWithCard = async (
       await revertLock();
       return settled;
     }
-    // Sella la huella de la tarjeta en la orden pagada para que cuente en el cap
-    // por tarjeta de futuras compras. Usa el hash del peek o, si faltó, el del
-    // BIN+últimos4 que MP devolvió en la respuesta del pago. No-PII, irreversible.
-    const cardHashForOrder =
-      cardHash ??
-      (data.card?.first_six_digits && data.card?.last_four_digits
-        ? signalHash(
-            "card",
-            `${data.card.first_six_digits}${data.card.last_four_digits}:${data.card.cardholder?.name ?? ""}`,
-          )
-        : null);
-    if (cardHashForOrder) {
-      await db.from("orders").update({ card_hash: cardHashForOrder }).eq("id", order.id);
+    // Fallback: si el peek pre-cobro no pudo leer el BIN (cardHash null), no se
+    // selló arriba — lo sellamos ahora con el BIN+últimos4 que MP devolvió en la
+    // respuesta. Cuando el peek sí funcionó, card_hash ya está escrito (pre-cobro,
+    // arriba) y esto no corre. No-PII, irreversible.
+    if (!cardHash && data.card?.first_six_digits && data.card?.last_four_digits) {
+      const respHash = signalHash(
+        "card",
+        `${data.card.first_six_digits}${data.card.last_four_digits}:${data.card.cardholder?.name ?? ""}`,
+      );
+      if (respHash) {
+        await db.from("orders").update({ card_hash: respHash }).eq("id", order.id);
+      }
     }
   } else if (status === "rejected" || status === "cancelled") {
     patch.status = "failed";

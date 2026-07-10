@@ -185,7 +185,10 @@ export const payWithYape = async (
   // la tarjeta. Sin esto, el cap por tarjeta solo empuja al revendedor a Yape. Se
   // cuenta las entradas ya pagadas con esta cuenta en el evento + las de esta
   // orden; si superan el tope (2× el tope por persona) se rechaza antes de cobrar.
-  const yapeHash = signalHash("yape", input.phoneNumber);
+  // Solo dígitos: el mismo número con/sin código de país o con espacios/guiones
+  // debe producir el MISMO hash, o la cuenta contaría como instrumentos distintos
+  // y el cap se evadiría.
+  const yapeHash = signalHash("yape", input.phoneNumber.replace(/\D/g, ""));
   if (yapeHash) {
     const maxPerYape = effectiveMaxPerCard(event?.max_tickets_per_person ?? null);
     const priorByYape = await countPaidAdmissionByInstrument(
@@ -202,6 +205,10 @@ export const payWithYape = async (
       await revertLock();
       return err("max_per_card_exceeded");
     }
+    // Sella la huella de la cuenta ANTES de cobrar, para que cuente aunque el pago
+    // se liquide asíncrono (in_process vía webhook) y no pase por `approved`. El
+    // conteo filtra status='paid', así que una orden fallida/expirada no suma.
+    await db.from("orders").update({ yape_hash: yapeHash }).eq("id", order.id);
   }
 
   // Idempotency key determinística: hash de orderId + token de Yape. Un
@@ -286,11 +293,7 @@ export const payWithYape = async (
       await revertLock();
       return settled;
     }
-    // Sella la huella de la cuenta Yape en la orden pagada para el cap de futuras
-    // compras (no-PII, irreversible).
-    if (yapeHash) {
-      await db.from("orders").update({ yape_hash: yapeHash }).eq("id", order.id);
-    }
+    // yape_hash ya se selló pre-cobro (arriba), cubre también el settle asíncrono.
   } else if (status === "rejected" || status === "cancelled") {
     patch.status = "failed";
     await db.from("orders").update(patch).eq("id", order.id);
