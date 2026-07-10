@@ -27,6 +27,7 @@ import type { TicketType } from "@/server/events/domain/Event";
 import { VenueLayoutModal } from "@/components/ui/VenueLayoutModal";
 import { PresaleCountdown } from "@/components/ui/PresaleCountdown";
 import { activePricing } from "@/lib/events/pricing";
+import { optimizeImageUrl } from "@/lib/images/optimizeUrl";
 import {
   eventAvailability,
   groupBoxesByNoun,
@@ -952,18 +953,27 @@ function FlyerCard({
   // Tinte oscuro del propio flyer para el overlay del blur-fill. Mientras
   // carga o si falla CORS → base de marca.
   const tint = palette?.dark ?? "#0D0B14";
+  // Si la URL del flyer 404ea o falla la carga (link roto, storage caído),
+  // no queremos el ícono de imagen rota del navegador ocupando el marco —
+  // se trata igual que "sin flyer": cae al gradiente de marca.
+  const [imgFailed, setImgFailed] = useState(false);
+  const hasCover = Boolean(event.coverUrl) && !imgFailed;
 
   return (
     <div className="relative w-full overflow-hidden rounded-[24px] ring-1 ring-white/10 lg:rounded-[28px]">
-      {event.coverUrl ? (
+      {hasCover ? (
         // Blur-fill: el propio flyer difuminado llena el marco y toma su color
         // (estilo Posh/DICE). Funciona con cualquier proporción sin recortar.
+        // Va difuminado → el mismo preset liviano "hero-blur" que ya usa el
+        // carrusel del home alcanza de sobra (no necesita nitidez).
         <div
           className="absolute inset-0 scale-110 bg-cover bg-center blur-2xl saturate-[1.5]"
-          style={{ backgroundImage: `url("${event.coverUrl}")` }}
+          style={{
+            backgroundImage: `url("${optimizeImageUrl(event.coverUrl, "hero-blur") ?? event.coverUrl}")`,
+          }}
         />
       ) : (
-        // Sin flyer → gradiente de marca.
+        // Sin flyer (o falló la carga) → gradiente de marca.
         <div
           className="absolute inset-0"
           style={{
@@ -980,17 +990,29 @@ function FlyerCard({
         }}
       />
 
-      <div className={"relative w-full " + (event.coverUrl ? "" : "aspect-[16/10]")}>
-        {event.coverUrl && (
+      <div className={"relative w-full " + (hasCover ? "" : "aspect-[16/10]")}>
+        {hasCover && (
           // La imagen SIEMPRE se ve completa (object-contain), limitada por el
           // ancho del panel y por una altura máxima. El panel se ajusta a ella y
           // el blur-fill rellena cualquier hueco (afiches verticales). Nunca se
-          // recorta, ni en móvil ni en desktop.
+          // recorta, ni en móvil ni en desktop. Si falla la carga, `onError`
+          // desmonta el <img> y cae al gradiente de marca (evita el ícono roto).
+          // `width`/`height` son solo una proporción de referencia (4:5, la
+          // típica de un flyer vertical) — el navegador la usa para reservar
+          // el espacio MIENTRAS carga (evita el salto/recuadro chico) y, una
+          // vez la imagen real carga, su proporción real manda igual (esto no
+          // cambia el resultado final con h-auto/w-auto, solo el estado previo).
+          // Nítida → preset propio "event-hero" (más ancho que el "hero-lcp"
+          // del carrusel del home: este flyer se ve mucho más grande, sobre
+          // todo en desktop, y con "hero-lcp" se vería pixelado).
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={event.coverUrl}
+            src={optimizeImageUrl(event.coverUrl, "event-hero") ?? event.coverUrl ?? undefined}
             alt={event.title}
-            className="relative z-[1] mx-auto block h-auto w-auto max-w-[calc(100%-2.5rem)] rounded-[28px] max-h-[52vh] my-5 lg:my-7 lg:max-w-[calc(100%-3.5rem)]"
+            width={864}
+            height={1080}
+            onError={() => setImgFailed(true)}
+            className="relative z-[1] mx-auto block h-auto w-auto max-w-[calc(100%-2.5rem)] rounded-[28px] max-h-[52vh] my-5 lg:my-7 lg:max-w-[calc(100%-3.5rem)] object-contain"
             style={{ filter: "drop-shadow(0 18px 50px rgba(0,0,0,0.55))" }}
           />
         )}
