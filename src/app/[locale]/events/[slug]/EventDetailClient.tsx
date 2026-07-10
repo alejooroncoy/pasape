@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { Link, useRouter } from "@/i18n/navigation";
 import { clientEvents } from "@/lib/analytics/clientEvents";
 import { api } from "@/lib/_shared/api-client";
+import { eventDatePillParts, eventDateTime } from "@/lib/_shared/format";
 import { UserHeader } from "@/app/[locale]/_home/UserHeader";
 import { useEvent } from "@/lib/events/hooks/useEvents";
 import { useSaveEvent } from "@/lib/identity/hooks/useSaveEvent";
@@ -1170,24 +1171,7 @@ function DatePill({
   timezone: string;
   large?: boolean;
 }) {
-  const day = new Intl.DateTimeFormat("es-PE", {
-    timeZone: timezone,
-    day: "2-digit",
-  }).format(startsAt);
-  const month = new Intl.DateTimeFormat("es-PE", {
-    timeZone: timezone,
-    month: "short",
-  }).format(startsAt).replace(".", "").toUpperCase();
-  const weekday = new Intl.DateTimeFormat("es-PE", {
-    timeZone: timezone,
-    weekday: "short",
-  }).format(startsAt).replace(".", "");
-  const time = new Intl.DateTimeFormat("es-PE", {
-    timeZone: timezone,
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(startsAt);
+  const { day, month, weekday, time } = eventDatePillParts(startsAt.toISOString(), timezone);
 
   if (large) {
     return (
@@ -1623,16 +1607,7 @@ function YapeMini() {
 /* ============================== Date helper ============================== */
 
 function formatLongDate(d: Date, timezone: string): string {
-  const s = new Intl.DateTimeFormat("es-PE", {
-    timeZone: timezone,
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(d);
-  return s.charAt(0).toUpperCase() + s.slice(1);
+  return eventDateTime(d.toISOString(), timezone);
 }
 
 // Marcamos como referenciado para evitar warning de unused export entre archivos.

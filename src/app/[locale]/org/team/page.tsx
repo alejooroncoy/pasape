@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import { Money } from "@/lib/_shared/money";
+import { shortEventDate } from "@/lib/_shared/format";
 import { useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import { Link } from "@/i18n/navigation";
@@ -1197,10 +1198,7 @@ function prettyRole(role: string): string {
 
 function formatDate(iso: string): string {
   try {
-    return new Date(iso).toLocaleDateString("es-PE", {
-      day: "2-digit",
-      month: "short",
-    });
+    return shortEventDate(iso, "America/Lima");
   } catch {
     return iso;
   }

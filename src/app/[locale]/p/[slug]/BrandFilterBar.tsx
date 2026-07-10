@@ -2,6 +2,7 @@
 
 import { useMemo, useState, type ReactNode } from "react";
 import { Money } from "@/lib/_shared/money";
+import { shortEventDateTime } from "@/lib/_shared/format";
 import { Link } from "@/i18n/navigation";
 
 export type BrandFilterItem = {
@@ -232,15 +233,7 @@ function EmptyState() {
 
 function formatDate(iso: string): string {
   try {
-    return new Date(iso)
-      .toLocaleString("es-PE", {
-        weekday: "short",
-        day: "2-digit",
-        month: "short",
-        hour: "2-digit",
-        minute: "2-digit",
-      })
-      .replace(/\./g, "");
+    return shortEventDateTime(iso, "America/Lima");
   } catch {
     return iso;
   }
