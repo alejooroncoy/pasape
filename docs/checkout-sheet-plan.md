@@ -57,3 +57,49 @@ Sensación app-nativa, coherente con la hoja de boxes. Nada que se sienta templa
 - Paso de selección repetido en `/buy` eliminado (el selector vive solo en el detalle).
 - Toast "elige alguna entrada" + scroll al selector cuando se compra sin elegir.
 - Fix del chip "Box Box" + animación de quitar más fluida.
+
+---
+
+# Plan — Superficie de pago en paleta clara (Yape + tarjeta)
+
+> Estado: **en implementación**. Hoy el evento y la hoja de datos son claros,
+> pero `/buy` (pago) es oscuro → salta de claro a oscuro, el mismo problema que
+> resolvimos con la selección. Rediseño con intención: rapidez, confianza, y una
+> razón clara detrás de cada decisión (no template de IA).
+
+## Verificado antes de rediseñar
+
+- Flujo **pagado** end-to-end: hoja "Ir a pagar · S/18" → orden reservada →
+  `/buy?order=id` → **"2 de 2 · Pago"** con teléfono prellenado, reserva 29:36,
+  Yape/tarjeta. Sin repetir datos.
+- El único costo notable: `checkoutSignalHeaders` (señales anti-bot) tarda ~10s
+  en dev — pre-existente, común a todo /buy. No se toca acá.
+
+## Principios de diseño
+
+- **Rapidez visible**: Yape lidera ("MÁS RÁPIDO", listo en 10s). El total manda.
+  La reserva (countdown) es sutil, no ansiosa.
+- **Confianza en claro**: fondo claro del sistema (`home-light`), inputs claros,
+  acento morado. El pago no tiene por qué ser una pantalla negra intimidante.
+- **Una razón por decisión**: método = dos opciones claras (Yape vs tarjeta), no
+  un muro de logos. Cada línea de copy dice qué pasa después.
+
+## Pasos
+
+1. **Scope claro** en el root de `/buy`: `home-light home-wash cart-grain` (flipea
+   todos los tokens `cart-*` a claro, como la página del evento).
+2. **Auditar** los ~16 `text-white` → `text-cart-ink`/`cart-ink-2` (el texto ya no
+   es blanco sobre oscuro).
+3. **Colores semánticos**: verde Yape (#41E0BC), rosa error (#FF4D5E), morado
+   acento — verificar contraste en claro y atenuar donde griten.
+4. **Selector de método**: dos cards (Yape destacado / tarjeta) en estilo claro,
+   con el seleccionado en acento suave.
+5. **Formulario de tarjeta** (`CardForm` + `MpBrick`): los Secure Fields de MP se
+   estilan a inputs claros (mismo lenguaje que la hoja de datos). El iframe de MP
+   se configura con estilo claro; el 3DS queda en su superficie (no se toca).
+6. **Probar**: Yape (código) + tarjeta (secure fields + 3DS) renderizan y cobran
+   en claro, sin regresión.
+
+## No-alcance
+
+- La lógica de pago, el 3DS y el anti-bot no cambian — es solo re-theme + UX.

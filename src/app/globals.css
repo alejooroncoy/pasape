@@ -51,6 +51,14 @@ body {
   padding: 0;
 }
 
+/* Páginas claras (scope .home-light): el <body> asoma por debajo/alrededor del
+   contenido (overscroll, contenido corto). Cuando la página monta un root
+   .home-light, el body también se pone claro — así no hay franja oscura bajo el
+   checkout/evento. Las pantallas oscuras (sin .home-light) no se ven afectadas. */
+body:has(.home-light) {
+  background: #fbfaff;
+}
+
 * {
   box-sizing: border-box;
 }

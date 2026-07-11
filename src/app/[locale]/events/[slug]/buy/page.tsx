@@ -810,7 +810,7 @@ function BuyFlowInner({ params }: Props) {
   })();
 
   return (
-    <div className="min-h-dvh bg-cart-bg text-white">
+    <div className="home-light home-wash cart-grain min-h-dvh bg-cart-bg text-cart-ink">
       {/* Header de usuario reutilizado */}
       <UserHeader />
 
@@ -821,7 +821,7 @@ function BuyFlowInner({ params }: Props) {
             type="button"
             onClick={onBack}
             aria-label="Volver"
-            className="grid size-9 shrink-0 place-items-center rounded-full bg-cart-bg-elev text-cart-ink-2 transition hover:bg-cart-bg-elev-2 hover:text-white"
+            className="grid size-9 shrink-0 place-items-center rounded-full bg-cart-bg-elev text-cart-ink-2 transition hover:bg-cart-bg-elev-2 hover:text-cart-ink"
           >
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
               <path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
@@ -1078,7 +1078,7 @@ function ContactConfirmModal({
             <path d="M14.5 9.5h4M14.5 12.5h4" />
           </svg>
         </div>
-        <h2 className="mt-4 text-[20px] font-bold tracking-[-0.02em] text-white">
+        <h2 className="mt-4 text-[20px] font-bold tracking-[-0.02em] text-cart-ink">
           Revisa tus datos de contacto
         </h2>
         <p className="mt-1.5 text-[13.5px] leading-relaxed text-cart-ink-2">
@@ -1096,7 +1096,7 @@ function ContactConfirmModal({
               <div className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-cart-ink-4">
                 WhatsApp
               </div>
-              <div className="truncate text-[14.5px] font-bold tabular-nums text-white">
+              <div className="truncate text-[14.5px] font-bold tabular-nums text-cart-ink">
                 {country ? `${country.flag} +${country.dial} ` : ""}
                 {national || "—"}
               </div>
@@ -1113,7 +1113,7 @@ function ContactConfirmModal({
               <div className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-cart-ink-4">
                 Correo
               </div>
-              <div className="truncate text-[14.5px] font-bold text-white">{email || "—"}</div>
+              <div className="truncate text-[14.5px] font-bold text-cart-ink">{email || "—"}</div>
             </div>
           </div>
         </div>
@@ -1128,7 +1128,7 @@ function ContactConfirmModal({
         <button
           type="button"
           onClick={onEdit}
-          className="mt-2 w-full rounded-full py-2.5 text-[13.5px] font-medium text-cart-ink-3 transition hover:text-white"
+          className="mt-2 w-full rounded-full py-2.5 text-[13.5px] font-medium text-cart-ink-3 transition hover:text-cart-ink"
         >
           Corregir datos
         </button>
@@ -1234,7 +1234,7 @@ function ReservationExpiredModal({
             <path d="M8 6v3l2 1.5M6 1.5h4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
           </svg>
         </div>
-        <h2 className="mt-4 text-[18px] font-semibold tracking-[-0.02em] text-white">
+        <h2 className="mt-4 text-[18px] font-semibold tracking-[-0.02em] text-cart-ink">
           Venció tu tiempo
         </h2>
         <p className="mt-2 text-[13.5px] leading-relaxed text-cart-ink-2">
@@ -1251,7 +1251,7 @@ function ReservationExpiredModal({
         <button
           type="button"
           onClick={onCancel}
-          className="mt-2 w-full rounded-full py-2.5 text-[13.5px] font-medium text-cart-ink-3 transition hover:text-white"
+          className="mt-2 w-full rounded-full py-2.5 text-[13.5px] font-medium text-cart-ink-3 transition hover:text-cart-ink"
         >
           Salir
         </button>
@@ -1550,7 +1550,7 @@ function BoxGrid({
             : "Tú invitas a tu grupo"}
         </p>
         {commonPriceCents !== null && (
-          <p className="text-[14px] font-bold tracking-[-0.01em] text-white">
+          <p className="text-[14px] font-bold tracking-[-0.01em] text-cart-ink">
             <Price cents={commonPriceCents} currency={currency} />
             {commonPriceCents > 0 && (
               <span className="ml-0.5 text-[10.5px] font-medium text-cart-ink-3">/{noun}</span>
@@ -1586,7 +1586,7 @@ function BoxGrid({
                   ? "cursor-not-allowed border border-cart-line bg-cart-bg-elev-2/40 text-cart-ink-4"
                   : selected
                     ? "bg-cart-accent text-cart-bg shadow-[0_6px_20px_-6px_var(--color-cart-accent-glow)]"
-                    : "border border-cart-line bg-cart-bg-elev-2 text-white hover:border-cart-accent hover:text-cart-accent")
+                    : "border border-cart-line bg-cart-bg-elev-2 text-cart-ink hover:border-cart-accent hover:text-cart-accent")
               }
             >
               <span className={"leading-none " + (showPriceOnTile ? "text-[13px]" : "text-[15px]")}>
@@ -1628,7 +1628,7 @@ function BoxGrid({
         ) : (
           <div className="flex items-baseline justify-between gap-3">
             <div className="min-w-0">
-              <p className="truncate text-[13.5px] font-semibold text-white">
+              <p className="truncate text-[13.5px] font-semibold text-cart-ink">
                 {selectedItems.map((s) => s.boxLabel ?? s.name).join(" · ")}
               </p>
               <p className="mt-0.5 text-[11.5px] text-cart-ink-3">
@@ -1874,7 +1874,7 @@ function QtyControl({
         type="button"
         onClick={() => onChange(Math.max(0, value - 1))}
         aria-label="Restar"
-        className="grid size-7 place-items-center rounded-full bg-cart-bg text-white transition hover:bg-cart-accent hover:text-cart-bg"
+        className="grid size-7 place-items-center rounded-full bg-cart-bg text-cart-ink transition hover:bg-cart-accent hover:text-cart-bg"
       >
         <svg width="10" height="10" viewBox="0 0 10 10"><path d="M2 5h6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
       </button>
@@ -1884,7 +1884,7 @@ function QtyControl({
         onClick={() => onChange(Math.min(max, value + 1))}
         aria-label="Sumar"
         disabled={value >= max}
-        className="grid size-7 place-items-center rounded-full bg-cart-bg text-white transition hover:bg-cart-accent hover:text-cart-bg disabled:cursor-not-allowed disabled:opacity-50"
+        className="grid size-7 place-items-center rounded-full bg-cart-bg text-cart-ink transition hover:bg-cart-accent hover:text-cart-bg disabled:cursor-not-allowed disabled:opacity-50"
       >
         <svg width="10" height="10" viewBox="0 0 10 10"><path d="M5 2v6M2 5h6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
       </button>
@@ -2172,7 +2172,7 @@ function PaymentReviewScreen({
         type="button"
         onClick={() => setWaited(true)}
         disabled={busy}
-        className="mt-3 w-full rounded-full border border-cart-line bg-cart-bg-elev-2 py-3.5 text-[14px] font-semibold text-cart-ink-2 transition hover:border-cart-line-strong hover:text-white disabled:opacity-60"
+        className="mt-3 w-full rounded-full border border-cart-line bg-cart-bg-elev-2 py-3.5 text-[14px] font-semibold text-cart-ink-2 transition hover:border-cart-line-strong hover:text-cart-ink disabled:opacity-60"
       >
         Esperar la confirmación
       </button>
@@ -2295,7 +2295,7 @@ function OrderSummary({
             </svg>
           </span>
           <span className="truncate text-[11.5px] text-cart-ink-2">
-            Promotor: <span className="font-medium text-white">{promoterLabel}</span>
+            Promotor: <span className="font-medium text-cart-ink">{promoterLabel}</span>
           </span>
         </div>
       )}

@@ -37,12 +37,14 @@ const brandFromPaymentMethodId = (id: string | null): CardBrand => {
   return "unknown";
 };
 
-// Estilo del input DENTRO del iframe seguro de MP (no lo controla nuestro CSS).
+// Estilo del input DENTRO del iframe seguro de MP (no lo controla nuestro CSS,
+// así que va con valores literales, no tokens). El checkout es claro → tinta
+// oscura (mismo `--color-cart-ink` del tema claro) sobre la card clara.
 const SECURE_FIELD_STYLE: Record<string, unknown> = {
-  color: "#FFFFFF",
+  color: "#16132a",
   "font-size": "15px",
   "font-family": "ui-monospace, SFMono-Regular, Menlo, monospace",
-  placeholderColor: "rgba(255,255,255,0.32)",
+  placeholderColor: "rgba(22,19,42,0.34)",
 };
 
 export function CardForm({
@@ -281,7 +283,7 @@ export function CardForm({
             value={holder}
             onChange={(e) => setHolder(e.target.value)}
             placeholder="María López"
-            className="block w-full rounded-2xl border border-cart-line bg-cart-bg-elev-2 px-4 py-3.5 text-[15px] text-white outline-none transition focus:border-cart-accent focus:shadow-[0_0_0_3px_var(--color-cart-accent-soft)]"
+            className="block w-full rounded-2xl border border-cart-line bg-cart-bg-elev-2 px-4 py-3.5 text-[15px] text-cart-ink outline-none transition focus:border-cart-accent focus:shadow-[0_0_0_3px_var(--color-cart-accent-soft)]"
           />
         </CardField>
 
@@ -292,7 +294,7 @@ export function CardForm({
             value={dni}
             onChange={(e) => setDni(e.target.value.replace(/\D/g, "").slice(0, 12))}
             placeholder="71234567"
-            className="block w-full rounded-2xl border border-cart-line bg-cart-bg-elev-2 px-4 py-3.5 font-mono text-[15px] tracking-[0.04em] text-white outline-none transition focus:border-cart-accent focus:shadow-[0_0_0_3px_var(--color-cart-accent-soft)]"
+            className="block w-full rounded-2xl border border-cart-line bg-cart-bg-elev-2 px-4 py-3.5 font-mono text-[15px] tracking-[0.04em] text-cart-ink outline-none transition focus:border-cart-accent focus:shadow-[0_0_0_3px_var(--color-cart-accent-soft)]"
           />
         </CardField>
       </div>
@@ -446,7 +448,7 @@ function ThreeDsChallenge({
       <button
         type="button"
         onClick={onCancel}
-        className="mt-4 flex w-full items-center justify-center gap-2 rounded-full border border-cart-line bg-cart-bg-elev-2 py-3.5 text-[14px] font-semibold text-cart-ink-2 transition hover:border-cart-line-strong hover:text-white"
+        className="mt-4 flex w-full items-center justify-center gap-2 rounded-full border border-cart-line bg-cart-bg-elev-2 py-3.5 text-[14px] font-semibold text-cart-ink-2 transition hover:border-cart-line-strong hover:text-cart-ink"
       >
         <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden>
           <path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
