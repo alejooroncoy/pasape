@@ -97,21 +97,55 @@ export function EventDetailClient({ slug }: { slug: string }) {
   );
 
   const [groupQty, setGroupQty] = useState<Record<string, number>>({});
+  // Boxes elegidos por IDENTIDAD (Box A/B/C) — no por cantidad. Se eligen en una
+  // hoja inferior (BoxPickerSheet) que muestra el plano como referencia.
+  const [selectedBoxIds, setSelectedBoxIds] = useState<string[]>([]);
+  const [boxSheetOpen, setBoxSheetOpen] = useState(false);
 
-  const liveUnits = useMemo(
+  // Dos naturalezas distintas en la misma pantalla: entradas "por persona"
+  // (stepper) y boxes (un espacio para el grupo, se reservan enteros). Se
+  // separan visualmente y el box se elige en la hoja — nunca se sale de aquí.
+  const entradaGroups = useMemo(
+    () => groups.filter((g) => !summarizeGroup(g).isAllBoxes),
+    [groups],
+  );
+  const boxGroups = useMemo(
+    () => groups.filter((g) => summarizeGroup(g).isAllBoxes),
+    [groups],
+  );
+  const boxItems = useMemo(() => boxGroups.flatMap((g) => g.items), [boxGroups]);
+  const selectedBoxes = useMemo(
+    () => boxItems.filter((b) => selectedBoxIds.includes(b.id)),
+    [boxItems, selectedBoxIds],
+  );
+
+  const entradaUnits = useMemo(
     () => Object.values(groupQty).reduce((a, b) => a + b, 0),
     [groupQty],
   );
+  const liveUnits = entradaUnits + selectedBoxes.length;
 
-  const liveTotalCents = useMemo(
-    () =>
-      groups.reduce((sum, group) => {
-        const qty = groupQty[detailGroupKey(group)] ?? 0;
-        const price = summarizeGroup(group).minPriceCents ?? 0;
-        return sum + qty * price;
-      }, 0),
-    [groups, groupQty],
-  );
+  // Resumen para la barra/botón: entradas y boxes se cuentan por separado (un
+  // box NO es "una entrada"). Ej: "2 entradas · 1 box".
+  const selectionLabel = useMemo(() => {
+    const parts: string[] = [];
+    if (entradaUnits > 0) parts.push(`${entradaUnits} ${entradaUnits === 1 ? "entrada" : "entradas"}`);
+    const nb = selectedBoxes.length;
+    if (nb > 0) parts.push(`${nb} ${nb === 1 ? "box" : "boxes"}`);
+    return parts.join(" · ");
+  }, [entradaUnits, selectedBoxes.length]);
+
+  const liveTotalCents = useMemo(() => {
+    const entradas = entradaGroups.reduce((sum, group) => {
+      const qty = groupQty[detailGroupKey(group)] ?? 0;
+      const price = summarizeGroup(group).minPriceCents ?? 0;
+      return sum + qty * price;
+    }, 0);
+    // El precio del box es el que ya viene calculado por el backend
+    // (buyerPriceCents) — display, no recálculo. El total real lo pisa el quote.
+    const boxes = selectedBoxes.reduce((s, b) => s + (b.buyerPriceCents ?? 0), 0);
+    return entradas + boxes;
+  }, [entradaGroups, groupQty, selectedBoxes]);
 
   // Precio "desde" del evento (display): el menor precio entre todas las zonas
   // disponibles. Solo para el gancho de la barra cuando el usuario aún no
@@ -123,30 +157,17 @@ export function EventDetailClient({ slug }: { slug: string }) {
     return prices.length ? Math.min(...prices) : null;
   }, [groups]);
 
-  const buyHref = (group?: TicketGroup) => {
-    const p = new URLSearchParams();
-    if (promo) p.set("promo", promo);
-    if (group) {
-      const single = group.items.length === 1 ? group.items[0] : null;
-      // Entrada convencional → pre-selecciona por id; box → por zona.
-      if (single && single.kind !== "box") p.set("tt", single.id);
-      const qty = groupQty[detailGroupKey(group)];
-      if (qty) p.set("qty", String(qty));
-    }
-    const qs = p.toString();
-    return `/events/${slug}/buy${qs ? `?${qs}` : ""}`;
-  };
-
   const buyHrefAll = () => {
     const p = new URLSearchParams();
     if (promo) p.set("promo", promo);
-    // Desglose por tipo de entrada (id:cantidad) para no perder qué eligió en
-    // cada card. Las claves "tt:" son entradas; las "zone:" (boxes) se eligen
-    // por separado en la compra, así que solo arrastramos la cantidad total.
+    // Desglose "id:cantidad" — el mismo formato `sel` que hidrata /buy y se
+    // conserva por el paso de datos hasta el pago. Entradas por cantidad; cada
+    // box por su id (siempre :1, se vende entero).
     const sel: string[] = [];
     for (const [key, qty] of Object.entries(groupQty)) {
       if (qty > 0 && key.startsWith("tt:")) sel.push(`${key.slice(3)}:${qty}`);
     }
+    for (const id of selectedBoxIds) sel.push(`${id}:1`);
     if (sel.length) p.set("sel", sel.join(","));
     else if (liveUnits > 0) p.set("qty", String(liveUnits));
     const qs = p.toString();
@@ -251,15 +272,32 @@ export function EventDetailClient({ slug }: { slug: string }) {
                 <h2 className="mb-3 text-[19px] font-bold tracking-[-0.02em] text-cart-ink">
                   Elige tu entrada<span className="text-cart-accent">.</span>
                 </h2>
-                <GroupCardList
-                  groups={groups}
-                  groupQty={groupQty}
-                  onGroupQtyChange={(key, qty) =>
-                    setGroupQty((prev) => ({ ...prev, [key]: qty }))
-                  }
-                  onPickGroup={(group) => router.push(buyHref(group) as never)}
-                  palette={palette}
-                />
+                {entradaGroups.length > 0 && (
+                  <>
+                    {boxGroups.length > 0 && (
+                      <TicketSubHeader>Entradas · por persona</TicketSubHeader>
+                    )}
+                    <GroupCardList
+                      groups={entradaGroups}
+                      groupQty={groupQty}
+                      onGroupQtyChange={(key, qty) =>
+                        setGroupQty((prev) => ({ ...prev, [key]: qty }))
+                      }
+                      onPickGroup={() => {}}
+                      palette={palette}
+                    />
+                  </>
+                )}
+                {boxGroups.length > 0 && (
+                  <BoxSection
+                    boxGroups={boxGroups}
+                    selectedBoxes={selectedBoxes}
+                    onOpen={() => setBoxSheetOpen(true)}
+                    onRemove={(id) =>
+                      setSelectedBoxIds((ids) => ids.filter((x) => x !== id))
+                    }
+                  />
+                )}
               </div>
             )}
 
@@ -291,16 +329,34 @@ export function EventDetailClient({ slug }: { slug: string }) {
                     <AvailabilityHeader availability={availability} palette={palette} />
 
                     <div className="mt-4">
-                      <GroupCardList
-                        groups={groups}
-                        compact
-                        groupQty={groupQty}
-                        onGroupQtyChange={(key, qty) =>
-                          setGroupQty((prev) => ({ ...prev, [key]: qty }))
-                        }
-                        onPickGroup={(group) => router.push(buyHref(group) as never)}
-                        palette={palette}
-                      />
+                      {entradaGroups.length > 0 && (
+                        <>
+                          {boxGroups.length > 0 && (
+                            <TicketSubHeader>Entradas · por persona</TicketSubHeader>
+                          )}
+                          <GroupCardList
+                            groups={entradaGroups}
+                            compact
+                            groupQty={groupQty}
+                            onGroupQtyChange={(key, qty) =>
+                              setGroupQty((prev) => ({ ...prev, [key]: qty }))
+                            }
+                            onPickGroup={() => {}}
+                            palette={palette}
+                          />
+                        </>
+                      )}
+                      {boxGroups.length > 0 && (
+                        <BoxSection
+                          compact
+                          boxGroups={boxGroups}
+                          selectedBoxes={selectedBoxes}
+                          onOpen={() => setBoxSheetOpen(true)}
+                          onRemove={(id) =>
+                            setSelectedBoxIds((ids) => ids.filter((x) => x !== id))
+                          }
+                        />
+                      )}
                     </div>
 
                     <BuyButton
@@ -314,7 +370,7 @@ export function EventDetailClient({ slug }: { slug: string }) {
                       {allSoldOut
                         ? "Agotado"
                         : liveUnits > 0
-                          ? `${liveUnits} ${liveUnits === 1 ? "entrada" : "entradas"} · ${formatPrice(liveTotalCents, "PEN")}`
+                          ? `${selectionLabel} · ${formatPrice(liveTotalCents, "PEN")}`
                           : "Comprar entradas"}
                     </BuyButton>
 
@@ -348,9 +404,7 @@ export function EventDetailClient({ slug }: { slug: string }) {
           {!isClosed && !allSoldOut && (
             <div className="mb-2.5 flex items-baseline justify-between">
               <span className="text-[12px] text-cart-ink-3">
-                {liveUnits > 0
-                  ? `${liveUnits} ${liveUnits === 1 ? "entrada" : "entradas"}`
-                  : "Aún sin elegir"}
+                {liveUnits > 0 ? selectionLabel : "Aún sin elegir"}
               </span>
               <span className="text-[14px] font-bold tracking-[-0.01em] text-cart-ink">
                 {liveUnits > 0 ? (
@@ -391,6 +445,17 @@ export function EventDetailClient({ slug }: { slug: string }) {
           </BuyButton>
         </div>
       </div>
+
+      {boxItems.length > 0 && (
+        <BoxPickerSheet
+          open={boxSheetOpen}
+          onClose={() => setBoxSheetOpen(false)}
+          boxGroups={boxGroups}
+          venueLayoutUrl={event.venueLayoutUrl}
+          selectedIds={selectedBoxIds}
+          onConfirm={(ids) => setSelectedBoxIds(ids)}
+        />
+      )}
     </PageContainer>
   );
 }
@@ -1024,6 +1089,294 @@ function BoxAvailabilityBar({
           />
         );
       })}
+    </div>
+  );
+}
+
+/* ============================== Boxes (sección + hoja) ============================== */
+
+function TicketSubHeader({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="mb-2.5 mt-1 flex items-center gap-2.5">
+      <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-cart-ink-3">
+        {children}
+      </span>
+      <span className="h-px flex-1 bg-cart-line" />
+    </div>
+  );
+}
+
+function nounCap(noun: string): string {
+  return noun.charAt(0).toUpperCase() + noun.slice(1);
+}
+
+// Sección de boxes en el detalle: distinta de las entradas (un espacio para el
+// grupo, se reserva entero). Los boxes elegidos se ven como chips con ✕ (quitar
+// de un toque) + "otro box"; el botón abre la hoja — nunca se sale de la página.
+function BoxSection({
+  boxGroups,
+  selectedBoxes,
+  onOpen,
+  onRemove,
+  compact,
+}: {
+  boxGroups: TicketGroup[];
+  selectedBoxes: TicketType[];
+  onOpen: () => void;
+  onRemove: (id: string) => void;
+  compact?: boolean;
+}) {
+  const summ = boxGroups.map((g) => summarizeGroup(g));
+  const free = summ.reduce((s, x) => s + x.freeBoxes, 0);
+  const total = summ.reduce((s, x) => s + x.totalBoxes, 0);
+  const noun = summ[0]?.noun ?? "box";
+  const allItems = boxGroups.flatMap((g) => g.items);
+  const prices = summ.map((x) => x.minPriceCents).filter((p): p is number => p != null);
+  const minPrice = prices.length ? Math.min(...prices) : null;
+  const hasSel = selectedBoxes.length > 0;
+  const soldOut = free === 0 && !hasSel;
+
+  return (
+    <div className="mt-4">
+      <TicketSubHeader>Boxes · un espacio para tu grupo</TicketSubHeader>
+      <div
+        className={"rounded-2xl border bg-cart-bg-elev " + (compact ? "px-3.5 py-3.5" : "px-4 py-4")}
+        style={{ borderColor: "color-mix(in srgb, var(--color-cart-accent-2) 30%, transparent)" }}
+      >
+        <div className="flex items-start justify-between gap-2">
+          <span className="font-semibold tracking-[-0.01em] text-cart-ink">
+            {nounCap(unitNounPlural(noun))}
+          </span>
+          {minPrice != null && (
+            <span className="whitespace-nowrap text-[13px] font-bold tracking-[-0.01em] text-cart-ink">
+              {minPrice <= 0 ? "Gratis" : formatMoney(minPrice, "PEN")}
+              <span className="ml-1 text-[10px] font-medium text-cart-ink-4">c/u</span>
+            </span>
+          )}
+        </div>
+
+        <BoxAvailabilityBar items={allItems} className="mt-2.5" />
+
+        {hasSel ? (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {selectedBoxes.map((b) => (
+              <span
+                key={b.id}
+                className="inline-flex items-center gap-1.5 rounded-full border py-1.5 pl-3 pr-1.5 text-[12.5px] font-bold text-cart-accent"
+                style={{
+                  background: "color-mix(in srgb, var(--color-cart-accent) 10%, transparent)",
+                  borderColor: "color-mix(in srgb, var(--color-cart-accent) 32%, transparent)",
+                }}
+              >
+                {b.boxLabel ? `${nounCap(noun)} ${b.boxLabel}` : b.name}
+                <button
+                  type="button"
+                  onClick={() => onRemove(b.id)}
+                  aria-label={`Quitar ${b.boxLabel ? `${noun} ${b.boxLabel}` : b.name}`}
+                  className="grid size-[19px] place-items-center rounded-full text-cart-accent transition hover:bg-cart-accent hover:text-white"
+                  style={{ background: "color-mix(in srgb, var(--color-cart-accent) 18%, transparent)" }}
+                >
+                  <svg width="8" height="8" viewBox="0 0 10 10" fill="none">
+                    <path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                  </svg>
+                </button>
+              </span>
+            ))}
+            {free > 0 && (
+              <button
+                type="button"
+                onClick={onOpen}
+                className="inline-flex items-center gap-1 rounded-full border border-dashed px-3.5 py-1.5 text-[12.5px] font-bold text-cart-accent transition"
+                style={{ borderColor: "color-mix(in srgb, var(--color-cart-accent) 45%, transparent)" }}
+              >
+                + Otro {noun}
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="mt-3 flex items-center justify-between gap-2">
+            <span className="text-[12px] text-cart-ink-3">
+              {soldOut ? "Agotado" : `${free} de ${total} libres`}
+            </span>
+            {!soldOut && (
+              <button
+                type="button"
+                onClick={onOpen}
+                className="rounded-full border px-4 py-1.5 text-[12.5px] font-bold text-cart-accent transition hover:brightness-110"
+                style={{
+                  background: "color-mix(in srgb, var(--color-cart-accent) 8%, transparent)",
+                  borderColor: "color-mix(in srgb, var(--color-cart-accent) 40%, transparent)",
+                }}
+              >
+                Reservar {noun}
+              </button>
+            )}
+          </div>
+        )}
+
+        <p className={"leading-snug text-cart-ink-3 " + (compact ? "mt-2 text-[10.5px]" : "mt-2.5 text-[11px]")}>
+          Reservas el {noun} entero para tu grupo; luego repartes las entradas.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// Hoja inferior para elegir box(es) por identidad. Multi-selección; muestra el
+// plano del local como referencia visual (es solo imagen: no hay regiones
+// clickeables mapeadas a cada box, se elige por su etiqueta A/B/C).
+function BoxPickerSheet({
+  open,
+  onClose,
+  boxGroups,
+  venueLayoutUrl,
+  selectedIds,
+  onConfirm,
+}: {
+  open: boolean;
+  onClose: () => void;
+  boxGroups: TicketGroup[];
+  venueLayoutUrl: string | null;
+  selectedIds: string[];
+  onConfirm: (ids: string[]) => void;
+}) {
+  const [pending, setPending] = useState<string[]>(selectedIds);
+  // Al abrir, arranca desde la selección actual (para editar/agregar).
+  useEffect(() => {
+    if (open) setPending(selectedIds);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  const toggle = (id: string) =>
+    setPending((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+
+  const multiNoun = boxGroups.length > 1;
+
+  return (
+    <div
+      className="fixed inset-0 z-[70]"
+      aria-hidden={!open}
+      style={{ pointerEvents: open ? "auto" : "none" }}
+    >
+      <div
+        onClick={onClose}
+        className={
+          "absolute inset-0 bg-[rgba(12,7,20,0.45)] transition-opacity duration-300 " +
+          (open ? "opacity-100" : "opacity-0")
+        }
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Elige tu box"
+        className={
+          "absolute inset-x-0 bottom-0 mx-auto flex max-h-[86vh] w-full max-w-[520px] flex-col rounded-t-[24px] border-t border-cart-line bg-cart-bg shadow-[0_-24px_60px_-20px_rgba(20,10,60,0.4)] transition-transform duration-[340ms] [transition-timing-function:cubic-bezier(.22,1,.36,1)] " +
+          (open ? "translate-y-0" : "translate-y-full")
+        }
+        style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 16px)" }}
+      >
+        <div className="shrink-0 px-4 pt-2">
+          <div className="mx-auto mb-3 h-1.5 w-9 rounded-full bg-cart-line-strong" />
+          <h3 className="text-[16.5px] font-bold tracking-[-0.01em] text-cart-ink">Elige tu box</h3>
+          <p className="mt-0.5 text-[12px] text-cart-ink-3">
+            Un espacio para tu grupo — toca los que quieras
+          </p>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-3">
+          {venueLayoutUrl && (
+            <div className="mb-4 overflow-hidden rounded-xl border border-cart-line bg-cart-bg-elev">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={venueLayoutUrl}
+                alt="Distribución del local"
+                className="max-h-[168px] w-full object-contain"
+              />
+              <div className="border-t border-cart-line px-3 py-1.5 text-[10.5px] text-cart-ink-3">
+                Distribución del local · referencia
+              </div>
+            </div>
+          )}
+
+          {boxGroups.map((g, gi) => {
+            const noun = summarizeGroup(g).noun;
+            return (
+              <div key={gi} className={gi > 0 ? "mt-4" : ""}>
+                {multiNoun && (
+                  <div className="mb-2 text-[11px] font-bold uppercase tracking-[0.1em] text-cart-ink-3">
+                    {nounCap(unitNounPlural(noun))}
+                  </div>
+                )}
+                <div className="grid grid-cols-4 gap-2">
+                  {g.items.map((b) => {
+                    const soldout = ticketStatus(b).kind === "soldout";
+                    const sel = pending.includes(b.id);
+                    const seats = b.kind === "box" ? b.seats : 0;
+                    return (
+                      <button
+                        key={b.id}
+                        type="button"
+                        disabled={soldout}
+                        onClick={() => toggle(b.id)}
+                        aria-pressed={sel}
+                        className={
+                          "flex aspect-square flex-col items-center justify-center gap-0.5 rounded-xl border text-cart-ink transition active:scale-95 " +
+                          (soldout
+                            ? "cursor-not-allowed border-cart-line bg-cart-bg-elev/50 text-cart-ink-4 line-through"
+                            : sel
+                              ? "text-cart-accent"
+                              : "border-cart-line bg-cart-bg-elev hover:border-cart-line-strong")
+                        }
+                        style={
+                          sel && !soldout
+                            ? {
+                                borderColor: "var(--color-cart-accent)",
+                                background: "color-mix(in srgb, var(--color-cart-accent) 12%, transparent)",
+                                boxShadow: "0 6px 16px -8px var(--color-cart-accent-glow)",
+                              }
+                            : undefined
+                        }
+                      >
+                        <span className="text-[15px] font-extrabold tracking-[-0.02em]">
+                          {b.boxLabel ?? b.name}
+                        </span>
+                        {seats > 0 && (
+                          <span className="text-[9px] font-medium text-cart-ink-4">{seats} pers.</span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="shrink-0 px-4 pt-3">
+          <button
+            type="button"
+            onClick={() => {
+              onConfirm(pending);
+              onClose();
+            }}
+            className="w-full rounded-full bg-cart-accent py-3.5 text-[14.5px] font-semibold text-white shadow-[0_2px_8px_-2px_rgba(50,30,120,0.28)] transition hover:brightness-110 active:scale-[0.99]"
+          >
+            {pending.length === 0
+              ? "Listo"
+              : pending.length === 1
+                ? "Confirmar · 1 box"
+                : `Confirmar · ${pending.length} boxes`}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
