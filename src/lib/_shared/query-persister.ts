@@ -18,13 +18,24 @@ const KEY = "client";
 // y el próximo persistClient() fallaría con "InvalidStateError: the database
 // connection is closing". Abrir una conexión nueva por operación (igual que
 // ticketKeyStore.ts / scanCache.ts / claimedOrderStore.ts) evita el problema.
-const getDb = (): Promise<IDBPDatabase> | null => {
+//
+// Nunca dejar que un fallo de IndexedDB se propague: WebKit/Safari puede
+// lanzar "UnknownError: An internal error was encountered in the Indexed
+// Database server" de forma espontánea (bug conocido de WebKit, sobre todo
+// en Private Browsing o con el storage bajo presión). Esta persistencia es
+// solo un cache offline — degradar a "sin persistencia" en vez de romper la
+// carga de la app con una promise rejection sin manejar.
+const getDb = async (): Promise<IDBPDatabase | null> => {
   if (typeof indexedDB === "undefined") return null;
-  return openDB(DB_NAME, 1, {
-    upgrade(db) {
-      if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
-    },
-  });
+  try {
+    return await openDB(DB_NAME, 1, {
+      upgrade(db) {
+        if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
+      },
+    });
+  } catch {
+    return null;
+  }
 };
 
 // Standalone (no depende de la instancia de persister del provider): usado en
@@ -33,23 +44,39 @@ const getDb = (): Promise<IDBPDatabase> | null => {
 export const clearPersistedQueryCache = async () => {
   const db = await getDb();
   if (!db) return;
-  await db.delete(STORE, KEY);
+  try {
+    await db.delete(STORE, KEY);
+  } catch {
+    // ver comentario en getDb: no propagar fallos de IndexedDB
+  }
 };
 
 export const createIdbPersister = (): Persister => ({
   async persistClient(client: PersistedClient) {
     const db = await getDb();
     if (!db) return;
-    await db.put(STORE, client, KEY);
+    try {
+      await db.put(STORE, client, KEY);
+    } catch {
+      // ver comentario en getDb: no propagar fallos de IndexedDB
+    }
   },
   async restoreClient() {
     const db = await getDb();
     if (!db) return undefined;
-    return (await db.get(STORE, KEY)) as PersistedClient | undefined;
+    try {
+      return (await db.get(STORE, KEY)) as PersistedClient | undefined;
+    } catch {
+      return undefined;
+    }
   },
   async removeClient() {
     const db = await getDb();
     if (!db) return;
-    await db.delete(STORE, KEY);
+    try {
+      await db.delete(STORE, KEY);
+    } catch {
+      // ver comentario en getDb: no propagar fallos de IndexedDB
+    }
   },
 });
