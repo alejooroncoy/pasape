@@ -8,6 +8,10 @@ export type ShowcaseOrg = {
   name: string;
   logoUrl: string | null;
   brandColor: string | null;
+  /** Insignia pública de organizador verificado (curada por Pasape). */
+  verified: boolean;
+  /** Cuántos eventos publicados tiene la productora (incluye el actual). */
+  eventCount: number;
 };
 
 export type ShowcaseEvent = {
@@ -43,7 +47,7 @@ export const getEventOrgShowcase = async (
 
   const { data: org } = await db
     .from("organizations")
-    .select("id, slug, name, logo_url, brand_color")
+    .select("id, slug, name, logo_url, brand_color, verified")
     .eq("id", ev.organization_id)
     .maybeSingle<{
       id: string;
@@ -51,8 +55,17 @@ export const getEventOrgShowcase = async (
       name: string;
       logo_url: string | null;
       brand_color: string | null;
+      verified: boolean;
     }>();
   if (!org) return null;
+
+  // Conteo total de eventos publicados de la productora (incluye el actual) —
+  // dato real para el mini-perfil, en vez de inferirlo del cross-sell (limitado).
+  const { count: publishedCount } = await db
+    .from("events")
+    .select("id", { count: "exact", head: true })
+    .eq("organization_id", org.id)
+    .eq("status", "published");
 
   const cutoff = new Date(Date.now() - SHOWCASE_RECENT_GRACE_MS).toISOString();
   const { data: rawEvents } = await db
@@ -103,6 +116,8 @@ export const getEventOrgShowcase = async (
       name: org.name,
       logoUrl: org.logo_url,
       brandColor: org.brand_color,
+      verified: org.verified ?? false,
+      eventCount: publishedCount ?? 0,
     },
     events: rows.map((r) => ({
       slug: r.slug,

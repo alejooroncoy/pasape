@@ -9,6 +9,8 @@ import { eventDatePillParts, eventDateTime } from "@/lib/_shared/format";
 import { UserHeader } from "@/app/[locale]/_home/UserHeader";
 import { useEvent } from "@/lib/events/hooks/useEvents";
 import { useSaveEvent } from "@/lib/identity/hooks/useSaveEvent";
+import { useFollow } from "@/lib/identity/hooks/useFollow";
+import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { usePromoterDisplayName } from "@/lib/promoters/hooks/usePromoter";
 import { useEventShowcase } from "@/lib/events/hooks/useEventShowcase";
 import { useEventPartners } from "@/lib/events/hooks/useEventPartners";
@@ -78,6 +80,12 @@ export function EventDetailClient({ slug }: { slug: string }) {
   const promo = search.get("promo");
   const router = useRouter();
 
+  // Comparación en vivo de los dos tratamientos del flyer (como /es/2 en el
+  // home): ?hero=immersive baña la cabecera con el color del flyer; por defecto
+  // "ticket" (póster + talón de datos).
+  const heroVariant: "ticket" | "immersive" =
+    search.get("hero") === "immersive" ? "immersive" : "ticket";
+
   const groups = useMemo(
     () => (data ? groupForDetail(data.ticketTypes) : []),
     [data],
@@ -104,6 +112,16 @@ export function EventDetailClient({ slug }: { slug: string }) {
       }, 0),
     [groups, groupQty],
   );
+
+  // Precio "desde" del evento (display): el menor precio entre todas las zonas
+  // disponibles. Solo para el gancho de la barra cuando el usuario aún no
+  // eligió — el total real lo arma el quote del backend en el checkout.
+  const fromPriceCents = useMemo(() => {
+    const prices = groups
+      .map((g) => summarizeGroup(g).minPriceCents)
+      .filter((p): p is number => p != null);
+    return prices.length ? Math.min(...prices) : null;
+  }, [groups]);
 
   const buyHref = (group?: TicketGroup) => {
     const p = new URLSearchParams();
@@ -159,6 +177,9 @@ export function EventDetailClient({ slug }: { slug: string }) {
   const startsAt = new Date(event.startsAt);
   const isClosed = event.status === "closed";
   const allSoldOut = availability.total === 0;
+  // El talón del ticket (variante "ticket" con flyer) ya muestra fecha + lugar,
+  // así que ocultamos la línea meta bajo el título para no repetirla.
+  const heroStub = heroVariant === "ticket" && Boolean(event.coverUrl);
 
   return (
     <PageContainer palette={palette}>
@@ -169,41 +190,52 @@ export function EventDetailClient({ slug }: { slug: string }) {
             {/* Flyer contenido (estilo Joinnus): el afiche vertical se ve
                 completo — nunca recortado — y un gradiente con los colores
                 del propio flyer rellena el marco. */}
-            <FlyerCard event={event} eventId={event.id} palette={palette} />
+            <FlyerCard
+              event={event}
+              eventId={event.id}
+              palette={palette}
+              variant={heroVariant}
+              fromPriceCents={fromPriceCents}
+              isClosed={isClosed}
+            />
 
-            <div className="pt-5 lg:hidden">
-              <h1 className="text-[30px] font-bold leading-[1.05] tracking-[-0.02em] sm:text-[34px]">
-                {event.title}
-              </h1>
-              {isClosed && <EndedBadge />}
-              <div className="mt-3 flex flex-col gap-1 text-[14px] text-cart-ink-2">
-                <span className="font-medium">
-                  <CalendarIcon /> {formatLongDate(startsAt, event.timezone)}
-                </span>
-                {event.venue && (
-                  <span className="text-cart-ink-3">
-                    <LocationIcon /> {event.venue}
+            {!heroStub && (
+              <div className="pt-5 lg:hidden">
+                <h1 className="text-[30px] font-bold leading-[1.05] tracking-[-0.02em] sm:text-[34px]">
+                  {event.title}
+                </h1>
+                {isClosed && <EndedBadge />}
+                <div className="mt-3 flex flex-col gap-1 text-[14px] text-cart-ink-2">
+                  <span className="font-medium">
+                    <CalendarIcon /> {formatLongDate(startsAt, event.timezone)}
                   </span>
-                )}
+                  {event.venue && (
+                    <span className="text-cart-ink-3">
+                      <LocationIcon /> {event.venue}
+                    </span>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
 
-            <div className="hidden lg:block lg:pt-6">
-              <h1 className="text-[44px] font-bold leading-[1.02] tracking-[-0.022em]">
-                {event.title}
-              </h1>
-              {isClosed && <EndedBadge />}
-              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[14px] text-cart-ink-2">
-                <span className="font-medium">
-                  <CalendarIcon /> {formatLongDate(startsAt, event.timezone)}
-                </span>
-                {event.venue && (
-                  <span className="text-cart-ink-3">
-                    <LocationIcon /> {event.venue}
+            {!heroStub && (
+              <div className="hidden lg:block lg:pt-6">
+                <h1 className="text-[44px] font-bold leading-[1.02] tracking-[-0.022em]">
+                  {event.title}
+                </h1>
+                {isClosed && <EndedBadge />}
+                <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[14px] text-cart-ink-2">
+                  <span className="font-medium">
+                    <CalendarIcon /> {formatLongDate(startsAt, event.timezone)}
                   </span>
-                )}
+                  {event.venue && (
+                    <span className="text-cart-ink-3">
+                      <LocationIcon /> {event.venue}
+                    </span>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
 
             {promo && <PromoBanner promo={promo} />}
 
@@ -216,7 +248,9 @@ export function EventDetailClient({ slug }: { slug: string }) {
 
             {!isClosed && (
               <div className="mt-8 lg:hidden">
-                <SectionTitle>Entradas</SectionTitle>
+                <h2 className="mb-3 text-[19px] font-bold tracking-[-0.02em] text-cart-ink">
+                  Elige tu entrada<span className="text-cart-accent">.</span>
+                </h2>
                 <GroupCardList
                   groups={groups}
                   groupQty={groupQty}
@@ -234,7 +268,7 @@ export function EventDetailClient({ slug }: { slug: string }) {
             {/* Productora del evento — lleva a su vitrina (estilo Passline/Luma). */}
             {showcase.data?.org && <OrganizerChip org={showcase.data.org} palette={palette} />}
 
-            <FeatureGrid palette={palette} />
+            <FeatureGrid />
 
             {partners.data && partners.data.length > 0 && (
               <PartnersStrip partners={partners.data} />
@@ -306,7 +340,35 @@ export function EventDetailClient({ slug }: { slug: string }) {
         style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)" }}
       >
         <div className="mx-auto px-5 pt-3">
+          {!isClosed && !allSoldOut && (
+            <div className="mb-2.5 flex items-baseline justify-between">
+              <span className="text-[12px] text-cart-ink-3">
+                {liveUnits > 0
+                  ? `${liveUnits} ${liveUnits === 1 ? "entrada" : "entradas"}`
+                  : "Aún sin elegir"}
+              </span>
+              <span className="text-[14px] font-bold tracking-[-0.01em] text-cart-ink">
+                {liveUnits > 0 ? (
+                  liveTotalCents <= 0 ? (
+                    "Gratis"
+                  ) : (
+                    <>
+                      {formatMoney(liveTotalCents, "PEN")}{" "}
+                      <span className="text-[10.5px] font-medium text-cart-ink-4">+ servicio</span>
+                    </>
+                  )
+                ) : fromPriceCents == null ? null : fromPriceCents <= 0 ? (
+                  <span className="font-semibold text-cart-ink-3">Gratis</span>
+                ) : (
+                  <span className="font-semibold text-cart-ink-3">
+                    Desde {formatMoney(fromPriceCents, "PEN")}
+                  </span>
+                )}
+              </span>
+            </div>
+          )}
           <BuyButton
+            flush
             onClick={() => {
               clientEvents.checkoutStarted({ event_slug: slug, location: "bottom_bar" });
               router.push(buyHrefAll() as never);
@@ -319,7 +381,7 @@ export function EventDetailClient({ slug }: { slug: string }) {
               : allSoldOut
                 ? "Agotado"
                 : liveUnits > 0
-                  ? `${liveUnits} ${liveUnits === 1 ? "entrada" : "entradas"} · ${formatMoney(liveTotalCents, "PEN")}`
+                  ? "Continuar al pago"
                   : "Comprar entradas"}
           </BuyButton>
         </div>
@@ -342,7 +404,7 @@ function PageContainer({ children }: { palette: Palette | null } & React.PropsWi
 
 function AsideContainer({ children }: { palette: Palette | null } & React.PropsWithChildren) {
   return (
-    <div className="rounded-3xl border border-cart-line bg-cart-bg-elev/60 p-5 shadow-[0_16px_44px_-18px_rgba(50,30,120,0.25)]">
+    <div className="rounded-2xl border border-cart-line bg-cart-bg-elev/60 p-5 shadow-[0_2px_14px_-8px_rgba(50,30,120,0.18)]">
       {children}
     </div>
   );
@@ -352,8 +414,9 @@ function BuyButton({
   children,
   palette,
   disabled,
+  flush,
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & React.PropsWithChildren & { palette: Palette | null }) {
+}: ButtonHTMLAttributes<HTMLButtonElement> & React.PropsWithChildren & { palette: Palette | null; flush?: boolean }) {
   // El tinte de marca solo aplica si el botón está activo — si no, las clases
   // `disabled:` (gris, sin sombra) quedarían tapadas por el color inline.
   const tinted = !disabled && palette?.accent;
@@ -366,10 +429,13 @@ function BuyButton({
     <button
       type="button"
       disabled={disabled}
-      className="mt-5 w-full rounded-full bg-cart-accent py-3.5 text-[14.5px] font-semibold text-cart-bg shadow-[0_8px_24px_-6px_var(--color-cart-accent-glow)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:bg-cart-bg-elev-2 disabled:text-cart-ink-3 disabled:shadow-none"
+      className={
+        (flush ? "" : "mt-5 ") +
+        "w-full rounded-full bg-cart-accent py-3.5 text-[14.5px] font-semibold text-cart-bg shadow-[0_2px_8px_-2px_rgba(50,30,120,0.28)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:bg-cart-bg-elev-2 disabled:text-cart-ink-3 disabled:shadow-none"
+      }
       style={
         tinted
-          ? { background: palette.accent, boxShadow: `0 8px 24px -6px ${palette.accent}80`, color: textColor }
+          ? { background: palette.accent, boxShadow: `0 2px 8px -2px ${palette.accent}59`, color: textColor }
           : undefined
       }
       {...props}
@@ -431,34 +497,94 @@ function OrganizerChip({ org, palette }: { org: ShowcaseOrg; palette: Palette | 
   const bgEnd = palette?.dark ?? "#1A0A2E";
 
   return (
-    <Link
-      href={`/${org.slug}` as never}
-      className="mt-6 flex items-center gap-3 rounded-2xl border border-cart-line bg-cart-bg-elev/60 px-4 py-3 transition hover:border-cart-line-strong"
-    >
-      <div className="size-10 shrink-0 overflow-hidden rounded-xl bg-cart-bg-elev-2">
-        {org.logoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={org.logoUrl} alt={org.name} className="size-full object-cover" />
-        ) : (
-          <div
-            className="grid size-full place-items-center text-[16px] font-bold"
-            style={{
-              background: `linear-gradient(135deg, ${bgStart}, ${bgEnd})`,
-              color: readableTextColor(bgStart),
-            }}
-          >
-            {initial}
-          </div>
-        )}
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">
-          Organiza
+    <div className="mt-7 flex items-center gap-3 border-t border-cart-line pt-5">
+      <Link href={`/${org.slug}` as never} className="group flex min-w-0 flex-1 items-center gap-3">
+        <div className="size-10 shrink-0 overflow-hidden rounded-lg bg-cart-bg-elev-2">
+          {org.logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={org.logoUrl} alt={org.name} className="size-full object-cover" />
+          ) : (
+            <div
+              className="grid size-full place-items-center text-[16px] font-bold"
+              style={{
+                background: `linear-gradient(135deg, ${bgStart}, ${bgEnd})`,
+                color: readableTextColor(bgStart),
+              }}
+            >
+              {initial}
+            </div>
+          )}
         </div>
-        <div className="truncate text-[14.5px] font-semibold">{org.name}</div>
-      </div>
-      <span className="text-[12.5px] font-medium text-cart-accent">Ver perfil →</span>
-    </Link>
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5">
+            <span className="truncate text-[15px] font-semibold text-cart-ink group-hover:underline">
+              {org.name}
+            </span>
+            {org.verified && <VerifiedSeal />}
+          </div>
+          <div className="mt-0.5 text-[11.5px] text-cart-ink-3">
+            Organizador
+            {org.eventCount > 0
+              ? ` · ${org.eventCount} ${org.eventCount === 1 ? "evento" : "eventos"}`
+              : ""}
+          </div>
+        </div>
+      </Link>
+      <FollowButton org={org} />
+    </div>
+  );
+}
+
+// Sello de organizador verificado (curado por Pasape) — glifo de check en disco,
+// como IG/X. Solo se muestra si el backend marca la org como verified.
+function VerifiedSeal() {
+  return (
+    <svg
+      className="shrink-0"
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      role="img"
+      aria-label="Organizador verificado"
+    >
+      <path
+        fill="#4f6df5"
+        d="M12 1.5l2.6 1.9 3.2-.1 1 3 2.6 1.8-1 3 1 3-2.6 1.8-1 3-3.2-.1L12 22.5l-2.6-1.9-3.2.1-1-3L2.6 16l1-3-1-3 2.6-1.8 1-3 3.2.1z"
+      />
+      <path fill="#fff" d="M10.6 14.6l-2.2-2.2-1.3 1.3 3.5 3.5 6-6-1.3-1.3z" />
+    </svg>
+  );
+}
+
+// Botón "Seguir" real (useFollow). Para invitados no rompe: los manda al perfil
+// de la productora, donde vive el login-gate del seguir (patrón de la vitrina).
+function FollowButton({ org }: { org: ShowcaseOrg }) {
+  const router = useRouter();
+  const me = useCurrentUser();
+  const loggedIn = !!me.data?.user;
+  const { isFollowing, toggle, isPending } = useFollow(org.id);
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        if (!loggedIn) {
+          router.push(`/${org.slug}` as never);
+          return;
+        }
+        toggle();
+      }}
+      disabled={isPending}
+      aria-pressed={isFollowing}
+      className={
+        "flex-none rounded-lg px-4 py-2 text-[12.5px] font-semibold transition disabled:opacity-60 " +
+        (isFollowing
+          ? "border border-cart-line bg-cart-bg-elev-2 text-cart-ink-3"
+          : "border border-cart-line-strong bg-cart-bg text-cart-ink hover:border-cart-ink-4")
+      }
+    >
+      {isFollowing ? "Siguiendo" : "Seguir"}
+    </button>
   );
 }
 
@@ -683,20 +809,26 @@ function GroupCard({
   const stepperTextColor = readableTextColor(cardAccent);
   const badgeColor = ensureContrast("#059669", cardBg, "#047857", 4.5);
 
+  // "Un solo mecanismo": la CARD solo es clickeable para boxes — necesitan el
+  // picker para elegir A/B/C. Las entradas individuales se agregan con el
+  // stepper y punto; tocar la card no navega, así no compiten dos caminos de
+  // compra (el único camino a pagar es el botón "Comprar" del pie/lateral).
+  const cardActs = summary.isAllBoxes && !summary.isAllSoldOut;
+
   return (
     <div
-      role="button"
-      tabIndex={summary.isAllSoldOut ? -1 : 0}
-      onClick={summary.isAllSoldOut ? undefined : onClick}
-      onKeyDown={summary.isAllSoldOut ? undefined : (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } }}
+      role={cardActs ? "button" : undefined}
+      tabIndex={cardActs ? 0 : undefined}
+      onClick={cardActs ? onClick : undefined}
+      onKeyDown={cardActs ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } } : undefined}
       aria-disabled={summary.isAllSoldOut}
       className={
         "group flex w-full items-stretch rounded-2xl border bg-cart-bg-elev text-left transition " +
         (summary.isAllSoldOut
           ? "border-cart-line opacity-55 cursor-not-allowed"
           : qty > 0
-            ? "shadow-[0_0_16px_-6px_var(--color-cart-accent-glow)] cursor-pointer"
-            : "border-cart-line hover:border-cart-line-strong hover:bg-cart-bg-elev/80 cursor-pointer") +
+            ? "shadow-[0_0_16px_-6px_var(--color-cart-accent-glow)]"
+            : "border-cart-line" + (cardActs ? " cursor-pointer hover:border-cart-line-strong hover:bg-cart-bg-elev/80" : "")) +
         (compact ? " px-3.5 py-3" : " px-4 py-4")
       }
       style={{
@@ -897,29 +1029,42 @@ function FlyerCard({
   event,
   eventId,
   palette,
+  variant,
+  fromPriceCents,
+  isClosed,
 }: {
-  event: { title: string; coverUrl: string | null; timezone: string };
+  event: {
+    title: string;
+    coverUrl: string | null;
+    timezone: string;
+    startsAt: string;
+    venue: string | null;
+  };
   eventId: string;
   palette: Palette | null;
+  /** "ticket" = póster + talón con título/datos; "immersive" = color del flyer baña la cabecera. */
+  variant: "ticket" | "immersive";
+  fromPriceCents: number | null;
+  isClosed: boolean;
 }) {
-  // Tinte oscuro del propio flyer para el overlay del blur-fill. Mientras
-  // carga o si falla CORS → base de marca.
-  const tint = palette?.dark ?? "#0D0B14";
   // Si la URL del flyer 404ea o falla la carga (link roto, storage caído),
   // no queremos el ícono de imagen rota del navegador ocupando el marco —
   // se trata igual que "sin flyer": cae al gradiente de marca.
   const [imgFailed, setImgFailed] = useState(false);
   const hasCover = Boolean(event.coverUrl) && !imgFailed;
+  const immersive = variant === "immersive";
+  const dt = eventDatePillParts(event.startsAt, event.timezone);
 
   return (
-    <div className="relative w-full overflow-hidden rounded-[24px] ring-1 ring-white/10 lg:rounded-[28px]">
+    <div className="relative w-full overflow-hidden rounded-[24px] border border-cart-line bg-cart-bg-elev lg:rounded-[28px]">
       {hasCover ? (
-        // Blur-fill: el propio flyer difuminado llena el marco y toma su color
-        // (estilo Posh/DICE). Funciona con cualquier proporción sin recortar.
-        // Va difuminado → el mismo preset liviano "hero-blur" que ya usa el
-        // carrusel del home alcanza de sobra (no necesita nitidez).
+        // Inmersivo: el propio flyer difuminado baña toda la cabecera con su
+        // color (Posh). Ticket: apenas un tinte, el póster manda en card clara.
         <div
-          className="absolute inset-0 scale-110 bg-cover bg-center blur-2xl saturate-[1.5]"
+          className={
+            "absolute inset-0 scale-110 bg-cover bg-center blur-2xl " +
+            (immersive ? "opacity-80 saturate-150" : "opacity-30 saturate-125")
+          }
           style={{
             backgroundImage: `url("${optimizeImageUrl(event.coverUrl, "hero-blur") ?? event.coverUrl}")`,
           }}
@@ -934,11 +1079,14 @@ function FlyerCard({
           }}
         />
       )}
-      {/* Viñeta tintada con el color del flyer: asienta el afiche sin apagarlo */}
+      {/* Scrim: en ticket es claro (mantiene el marco en la paleta clara);
+          en inmersivo es oscuro y sutil, para dar profundidad sin apagar el color. */}
       <div
         className="absolute inset-0"
         style={{
-          background: `radial-gradient(85% 75% at 50% 35%, ${tint}26 25%, ${tint}b3 100%)`,
+          background: immersive
+            ? "linear-gradient(180deg, rgba(12,7,20,0.12) 0%, rgba(12,7,20,0) 42%, rgba(12,7,20,0.28) 100%)"
+            : "linear-gradient(180deg, rgba(251,250,255,0.4) 0%, rgba(251,250,255,0) 32%, rgba(251,250,255,0.6) 100%)",
         }}
       />
 
@@ -964,8 +1112,12 @@ function FlyerCard({
             width={864}
             height={1080}
             onError={() => setImgFailed(true)}
-            className="relative z-[1] mx-auto block h-auto w-auto max-w-[calc(100%-2.5rem)] rounded-[28px] max-h-[52vh] my-5 lg:my-7 lg:max-w-[calc(100%-3.5rem)] object-contain"
-            style={{ filter: "drop-shadow(0 18px 50px rgba(0,0,0,0.55))" }}
+            className="relative z-[1] mx-auto block h-auto w-auto max-w-[calc(100%-2.5rem)] rounded-[20px] max-h-[52vh] my-5 lg:my-7 lg:max-w-[calc(100%-3.5rem)] object-contain"
+            style={{
+              filter: immersive
+                ? "drop-shadow(0 18px 44px rgba(0,0,0,0.5))"
+                : "drop-shadow(0 8px 22px rgba(40,20,90,0.18))",
+            }}
           />
         )}
 
@@ -978,9 +1130,70 @@ function FlyerCard({
         </div>
 
       </div>
+
+      {/* Talón del ticket: el póster, el NOMBRE y los datos son un solo objeto
+          (una entrada física completa). Corte perforado + título + fecha +
+          precio. Solo en la variante "ticket" — el título grande de abajo se
+          oculta para no repetirlo. */}
+      {variant === "ticket" && hasCover && (
+        <div className="relative">
+          {/* Perforación: círculos centrados en el borde — la mitad de afuera la
+              recorta el overflow-hidden de la card, dejando la muesca. */}
+          <span className="absolute left-0 top-0 z-[2] size-4 -translate-x-1/2 -translate-y-1/2 rounded-full bg-cart-bg" />
+          <span className="absolute right-0 top-0 z-[2] size-4 translate-x-1/2 -translate-y-1/2 rounded-full bg-cart-bg" />
+          <span className="absolute inset-x-4 top-0 -translate-y-1/2 border-t-2 border-dashed border-cart-line-strong" />
+          <div
+            className="px-5 py-4"
+            style={{
+              background:
+                "linear-gradient(180deg, color-mix(in srgb, var(--color-cart-accent) 6%, var(--color-cart-bg-elev)) 0%, var(--color-cart-bg-elev) 100%)",
+            }}
+          >
+            <h1 className="text-[20px] font-bold leading-[1.14] tracking-[-0.02em] text-cart-ink sm:text-[23px] lg:text-[27px]">
+              {event.title}
+            </h1>
+            <div className="mt-3 flex items-center gap-4">
+              <div className="text-center leading-none">
+                <div className="text-[26px] font-extrabold tracking-[-0.03em] text-cart-ink">
+                  {dt.day}
+                </div>
+                <div className="mt-1 text-[11px] font-extrabold uppercase tracking-[0.1em] text-cart-accent">
+                  {dt.month}
+                </div>
+              </div>
+              <div className="h-9 w-px bg-cart-line-strong" />
+              <div className="min-w-0 flex-1">
+                <div className="text-[13.5px] font-bold tracking-[-0.01em] text-cart-ink">
+                  {dt.weekday} · {dt.time}
+                </div>
+                {event.venue && (
+                  <div className="mt-0.5 truncate text-[11.5px] text-cart-ink-3">{event.venue}</div>
+                )}
+              </div>
+              {fromPriceCents != null && (
+                <div className="text-right">
+                  <div className="text-[9px] font-semibold uppercase tracking-[0.06em] text-cart-ink-4">
+                    Desde
+                  </div>
+                  <div className="text-[15px] font-bold tracking-[-0.02em] text-cart-ink">
+                    {fromPriceCents <= 0 ? "Gratis" : formatMoney(fromPriceCents, "PEN")}
+                  </div>
+                </div>
+              )}
+            </div>
+            {isClosed && <EndedBadge />}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+// Botón de chrome sobre el flyer: fondo claro frosted + sombra + ring, para que
+// SIEMPRE contraste (el flyer puede ser oscuro o vibrante) y se lea como UI, no
+// como una mancha encima del arte. Icono oscuro.
+const HERO_BTN =
+  "grid size-10 place-items-center rounded-full bg-white/90 text-cart-ink shadow-[0_2px_10px_rgba(0,0,0,0.28)] ring-1 ring-black/[0.06] backdrop-blur-md transition hover:bg-white";
 
 function BackButton() {
   const router = useRouter();
@@ -1003,7 +1216,7 @@ function BackButton() {
       type="button"
       onClick={handleBack}
       aria-label={hasHistory ? "Volver" : "Inicio"}
-      className="grid size-10 place-items-center rounded-full bg-black/45 text-white backdrop-blur-md transition hover:bg-black/65"
+      className={HERO_BTN}
     >
       {hasHistory ? (
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -1043,14 +1256,14 @@ function SaveEventButton({ eventId }: { eventId: string }) {
       disabled={isPending}
       aria-label={isSaved ? "Quitar de favoritos" : "Guardar en favoritos"}
       aria-pressed={isSaved}
-      className="grid size-10 place-items-center rounded-full bg-black/45 backdrop-blur-md transition hover:bg-black/65 active:scale-90 disabled:opacity-60"
+      className={HERO_BTN + " active:scale-90 disabled:opacity-60"}
     >
       <svg
         width="17"
         height="17"
         viewBox="0 0 18 18"
         fill={isSaved ? "var(--color-cart-accent)" : "none"}
-        className={isSaved ? "text-cart-accent" : "text-white"}
+        className={isSaved ? "text-cart-accent" : "text-cart-ink"}
         aria-hidden
       >
         <path
@@ -1090,16 +1303,15 @@ function ShareButton({ title }: { title: string }) {
         type="button"
         onClick={onShare}
         aria-label="Compartir evento"
-        className="grid size-10 place-items-center rounded-full bg-black/45 text-white backdrop-blur-md transition hover:bg-black/65"
+        className={HERO_BTN}
       >
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-          <path
-            d="M8 10V2m0 0L5 5m3-3l3 3M3 10v3a1 1 0 001 1h8a1 1 0 001-1v-3"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
+        {/* Icono de compartir universal (nodos conectados) — más claro que el
+            glifo iOS (caja + flecha), que muchos no reconocen. */}
+        <svg width="16" height="16" viewBox="0 0 18 18" fill="none" aria-hidden>
+          <circle cx="13.5" cy="4" r="2.2" stroke="currentColor" strokeWidth="1.5" />
+          <circle cx="4.5" cy="9" r="2.2" stroke="currentColor" strokeWidth="1.5" />
+          <circle cx="13.5" cy="14" r="2.2" stroke="currentColor" strokeWidth="1.5" />
+          <path d="M6.4 7.9l5-2.8M6.4 10.1l5 2.8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
         </svg>
       </button>
       {copied && (
@@ -1192,87 +1404,45 @@ function DescriptionBlock({ text }: { text: string }) {
   );
 }
 
-function FeatureGrid({ palette }: { palette: Palette | null }) {
-  // Cards claras (paleta del home). El acento del flyer solo tiñe el icono si
-  // contrasta sobre lavanda; si no, morado de marca.
-  const borderColor = "var(--color-cart-line)";
-  const iconColor = palette?.accent
-    ? ensureContrast(palette.accent, "#f3f1fb", "#7C3AED", 2.5)
-    : "#7C3AED";
-  const chipBg = undefined;
-
+// Franja de confianza como las ticketeras (Joinnus/Teleticket): respaldo a la
+// izquierda y métodos de pago REALES a la derecha (logos, no texto).
+function FeatureGrid() {
   return (
-    <div className="mt-7 grid grid-cols-3 gap-2">
-      <FeatureChip
-        icon={<YapeMini />}
-        label="Yape"
-        sub="o tarjeta"
-        borderColor={borderColor}
-        iconColor={iconColor}
-        bg={chipBg}
-      />
-      <FeatureChip
-        icon={
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.5" />
-            <rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.5" />
-            <rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.5" />
-            <path d="M9 9h2v2H9zm3 3h2v2h-2z" fill="currentColor" />
+    <div className="mt-7 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-cart-line bg-cart-bg-elev/40 px-4 py-3">
+      <span className="inline-flex items-center gap-2.5 text-[12.5px] font-semibold text-cart-ink">
+        <span
+          className="grid size-7 shrink-0 place-items-center rounded-lg"
+          style={{ background: "rgba(5,150,105,0.12)", color: "#047857" }}
+        >
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
+            <rect x="3" y="7" width="10" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
+            <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" stroke="currentColor" strokeWidth="1.5" />
           </svg>
-        }
-        label="QR al instante"
-        sub="sin esperas"
-        borderColor={borderColor}
-        iconColor={iconColor}
-        bg={chipBg}
-      />
-      <FeatureChip
-        icon={
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path
-              d="M8 1.5l5 2.5v4c0 3.5-2.5 5.5-5 6.5-2.5-1-5-3-5-6.5v-4l5-2.5z"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinejoin="round"
-            />
-          </svg>
-        }
-        label="Seguro"
-        sub="entrada válida"
-        borderColor={borderColor}
-        iconColor={iconColor}
-        bg={chipBg}
-      />
-    </div>
-  );
-}
-
-function FeatureChip({
-  icon,
-  label,
-  sub,
-  borderColor,
-  iconColor,
-  bg,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  sub: string;
-  borderColor?: string;
-  iconColor?: string;
-  bg?: string;
-}) {
-  return (
-    <div
-      className={"flex flex-col items-start gap-1.5 rounded-2xl px-3.5 py-3" + (bg ? "" : " bg-cart-bg-elev/60")}
-      style={{ border: `1px solid ${borderColor ?? "rgba(255,255,255,0.12)"}`, background: bg }}
-    >
-      <span style={{ color: iconColor ?? "#7C3AED" }}>
-        {icon}
+        </span>
+        <span className="leading-tight">
+          Compra 100% segura
+          <span className="block text-[10.5px] font-medium text-cart-ink-3">
+            Tu entrada llega al instante por QR
+          </span>
+        </span>
       </span>
-      <div>
-        <div className="text-[12px] font-semibold text-cart-ink">{label}</div>
-        <div className="text-[10.5px] text-cart-ink-3">{sub}</div>
+      <div className="flex items-center gap-1.5">
+        <span className="grid h-7 min-w-[42px] place-items-center rounded-md border border-cart-line-strong bg-white px-2">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/brand/yape.png" alt="Yape" className="h-4 w-auto object-contain" />
+        </span>
+        <span className="grid h-7 min-w-[42px] place-items-center rounded-md border border-cart-line-strong bg-white px-2">
+          <svg width="38" height="13" viewBox="0 0 52 17" aria-label="Visa">
+            <text x="26" y="14" textAnchor="middle" fontFamily="Arial, Helvetica, sans-serif" fontStyle="italic" fontWeight="800" fontSize="16" fill="#1a1f71" letterSpacing="0.5">VISA</text>
+          </svg>
+        </span>
+        <span className="grid h-7 min-w-[42px] place-items-center rounded-md border border-cart-line-strong bg-white px-2">
+          <svg width="30" height="19" viewBox="0 0 40 25" aria-label="Mastercard">
+            <circle cx="15.5" cy="12.5" r="8.5" fill="#EB001B" />
+            <circle cx="24.5" cy="12.5" r="8.5" fill="#F79E1B" />
+            <path d="M20 6.2a8.5 8.5 0 0 1 0 12.6 8.5 8.5 0 0 1 0-12.6z" fill="#FF5F00" />
+          </svg>
+        </span>
       </div>
     </div>
   );
@@ -1538,15 +1708,6 @@ function LocationIcon() {
         strokeLinejoin="round"
       />
       <circle cx="8" cy="5.5" r="1.5" stroke="currentColor" strokeWidth="1.5" />
-    </svg>
-  );
-}
-
-function YapeMini() {
-  return (
-    <svg width="18" height="14" viewBox="0 0 24 18" fill="none">
-      <rect x="0.5" y="0.5" width="23" height="17" rx="3" stroke="currentColor" />
-      <text x="12" y="12" textAnchor="middle" fontSize="7" fontWeight="700" fill="currentColor">YAPE</text>
     </svg>
   );
 }
