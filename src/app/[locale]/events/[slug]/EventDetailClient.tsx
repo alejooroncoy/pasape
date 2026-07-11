@@ -186,7 +186,7 @@ export function EventDetailClient({ slug }: { slug: string }) {
       <UserHeader />
       <div className="mx-auto w-full max-w-[1120px] px-5 lg:px-8">
         <div className="grid gap-8 pt-4 lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-10 lg:pt-8">
-          <div className="pb-32 lg:pb-12">
+          <div className="pb-6 lg:pb-12">
             {/* Flyer contenido (estilo Joinnus): el afiche vertical se ve
                 completo — nunca recortado — y un gradiente con los colores
                 del propio flyer rellena el marco. */}
@@ -334,6 +334,11 @@ export function EventDetailClient({ slug }: { slug: string }) {
       </div>
 
       <Footer />
+
+      {/* Holgura para que la barra de compra fija (solo móvil) no tape el pie
+          del footer. Antes esta holgura vivía como pb-32 en el contenido, pero
+          en páginas cortas dejaba un gran vacío entre el contenido y el footer. */}
+      <div aria-hidden className="h-28 lg:hidden" />
 
       <div
         className="fixed inset-x-0 bottom-0 z-40 border-t border-cart-line bg-cart-bg/95 backdrop-blur-md lg:hidden"
@@ -1189,11 +1194,11 @@ function FlyerCard({
   );
 }
 
-// Botón de chrome sobre el flyer: fondo claro frosted + sombra + ring, para que
-// SIEMPRE contraste (el flyer puede ser oscuro o vibrante) y se lea como UI, no
-// como una mancha encima del arte. Icono oscuro.
+// Botón de chrome sobre el flyer: blanco SÓLIDO (nada de translúcido + blur, que
+// funcionaba como vidrio esmerilado y absorbía el morado/magenta del flyer) +
+// sombra y ring para separarlo. Contrasta sobre cualquier flyer sin teñirse.
 const HERO_BTN =
-  "grid size-10 place-items-center rounded-full bg-white/90 text-cart-ink shadow-[0_2px_10px_rgba(0,0,0,0.28)] ring-1 ring-black/[0.06] backdrop-blur-md transition hover:bg-white";
+  "grid size-10 place-items-center rounded-full bg-white text-cart-ink shadow-[0_4px_14px_-3px_rgba(45,25,90,0.28)] ring-1 ring-black/[0.03] transition hover:bg-white/95";
 
 function BackButton() {
   const router = useRouter();

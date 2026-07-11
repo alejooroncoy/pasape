@@ -48,7 +48,9 @@ export function AppHeader({
 
   return (
     <header
-      className={`sticky top-0 z-50 backdrop-blur-md backdrop-saturate-150 border-b transition-[border-color,background] duration-200 ${scrolled ? "border-cart-line bg-cart-bg/[0.92]" : "border-transparent bg-cart-bg/80"
+      className={`sticky top-0 z-50 border-b transition-[border-color,background] duration-200 ${scrolled
+          ? "border-cart-line bg-cart-bg/[0.92] backdrop-blur-md backdrop-saturate-150"
+          : "border-transparent bg-transparent"
         }`}
       // Mismo gradiente que PageContainer, con `background-attachment: fixed`
       // en los dos — así el % del gradiente se resuelve contra el viewport y
