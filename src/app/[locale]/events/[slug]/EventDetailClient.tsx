@@ -3,6 +3,7 @@
 import { ButtonHTMLAttributes, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useDragControls } from "motion/react";
 import { useSearchParams } from "next/navigation";
+import { toast } from "sonner";
 import { Link, useRouter } from "@/i18n/navigation";
 import { clientEvents } from "@/lib/analytics/clientEvents";
 import { api } from "@/lib/_shared/api-client";
@@ -184,6 +185,8 @@ export function EventDetailClient({ slug }: { slug: string }) {
   const goBuy = (location: string) => {
     if (liveUnits <= 0) {
       selectorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      // `id` fijo: si toca varias veces no se apilan toasts, solo se refresca.
+      toast("Elige alguna entrada para continuar", { id: "pick-first" });
       return;
     }
     clientEvents.checkoutStarted({ event_slug: slug, location });
