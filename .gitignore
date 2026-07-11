@@ -62,6 +62,7 @@ do-sales-cadence.md
 skills-lock.json
 
 .claude/
+.worktrees/
 .vscode/
 package-lock.json
 .playwright-mcp/
