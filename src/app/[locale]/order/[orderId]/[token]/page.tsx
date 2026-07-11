@@ -6,10 +6,8 @@ import { Link, useRouter } from "@/i18n/navigation";
 import { useClaimOrder } from "@/lib/tickets/hooks/useTickets";
 import { useSessionReady } from "@/lib/identity/hooks/useSessionReady";
 import { useUpdateProfile } from "@/lib/identity/hooks/useUpdateProfile";
-import { useGoogleSignIn } from "@/lib/identity/hooks/useFirebaseAuth";
 import { PhoneField } from "@/components/design/PhoneField";
-import { GoogleBtn } from "@/components/design";
-import { setOauthReturn } from "@/components/auth/PostLoginRedirect";
+import { PasskeyLoginOptions } from "@/components/auth/PasskeyLoginOptions";
 import { Logo } from "@/components/brand/Logo";
 import { getCachedClaim, saveClaim } from "@/lib/tickets/claimedOrderStore";
 
@@ -36,9 +34,12 @@ export default function OrderPage(props: Props) {
   const claimOrderRef = useRef(claimOrder);
   claimOrderRef.current = claimOrder;
   const router = useRouter();
-  const google = useGoogleSignIn({});
   const [done, setDone] = useState<{ count: number; firstId: string | null; eventSlug: string } | null>(null);
   const tried = useRef(false);
+  // Tras verificar el código hay sesión pero todavía falta ofrecer "guardar tu
+  // huella" — sin este flag, en cuanto `isLogged` pasa a true el ternario de
+  // abajo saltaría directo a la UI de reclamo, sin que el usuario vea esa oferta.
+  const [holdForPasskeyOffer, setHoldForPasskeyOffer] = useState(false);
 
   // Justo al volver de Google, el snapshot de sesión persistido (para que la
   // app cargue rápido/offline) responde "no logueado" al instante, antes de
@@ -193,35 +194,39 @@ export default function OrderPage(props: Props) {
           </>
         ) : identityUnsettled ? (
           <p className="text-[14px] text-cart-ink-3">Cargando…</p>
-        ) : !isLogged ? (
-          /* Pagado, falta entrar */
+        ) : !isLogged || holdForPasskeyOffer ? (
+          /* Pagado, falta entrar — o ya logueado por código y falta solo
+             ofrecer "guardar tu huella" (holdForPasskeyOffer). Importante:
+             <PasskeyLoginOptions> se mantiene en la MISMA posición del árbol
+             en ambos casos para no perder su estado interno (paso "offer-passkey")
+             al pasar de uno a otro — remontarlo lo reiniciaría a "start". */
           <>
-            <div className="mx-auto mb-5 grid size-14 place-items-center rounded-full bg-emerald-400/15 text-emerald-300">
-              <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
-                <path d="M5 12.5l4 4 10-10" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </div>
-            <p className="text-[12px] font-bold uppercase tracking-[0.16em] text-emerald-300">{isFreeOrder ? "Entrada confirmada" : "Pago confirmado"}</p>
-            <h1 className="mt-1 text-[26px] font-bold tracking-[-0.02em]">Entra para ver tus entradas</h1>
-            <p className="mx-auto mt-2 max-w-[34ch] text-[13.5px] leading-snug text-cart-ink-3">
-              Entra con tu cuenta para guardar tus entradas. No reenvíes este enlace.
-            </p>
-            <p className="mx-auto mt-2 max-w-[34ch] text-[12.5px] leading-snug text-cart-ink-3/80">
-              Quedan en tu cuenta con tu propio QR, siempre a la mano.
-            </p>
+            {!isLogged && (
+              <>
+                <div className="mx-auto mb-5 grid size-14 place-items-center rounded-full bg-emerald-400/15 text-emerald-300">
+                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+                    <path d="M5 12.5l4 4 10-10" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </div>
+                <p className="text-[12px] font-bold uppercase tracking-[0.16em] text-emerald-300">{isFreeOrder ? "Entrada confirmada" : "Pago confirmado"}</p>
+                <h1 className="mt-1 text-[26px] font-bold tracking-[-0.02em]">Entra para ver tus entradas</h1>
+                <p className="mx-auto mt-2 max-w-[34ch] text-[13.5px] leading-snug text-cart-ink-3">
+                  Entra con tu cuenta para guardar tus entradas. No reenvíes este enlace.
+                </p>
+                <p className="mx-auto mt-2 max-w-[34ch] text-[12.5px] leading-snug text-cart-ink-3/80">
+                  Quedan en tu cuenta con tu propio QR, siempre a la mano.
+                </p>
+              </>
+            )}
             <div className="mt-7">
-              <GoogleBtn
-                onClick={() => {
-                  setOauthReturn(window.location.pathname + window.location.search);
-                  google.signIn();
-                }}
-                disabled={google.pending}
-                label={google.pending ? "Abriendo Google…" : "Continuar con Google"}
+              <PasskeyLoginOptions
+                source="order"
+                orderId={orderId}
+                token={token}
+                onOfferingPasskey={() => setHoldForPasskeyOffer(true)}
+                onSuccess={() => setHoldForPasskeyOffer(false)}
               />
             </div>
-            {google.error && (
-              <p className="mt-3 text-[12px] text-rose-300">No se pudo abrir Google. Reintenta.</p>
-            )}
           </>
         ) : needPhone ? (
           /* Tras el claim: pedimos el celular (para WhatsApp). Salteable. */

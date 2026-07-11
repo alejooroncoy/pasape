@@ -3,10 +3,8 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { GoogleBtn } from "@/components/design";
-import { useGoogleSignIn } from "@/lib/identity/hooks/useFirebaseAuth";
+import { PasskeyLoginOptions } from "@/components/auth/PasskeyLoginOptions";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
-import { clientEvents } from "@/lib/analytics/clientEvents";
 
 type Props = {
   open: boolean;
@@ -19,15 +17,20 @@ const TITLE = "Entra a Pasape";
 const SUBTITLE = "Guarda eventos, compra entradas y sigue a tus productoras favoritas.";
 
 export function SignInDrawer({ open, onClose, redirectTo }: Props) {
-  const { signIn, pending, error } = useGoogleSignIn({ redirectTo });
   const me = useCurrentUser();
   // Montado en cliente: createPortal necesita document (no existe en SSR).
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
+  // Tras verificar el código, ya hay sesión pero todavía falta ofrecer
+  // "guardar tu huella" — este flag evita que el auto-close de abajo (pensado
+  // para el flujo de Google, que sí redirige fuera de la página) se adelante y
+  // cierre el drawer antes de que el usuario vea esa oferta.
+  const [holdOpenForPasskeyOffer, setHoldOpenForPasskeyOffer] = useState(false);
+
   useEffect(() => {
-    if (me.data?.user && open) onClose();
-  }, [me.data, open, onClose]);
+    if (me.data?.user && open && !holdOpenForPasskeyOffer) onClose();
+  }, [me.data, open, onClose, holdOpenForPasskeyOffer]);
 
   useEffect(() => {
     if (!open) return;
@@ -93,13 +96,16 @@ export function SignInDrawer({ open, onClose, redirectTo }: Props) {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2, duration: 0.3 }}
             >
-              <GoogleBtn onClick={() => { clientEvents.signInStarted({ provider: "google" }); void signIn(); }} disabled={pending} />
+              <PasskeyLoginOptions
+                source="generic"
+                redirectTo={redirectTo}
+                onSuccess={() => {
+                  setHoldOpenForPasskeyOffer(false);
+                  onClose();
+                }}
+                onOfferingPasskey={() => setHoldOpenForPasskeyOffer(true)}
+              />
             </motion.div>
-            {error && (
-              <div className="mt-3 text-center text-xs text-cart-ink-3" role="status">
-                {error}
-              </div>
-            )}
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
