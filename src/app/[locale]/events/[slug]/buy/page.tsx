@@ -139,7 +139,15 @@ function BuyFlowInner({ params }: Props) {
   const [quoted, setQuoted] = useState<{ sig: string; quote: OrderQuote } | null>(null);
   const [quoteFailed, setQuoteFailed] = useState(false);
   const search = useSearchParams();
-  const [phase, setPhase] = useState<Phase>("pick");
+  // La selección se hace ENTERA en el detalle del evento (entradas + boxes) y
+  // llega por `?sel` (o `?qty`/`?tt`). Por eso /buy ya no repite el paso de
+  // elegir: si venimos con una selección, arrancamos directo en "datos". El
+  // paso "pick" queda solo como red de seguridad (reintento tras vencer la
+  // reserva). Sin selección y sin orden que restaurar → se rebota al detalle.
+  const hasIncomingSelection = Boolean(
+    search.get("sel") || search.get("qty") || search.get("tt"),
+  );
+  const [phase, setPhase] = useState<Phase>(hasIncomingSelection ? "data" : "pick");
   const [qty, setQty] = useState<Record<string, number>>({});
   const [promoCode, setPromoCode] = useState<string | null>(null);
   const [, setPreferenceId] = useState<string | null>(null);
@@ -475,6 +483,34 @@ function BuyFlowInner({ params }: Props) {
         .map(([ticketTypeId, q]) => ({ ticketTypeId, qty: q })),
     [qty],
   );
+
+  // Sin selección: /buy no tiene nada que mostrar (el selector vive en el
+  // detalle). Si ya corrió la hidratación del `?sel` y el carrito quedó vacío
+  // —y no estamos restaurando una orden— rebotamos al detalle a elegir, en vez
+  // de dejar un checkout huérfano. `pay` nunca rebota (ya hay orden creada).
+  const bouncedRef = useRef(false);
+  useEffect(() => {
+    if (!data || bouncedRef.current) return;
+    // Con selección entrante (la hidrata el effect de `?sel`) o con orden que
+    // restaurar, el dueño de la fase es ese flujo — nunca rebotamos. Solo la
+    // entrada directa sin nada seleccionado cae al detalle a elegir.
+    if (hasIncomingSelection || search.get("order")) return;
+    if (phase === "pay") return;
+    if (items.length === 0) {
+      bouncedRef.current = true;
+      router.replace(`/events/${slug}` as never);
+    }
+  }, [data, hasIncomingSelection, items.length, phase, search, router, slug]);
+
+  // Al aterrizar en "datos" saltándonos "pick", pedimos el quote autoritativo
+  // una vez para mostrar el total exacto (en "pick" esto lo disparaba el CTA).
+  const quotedOnLandRef = useRef(false);
+  useEffect(() => {
+    if (phase !== "data" || items.length === 0 || quotedOnLandRef.current) return;
+    quotedOnLandRef.current = true;
+    requestQuote();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, items.length]);
   // Subtotal "todo incluido" del comprador: suma los `buyerPriceCents` que YA
   // vienen calculados del backend (comisión horneada cuando aplica) × promos
   // 2x1/3x2. El cliente NO recalcula la comisión — solo suma precios que le dio
@@ -713,7 +749,9 @@ function BuyFlowInner({ params }: Props) {
       return;
     }
     if (phase === "data") {
-      setPhase("pick");
+      // El selector vive en el detalle: "atrás" regresa ahí a cambiar la
+      // selección, no a un paso de elegir dentro de /buy.
+      router.back();
       return;
     }
     router.back();
@@ -733,17 +771,20 @@ function BuyFlowInner({ params }: Props) {
     setPhase("pick");
   };
 
-  // Stepper honesto: gratis = 2 pasos (sin "Pago"); pagado = 3.
+  // La selección ya se hizo en el detalle, así que /buy solo cuenta los pasos
+  // que de verdad viven acá: datos (+ pago). Gratis = 1 solo paso (datos);
+  // pagado = 2 (datos → pago). "pick" es la red de seguridad (reintento) y
+  // lleva su propia etiqueta suelta, sin numerar el flujo principal.
   const phaseLabel: Record<Phase, string> = isFreeOrder
     ? {
-        pick: "1 de 2 · Tu pedido",
-        data: "2 de 2 · Tus datos",
-        pay: "2 de 2 · Tus datos",
+        pick: "Elige tus entradas",
+        data: "Tus datos",
+        pay: "Tus datos",
       }
     : {
-        pick: "1 de 3 · Tu pedido",
-        data: "2 de 3 · Tus datos",
-        pay: "3 de 3 · Pago",
+        pick: "Elige tus entradas",
+        data: "1 de 2 · Tus datos",
+        pay: "2 de 2 · Pago",
       };
 
   const primaryCtaLabel = (compact: boolean): string => {

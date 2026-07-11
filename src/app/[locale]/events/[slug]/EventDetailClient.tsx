@@ -102,6 +102,9 @@ export function EventDetailClient({ slug }: { slug: string }) {
   // hoja inferior (BoxPickerSheet) que muestra el plano como referencia.
   const [selectedBoxIds, setSelectedBoxIds] = useState<string[]>([]);
   const [boxSheetOpen, setBoxSheetOpen] = useState(false);
+  // Ancla del selector (móvil): sin selección, el CTA lleva aquí en vez de a un
+  // /buy vacío. La selección vive solo en esta página; /buy es datos + pago.
+  const selectorRef = useRef<HTMLDivElement>(null);
 
   // Dos naturalezas distintas en la misma pantalla: entradas "por persona"
   // (stepper) y boxes (un espacio para el grupo, se reservan enteros). Se
@@ -173,6 +176,18 @@ export function EventDetailClient({ slug }: { slug: string }) {
     else if (liveUnits > 0) p.set("qty", String(liveUnits));
     const qs = p.toString();
     return `/events/${slug}/buy${qs ? `?${qs}` : ""}`;
+  };
+
+  // Un solo camino a la compra. Sin selección no vamos a /buy (rebotaría acá):
+  // enfocamos el selector para que el usuario elija primero. En desktop el
+  // selector ya está al lado del botón (el ancla móvil es display:none → no-op).
+  const goBuy = (location: string) => {
+    if (liveUnits <= 0) {
+      selectorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    clientEvents.checkoutStarted({ event_slug: slug, location });
+    router.push(buyHrefAll() as never);
   };
 
   if (isLoading) return <PageSkeleton />;
@@ -269,7 +284,7 @@ export function EventDetailClient({ slug }: { slug: string }) {
             )}
 
             {!isClosed && (
-              <div className="mt-8 lg:hidden">
+              <div ref={selectorRef} className="mt-8 scroll-mt-20 lg:hidden">
                 <h2 className="mb-3 text-[19px] font-bold tracking-[-0.02em] text-cart-ink">
                   Elige tu entrada<span className="text-cart-accent">.</span>
                 </h2>
@@ -361,10 +376,7 @@ export function EventDetailClient({ slug }: { slug: string }) {
                     </div>
 
                     <BuyButton
-                      onClick={() => {
-                        clientEvents.checkoutStarted({ event_slug: slug, location: "sidebar" });
-                        router.push(buyHrefAll() as never);
-                      }}
+                      onClick={() => goBuy("sidebar")}
                       palette={palette}
                       disabled={allSoldOut}
                     >
@@ -429,10 +441,7 @@ export function EventDetailClient({ slug }: { slug: string }) {
           )}
           <BuyButton
             flush
-            onClick={() => {
-              clientEvents.checkoutStarted({ event_slug: slug, location: "bottom_bar" });
-              router.push(buyHrefAll() as never);
-            }}
+            onClick={() => goBuy("bottom_bar")}
             palette={palette}
             disabled={isClosed || allSoldOut}
           >
