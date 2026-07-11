@@ -1241,9 +1241,12 @@ function BoxPickerSheet({
   onConfirm: (ids: string[]) => void;
 }) {
   const [pending, setPending] = useState<string[]>(selectedIds);
-  // Al abrir, arranca desde la selección actual (para editar/agregar).
+  const [planoOpen, setPlanoOpen] = useState(false);
+  // Al abrir, arranca desde la selección actual (para editar/agregar). Al cerrar
+  // la hoja, cierra también el plano ampliado.
   useEffect(() => {
     if (open) setPending(selectedIds);
+    else setPlanoOpen(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
   useEffect(() => {
@@ -1292,18 +1295,43 @@ function BoxPickerSheet({
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-3">
+          {/* Solo si el organizador subió una imagen de distribución. Tira
+              compacta (no empuja el grid) — "Ampliar" la abre a pantalla
+              completa con zoom (reusa VenueLayoutModal). */}
           {venueLayoutUrl && (
-            <div className="mb-4 overflow-hidden rounded-xl border border-cart-line bg-cart-bg-elev">
+            <button
+              type="button"
+              onClick={() => setPlanoOpen(true)}
+              aria-label="Ampliar distribución del local"
+              className="relative mb-4 block w-full overflow-hidden rounded-xl border border-cart-line"
+            >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={venueLayoutUrl}
                 alt="Distribución del local"
-                className="max-h-[168px] w-full object-contain"
+                className="h-[104px] w-full object-cover"
               />
-              <div className="border-t border-cart-line px-3 py-1.5 text-[10.5px] text-cart-ink-3">
-                Distribución del local · referencia
-              </div>
-            </div>
+              <span
+                className="pointer-events-none absolute inset-0"
+                style={{ background: "linear-gradient(90deg, rgba(8,5,16,0) 45%, rgba(8,5,16,0.4) 100%)" }}
+              />
+              <span className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-white/95 px-2.5 py-1 text-[10.5px] font-bold text-cart-ink shadow-[0_3px_10px_rgba(0,0,0,0.3)]">
+                <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
+                  <path d="M3 7V3h4M13 9v4h-4M3 3l4.5 4.5M13 13l-4.5-4.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                </svg>
+                Ampliar
+              </span>
+              <span
+                className="absolute bottom-2 left-2.5 flex items-center gap-1.5 text-[10px] font-semibold text-white"
+                style={{ textShadow: "0 1px 6px rgba(0,0,0,0.6)" }}
+              >
+                <svg width="10" height="10" viewBox="0 0 14 14" fill="none">
+                  <path d="M7 12.5S2.8 8.8 2.8 5.8a4.2 4.2 0 118.4 0c0 3-4.2 6.7-4.2 6.7z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+                  <circle cx="7" cy="5.8" r="1.4" stroke="currentColor" strokeWidth="1.2" />
+                </svg>
+                Distribución del local
+              </span>
+            </button>
           )}
 
           {boxGroups.map((g, gi) => {
@@ -1377,6 +1405,15 @@ function BoxPickerSheet({
           </button>
         </div>
       </div>
+
+      {venueLayoutUrl && (
+        <VenueLayoutModal
+          open={planoOpen}
+          onOpenChange={setPlanoOpen}
+          url={venueLayoutUrl}
+          caption="Distribución del local · referencia"
+        />
+      )}
     </div>
   );
 }
