@@ -1182,25 +1182,35 @@ function BoxSection({
         {hasSel ? (
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <AnimatePresence initial={false} mode="popLayout">
-              {selectedBoxes.map((b) => (
+              {selectedBoxes.map((b) => {
+                // Evita "Box Box A": si el label del organizador ya empieza con
+                // el sustantivo (box/mesa…), se usa tal cual; si es corto ("A"),
+                // se le antepone el sustantivo para dar contexto.
+                const raw = b.boxLabel ?? b.name;
+                const label = !b.boxLabel
+                  ? b.name
+                  : raw.toLowerCase().startsWith(noun.toLowerCase())
+                    ? raw
+                    : `${nounCap(noun)} ${raw}`;
+                return (
                 <motion.span
                   key={b.id}
-                  layout
-                  initial={{ opacity: 0, scale: 0.55 }}
+                  layout="position"
+                  initial={{ opacity: 0, scale: 0.6 }}
                   animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.55 }}
-                  transition={{ type: "spring", stiffness: 720, damping: 32, mass: 0.5 }}
+                  exit={{ opacity: 0, scale: 0.6 }}
+                  transition={{ type: "spring", stiffness: 480, damping: 30, mass: 0.6 }}
                   className="inline-flex items-center gap-1.5 rounded-full border py-1.5 pl-3 pr-1.5 text-[12.5px] font-bold text-cart-accent"
                   style={{
                     background: "color-mix(in srgb, var(--color-cart-accent) 10%, transparent)",
                     borderColor: "color-mix(in srgb, var(--color-cart-accent) 32%, transparent)",
                   }}
                 >
-                  {b.boxLabel ? `${nounCap(noun)} ${b.boxLabel}` : b.name}
+                  {label}
                   <button
                     type="button"
                     onClick={() => onRemove(b.id)}
-                    aria-label={`Quitar ${b.boxLabel ? `${noun} ${b.boxLabel}` : b.name}`}
+                    aria-label={`Quitar ${label}`}
                     className="grid size-[19px] place-items-center rounded-full text-cart-accent transition hover:bg-cart-accent hover:text-white active:scale-90"
                     style={{ background: "color-mix(in srgb, var(--color-cart-accent) 18%, transparent)" }}
                   >
@@ -1209,14 +1219,16 @@ function BoxSection({
                     </svg>
                   </button>
                 </motion.span>
-              ))}
+                );
+              })}
             </AnimatePresence>
             {free > 0 && (
               <motion.button
-                layout
+                layout="position"
                 type="button"
                 onClick={onOpen}
                 whileTap={{ scale: 0.94 }}
+                transition={{ type: "spring", stiffness: 480, damping: 30, mass: 0.6 }}
                 className="inline-flex items-center gap-1 rounded-full border border-dashed px-3.5 py-1.5 text-[12.5px] font-bold text-cart-accent transition"
                 style={{ borderColor: "color-mix(in srgb, var(--color-cart-accent) 45%, transparent)" }}
               >
