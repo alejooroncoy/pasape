@@ -1,7 +1,7 @@
 "use client";
 
 import { ButtonHTMLAttributes, useEffect, useMemo, useRef, useState } from "react";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, motion, useDragControls } from "motion/react";
 import { useSearchParams } from "next/navigation";
 import { Link, useRouter } from "@/i18n/navigation";
 import { clientEvents } from "@/lib/analytics/clientEvents";
@@ -977,23 +977,31 @@ function GroupCard({
           <div className="mt-2 flex items-center gap-1.5">
             {qty > 0 ? (
               <>
-                <button
+                <motion.button
                   type="button"
                   onClick={(e) => handleCounterClick(e, -1)}
+                  whileTap={{ scale: 0.8 }}
                   className="grid size-7 place-items-center rounded-full border border-cart-line bg-cart-bg-elev-2 text-cart-ink transition hover:border-cart-line-strong"
                   aria-label="Quitar una entrada"
                 >
                   <svg width="10" height="2" viewBox="0 0 10 2" fill="none">
                     <path d="M1 1h8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
                   </svg>
-                </button>
-                <span className={compact ? "w-4 text-center text-[13px] font-bold" : "w-5 text-center text-[14px] font-bold"}>
+                </motion.button>
+                <motion.span
+                  key={qty}
+                  initial={{ scale: 0.35, opacity: 0.2 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ type: "spring", stiffness: 750, damping: 18, mass: 0.5 }}
+                  className={compact ? "w-4 text-center text-[13px] font-bold" : "w-5 text-center text-[14px] font-bold"}
+                >
                   {qty}
-                </span>
-                <button
+                </motion.span>
+                <motion.button
                   type="button"
                   onClick={(e) => handleCounterClick(e, +1)}
                   disabled={qty >= maxQty}
+                  whileTap={{ scale: 0.8 }}
                   className="grid size-7 place-items-center rounded-full transition hover:brightness-110 disabled:opacity-40"
                   style={{ background: cardAccent, color: stepperTextColor }}
                   aria-label="Agregar una entrada"
@@ -1001,12 +1009,13 @@ function GroupCard({
                   <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
                     <path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
                   </svg>
-                </button>
+                </motion.button>
               </>
             ) : (
-              <button
+              <motion.button
                 type="button"
                 onClick={(e) => handleCounterClick(e, +1)}
+                whileTap={{ scale: 0.93 }}
                 className={
                   "rounded-full border px-3 py-1 transition hover:brightness-125 " +
                   (compact ? "text-[11px]" : "text-[12px]") +
@@ -1016,7 +1025,7 @@ function GroupCard({
                 aria-label="Seleccionar esta zona"
               >
                 + Elegir
-              </button>
+              </motion.button>
             )}
           </div>
         ) : (
@@ -1168,7 +1177,7 @@ function BoxSection({
                   initial={{ opacity: 0, scale: 0.55 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.55 }}
-                  transition={{ type: "spring", stiffness: 520, damping: 30, mass: 0.6 }}
+                  transition={{ type: "spring", stiffness: 720, damping: 32, mass: 0.5 }}
                   className="inline-flex items-center gap-1.5 rounded-full border py-1.5 pl-3 pr-1.5 text-[12.5px] font-bold text-cart-accent"
                   style={{
                     background: "color-mix(in srgb, var(--color-cart-accent) 10%, transparent)",
@@ -1252,6 +1261,8 @@ function BoxPickerSheet({
 }) {
   const [pending, setPending] = useState<string[]>(selectedIds);
   const [planoOpen, setPlanoOpen] = useState(false);
+  // Drag-to-dismiss: solo el header arrastra la hoja (el grid scrollea normal).
+  const dragControls = useDragControls();
   // Al abrir, arranca desde la selección actual (para editar/agregar). Al cerrar
   // la hoja, cierra también el plano ampliado.
   useEffect(() => {
@@ -1286,17 +1297,29 @@ function BoxPickerSheet({
           (open ? "opacity-100" : "opacity-0")
         }
       />
-      <div
+      <motion.div
         role="dialog"
         aria-modal="true"
         aria-label="Elige tu box"
-        className={
-          "absolute inset-x-0 bottom-0 mx-auto flex max-h-[86vh] w-full max-w-[520px] flex-col rounded-t-[24px] border-t border-cart-line bg-cart-bg shadow-[0_-24px_60px_-20px_rgba(20,10,60,0.4)] transition-transform duration-[340ms] [transition-timing-function:cubic-bezier(.22,1,.36,1)] " +
-          (open ? "translate-y-0" : "translate-y-full")
-        }
+        className="absolute inset-x-0 bottom-0 mx-auto flex max-h-[86vh] w-full max-w-[520px] flex-col rounded-t-[24px] border-t border-cart-line bg-cart-bg shadow-[0_-24px_60px_-20px_rgba(20,10,60,0.4)]"
         style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 16px)" }}
+        initial={false}
+        animate={{ y: open ? "0%" : "100%" }}
+        transition={{ type: "spring", stiffness: 460, damping: 40 }}
+        drag="y"
+        dragControls={dragControls}
+        dragListener={false}
+        dragConstraints={{ top: 0, bottom: 0 }}
+        dragElastic={{ top: 0, bottom: 0.6 }}
+        onDragEnd={(_, info) => {
+          // Cerrar si arrastraste bastante hacia abajo o con impulso.
+          if (info.offset.y > 110 || info.velocity.y > 650) onClose();
+        }}
       >
-        <div className="shrink-0 px-4 pt-2">
+        <div
+          className="shrink-0 cursor-grab touch-none px-4 pt-2 active:cursor-grabbing"
+          onPointerDown={(e) => dragControls.start(e)}
+        >
           <div className="mx-auto mb-3 h-1.5 w-9 rounded-full bg-cart-line-strong" />
           <h3 className="text-[16.5px] font-bold tracking-[-0.01em] text-cart-ink">Elige tu box</h3>
           <p className="mt-0.5 text-[12px] text-cart-ink-3">
@@ -1368,7 +1391,7 @@ function BoxPickerSheet({
                         initial={false}
                         whileTap={soldout ? undefined : { scale: 0.9 }}
                         animate={sel && !soldout ? { scale: [1, 1.08, 1] } : { scale: 1 }}
-                        transition={{ duration: 0.26, ease: "easeOut" }}
+                        transition={{ duration: 0.16, ease: "easeOut" }}
                         className={
                           "flex aspect-square flex-col items-center justify-center gap-0.5 rounded-xl border text-cart-ink transition-[border-color,background,color] " +
                           (soldout
@@ -1418,7 +1441,7 @@ function BoxPickerSheet({
                 : `Confirmar · ${pending.length} boxes`}
           </button>
         </div>
-      </div>
+      </motion.div>
 
       {venueLayoutUrl && (
         <VenueLayoutModal
