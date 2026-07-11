@@ -136,13 +136,17 @@ button, [role="button"], a {
   --color-cart-bg-elev: #f3f1fb;
   --color-cart-bg-elev-2: #ece8f9;
   --color-cart-bg-purple: #efe9ff;
-  --color-cart-ink: #16132a;
-  --color-cart-ink-2: #433d5c;
-  --color-cart-ink-3: #6d6688;
-  --color-cart-ink-4: #9691ac;
-  --color-cart-line: rgba(28, 20, 60, 0.1);
-  --color-cart-line-2: rgba(28, 20, 60, 0.06);
-  --color-cart-line-strong: rgba(28, 20, 60, 0.18);
+  /* Rampa de tinta con más contraste (feedback: el texto se veía lavado). Sesgo
+     morado en los neutros = paleta elegida, no gris genérico. Contrastes sobre
+     el bg #fbfaff: ink ~15:1, ink-2 ~10:1, ink-3 ~7:1 (secundario legible),
+     ink-4 ~5:1 (hints/placeholder, ya no washed). */
+  --color-cart-ink: #141026;
+  --color-cart-ink-2: #363050;
+  --color-cart-ink-3: #4f4870;
+  --color-cart-ink-4: #6a6488;
+  --color-cart-line: rgba(28, 20, 60, 0.12);
+  --color-cart-line-2: rgba(28, 20, 60, 0.07);
+  --color-cart-line-strong: rgba(28, 20, 60, 0.2);
   --color-cart-accent: #7c3aed;
   --color-cart-accent-strong: #6425c9;
   --color-cart-accent-2: #4f6df5;
