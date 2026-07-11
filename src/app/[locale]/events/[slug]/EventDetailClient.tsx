@@ -1,6 +1,7 @@
 "use client";
 
 import { ButtonHTMLAttributes, useEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import { useSearchParams } from "next/navigation";
 import { Link, useRouter } from "@/i18n/navigation";
 import { clientEvents } from "@/lib/analytics/clientEvents";
@@ -1159,38 +1160,47 @@ function BoxSection({
 
         {hasSel ? (
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            {selectedBoxes.map((b) => (
-              <span
-                key={b.id}
-                className="inline-flex items-center gap-1.5 rounded-full border py-1.5 pl-3 pr-1.5 text-[12.5px] font-bold text-cart-accent"
-                style={{
-                  background: "color-mix(in srgb, var(--color-cart-accent) 10%, transparent)",
-                  borderColor: "color-mix(in srgb, var(--color-cart-accent) 32%, transparent)",
-                }}
-              >
-                {b.boxLabel ? `${nounCap(noun)} ${b.boxLabel}` : b.name}
-                <button
-                  type="button"
-                  onClick={() => onRemove(b.id)}
-                  aria-label={`Quitar ${b.boxLabel ? `${noun} ${b.boxLabel}` : b.name}`}
-                  className="grid size-[19px] place-items-center rounded-full text-cart-accent transition hover:bg-cart-accent hover:text-white"
-                  style={{ background: "color-mix(in srgb, var(--color-cart-accent) 18%, transparent)" }}
+            <AnimatePresence initial={false} mode="popLayout">
+              {selectedBoxes.map((b) => (
+                <motion.span
+                  key={b.id}
+                  layout
+                  initial={{ opacity: 0, scale: 0.55 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.55 }}
+                  transition={{ type: "spring", stiffness: 520, damping: 30, mass: 0.6 }}
+                  className="inline-flex items-center gap-1.5 rounded-full border py-1.5 pl-3 pr-1.5 text-[12.5px] font-bold text-cart-accent"
+                  style={{
+                    background: "color-mix(in srgb, var(--color-cart-accent) 10%, transparent)",
+                    borderColor: "color-mix(in srgb, var(--color-cart-accent) 32%, transparent)",
+                  }}
                 >
-                  <svg width="8" height="8" viewBox="0 0 10 10" fill="none">
-                    <path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                  </svg>
-                </button>
-              </span>
-            ))}
+                  {b.boxLabel ? `${nounCap(noun)} ${b.boxLabel}` : b.name}
+                  <button
+                    type="button"
+                    onClick={() => onRemove(b.id)}
+                    aria-label={`Quitar ${b.boxLabel ? `${noun} ${b.boxLabel}` : b.name}`}
+                    className="grid size-[19px] place-items-center rounded-full text-cart-accent transition hover:bg-cart-accent hover:text-white active:scale-90"
+                    style={{ background: "color-mix(in srgb, var(--color-cart-accent) 18%, transparent)" }}
+                  >
+                    <svg width="8" height="8" viewBox="0 0 10 10" fill="none">
+                      <path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                    </svg>
+                  </button>
+                </motion.span>
+              ))}
+            </AnimatePresence>
             {free > 0 && (
-              <button
+              <motion.button
+                layout
                 type="button"
                 onClick={onOpen}
+                whileTap={{ scale: 0.94 }}
                 className="inline-flex items-center gap-1 rounded-full border border-dashed px-3.5 py-1.5 text-[12.5px] font-bold text-cart-accent transition"
                 style={{ borderColor: "color-mix(in srgb, var(--color-cart-accent) 45%, transparent)" }}
               >
                 + Otro {noun}
-              </button>
+              </motion.button>
             )}
           </div>
         ) : (
@@ -1349,14 +1359,18 @@ function BoxPickerSheet({
                     const sel = pending.includes(b.id);
                     const seats = b.kind === "box" ? b.seats : 0;
                     return (
-                      <button
+                      <motion.button
                         key={b.id}
                         type="button"
                         disabled={soldout}
                         onClick={() => toggle(b.id)}
                         aria-pressed={sel}
+                        initial={false}
+                        whileTap={soldout ? undefined : { scale: 0.9 }}
+                        animate={sel && !soldout ? { scale: [1, 1.08, 1] } : { scale: 1 }}
+                        transition={{ duration: 0.26, ease: "easeOut" }}
                         className={
-                          "flex aspect-square flex-col items-center justify-center gap-0.5 rounded-xl border text-cart-ink transition active:scale-95 " +
+                          "flex aspect-square flex-col items-center justify-center gap-0.5 rounded-xl border text-cart-ink transition-[border-color,background,color] " +
                           (soldout
                             ? "cursor-not-allowed border-cart-line bg-cart-bg-elev/50 text-cart-ink-4 line-through"
                             : sel
@@ -1379,7 +1393,7 @@ function BoxPickerSheet({
                         {seats > 0 && (
                           <span className="text-[9px] font-medium text-cart-ink-4">{seats} pers.</span>
                         )}
-                      </button>
+                      </motion.button>
                     );
                   })}
                 </div>
