@@ -63,27 +63,21 @@ export function DatosForm({
               </span>
             </div>
           )}
-          <label className="flex cursor-pointer items-center gap-2 text-[12.5px] text-cart-ink-2">
-            <input
-              type="checkbox"
-              checked={isForeigner}
-              onChange={(e) => setIsForeigner(e.target.checked)}
-              className="h-4 w-4 accent-cart-accent"
-            />
-            Soy extranjero (no tengo DNI)
-          </label>
           <Field
-            label={isForeigner ? "Pasaporte / documento" : "DNI"}
+            label={isForeigner ? "Número de pasaporte" : "Número de DNI"}
             value={guestDni}
             onChange={(v) => setGuestDni(sanitizeDocument(v, isForeigner))}
             placeholder={isForeigner ? "AB123456" : "71234567"}
             mono
             hint={
               isForeigner
-                ? "Con lo que te identificas en la puerta."
-                : "Lo usa el portero para validar tu entrada."
+                ? "El documento con el que te identificas en la puerta."
+                : "El portero valida tu entrada con este número."
             }
           />
+          {/* Caso común = peruano con DNI (default). Ser extranjero es un opt-out
+              estilado: al marcarlo el campo de arriba pasa a Pasaporte. */}
+          <ForeignerCheck isForeigner={isForeigner} onChange={setIsForeigner} />
           <Field
             label="Nombre completo"
             value={guestName}
@@ -114,6 +108,63 @@ export function DatosForm({
         </div>
       </Section>
     </div>
+  );
+}
+
+// Opt-out "soy extranjero": el 95% es peruano con DNI, así que es una excepción,
+// no una elección 50/50. Checkbox ESTILADO (no el gris del navegador, que es lo
+// que se ve "IA"): caja propia con check, la fila entera es clickeable y al
+// marcarla se tiñe de acento suave. Cambia el campo de documento de arriba.
+function ForeignerCheck({
+  isForeigner,
+  onChange,
+}: {
+  isForeigner: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <label
+      className={
+        "flex cursor-pointer select-none items-center gap-2.5 rounded-xl border px-3.5 py-2.5 transition-colors " +
+        (isForeigner
+          ? "border-cart-accent/45 bg-cart-accent-soft"
+          : "border-cart-line bg-cart-bg-elev hover:border-cart-line-strong")
+      }
+    >
+      <input
+        type="checkbox"
+        checked={isForeigner}
+        onChange={(e) => onChange(e.target.checked)}
+        className="sr-only"
+      />
+      <span
+        className={
+          "grid size-[19px] shrink-0 place-items-center rounded-md border transition-colors " +
+          (isForeigner
+            ? "border-cart-accent bg-cart-accent"
+            : "border-cart-line-strong bg-cart-bg")
+        }
+      >
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 12 12"
+          fill="none"
+          className={"transition-opacity " + (isForeigner ? "opacity-100" : "opacity-0")}
+        >
+          <path
+            d="M2.5 6.3l2.3 2.3L9.5 3.7"
+            stroke="#fff"
+            strokeWidth="1.9"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </span>
+      <span className="text-[13px] font-medium text-cart-ink-2">
+        No tengo DNI <span className="text-cart-ink-4">— soy extranjero</span>
+      </span>
+    </label>
   );
 }
 
