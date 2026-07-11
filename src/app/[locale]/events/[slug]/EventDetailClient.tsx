@@ -20,10 +20,8 @@ import {
   type Palette,
   readableTextColor,
   ensureContrast,
-  themedMutedText,
-  mixColors,
-  pageTintGradient,
 } from "@/lib/_shared/color";
+import { Footer } from "@/app/[locale]/_home/Footer";
 import type { TicketType } from "@/server/events/domain/Event";
 import { VenueLayoutModal } from "@/components/ui/VenueLayoutModal";
 import { PresaleCountdown } from "@/components/ui/PresaleCountdown";
@@ -140,7 +138,7 @@ export function EventDetailClient({ slug }: { slug: string }) {
   if (isLoading) return <PageSkeleton />;
   if (error || !data) {
     return (
-      <div className="min-h-dvh bg-cart-bg text-cart-ink-2">
+      <div className="home-light home-wash min-h-dvh bg-cart-bg text-cart-ink-2">
         <UserHeader />
         <div className="grid min-h-[60dvh] place-items-center px-6 text-center">
           <div>
@@ -164,7 +162,7 @@ export function EventDetailClient({ slug }: { slug: string }) {
 
   return (
     <PageContainer palette={palette}>
-      <UserHeader tint={palette?.dark} />
+      <UserHeader />
       <div className="mx-auto w-full max-w-[1120px] px-5 lg:px-8">
         <div className="grid gap-8 pt-4 lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-10 lg:pt-8">
           <div className="pb-32 lg:pb-12">
@@ -301,6 +299,8 @@ export function EventDetailClient({ slug }: { slug: string }) {
         </div>
       </div>
 
+      <Footer />
+
       <div
         className="fixed inset-x-0 bottom-0 z-40 border-t border-cart-line bg-cart-bg/95 backdrop-blur-md lg:hidden"
         style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)" }}
@@ -329,48 +329,20 @@ export function EventDetailClient({ slug }: { slug: string }) {
 }
 
 /** Containers que reciben la paleta ya calculada (una sola vez) desde EventDetailInner. */
-function PageContainer({ palette, children }: { palette: Palette | null } & React.PropsWithChildren) {
-  const tint = palette?.dark ?? "#0D0B14";
-
-  // cart-ink-3/4 son gris frío fijo — pensados para el fondo neutro cart-bg,
-  // no para un tinte cálido dinámico. Tailwind v4 genera `text-cart-ink-3`
-  // como `color: var(--color-cart-ink-3)`, así que sobreescribir la variable
-  // acá arriba corrige el contraste/armonía en TODO el árbol de una vez, sin
-  // tocar cada uso suelto (disponibilidad, hints, meta del evento, etc).
-  const themedVars = palette
-    ? ({
-        "--color-cart-ink-3": themedMutedText("#8e8ea1", tint, tint, 4.5),
-        "--color-cart-ink-4": themedMutedText("#5e5e70", tint, tint, 3),
-      } as React.CSSProperties)
-    : undefined;
-
+function PageContainer({ children }: { palette: Palette | null } & React.PropsWithChildren) {
+  // Misma paleta clara del home (scope .home-light + wash): la página del
+  // evento ya no se tiñe de oscuro con el flyer — el color del evento vive
+  // en el flyer y sus acentos, no en el fondo de toda la pantalla.
   return (
-    <div
-      className="min-h-dvh bg-cart-bg text-white"
-      style={{
-        // `background-attachment: fixed` para que el % del gradiente se
-        // resuelva contra el viewport, igual que en AppHeader (mismo
-        // `pageTintGradient`) — así los dos pintan el mismo recorte de
-        // fondo en la misma posición de pantalla, sin costura, a cualquier
-        // scroll (no son dos colores parecidos, es el mismo fondo).
-        backgroundImage: pageTintGradient(tint),
-        backgroundAttachment: "fixed",
-        ...themedVars,
-      }}
-    >
-      {children}
+    <div className="home-light home-wash cart-grain min-h-dvh bg-cart-bg text-cart-ink">
+      <div className="relative z-[1]">{children}</div>
     </div>
   );
 }
 
-function AsideContainer({ palette, children }: { palette: Palette | null } & React.PropsWithChildren) {
+function AsideContainer({ children }: { palette: Palette | null } & React.PropsWithChildren) {
   return (
-    <div
-      className="rounded-3xl border border-cart-line bg-cart-bg-elev p-5 shadow-[0_20px_60px_-20px_rgba(0,0,0,0.6)]"
-      style={{
-        background: palette?.dark,
-      }}
-    >
+    <div className="rounded-3xl border border-cart-line bg-cart-bg-elev/60 p-5 shadow-[0_16px_44px_-18px_rgba(50,30,120,0.25)]">
       {children}
     </div>
   );
@@ -431,7 +403,7 @@ function EndedPanel({ org }: { org?: ShowcaseOrg }) {
           />
         </svg>
       </div>
-      <h2 className="mt-4 text-[17px] font-bold tracking-[-0.01em] text-white">
+      <h2 className="mt-4 text-[17px] font-bold tracking-[-0.01em] text-cart-ink">
         Este evento ya terminó
       </h2>
       <p className="mt-1.5 text-[13px] leading-snug text-cart-ink-3">
@@ -440,7 +412,7 @@ function EndedPanel({ org }: { org?: ShowcaseOrg }) {
       {org && (
         <Link
           href={`/${org.slug}` as never}
-          className="mt-5 w-full rounded-full border border-cart-line bg-cart-bg-elev-2 py-3 text-[13.5px] font-semibold text-white transition hover:border-cart-line-strong"
+          className="mt-5 w-full rounded-full border border-cart-line bg-cart-bg-elev-2 py-3 text-[13.5px] font-semibold text-cart-ink transition hover:border-cart-line-strong"
         >
           Ver más de {org.name}
         </Link>
@@ -453,28 +425,15 @@ function EndedPanel({ org }: { org?: ShowcaseOrg }) {
 
 function OrganizerChip({ org, palette }: { org: ShowcaseOrg; palette: Palette | null }) {
   const initial = (org.name || "?")[0].toUpperCase();
+  // El avatar sin logo conserva el degradado de la paleta del flyer; la card
+  // en sí es clara, como el resto de la página.
   const bgStart = palette?.mid ?? palette?.dark ?? org.brandColor ?? "#7C3AED";
   const bgEnd = palette?.dark ?? "#1A0A2E";
-  const borderColor = palette ? palette.dark ?? "rgba(255,255,255,10)" : "rgba(255,255,255,0.12)";
-
-  const hasPalette = Boolean(palette && (palette.mid || palette.accent || palette.dark));
-  const linkStyle: React.CSSProperties | undefined = hasPalette
-    ? {
-        background: palette?.dark ? `linear-gradient(135deg, ${bgStart}10, ${bgEnd}70)` : undefined,
-        border: `1px solid ${borderColor ?? "rgba(255,255,255,0.12)"}`,
-      }
-    : undefined;
-  // "Ver perfil" adopta el acento del flyer (combina con el resto de la
-  // página) solo si contrasta contra el fondo del chip — si no, blanco.
-  const chipLinkColor = palette?.accent
-    ? ensureContrast(palette.accent, bgEnd, "#ffffff", 3)
-    : undefined;
 
   return (
     <Link
       href={`/${org.slug}` as never}
-      className="mt-6 flex items-center gap-3 rounded-2xl border border-cart-line bg-cart-bg-elev px-4 py-3 transition hover:border-cart-line-strong"
-      style={linkStyle}
+      className="mt-6 flex items-center gap-3 rounded-2xl border border-cart-line bg-cart-bg-elev/60 px-4 py-3 transition hover:border-cart-line-strong"
     >
       <div className="size-10 shrink-0 overflow-hidden rounded-xl bg-cart-bg-elev-2">
         {org.logoUrl ? (
@@ -498,12 +457,7 @@ function OrganizerChip({ org, palette }: { org: ShowcaseOrg; palette: Palette | 
         </div>
         <div className="truncate text-[14.5px] font-semibold">{org.name}</div>
       </div>
-      <span
-        className={chipLinkColor ? "text-[12.5px] font-medium" : "text-[12.5px] font-medium text-cart-accent"}
-        style={chipLinkColor ? { color: chipLinkColor } : undefined}
-      >
-        Ver perfil →
-      </span>
+      <span className="text-[12.5px] font-medium text-cart-accent">Ver perfil →</span>
     </Link>
   );
 }
@@ -576,12 +530,11 @@ function AvailabilityHeader({
   // misma familia de color (ej. un flyer verde) — se aclaran solo lo
   // necesario para seguir contrastando contra el fondo del panel, sin
   // saltar a otro tono (mismo criterio que `cardAccent` en GroupCard).
-  const bg = palette?.dark ?? "#0D0B14";
-  // 4.5:1 = mínimo WCAG AA para texto normal (este es 12px) — 3:1 alcanzaba
-  // el umbral de "texto grande" pero se veía apagado en paletas cercanas en
-  // tono (ej. verde sobre verde).
-  const availableColor = palette ? ensureContrast("#34d399", bg, "#34d399", 4.5) : "#34d399";
-  const soldOutColor = palette ? ensureContrast("#fda4af", bg, "#fda4af", 4.5) : "#fda4af";
+  // Panel claro: verdes/rojos oscuros que contrastan sobre la superficie
+  // lavanda del aside (los pasteles de la versión dark se perdían).
+  const bg = "#f3f1fb";
+  const availableColor = ensureContrast("#059669", bg, "#047857", 4.5);
+  const soldOutColor = ensureContrast("#e11d48", bg, "#be123c", 4.5);
 
   if (availability.total === 0) {
     return (
@@ -723,13 +676,12 @@ function GroupCard({
   // "+ Elegir" sobre el propio fondo de la card, no solo como borde — con
   // paletas tostadas/cálidas (naranja sobre marrón) un acento de bajo
   // contraste se leía casi invisible.
-  const cardBg = palette?.dark ?? "#0D0B14";
-  const cardAccent = palette?.accent ? ensureContrast(palette.accent, cardBg, "#B87CFF", 4.5) : "#B87CFF";
+  // Card clara (paleta del home): el acento del flyer solo se usa si contrasta
+  // sobre superficie lavanda; si no, morado de marca.
+  const cardBg = "#f3f1fb";
+  const cardAccent = palette?.accent ? ensureContrast(palette.accent, cardBg, "#7c3aed", 4.5) : "#7c3aed";
   const stepperTextColor = readableTextColor(cardAccent);
-  // Mismo criterio que `cardAccent`: el verde fijo de "Gratis"/"Preventa" se
-  // aclara si la paleta del flyer es de la misma familia (ej. verde) en vez
-  // de perderse contra el fondo de la card.
-  const badgeColor = palette ? ensureContrast("#6ee7b7", cardBg, "#6ee7b7", 4.5) : "#6ee7b7";
+  const badgeColor = ensureContrast("#059669", cardBg, "#047857", 4.5);
 
   return (
     <div
@@ -748,7 +700,6 @@ function GroupCard({
         (compact ? " px-3.5 py-3" : " px-4 py-4")
       }
       style={{
-        background: `radial-gradient(25% 25% at 20% 25%, ${cardBg}75 15%, ${cardBg}b3 100%)`,
         borderColor: !summary.isAllSoldOut && qty > 0 ? `${cardAccent}99` : undefined,
       }}
     >
@@ -762,14 +713,14 @@ function GroupCard({
           {groupTitle}
           {ap?.isFree ? (
             <span
-              className="rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-[0.06em]"
+              className="rounded-md bg-emerald-600/12 px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-[0.06em]"
               style={{ color: badgeColor }}
             >
               Gratis
             </span>
           ) : ap?.isPresale && (
             <span
-              className="rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-[0.06em]"
+              className="rounded-md bg-emerald-600/12 px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-[0.06em]"
               style={{ color: badgeColor }}
             >
               Preventa
@@ -826,7 +777,7 @@ function GroupCard({
                 <button
                   type="button"
                   onClick={(e) => handleCounterClick(e, -1)}
-                  className="grid size-7 place-items-center rounded-full border border-cart-line bg-cart-bg-elev-2 text-white transition hover:border-cart-line-strong"
+                  className="grid size-7 place-items-center rounded-full border border-cart-line bg-cart-bg-elev-2 text-cart-ink transition hover:border-cart-line-strong"
                   aria-label="Quitar una entrada"
                 >
                   <svg width="10" height="2" viewBox="0 0 10 2" fill="none">
@@ -1242,17 +1193,13 @@ function DescriptionBlock({ text }: { text: string }) {
 }
 
 function FeatureGrid({ palette }: { palette: Palette | null }) {
-  const borderColor = palette ? palette.dark ?? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.12)";
-  // El icono va sobre el fondo de la card — si el acento extraído resulta
-  // demasiado oscuro para ese fondo, cae al morado de marca en vez de
-  // quedar invisible.
+  // Cards claras (paleta del home). El acento del flyer solo tiñe el icono si
+  // contrasta sobre lavanda; si no, morado de marca.
+  const borderColor = "var(--color-cart-line)";
   const iconColor = palette?.accent
-    ? ensureContrast(palette.accent, "#12121a", "#7C3AED", 2.5)
+    ? ensureContrast(palette.accent, "#f3f1fb", "#7C3AED", 2.5)
     : "#7C3AED";
-  // Antes las 3 cards quedaban negras planas (bg-cart-bg-elev fijo) mientras
-  // el resto de la página ya estaba tenida — se veían "pegadas" encima.
-  // Mezclamos el tinte con el elev oscuro de siempre para que combinen.
-  const chipBg = palette?.dark ? mixColors(palette.dark, "#12121a", 0.55) : undefined;
+  const chipBg = undefined;
 
   return (
     <div className="mt-7 grid grid-cols-3 gap-2">
@@ -1320,11 +1267,11 @@ function FeatureChip({
       className={"flex flex-col items-start gap-1.5 rounded-2xl px-3.5 py-3" + (bg ? "" : " bg-cart-bg-elev/60")}
       style={{ border: `1px solid ${borderColor ?? "rgba(255,255,255,0.12)"}`, background: bg }}
     >
-      <span className="text-white" style={{ color: iconColor ?? "#7C3AED" }}>
+      <span style={{ color: iconColor ?? "#7C3AED" }}>
         {icon}
       </span>
       <div>
-        <div className="text-[12px] font-semibold text-white">{label}</div>
+        <div className="text-[12px] font-semibold text-cart-ink">{label}</div>
         <div className="text-[10.5px] text-cart-ink-3">{sub}</div>
       </div>
     </div>
@@ -1417,7 +1364,7 @@ function PartnersStrip({ partners }: { partners: EventPartner[] }) {
                   className="h-6 max-w-[80px] object-contain grayscale transition group-hover:grayscale-0"
                 />
               ) : (
-                <span className="text-[12px] font-semibold text-cart-ink-3 transition group-hover:text-white">
+                <span className="text-[12px] font-semibold text-cart-ink-3 transition group-hover:text-cart-ink">
                   {p.name}
                 </span>
               )}
@@ -1527,7 +1474,7 @@ function SidebarMoreFromOrg({ org, events }: { org: ShowcaseOrg; events: Showcas
 
 function PageSkeleton() {
   return (
-    <div className="min-h-dvh bg-cart-bg text-white">
+    <div className="home-light home-wash min-h-dvh bg-cart-bg text-cart-ink">
       <UserHeader />
       <div className="mx-auto w-full max-w-[1120px] px-5 lg:px-8">
         <div className="grid gap-8 pt-4 lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-10 lg:pt-8">

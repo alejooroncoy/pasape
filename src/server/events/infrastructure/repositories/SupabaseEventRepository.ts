@@ -254,7 +254,7 @@ const slugify = (s: string): string =>
     .slice(0, 60) || `evt-${Math.random().toString(36).slice(2, 8)}`;
 
 export const supabaseEventRepository: EventRepository = {
-  async listPublished(limit, cursor, category) {
+  async listPublished(limit, cursor, category, search) {
     const db = supabaseAdmin();
     let q = db
       .from("events")
@@ -264,6 +264,12 @@ export const supabaseEventRepository: EventRepository = {
       .limit(limit);
     if (cursor) q = q.gt("starts_at", cursor);
     if (category) q = q.eq("category", category);
+    if (search) {
+      // Escapar los metacaracteres del filtro `or()` de PostgREST (coma,
+      // paréntesis, comodines) — el término del usuario es literal.
+      const term = search.replace(/[%_,()]/g, " ").trim();
+      if (term) q = q.or(`title.ilike.%${term}%,venue.ilike.%${term}%`);
+    }
     const { data } = await q;
     return (data as EventRow[] | null)?.map(toEvent) ?? [];
   },

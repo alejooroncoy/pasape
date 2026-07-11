@@ -167,7 +167,18 @@ const listPublicCached = unstable_cache(
 );
 
 export const EventsController = {
-  async listPublic(opts: { limit?: number; cursor?: string | null; category?: EventCategory | null } = {}): Promise<Result<Event[]>> {
+  async listPublic(
+    opts: { limit?: number; cursor?: string | null; category?: EventCategory | null; search?: string | null } = {},
+  ): Promise<Result<Event[]>> {
+    // Las búsquedas no pasan por el Data Cache: cada término distinto sería una
+    // key nueva (cache inútil) y la query ya está cubierta por índices trigram.
+    if (opts.search) {
+      const events = await listPublishedEvents(
+        { repo },
+        { limit: opts.limit, cursor: opts.cursor, category: opts.category, search: opts.search },
+      );
+      return ok(events);
+    }
     const events = await listPublicCached(
       opts.limit ?? null,
       opts.cursor ?? null,

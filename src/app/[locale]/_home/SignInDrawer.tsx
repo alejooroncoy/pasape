@@ -70,13 +70,13 @@ export function SignInDrawer({ open, onClose, redirectTo }: Props) {
           >
             {/* Asa solo en móvil (bottom-sheet); en desktop es modal centrado. */}
             <div className="mb-4 flex justify-center lg:hidden">
-              <div className="h-1 w-9 rounded-full bg-white/15" />
+              <div className="h-1 w-9 rounded-full bg-cart-ink/15" />
             </div>
             <motion.div
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.08, duration: 0.25 }}
-              className="mb-1.5 font-sans text-[24px] font-bold leading-tight tracking-[-0.03em] text-white"
+              className="mb-1.5 font-sans text-[24px] font-bold leading-tight tracking-[-0.03em] text-cart-ink"
             >
               {TITLE}
             </motion.div>

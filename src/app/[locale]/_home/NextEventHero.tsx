@@ -37,41 +37,34 @@ export function NextEventHero() {
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3, ease: "easeOut" }}
-        className="relative overflow-hidden rounded-[28px] border border-cart-accent/30 p-5 sm:p-6"
+        className="relative overflow-hidden rounded-[20px] border border-cart-line p-5 sm:p-6"
         style={{
           background:
-            "linear-gradient(155deg, rgba(124,58,237,0.28) 0%, rgba(124,58,237,0.06) 55%, rgba(10,10,15,0.4) 100%)",
+            "linear-gradient(115deg, rgba(124,58,237,0.12) 0%, rgba(79,109,245,0.08) 55%, rgba(124,58,237,0.04) 100%)",
         }}
       >
-        {/* glow */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute -right-16 -top-16 h-52 w-52 rounded-full blur-3xl"
-          style={{ background: "radial-gradient(closest-side, rgba(184,124,255,0.35), transparent)" }}
-        />
-
         <div className="relative flex items-center justify-between gap-3">
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-white/90 backdrop-blur">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-cart-accent/12 px-2.5 py-1 text-[10.5px] font-bold text-cart-accent">
             <span className="size-1.5 animate-pulse rounded-full bg-cart-accent" />
             Tu próxima salida
           </span>
-          <span className="text-[12px] font-semibold text-cart-accent">{when}</span>
+          <span className="text-[12px] font-bold text-cart-accent">{when}</span>
         </div>
 
-        <h2 className="relative mt-3 text-[24px] font-bold leading-[1.1] tracking-[-0.02em] text-white sm:text-[28px]">
+        <h2 className="relative mt-3 text-[24px] font-bold leading-[1.1] tracking-[-0.02em] text-cart-ink sm:text-[28px]">
           {next.event.title}
         </h2>
-        <p className="relative mt-1.5 text-[13px] text-white/70">
+        <p className="relative mt-1.5 text-[13px] text-cart-ink-2">
           {formatDate(next.event.startsAt, next.event.timezone)}
           {next.event.venue ? ` · ${next.event.venue}` : ""}
         </p>
 
         <div className="relative mt-2 flex flex-wrap items-center gap-1.5">
-          <span className="rounded-full border border-white/15 bg-white/5 px-2.5 py-1 text-[11.5px] font-medium text-white/80">
+          <span className="rounded-full border border-cart-line bg-cart-bg px-2.5 py-1 text-[11.5px] font-semibold text-cart-ink-2">
             {next.ticketType.name}
           </span>
           {next.boxLabel && (
-            <span className="rounded-full border border-cart-accent/40 bg-cart-accent/15 px-2.5 py-1 font-mono text-[11.5px] font-semibold text-cart-accent">
+            <span className="rounded-full border border-cart-accent/40 bg-cart-accent/12 px-2.5 py-1 font-mono text-[11.5px] font-semibold text-cart-accent">
               {next.boxLabel}
             </span>
           )}
@@ -86,7 +79,7 @@ export function NextEventHero() {
           </Link>
           <Link
             href={"/tickets" as never}
-            className="inline-flex items-center justify-center rounded-full border border-white/15 px-5 py-3 text-[13.5px] font-medium text-white/80 transition hover:text-white"
+            className="inline-flex items-center justify-center rounded-full border border-cart-line-strong bg-cart-bg px-5 py-3 text-[13.5px] font-semibold text-cart-ink-2 transition hover:text-cart-ink"
           >
             Todas mis entradas
           </Link>

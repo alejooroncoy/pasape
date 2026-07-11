@@ -15,9 +15,9 @@ export function Logo({ className, style, ...props }: SVGProps<SVGSVGElement>) {
       {...props}
     >
       <g transform="translate(0,1254) scale(0.1,-0.1)" stroke="none">
-        {/* Oreja lavender */}
+        {/* Oreja lavender — tematizable por scope (.home-light la intensifica) */}
         <path
-          fill="#C9A8FF"
+          fill="var(--logo-ear, #C9A8FF)"
           d="M5962 8175 c-40 -17 -95 -55 -89 -61 2 -3 -8 -18 -23 -34 -16 -17
 -35 -52 -44 -78 -16 -46 -16 -47 5 -64 11 -10 26 -15 32 -11 5 3 7 1 3 -5 -3
 -6 -2 -13 4 -17 6 -4 8 -11 5 -16 -9 -13 40 -185 75 -268 137 -321 403 -494
@@ -26,8 +26,8 @@ export function Logo({ className, style, ...props }: SVGProps<SVGSVGElement>) {
 -48 71 -29 39 -75 108 -103 155 -55 91 -104 148 -154 180 -41 26 -129 34 -172
 15z"
         />
-        {/* Figura principal */}
-        <g fill="#FFFFFF" stroke="#FFFFFF" strokeWidth={35} strokeLinejoin="round">
+        {/* Figura principal — blanca en dark; tinta oscura dentro de .home-light */}
+        <g fill="var(--logo-ink, #FFFFFF)" stroke="var(--logo-ink, #FFFFFF)" strokeWidth={35} strokeLinejoin="round">
           <path d="M6175 9844 c-689 -80 -1212 -491 -1419 -1114 -75 -226 -70 -132 -73
 -1352 -4 -1098 -4 -1098 -31 -1112 -90 -47 -115 -111 -120 -304 -6 -212 17
 -286 109 -346 39 -26 39 -26 41 -658 3 -610 4 -633 22 -636 33 -7 36 18 36

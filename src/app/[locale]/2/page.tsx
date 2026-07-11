@@ -1,30 +1,22 @@
-import type { Metadata } from "next";
 import { HydrationBoundary, dehydrate } from "@tanstack/react-query";
 import { setRequestLocale } from "next-intl/server";
-import { HomeClient } from "./_home/HomeClient";
-import { buildPageMetadata } from "@/lib/seo/metadata";
-import { HOME_TITLE, DEFAULT_DESCRIPTION } from "@/lib/seo/site";
+import { HomeClient } from "../_home/HomeClient";
 import { getSessionUser } from "@/server/identity/application/GetSessionUser";
 import { makeQueryClient } from "@/lib/_shared/query-client-config";
 import { BROWSE_EVENTS_LIMIT } from "@/lib/events/constants";
 import { optimizeImageUrl } from "@/lib/images/optimizeUrl";
 import { EventsController } from "@/server/events/controllers/rest/EventsController";
 
+// Ruta temporal de comparación (no indexable, no linkeada desde la nav):
+// mismo home, variante "oscuro ambiental" a la Partiful, para decidir contra
+// la variante "blanco + wash" que vive en "/".
+export const metadata = { robots: { index: false, follow: false } };
+
 type Props = {
   params: Promise<{ locale: string }>;
 };
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const { locale } = await params;
-  return buildPageMetadata({
-    title: HOME_TITLE,
-    description: DEFAULT_DESCRIPTION,
-    locale,
-    path: "/",
-  });
-}
-
-export default async function HomePage({ params }: Props) {
+export default async function HomeVariant2Page({ params }: Props) {
   const { locale } = await params;
   setRequestLocale(locale);
 
@@ -46,9 +38,9 @@ export default async function HomePage({ params }: Props) {
     <>
       {lcpCover ? <link rel="preload" as="image" href={lcpCover} fetchPriority="high" /> : null}
       <HydrationBoundary state={dehydrate(qc)}>
-        <h1 className="sr-only">Pasape — Compra entradas para eventos en Perú</h1>
         <HomeClient
           user={user ? { fullName: user.fullName, avatarUrl: user.avatarUrl } : null}
+          variant="dark-ambient"
         />
       </HydrationBoundary>
     </>

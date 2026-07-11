@@ -12,7 +12,10 @@ export const GET = async (req: NextRequest) => {
   if (scope === "mine") return json(await EventsController.listMine());
   const cat = req.nextUrl.searchParams.get("category");
   const category = cat && VALID_CATEGORIES.has(cat) ? (cat as EventCategory) : null;
-  return json(await EventsController.listPublic({ category }));
+  // Búsqueda del header (debounced en cliente): mínimo 2 chars, cap defensivo.
+  const rawQ = req.nextUrl.searchParams.get("q")?.trim() ?? "";
+  const search = rawQ.length >= 2 ? rawQ.slice(0, 60) : null;
+  return json(await EventsController.listPublic({ category, search }));
 };
 
 export const POST = async (req: NextRequest) => {

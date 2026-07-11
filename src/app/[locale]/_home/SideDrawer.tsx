@@ -83,7 +83,7 @@ export function SideDrawer({ user, open, onClose, onSignIn, onSelectCategory }: 
                 type="button"
                 onClick={onClose}
                 aria-label="Cerrar menú"
-                className="grid size-[38px] cursor-pointer place-items-center rounded-full border border-cart-line bg-cart-bg-elev text-cart-ink-2 transition-colors hover:border-cart-line-strong hover:text-white"
+                className="grid size-[38px] cursor-pointer place-items-center rounded-full border border-cart-line bg-cart-bg-elev text-cart-ink-2 transition-colors hover:border-cart-line-strong hover:text-cart-ink"
               >
                 <CloseIcon />
               </button>
@@ -125,7 +125,7 @@ export function SideDrawer({ user, open, onClose, onSignIn, onSelectCategory }: 
                 <Link
                   href="/organizadores"
                   onClick={onClose}
-                  className="flex w-full cursor-pointer items-center gap-3.5 rounded-[10px] bg-transparent px-4 py-[11px] text-[15px] font-medium text-cart-ink-2 transition-colors hover:bg-cart-bg-elev hover:text-white"
+                  className="flex w-full cursor-pointer items-center gap-3.5 rounded-[10px] bg-transparent px-4 py-[11px] text-[15px] font-medium text-cart-ink-2 transition-colors hover:bg-cart-bg-elev hover:text-cart-ink"
                 >
                   <span className="grid size-[22px] flex-shrink-0 place-items-center text-cart-ink-3">
                     <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
@@ -138,7 +138,7 @@ export function SideDrawer({ user, open, onClose, onSignIn, onSelectCategory }: 
                   href={WA_HREF}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex w-full cursor-pointer items-center gap-3.5 rounded-[10px] bg-transparent px-4 py-[11px] text-[15px] font-medium text-cart-ink-2 transition-colors hover:bg-cart-bg-elev hover:text-white"
+                  className="flex w-full cursor-pointer items-center gap-3.5 rounded-[10px] bg-transparent px-4 py-[11px] text-[15px] font-medium text-cart-ink-2 transition-colors hover:bg-cart-bg-elev hover:text-cart-ink"
                 >
                   <span className="grid size-[22px] flex-shrink-0 place-items-center text-cart-ink-3">
                     <WaIcon width={18} height={18} />
@@ -175,7 +175,7 @@ function AccountHeader({ user, onClose, onSignIn }: {
       <Link href="/profile" onClick={onClose} className={base}>
         <DrawerAvatar user={user} />
         <div className="min-w-0 flex-1">
-          <b className="block truncate text-[16px] font-semibold text-white">
+          <b className="block truncate text-[16px] font-semibold text-cart-ink">
             {user.fullName?.trim() || "Tu cuenta"}
           </b>
           <span className="text-[13px] text-cart-ink-3">Ver perfil</span>
@@ -201,7 +201,7 @@ function AccountHeader({ user, onClose, onSignIn }: {
         </svg>
       </span>
       <div className="min-w-0 flex-1">
-        <b className="block text-[16px] font-semibold text-white">Inicia sesión</b>
+        <b className="block text-[16px] font-semibold text-cart-ink">Inicia sesión</b>
         <span className="text-[13px] text-cart-ink-3">Guarda eventos y compra</span>
       </div>
       <ChevronRight size={18} className="shrink-0 text-cart-ink-4" />
@@ -251,7 +251,7 @@ function AccountRow({ href, icon, label, onClose }: {
     <Link
       href={href}
       onClick={onClose}
-      className="flex w-full cursor-pointer items-center gap-3.5 rounded-[10px] bg-transparent px-4 py-[11px] text-[15px] font-medium text-cart-ink-2 transition-colors hover:bg-cart-bg-elev hover:text-white"
+      className="flex w-full cursor-pointer items-center gap-3.5 rounded-[10px] bg-transparent px-4 py-[11px] text-[15px] font-medium text-cart-ink-2 transition-colors hover:bg-cart-bg-elev hover:text-cart-ink"
     >
       <span className="grid size-[22px] flex-shrink-0 place-items-center text-cart-ink-3">
         {icon}
@@ -270,7 +270,7 @@ function DrawerAvatar({ user }: { user: NavUser }) {
   }
   const initial = (user.fullName?.trim()?.[0] ?? "?").toUpperCase();
   return (
-    <span className="grid size-11 flex-shrink-0 place-items-center rounded-full bg-cart-accent text-[16px] font-semibold text-white">
+    <span className="grid size-11 flex-shrink-0 place-items-center rounded-full bg-cart-accent text-[16px] font-semibold text-cart-ink">
       {initial}
     </span>
   );
@@ -300,7 +300,7 @@ function Item({ Icon, label, meta, badge, onClick }: {
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full cursor-pointer items-center gap-3.5 rounded-[10px] border-0 bg-transparent px-4 py-[11px] text-left text-[15px] font-medium text-cart-ink-2 transition-colors hover:bg-cart-bg-elev hover:text-white"
+      className="flex w-full cursor-pointer items-center gap-3.5 rounded-[10px] border-0 bg-transparent px-4 py-[11px] text-left text-[15px] font-medium text-cart-ink-2 transition-colors hover:bg-cart-bg-elev hover:text-cart-ink"
     >
       <span className="grid size-[22px] flex-shrink-0 place-items-center text-cart-ink-3">
         <Icon width={18} height={18} />

@@ -1,22 +1,36 @@
 import { Link } from "@/i18n/navigation";
 import { Logo } from "@/components/brand/Logo";
 import { LibroReclamacionesFooterLink } from "@/components/legal/LibroReclamacionesFooterLink";
+import { WaIcon } from "./icons";
+import { WA_HREF } from "./wa";
 
+// Footer claro, en la misma paleta de la página (el bloque tinta chocaba con
+// el resto del home). Superficie apenas elevada + hairline arriba para
+// separarlo, marca grande, chip de WhatsApp y cierre centrado tipo Joinnus.
 export function Footer() {
   return (
-    <footer className="mt-[clamp(64px,9vw,120px)] border-t border-cart-line px-[clamp(20px,4vw,56px)] py-12 text-[13.5px] text-cart-ink-3">
-      <div className="mx-auto max-w-[1320px]">
-        <div className="grid grid-cols-[1.2fr_repeat(4,minmax(0,1fr))] gap-8 max-[1100px]:grid-cols-2 max-[560px]:grid-cols-1">
+    <footer className="mt-[clamp(48px,6vw,80px)] border-t border-cart-line bg-cart-bg-elev/40 text-[13.5px] text-cart-ink-2">
+      <div className="mx-auto max-w-[1320px] px-[clamp(20px,4vw,56px)] py-9">
+        <div className="grid grid-cols-[1.3fr_repeat(3,minmax(0,1fr))_auto] gap-8 max-[1100px]:grid-cols-2 max-[560px]:grid-cols-1">
           <div>
-            <Link href="/" className="inline-flex items-center gap-2.5 text-[19px] font-semibold tracking-[-0.01em] text-white">
-              <span className="grid size-[34px] place-items-center">
+            <Link href="/" className="inline-flex items-center gap-2.5 text-[21px] font-bold tracking-[-0.01em] text-cart-ink">
+              <span className="grid size-[38px] place-items-center">
                 <Logo className="size-full" />
               </span>
               Pasape
             </Link>
-            <p className="mt-4 max-w-[32ch] text-[13.5px] leading-[1.55] text-cart-ink-3">
+            <p className="mt-3.5 max-w-[30ch] text-[13.5px] leading-[1.55] text-cart-ink-2">
               Tu pase a los eventos que valen la pena en Lima.
             </p>
+            <a
+              href={WA_HREF}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-5 inline-flex items-center gap-2 rounded-full bg-[#25D366]/12 px-4 py-2 text-[12.5px] font-semibold text-[#128C4A] transition-colors hover:bg-[#25D366]/20"
+            >
+              <WaIcon width={15} height={15} />
+              Escríbenos por WhatsApp
+            </a>
           </div>
           <FootCol
             title="Explorar"
@@ -46,15 +60,12 @@ export function Footer() {
             ]}
           />
           <div>
-            <h2 className="m-0 mb-3.5 text-[11.5px] font-medium uppercase tracking-[0.1em] text-cart-ink-2">
-              Libro de reclamaciones
-            </h2>
             <LibroReclamacionesFooterLink />
           </div>
         </div>
-        <div className="mt-10 flex flex-wrap items-center justify-between gap-3 border-t border-cart-line-2 pt-[22px] text-[12.5px] text-cart-ink-3">
-          <span>© 2026 Pasape S.A.C. — Lima, Perú.</span>
-          <span>Hecho con ☕ en Perú.</span>
+        {/* Cierre centrado, como Joinnus */}
+        <div className="mt-8 border-t border-cart-line-2 pt-4 text-center text-[12.5px] text-cart-ink-2">
+          Copyright © Pasape 2026&nbsp;&nbsp;|&nbsp;&nbsp;Todos los derechos reservados&nbsp;&nbsp;·&nbsp;&nbsp;Hecho con ☕ en Perú
         </div>
       </div>
     </footer>
@@ -64,13 +75,13 @@ export function Footer() {
 function FootCol({ title, links }: { title: string; links: Array<[string, string]> }) {
   return (
     <div>
-      <h2 className="m-0 mb-3.5 text-[11.5px] font-medium uppercase tracking-[0.1em] text-cart-ink-2">
+      <h2 className="m-0 mb-3.5 text-[13px] font-bold tracking-[-0.01em] text-cart-ink">
         {title}
       </h2>
       <ul className="m-0 flex list-none flex-col gap-2 p-0">
         {links.map(([label, href]) => (
           <li key={label}>
-            <Link href={href} className="transition-colors hover:text-white">
+            <Link href={href} className="text-cart-ink-2 transition-colors hover:text-cart-ink">
               {label}
             </Link>
           </li>

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { CaretIcon, PinIcon, SearchIcon } from "./icons";
 import { Logo } from "@/components/brand/Logo";
@@ -9,6 +9,9 @@ import { SignInDrawer } from "./SignInDrawer";
 import { CATEGORIES, CATEGORY_BY_ID } from "./categories";
 import type { EventCategory } from "@/server/events/domain/Event";
 import { pageTintGradient } from "@/lib/_shared/color";
+import { useSearchEvents } from "@/lib/events/hooks/useEvents";
+import { optimizeImageUrl } from "@/lib/images/optimizeUrl";
+import { shortEventDate } from "@/lib/_shared/format";
 
 // Spring compartido para micro-interacciones (tap/hover).
 const TAP_SPRING = { type: "spring", stiffness: 500, damping: 30 } as const;
@@ -95,8 +98,21 @@ export function HeaderCity() {
   );
 }
 
-/** Buscador — crece para llenar el espacio (flex-1). Solo donde tenga sentido. */
+/** Buscador — crece para llenar el espacio (flex-1). Consulta al backend con
+ *  debounce y muestra los resultados en un dropdown bajo el input. */
 export function HeaderSearch({ onSearch }: { onSearch: (q: string) => void }) {
+  const [raw, setRaw] = useState("");
+  // Término estabilizado (debounce 350ms) — es el que viaja al backend.
+  const [debounced, setDebounced] = useState("");
+  const [open, setOpen] = useState(false);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const results = useSearchEvents(debounced);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(raw), 350);
+    return () => clearTimeout(t);
+  }, [raw]);
+
   // ⌘K / Ctrl+K → focus
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -109,21 +125,101 @@ export function HeaderSearch({ onSearch }: { onSearch: (q: string) => void }) {
     return () => document.removeEventListener("keydown", onKey);
   }, []);
 
+  // Cerrar con click fuera / Escape.
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      if (!boxRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const showPanel = open && debounced.trim().length >= 2;
+  const list = results.data ?? [];
+
   return (
-    <label className="flex h-[42px] w-full flex-1 items-center gap-2.5 rounded-full border border-cart-line bg-cart-bg-elev px-3.5 transition-colors focus-within:border-cart-accent focus-within:shadow-[0_0_0_4px_var(--color-cart-accent-soft),0_0_18px_var(--color-cart-accent-glow)] max-[560px]:h-10 max-[560px]:px-3 max-[560px]:gap-2">
-      <SearchIcon className="shrink-0 text-cart-ink-4" />
-      <input
-        data-cart-search
-        type="search"
-        placeholder="Buscar eventos, artistas, lugares…"
-        aria-label="Buscar eventos"
-        className="min-w-0 flex-1 border-0 bg-transparent text-[14.5px] text-white outline-none focus:outline-none focus-visible:outline-none max-[560px]:text-sm placeholder:text-cart-ink-4"
-        onChange={(e) => onSearch(e.target.value)}
-      />
-      <kbd className="shrink-0 rounded-md border border-cart-line bg-cart-bg-elev-2 px-1.5 py-0.5 font-mono text-[11px] text-cart-ink-3 max-[560px]:hidden">
-        ⌘K
-      </kbd>
-    </label>
+    <div ref={boxRef} className="relative w-full flex-1">
+      <label className="flex h-[42px] w-full items-center gap-2.5 rounded-full border border-cart-line bg-cart-bg-elev px-3.5 transition-colors focus-within:border-cart-accent focus-within:shadow-[0_0_0_4px_var(--color-cart-accent-soft),0_0_18px_var(--color-cart-accent-glow)] max-[560px]:h-10 max-[560px]:px-3 max-[560px]:gap-2">
+        <SearchIcon className="shrink-0 text-cart-ink-4" />
+        <input
+          data-cart-search
+          type="search"
+          placeholder="Buscar eventos, artistas, lugares…"
+          aria-label="Buscar eventos"
+          autoComplete="off"
+          className="min-w-0 flex-1 border-0 bg-transparent text-[14.5px] text-cart-ink outline-none focus:outline-none focus-visible:outline-none max-[560px]:text-sm placeholder:text-cart-ink-4"
+          value={raw}
+          onFocus={() => setOpen(true)}
+          onChange={(e) => {
+            setRaw(e.target.value);
+            setOpen(true);
+            onSearch(e.target.value);
+          }}
+        />
+        <kbd className="shrink-0 rounded-md border border-cart-line bg-cart-bg-elev-2 px-1.5 py-0.5 font-mono text-[11px] text-cart-ink-3 max-[560px]:hidden">
+          ⌘K
+        </kbd>
+      </label>
+
+      {showPanel && (
+        <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-[60] overflow-hidden rounded-[16px] border border-cart-line bg-cart-bg shadow-[0_24px_60px_-16px_rgba(20,10,60,0.28)]">
+          {results.isLoading && (
+            <div className="flex items-center gap-3 px-4 py-3.5">
+              <div className="size-10 animate-pulse rounded-[8px] bg-cart-bg-elev-2" />
+              <div className="flex-1 space-y-1.5">
+                <div className="h-3.5 w-1/2 animate-pulse rounded bg-cart-bg-elev-2" />
+                <div className="h-3 w-1/3 animate-pulse rounded bg-cart-bg-elev-2" />
+              </div>
+            </div>
+          )}
+
+          {!results.isLoading && list.length === 0 && (
+            <p className="m-0 px-4 py-4 text-[13px] text-cart-ink-3">
+              Sin resultados para “{debounced.trim()}”
+            </p>
+          )}
+
+          {list.slice(0, 6).map((ev) => (
+            <Link
+              key={ev.id}
+              href={`/events/${ev.slug}`}
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-3 px-3.5 py-2.5 transition-colors hover:bg-cart-bg-elev"
+            >
+              {ev.coverUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={optimizeImageUrl(ev.coverUrl, "card") ?? ev.coverUrl}
+                  alt=""
+                  className="size-10 flex-shrink-0 rounded-[8px] object-cover"
+                />
+              ) : (
+                <span className="size-10 flex-shrink-0 rounded-[8px] bg-cart-bg-elev-2" />
+              )}
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[13.5px] font-semibold text-cart-ink">
+                  {ev.title}
+                </span>
+                <span className="block truncate text-[11.5px] text-cart-ink-3">
+                  <span className="font-semibold text-cart-accent">
+                    {shortEventDate(ev.startsAt, ev.timezone)}
+                  </span>
+                  {ev.venue ? ` · ${ev.venue}` : ""}
+                </span>
+              </span>
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -141,7 +237,7 @@ export function HeaderActions({ user, onOpenMenu }: { user: NavUser | null; onOp
   // intención del click); "Ingresar" en cambio se queda donde estabas.
   const [signInRedirect, setSignInRedirect] = useState<string | undefined>(undefined);
   const ticketsClass =
-    "relative inline-flex h-10 items-center gap-2 rounded-full border border-transparent px-3 text-[13.5px] font-medium text-cart-ink-2 transition-colors hover:border-cart-line hover:bg-cart-bg-elev hover:text-white max-[900px]:hidden";
+    "relative inline-flex h-10 items-center gap-2 rounded-full border border-transparent px-3 text-[13.5px] font-medium text-cart-ink-2 transition-colors hover:border-cart-line hover:bg-cart-bg-elev hover:text-cart-ink max-[900px]:hidden";
   const ticketsInner = (
     <>
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
@@ -158,7 +254,7 @@ export function HeaderActions({ user, onOpenMenu }: { user: NavUser | null; onOp
 
       <Link
         href="/organizadores"
-        className="whitespace-nowrap text-[13.5px] text-cart-ink-2 transition-colors hover:text-white max-[1180px]:hidden"
+        className="whitespace-nowrap text-[13.5px] text-cart-ink-2 transition-colors hover:text-cart-ink max-[1180px]:hidden"
       >
         Soy organizador
       </Link>
@@ -193,7 +289,7 @@ export function HeaderActions({ user, onOpenMenu }: { user: NavUser | null; onOp
           className="inline-flex items-center gap-2 rounded-full border border-cart-line bg-cart-bg-elev py-1 pl-1 pr-3 transition-colors hover:border-cart-line-strong max-[900px]:hidden"
         >
           <Avatar user={user} />
-          <span className="max-w-[120px] truncate text-sm font-medium text-white">
+          <span className="max-w-[120px] truncate text-sm font-medium text-cart-ink">
             {firstName(user.fullName)}
           </span>
         </motion.button>
@@ -294,7 +390,7 @@ export function CitySelector({ className = "" }: { className?: string }) {
         whileHover={{ y: -1 }}
         whileTap={{ scale: 0.95 }}
         transition={{ type: "spring", stiffness: 500, damping: 30 }}
-        className="inline-flex items-center gap-1.5 rounded-full border border-cart-line bg-cart-bg-elev px-3 py-2 text-[13px] font-medium text-cart-ink-2 transition-colors hover:border-cart-line-strong hover:text-white"
+        className="inline-flex items-center gap-1.5 rounded-full border border-cart-line bg-cart-bg-elev px-3 py-2 text-[13px] font-medium text-cart-ink-2 transition-colors hover:border-cart-line-strong hover:text-cart-ink"
       >
         <PinIcon className="text-cart-accent" />
         Lima
@@ -360,7 +456,8 @@ export function MobileCategoryStrip({
       <span className="h-4 w-px shrink-0 bg-cart-line" aria-hidden />
       {STRIP_CHIPS.map(({ label, cat }) => {
         const active = selectedCategory === cat;
-        const color = cat ? CATEGORY_BY_ID[cat].color : "#ffffff";
+        const color = cat ? CATEGORY_BY_ID[cat].color : "var(--color-cart-ink)";
+        const activeText = cat ? "#0a0a0f" : "var(--color-cart-bg)";
         return (
           <motion.button
             key={label}
@@ -374,8 +471,8 @@ export function MobileCategoryStrip({
                 ? {
                   borderColor: color,
                   background: color,
-                  color: "#0a0a0f",
-                  boxShadow: `0 0 12px ${color}80`,
+                  color: activeText,
+                  boxShadow: `0 0 12px ${cat ? `${color}80` : "transparent"}`,
                 }
                 : {
                   borderColor: "var(--color-cart-line)",

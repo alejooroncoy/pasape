@@ -23,8 +23,8 @@ export function CategoriesSection({ selected, onChange }: Props) {
           onClick={() => onChange(null)}
           className={`flex-shrink-0 rounded-full border px-4 py-[7px] text-[13px] font-medium transition-colors duration-150 ${
             selected === null
-              ? "border-cart-accent bg-cart-accent/15 text-white"
-              : "border-cart-line bg-transparent text-white/50 hover:border-white/25 hover:text-white/75"
+              ? "border-cart-accent bg-cart-accent/15 text-cart-ink"
+              : "border-cart-line bg-transparent text-cart-ink/50 hover:border-cart-ink/25 hover:text-cart-ink/75"
           }`}
         >
           Todos
@@ -40,10 +40,10 @@ export function CategoriesSection({ selected, onChange }: Props) {
               style={{
                 borderColor: active ? color : "var(--color-cart-line)",
                 background: active ? `${color}26` : "transparent",
-                color: active ? "#fff" : "rgba(255,255,255,0.5)",
+                color: active ? "var(--color-cart-ink)" : "var(--color-cart-ink-3)",
               }}
             >
-              <span className="text-[14px]" style={{ color: active ? color : "rgba(255,255,255,0.4)" }}>
+              <span className="text-[14px]" style={{ color: active ? color : "var(--color-cart-ink-4)" }}>
                 <Icon />
               </span>
               {label}

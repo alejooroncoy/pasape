@@ -13,7 +13,7 @@ export function LibroReclamacionesFooterLink({ className, variant = "dark" }: Pr
   const textCls =
     variant === "light"
       ? "text-ink-3 group-hover:text-ink"
-      : "text-cart-ink-3 group-hover:text-white";
+      : "text-cart-ink-3 group-hover:text-cart-ink";
 
   return (
     <Link href="/complaints" className={cn("group inline-block", className)}>
