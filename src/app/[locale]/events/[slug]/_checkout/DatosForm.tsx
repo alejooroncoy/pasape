@@ -168,7 +168,7 @@ export function Field({
         placeholder={placeholder}
         disabled={disabled}
         className={
-          "mt-1.5 block w-full rounded-2xl border border-cart-line bg-cart-bg-elev px-4 py-3.5 text-[15px] text-white outline-none transition focus:border-cart-accent focus:shadow-[0_0_0_3px_var(--color-cart-accent-soft)] disabled:cursor-not-allowed disabled:opacity-60 " +
+          "mt-1.5 block w-full rounded-2xl border border-cart-line bg-cart-bg-elev px-4 py-3.5 text-[15px] text-cart-ink outline-none transition focus:border-cart-accent focus:shadow-[0_0_0_3px_var(--color-cart-accent-soft)] disabled:cursor-not-allowed disabled:opacity-60 " +
           (mono ? "font-mono tracking-[0.04em]" : "")
         }
       />

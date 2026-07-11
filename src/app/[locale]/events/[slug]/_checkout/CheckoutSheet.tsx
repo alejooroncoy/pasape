@@ -217,7 +217,7 @@ export function CheckoutSheet({
         role="dialog"
         aria-modal="true"
         aria-label="Completa tus datos"
-        className="absolute inset-x-0 bottom-0 mx-auto flex max-h-[92vh] w-full max-w-[520px] flex-col rounded-t-[24px] border-t border-cart-line bg-cart-bg text-white shadow-[0_-24px_60px_-20px_rgba(20,10,60,0.5)]"
+        className="absolute inset-x-0 bottom-0 mx-auto flex max-h-[92vh] w-full max-w-[520px] flex-col rounded-t-[24px] border-t border-cart-line bg-cart-bg text-cart-ink shadow-[0_-24px_60px_-20px_rgba(20,10,60,0.5)]"
         initial={false}
         animate={{ y: open ? "0%" : "100%" }}
         transition={{ type: "spring", stiffness: 460, damping: 40 }}

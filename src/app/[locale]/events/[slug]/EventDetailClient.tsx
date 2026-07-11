@@ -468,7 +468,7 @@ export function EventDetailClient({ slug }: { slug: string }) {
               : allSoldOut
                 ? "Agotado"
                 : liveUnits > 0
-                  ? "Continuar al pago"
+                  ? "Continuar · Tus datos"
                   : "Comprar entradas"}
           </BuyButton>
         </div>
