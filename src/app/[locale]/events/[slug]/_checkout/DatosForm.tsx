@@ -7,12 +7,42 @@
 // el mismo form y sus validaciones — sin duplicar ni derivar.
 
 import type React from "react";
+import { useEffect, useRef, useState } from "react";
 import { PhoneField } from "@/components/design/PhoneField";
 import {
   sanitizeDocument,
   sanitizeEmail,
   sanitizePersonNameLive,
 } from "@/lib/input/sanitize";
+
+// Tipo de documento — patrón de selector (DNI por defecto), no un checkbox
+// "no tengo DNI" (que le queda redundante al peruano que ya puso su DNI). Es lo
+// que hacen las ticketeras peruanas y los flujos KYC (Binance/Wise/Airbnb):
+// muestra SOLO la opción elegida, sin peso 50/50 ni enunciados en negativo.
+type DocType = "dni" | "ce" | "passport";
+const DOC_TYPES: Record<
+  DocType,
+  { short: string; label: string; placeholder: string; hint: string }
+> = {
+  dni: {
+    short: "DNI",
+    label: "Número de DNI",
+    placeholder: "71234567",
+    hint: "El portero valida tu entrada con este número.",
+  },
+  ce: {
+    short: "Carné de extranjería",
+    label: "Número de C.E.",
+    placeholder: "001234567",
+    hint: "Tu carné de extranjería (residentes en Perú).",
+  },
+  passport: {
+    short: "Pasaporte",
+    label: "Número de pasaporte",
+    placeholder: "AB123456",
+    hint: "El documento con el que te identificas en la puerta.",
+  },
+};
 
 export function DatosForm({
   isLogged,
@@ -41,6 +71,11 @@ export function DatosForm({
   guestEmail: string;
   setGuestEmail: (v: string) => void;
 }) {
+  // El backend solo distingue DNI (peruano) vs extranjero; el sub-tipo (C.E. vs
+  // pasaporte) es solo para el label/placeholder correcto. `isForeigner` sigue
+  // siendo la fuente de verdad para la validación.
+  const [docType, setDocType] = useState<DocType>(isForeigner ? "passport" : "dni");
+  const doc = DOC_TYPES[docType];
   return (
     <div className="flex flex-col gap-8">
       <Section
@@ -63,21 +98,22 @@ export function DatosForm({
               </span>
             </div>
           )}
-          <Field
-            label={isForeigner ? "Número de pasaporte" : "Número de DNI"}
-            value={guestDni}
-            onChange={(v) => setGuestDni(sanitizeDocument(v, isForeigner))}
-            placeholder={isForeigner ? "AB123456" : "71234567"}
-            mono
-            hint={
-              isForeigner
-                ? "El documento con el que te identificas en la puerta."
-                : "El portero valida tu entrada con este número."
-            }
+          {/* Tipo primero (DNI por defecto), número después — orden estándar. */}
+          <DocTypeSelect
+            value={docType}
+            onChange={(t) => {
+              setDocType(t);
+              setIsForeigner(t !== "dni");
+            }}
           />
-          {/* Caso común = peruano con DNI (default). Ser extranjero es un opt-out
-              estilado: al marcarlo el campo de arriba pasa a Pasaporte. */}
-          <ForeignerCheck isForeigner={isForeigner} onChange={setIsForeigner} />
+          <Field
+            label={doc.label}
+            value={guestDni}
+            onChange={(v) => setGuestDni(sanitizeDocument(v, docType !== "dni"))}
+            placeholder={doc.placeholder}
+            mono
+            hint={doc.hint}
+          />
           <Field
             label="Nombre completo"
             value={guestName}
@@ -111,60 +147,91 @@ export function DatosForm({
   );
 }
 
-// Opt-out "soy extranjero": el 95% es peruano con DNI, así que es una excepción,
-// no una elección 50/50. Checkbox ESTILADO (no el gris del navegador, que es lo
-// que se ve "IA"): caja propia con check, la fila entera es clickeable y al
-// marcarla se tiñe de acento suave. Cambia el campo de documento de arriba.
-function ForeignerCheck({
-  isForeigner,
+// Dropdown de tipo de documento. Muestra solo la opción elegida (DNI por
+// defecto); al abrir, la lista con las tres. Neutro, sin peso 50/50 ni el "no
+// tengo DNI" que le sobraba al peruano. Cierra con click fuera / Escape.
+function DocTypeSelect({
+  value,
   onChange,
 }: {
-  isForeigner: boolean;
-  onChange: (v: boolean) => void;
+  value: DocType;
+  onChange: (t: DocType) => void;
 }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
   return (
-    <label
-      className={
-        "flex cursor-pointer select-none items-center gap-2.5 rounded-xl border px-3.5 py-2.5 transition-colors " +
-        (isForeigner
-          ? "border-cart-accent/45 bg-cart-accent-soft"
-          : "border-cart-line bg-cart-bg-elev hover:border-cart-line-strong")
-      }
-    >
-      <input
-        type="checkbox"
-        checked={isForeigner}
-        onChange={(e) => onChange(e.target.checked)}
-        className="sr-only"
-      />
-      <span
-        className={
-          "grid size-[19px] shrink-0 place-items-center rounded-md border transition-colors " +
-          (isForeigner
-            ? "border-cart-accent bg-cart-accent"
-            : "border-cart-line-strong bg-cart-bg")
-        }
+    <div ref={ref} className="relative">
+      <span className="text-[11.5px] font-semibold uppercase tracking-[0.12em] text-cart-ink-3">
+        Tipo de documento
+      </span>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className="mt-1.5 flex w-full items-center justify-between rounded-2xl border border-cart-line bg-cart-bg-elev px-4 py-3.5 text-[15px] text-cart-ink outline-none transition focus:border-cart-accent focus:shadow-[0_0_0_3px_var(--color-cart-accent-soft)]"
       >
+        <span>{DOC_TYPES[value].short}</span>
         <svg
-          width="12"
-          height="12"
-          viewBox="0 0 12 12"
+          className={"shrink-0 text-cart-ink-3 transition-transform " + (open ? "rotate-180" : "")}
+          width="15"
+          height="15"
+          viewBox="0 0 16 16"
           fill="none"
-          className={"transition-opacity " + (isForeigner ? "opacity-100" : "opacity-0")}
         >
-          <path
-            d="M2.5 6.3l2.3 2.3L9.5 3.7"
-            stroke="#fff"
-            strokeWidth="1.9"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
+          <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
-      </span>
-      <span className="text-[13px] font-medium text-cart-ink-2">
-        No tengo DNI <span className="text-cart-ink-4">— soy extranjero</span>
-      </span>
-    </label>
+      </button>
+      {open && (
+        <div
+          role="listbox"
+          className="absolute left-0 right-0 top-[calc(100%+6px)] z-20 overflow-hidden rounded-2xl border border-cart-line bg-cart-bg shadow-[0_16px_40px_-12px_rgba(20,10,60,0.28)]"
+        >
+          {(Object.keys(DOC_TYPES) as DocType[]).map((t) => {
+            const active = t === value;
+            return (
+              <button
+                key={t}
+                type="button"
+                role="option"
+                aria-selected={active}
+                onClick={() => {
+                  onChange(t);
+                  setOpen(false);
+                }}
+                className={
+                  "flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-[14px] transition-colors hover:bg-cart-bg-elev " +
+                  (active ? "font-semibold text-cart-accent" : "text-cart-ink-2")
+                }
+              >
+                {DOC_TYPES[t].short}
+                {active && (
+                  <svg width="14" height="14" viewBox="0 0 12 12" fill="none" className="shrink-0">
+                    <path d="M2.5 6.3l2.3 2.3L9.5 3.7" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 
