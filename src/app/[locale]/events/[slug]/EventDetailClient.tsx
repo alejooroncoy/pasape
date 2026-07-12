@@ -5,7 +5,7 @@ import { AnimatePresence, motion, useDragControls } from "motion/react";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { CheckoutSheet } from "./_checkout/CheckoutSheet";
-import { Link, useRouter } from "@/i18n/navigation";
+import { Link, useRouter, usePathname } from "@/i18n/navigation";
 import { clientEvents } from "@/lib/analytics/clientEvents";
 import { api } from "@/lib/_shared/api-client";
 import { eventDatePillParts, eventDateTime } from "@/lib/_shared/format";
@@ -667,10 +667,13 @@ function VerifiedSeal() {
   );
 }
 
-// Botón "Seguir" real (useFollow). Para invitados no rompe: los manda al perfil
-// de la productora, donde vive el login-gate del seguir (patrón de la vitrina).
+// Botón "Seguir" real (useFollow). Invitado → login-gate en el sitio y vuelve al
+// evento (mismo patrón que la vitrina: `/login?next=`). Antes lo mandaba a la
+// vitrina de la org, un desvío confuso: clicabas "Seguir" y aterrizabas en otra
+// página sin haber seguido nada.
 function FollowButton({ org }: { org: ShowcaseOrg }) {
   const router = useRouter();
+  const pathname = usePathname();
   const me = useCurrentUser();
   const loggedIn = !!me.data?.user;
   const { isFollowing, toggle, isPending } = useFollow(org.id);
@@ -680,7 +683,7 @@ function FollowButton({ org }: { org: ShowcaseOrg }) {
       type="button"
       onClick={() => {
         if (!loggedIn) {
-          router.push(`/${org.slug}` as never);
+          router.push(`/login?next=${pathname}` as never);
           return;
         }
         toggle();
