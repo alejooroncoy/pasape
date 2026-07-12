@@ -10,6 +10,7 @@ import { clientEvents } from "@/lib/analytics/clientEvents";
 import { api } from "@/lib/_shared/api-client";
 import { eventDatePillParts, eventDateTime } from "@/lib/_shared/format";
 import { UserHeader } from "@/app/[locale]/_home/UserHeader";
+import type { NavUser } from "@/app/[locale]/_home/AppHeader";
 import { SignInDrawer } from "@/app/[locale]/_home/SignInDrawer";
 import { useEvent } from "@/lib/events/hooks/useEvents";
 import { useSaveEvent } from "@/lib/identity/hooks/useSaveEvent";
@@ -46,7 +47,14 @@ import {
 // Server prefetchea `["events", "detail", slug]` (ver page.tsx) → esta query
 // hidrata con la data ya resuelta y `isLoading` arranca en false, sin el
 // flash negro→color mientras esperaba el fetch del cliente.
-export function EventDetailClient({ slug }: { slug: string }) {
+export function EventDetailClient({
+  slug,
+  initialUser,
+}: {
+  slug: string;
+  /** Sesión resuelta por el server (RSC) → primer render determinista del header. */
+  initialUser?: NavUser | null;
+}) {
   const { data, isLoading, error } = useEvent(slug);
 
   // Señal cruda para un futuro motor de recomendaciones (profile_category_views).
@@ -108,6 +116,14 @@ export function EventDetailClient({ slug }: { slug: string }) {
   // El paso de datos ("¿Quién va?") se resuelve en un bottom-sheet sobre el
   // evento (no navegando): gratis se completa acá, pagado entrega al pago.
   const [checkoutOpen, setCheckoutOpen] = useState(false);
+  // Reanudar pago tras recargar la URL interceptada: /buy?…&inline=1 (hard-nav)
+  // redirige aquí con ?pay=order&k=token. Abrimos la hoja DIRECTO en pago en vez
+  // de mostrar la página completa de /buy (evita el salto de UI en el reload).
+  const resumePayOrder = search.get("pay");
+  const resumePayToken = search.get("k");
+  useEffect(() => {
+    if (resumePayOrder) setCheckoutOpen(true);
+  }, [resumePayOrder]);
   // Ancla del selector (móvil): sin selección, el CTA lleva aquí en vez de a un
   // /buy vacío. La selección vive solo en esta página; /buy es datos + pago.
   const selectorRef = useRef<HTMLDivElement>(null);
@@ -209,11 +225,11 @@ export function EventDetailClient({ slug }: { slug: string }) {
     setCheckoutOpen(true);
   };
 
-  if (isLoading) return <PageSkeleton />;
+  if (isLoading) return <PageSkeleton initialUser={initialUser} />;
   if (error || !data) {
     return (
       <div className="home-light home-wash min-h-dvh bg-cart-bg text-cart-ink-2">
-        <UserHeader />
+        <UserHeader initialUser={initialUser} />
         <div className="grid min-h-[60dvh] place-items-center px-6 text-center">
           <div>
             <p className="text-[15px]">No pudimos cargar este evento.</p>
@@ -239,7 +255,7 @@ export function EventDetailClient({ slug }: { slug: string }) {
 
   return (
     <PageContainer palette={palette}>
-      <UserHeader />
+      <UserHeader initialUser={initialUser} />
       <div className="mx-auto w-full max-w-[1120px] px-5 lg:px-8">
         <div className="grid gap-8 pt-4 lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-10 lg:pt-8">
           <div className="pb-6 lg:pb-12">
@@ -445,7 +461,11 @@ export function EventDetailClient({ slug }: { slug: string }) {
                   ) : (
                     <>
                       {formatMoney(liveTotalCents, "PEN")}{" "}
-                      <span className="text-[10.5px] font-medium text-cart-ink-4">+ servicio</span>
+                      {/* liveTotalCents ya es buyerPriceCents (fee horneado): el
+                          número ES el precio final, no un subtotal. "+ servicio"
+                          mentía (sugería que aún se suma). Alineado con buy/page
+                          ("Incluye … de servicio"). */}
+                      <span className="text-[10.5px] font-medium text-cart-ink-4">servicio incluido</span>
                     </>
                   )
                 ) : fromPriceCents == null ? null : fromPriceCents <= 0 ? (
@@ -496,6 +516,9 @@ export function EventDetailClient({ slug }: { slug: string }) {
         accent={palette?.accent}
         summaryLabel={selectionLabel}
         fallbackTotalCents={liveTotalCents}
+        resumePay={
+          resumePayOrder ? { orderId: resumePayOrder, orderToken: resumePayToken } : null
+        }
       />
     </PageContainer>
   );
@@ -2137,10 +2160,10 @@ function SidebarMoreFromOrg({ org, events }: { org: ShowcaseOrg; events: Showcas
 
 /* ============================== Skeleton ============================== */
 
-function PageSkeleton() {
+function PageSkeleton({ initialUser }: { initialUser?: NavUser | null }) {
   return (
     <div className="home-light home-wash min-h-dvh bg-cart-bg text-cart-ink">
-      <UserHeader />
+      <UserHeader initialUser={initialUser} />
       <div className="mx-auto w-full max-w-[1120px] px-5 lg:px-8">
         <div className="grid gap-8 pt-4 lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-10 lg:pt-8">
           {/* Columna izquierda: flyer + título + entradas (móvil) */}

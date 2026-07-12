@@ -47,7 +47,8 @@ posthog.init(process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN!, {
   },
   // Recorder ~50 KiB, pero carga lazy (no bloquea el primer paint) — el
   // producto necesita ver sesiones reales de compra. Surveys se mantiene
-  // apagado (no se usa).
-  disable_session_recording: false,
+  // apagado (no se usa). En local (`next dev`) el replay se apaga: no queremos
+  // grabar sesiones de desarrollo ni gastar cuota de PostHog con ruido.
+  disable_session_recording: process.env.NODE_ENV === "development",
   disable_surveys: true,
 });

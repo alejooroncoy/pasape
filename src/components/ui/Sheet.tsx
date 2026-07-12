@@ -20,7 +20,7 @@
 
 import * as Dialog from "@radix-ui/react-dialog";
 import { AnimatePresence, motion, useDragControls } from "motion/react";
-import type { ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 type Props = {
   open: boolean;
@@ -36,6 +36,16 @@ type Props = {
   maxWidth?: number;
   /** Acento del asa/detalles (por defecto el token de acento). */
   className?: string;
+  /**
+   * Modo "hoja que CRECE a pantalla completa" (checkout: datos → pago). Es la
+   * MISMA hoja (no cierra una y abre otra): animamos su alto desde su tamaño
+   * actual hasta 100dvh y el radio superior a 0. Al terminar, `onExpandComplete`
+   * — el consumidor monta ahí el contenido frágil (campos MP) recién cuando el
+   * crecimiento asentó, no durante el transform. El asa se oculta.
+   */
+  expanded?: boolean;
+  /** Se dispara cuando la animación de crecimiento terminó (alto ya = 100dvh). */
+  onExpandComplete?: () => void;
 };
 
 export function Sheet({
@@ -47,8 +57,37 @@ export function Sheet({
   footer,
   maxWidth = 420,
   className,
+  expanded = false,
+  onExpandComplete,
 }: Props) {
   const dragControls = useDragControls();
+
+  // Crecimiento determinista: al pasar a `expanded`, fijamos el alto actual (px)
+  // y en el siguiente frame lo animamos a innerHeight. Ir de "auto"→px→100dvh
+  // evita el salto que daría animar desde un alto content-driven. Cuando no está
+  // expandida no tocamos el alto (queda content-driven con max-h). Ver Plan A.
+  const contentRef = useRef<HTMLDivElement>(null);
+  const targetHRef = useRef(0);
+  const wasExpandedRef = useRef(false);
+  const [grownH, setGrownH] = useState<number | "auto" | null>(null);
+  useLayoutEffect(() => {
+    if (!expanded) {
+      // Colapso ANIMADO: si veníamos de pantalla completa (X → volver a datos),
+      // animamos el alto de vuelta a "auto" (framer mide el contenido de datos)
+      // en vez de saltar. Si nunca expandió, no controlamos el alto (CSS manda).
+      setGrownH(wasExpandedRef.current ? "auto" : null);
+      wasExpandedRef.current = false;
+      return;
+    }
+    wasExpandedRef.current = true;
+    const cur = contentRef.current?.getBoundingClientRect().height ?? 0;
+    setGrownH(cur); // arranca clonando el alto actual (sin salto)
+    targetHRef.current = window.innerHeight;
+    const id = requestAnimationFrame(() =>
+      requestAnimationFrame(() => setGrownH(targetHRef.current)),
+    );
+    return () => cancelAnimationFrame(id);
+  }, [expanded]);
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -68,15 +107,34 @@ export function Sheet({
             </Dialog.Overlay>
 
             {/* Contenedor de posición (bottom en móvil, centro en desktop). No
-                captura clicks salvo la hoja: Radix cierra al tocar fuera. */}
-            <div className="home-light pointer-events-none fixed inset-0 z-[91] flex items-end justify-center lg:items-center lg:p-6">
+                captura clicks salvo la hoja: Radix cierra al tocar fuera. En
+                `expanded` se ancla abajo (aunque sea desktop): la hoja crece
+                hacia arriba hasta llenar. */}
+            <div
+              className={
+                "home-light pointer-events-none fixed inset-0 z-[91] flex justify-center " +
+                (expanded ? "items-end" : "items-end lg:items-center lg:p-6")
+              }
+            >
               <Dialog.Content asChild forceMount>
                 <motion.div
+                  ref={contentRef}
                   initial={{ y: "100%" }}
-                  animate={{ y: 0 }}
+                  animate={
+                    expanded
+                      ? { y: 0, height: grownH ?? undefined, borderTopLeftRadius: 0, borderTopRightRadius: 0 }
+                      : {
+                          y: 0,
+                          // Si veníamos de expandida, animamos el alto de vuelta a
+                          // "auto" (encoge suave); si no, no controlamos el alto.
+                          height: grownH === "auto" ? "auto" : undefined,
+                          borderTopLeftRadius: 26,
+                          borderTopRightRadius: 26,
+                        }
+                  }
                   exit={{ y: "100%" }}
                   transition={{ type: "spring", damping: 34, stiffness: 340, mass: 0.9 }}
-                  drag="y"
+                  drag={expanded ? false : "y"}
                   dragControls={dragControls}
                   dragListener={false}
                   dragConstraints={{ top: 0, bottom: 0 }}
@@ -84,28 +142,47 @@ export function Sheet({
                   onDragEnd={(_, info) => {
                     if (info.offset.y > 110 || info.velocity.y > 650) onOpenChange(false);
                   }}
+                  onAnimationComplete={() => {
+                    // Solo cuando el alto llegó a su destino final (100dvh), no en
+                    // el frame intermedio que clona el alto de arranque.
+                    if (expanded && grownH != null && grownH === targetHRef.current) {
+                      onExpandComplete?.();
+                    }
+                  }}
                   style={{ maxWidth }}
                   className={
-                    "pointer-events-auto flex max-h-[92vh] w-full flex-col rounded-t-[26px] border-t border-cart-line bg-cart-bg-elev text-cart-ink " +
-                    "shadow-[0_-16px_50px_-18px_rgba(20,10,60,0.28)] lg:rounded-[26px] lg:border lg:shadow-[0_28px_70px_-20px_rgba(20,10,60,0.4)] " +
+                    "pointer-events-auto flex w-full flex-col border-cart-line bg-cart-bg-elev text-cart-ink " +
+                    (expanded
+                      ? "max-h-none border-t "
+                      : "max-h-[92vh] rounded-t-[26px] border-t shadow-[0_-16px_50px_-18px_rgba(20,10,60,0.28)] lg:rounded-[26px] lg:border lg:shadow-[0_28px_70px_-20px_rgba(20,10,60,0.4)] ") +
                     (className ?? "")
                   }
                 >
-                  {/* Asa = única zona que inicia el arrastre (el cuerpo scrollea). */}
-                  <div
-                    className="shrink-0 cursor-grab touch-none pt-3 active:cursor-grabbing"
-                    onPointerDown={(e) => dragControls.start(e)}
-                  >
-                    <div className="mx-auto h-1.5 w-9 rounded-full bg-cart-line-strong" />
-                  </div>
+                  {/* Asa = única zona que inicia el arrastre (el cuerpo scrollea).
+                      Se oculta al crecer (ya no es una hoja arrastrable). */}
+                  {!expanded && (
+                    <div
+                      className="shrink-0 cursor-grab touch-none pt-3 active:cursor-grabbing"
+                      onPointerDown={(e) => dragControls.start(e)}
+                    >
+                      <div className="mx-auto h-1.5 w-9 rounded-full bg-cart-line-strong" />
+                    </div>
+                  )}
 
                   <Dialog.Title className="sr-only">{title}</Dialog.Title>
                   {description && (
                     <Dialog.Description className="sr-only">{description}</Dialog.Description>
                   )}
 
-                  {/* Cuerpo scrolleable. */}
-                  <div className="min-h-0 flex-1 overflow-y-auto px-[22px] pb-2 pt-1">{children}</div>
+                  {/* Cuerpo scrolleable (x oculto: las transiciones de paso
+                      deslizan en horizontal y no deben generar scroll lateral).
+                      Expandida: respeta el notch arriba (ya no hay asa). */}
+                  <div
+                    className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-[22px] pb-2 pt-1"
+                    style={expanded ? { paddingTop: "max(env(safe-area-inset-top, 0px), 10px)" } : undefined}
+                  >
+                    {children}
+                  </div>
 
                   {footer && (
                     <div

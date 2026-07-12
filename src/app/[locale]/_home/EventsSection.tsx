@@ -69,7 +69,7 @@ function EventCard({ event }: { event: Event }) {
         href={`/events/${event.slug}` as any}
         className="block cursor-pointer overflow-hidden rounded-[14px] border border-cart-line bg-cart-bg-elev transition-[border-color,transform,box-shadow] duration-200 group-hover:-translate-y-0.5 group-hover:border-cart-line-strong group-hover:shadow-[0_10px_28px_-12px_rgba(20,10,60,0.25)]"
       >
-        <div className="relative w-full overflow-hidden" style={{ aspectRatio: "3/4" }}>
+        <div className="card-media relative w-full overflow-hidden aspect-[3/4]">
           {event.coverUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -184,8 +184,12 @@ export function EventsSection({
 
         {/* Pills de categoría — activo en morado SÓLIDO con texto blanco (como
             los filtros llenos de Joinnus/Teleticket), inactivo con hover
-            azulito. Nada de rellenos lavanda a medias. */}
-        <div className="flex flex-wrap gap-2 mb-5">
+            azulito. Nada de rellenos lavanda a medias.
+            En móvil (≤560px) se ocultan: ahí manda el strip sticky del header
+            (MobileCategoryStrip, ubicación + categoría), y repetir el filtro
+            por sección se lee como control roto/duplicado. En desktop el strip
+            está oculto, así que estos pills son el único filtro y se muestran. */}
+        <div className="flex flex-wrap gap-2 mb-5 max-[560px]:hidden">
           <button
             onClick={() => onCategoryChange(null)}
             className={`rounded-full px-4 py-1.5 text-[12.5px] font-semibold transition-colors duration-150 ${
@@ -228,9 +232,14 @@ export function EventsSection({
           grilla responsiva en vez de carrusel horizontal. */}
       <div
         className={
+          // En móvil (2 col): si el total es IMPAR, la última card queda sola en
+          // su fila → :last-child:nth-child(odd) la hace ocupar el ancho completo
+          // (col-span-2) y su flyer pasa a apaisado (16/10) para mantener ~la
+          // misma altura, no un portrait gigante. `max-sm` lo limita a móvil;
+          // en 3/4 columnas (sm+) no aplica. Todo con CSS, sin JS.
           framed
-            ? "grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4"
-            : "mx-auto grid max-w-[1320px] grid-cols-2 gap-3 px-[clamp(20px,4vw,56px)] sm:grid-cols-3 sm:gap-4 lg:grid-cols-4"
+            ? "grid grid-cols-2 gap-3 max-sm:[&>*:last-child:nth-child(odd)]:col-span-2 max-sm:[&>*:last-child:nth-child(odd)_.card-media]:aspect-[16/10] sm:grid-cols-3 sm:gap-4"
+            : "mx-auto grid max-w-[1320px] grid-cols-2 gap-3 px-[clamp(20px,4vw,56px)] max-sm:[&>*:last-child:nth-child(odd)]:col-span-2 max-sm:[&>*:last-child:nth-child(odd)_.card-media]:aspect-[16/10] sm:grid-cols-3 sm:gap-4 lg:grid-cols-4"
         }
       >
         {events.isLoading && Array.from({ length: 8 }).map((_, i) => <CardSkeleton key={i} />)}
@@ -250,7 +259,7 @@ export function EventsSection({
 
   if (framed) {
     return (
-      <section ref={sectionRef} className="min-w-0">
+      <section ref={sectionRef} className="min-w-0 scroll-mt-[96px] sm:scroll-mt-[80px]">
         <div className="rounded-[18px] border border-cart-line bg-cart-bg-elev/50 p-4 sm:p-5">{body}</div>
       </section>
     );
@@ -259,7 +268,7 @@ export function EventsSection({
   return (
     <section
       ref={sectionRef}
-      className={compactHeader ? "pt-3 pb-[clamp(32px,4vw,56px)]" : "pt-[clamp(20px,3vw,32px)] pb-[clamp(32px,4vw,56px)]"}
+      className={`scroll-mt-[96px] sm:scroll-mt-[80px] ${compactHeader ? "pt-3 pb-[clamp(32px,4vw,56px)]" : "pt-[clamp(20px,3vw,32px)] pb-[clamp(32px,4vw,56px)]"}`}
     >
       {body}
     </section>

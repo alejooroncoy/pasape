@@ -5,7 +5,7 @@ import { motion } from "motion/react";
 import { Link } from "@/i18n/navigation";
 import { useBrowseEvents } from "@/lib/events/hooks/useEvents";
 import { optimizeImageUrl } from "@/lib/images/optimizeUrl";
-import { eventDateTime } from "@/lib/_shared/format";
+import { eventDateTime, shortEventDateTime } from "@/lib/_shared/format";
 
 // Auto-avance del carrusel: la barra (.hero-progress-bar, en globals.css) llena
 // de 0 a 100 % en este tiempo y onAnimationEnd pasa al siguiente evento.
@@ -77,56 +77,47 @@ export function FeaturedBanner() {
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.35, ease: [0.32, 0.72, 0, 1] }}
       >
-        <div className="flex items-center gap-3.5 sm:gap-[clamp(24px,4vw,48px)]">
+        {/* Toda la card es el enlace al evento (sin botón): un tap en cualquier
+            parte lleva a la página del evento. La afición "Ver evento →" (texto,
+            no botón relleno) señala que es clickeable sin saturar. */}
+        <Link
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          href={`/events/${ev.slug}` as any}
+          className="group/card flex items-center gap-3.5 sm:gap-[clamp(24px,4vw,48px)]"
+        >
           {ev.coverUrl && (
-            <Link
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              href={`/events/${ev.slug}` as any}
-              className="flex-shrink-0"
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={optimizeImageUrl(ev.coverUrl, "hero-lcp") ?? ev.coverUrl}
-                alt={ev.title}
-                fetchPriority="high"
-                className="h-[112px] w-auto rounded-[10px] object-cover shadow-[0_14px_34px_-14px_rgba(50,30,120,0.45)] sm:h-[clamp(150px,19vw,235px)] sm:rounded-[12px]"
-              />
-            </Link>
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={optimizeImageUrl(ev.coverUrl, "hero-lcp") ?? ev.coverUrl}
+              alt={ev.title}
+              fetchPriority="high"
+              className="h-[112px] w-auto flex-shrink-0 rounded-[10px] object-cover shadow-[0_14px_34px_-14px_rgba(50,30,120,0.45)] transition-transform duration-300 group-hover/card:-translate-y-0.5 sm:h-[clamp(150px,19vw,235px)] sm:rounded-[12px]"
+            />
           )}
 
           <div className="relative min-w-0 flex-1 py-0.5 sm:py-1">
-            <span className="mb-1.5 inline-flex items-center gap-1.5 rounded-full bg-cart-accent/12 px-2.5 py-1 text-[10.5px] font-bold text-cart-accent sm:mb-3 sm:px-3 sm:py-1.5 sm:text-[clamp(11px,1.1vw,12.5px)]">
+            <span className="mb-1.5 inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-cart-accent/12 px-2.5 py-1 text-[10.5px] font-bold text-cart-accent sm:mb-3 sm:px-3 sm:py-1.5 sm:text-[clamp(11px,1.1vw,12.5px)]">
               <span className="size-1.5 rounded-full bg-cart-accent" aria-hidden />
-              {eventDateTime(ev.startsAt, ev.timezone)}
+              {/* Móvil: formato corto (una sola línea, no envuelve). Desktop: largo. */}
+              <span className="sm:hidden">{shortEventDateTime(ev.startsAt, ev.timezone)}</span>
+              <span className="hidden sm:inline">{eventDateTime(ev.startsAt, ev.timezone)}</span>
             </span>
             <h2 className="m-0 mb-0.5 line-clamp-2 font-sans text-[17.5px] font-bold leading-[1.1] tracking-[-0.02em] text-cart-ink sm:mb-1.5 sm:text-[clamp(22px,3vw,40px)] sm:leading-[1.05] sm:tracking-[-0.03em]">
               {ev.title}
             </h2>
             {ev.venue && (
-              <p className="m-0 line-clamp-1 text-[12px] text-cart-ink-3 sm:mb-5 sm:text-[clamp(12.5px,1.3vw,14.5px)]">
-                {ev.venue}
+              <p className="m-0 flex items-center gap-1 text-[12px] text-cart-ink-3 sm:gap-1.5 sm:text-[clamp(12.5px,1.3vw,14.5px)]">
+                <PinIcon />
+                <span className="line-clamp-1">{ev.venue}</span>
               </p>
             )}
-            {/* CTA inline solo en desktop; en móvil va full-width abajo */}
-            <Link
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              href={`/events/${ev.slug}` as any}
-              className="hidden items-center gap-2 rounded-full bg-cart-accent px-[clamp(16px,2vw,24px)] py-[clamp(9px,1.2vw,12px)] text-[clamp(12.5px,1.3vw,14px)] font-bold text-white shadow-[0_8px_20px_-8px_var(--color-cart-accent-glow-strong)] transition-transform hover:-translate-y-px sm:inline-flex"
-            >
-              Comprar entradas
-              <ArrowIcon />
-            </Link>
+            <span className="mt-2.5 inline-flex items-center gap-1.5 text-[12.5px] font-bold text-cart-accent sm:mt-4 sm:text-[clamp(12.5px,1.3vw,14px)]">
+              Ver evento
+              <span className="transition-transform duration-200 group-hover/card:translate-x-0.5">
+                <ArrowIcon />
+              </span>
+            </span>
           </div>
-        </div>
-
-        {/* CTA móvil: full-width, cómodo para el pulgar */}
-        <Link
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          href={`/events/${ev.slug}` as any}
-          className="mt-3.5 flex w-full items-center justify-center gap-2 rounded-full bg-cart-accent py-3 text-[13.5px] font-bold text-white shadow-[0_8px_20px_-8px_var(--color-cart-accent-glow-strong)] sm:hidden"
-        >
-          Comprar entradas
-          <ArrowIcon />
         </Link>
       </motion.div>
 
@@ -169,6 +160,27 @@ export function FeaturedBanner() {
         </div>
       )}
     </div>
+  );
+}
+
+function PinIcon() {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 14 14"
+      fill="none"
+      aria-hidden
+      className="shrink-0 text-cart-ink-4 sm:size-[13px]"
+    >
+      <path
+        d="M7 1.75c-2.14 0-3.88 1.7-3.88 3.8 0 2.66 3.88 6.7 3.88 6.7s3.88-4.04 3.88-6.7c0-2.1-1.74-3.8-3.88-3.8Z"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinejoin="round"
+      />
+      <circle cx="7" cy="5.5" r="1.4" stroke="currentColor" strokeWidth="1.3" />
+    </svg>
   );
 }
 

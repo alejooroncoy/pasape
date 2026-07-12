@@ -54,11 +54,11 @@ export function HomeClient({
   const [search, setSearch] = useState("");
   const eventsSectionRef = useRef<HTMLElement>(null);
 
+  // Seleccionar categoría solo filtra en el sitio — sin auto-scroll. El salto
+  // hacia la sección se sentía brusco en móvil; el usuario ya ve la grilla
+  // reaccionar sin que la página se mueva.
   const selectCategoryFromNav = (cat: EventCategory | null) => {
     setCategory(cat);
-    setTimeout(() => {
-      eventsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 50);
   };
 
   const lastSearchTracked = useRef("");
