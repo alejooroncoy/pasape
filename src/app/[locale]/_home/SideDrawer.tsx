@@ -70,7 +70,7 @@ export function SideDrawer({ user, open, onClose, onSignIn, onSelectCategory }: 
             exit={{ x: "100%" }}
             transition={{ type: "spring", damping: 30, stiffness: 320 }}
             aria-label="Menú"
-            className="fixed inset-y-0 right-0 z-[81] flex w-[min(380px,86vw)] flex-col overflow-hidden border-l border-cart-line bg-cart-bg shadow-[-30px_0_60px_-20px_rgba(0,0,0,0.6)]"
+            className="home-light fixed inset-y-0 right-0 z-[81] flex w-[min(380px,86vw)] flex-col overflow-hidden border-l border-cart-line bg-cart-bg shadow-[-30px_0_60px_-20px_rgba(0,0,0,0.6)]"
           >
             <div className="flex flex-shrink-0 items-center justify-between border-b border-cart-line px-[22px] py-[18px]">
               <Link href="/" className="inline-flex items-center gap-2.5 text-[19px] font-semibold tracking-[-0.01em]">
