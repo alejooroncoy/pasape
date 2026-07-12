@@ -10,6 +10,7 @@ import { clientEvents } from "@/lib/analytics/clientEvents";
 import { api } from "@/lib/_shared/api-client";
 import { eventDatePillParts, eventDateTime } from "@/lib/_shared/format";
 import { UserHeader } from "@/app/[locale]/_home/UserHeader";
+import { SignInDrawer } from "@/app/[locale]/_home/SignInDrawer";
 import { useEvent } from "@/lib/events/hooks/useEvents";
 import { useSaveEvent } from "@/lib/identity/hooks/useSaveEvent";
 import { useFollow } from "@/lib/identity/hooks/useFollow";
@@ -668,37 +669,45 @@ function VerifiedSeal() {
 }
 
 // Botón "Seguir" real (useFollow). Invitado → login-gate en el sitio y vuelve al
-// evento (mismo patrón que la vitrina: `/login?next=`). Antes lo mandaba a la
-// vitrina de la org, un desvío confuso: clicabas "Seguir" y aterrizabas en otra
-// página sin haber seguido nada.
+// evento. Invitado → abre el SignInDrawer (bottom-sheet en móvil, modal en
+// desktop) sin salir de la página; al loguear vuelve acá (redirectTo). Antes
+// navegaba a la vitrina de la org, un desvío confuso: clicabas "Seguir" y
+// aterrizabas en otra página sin haber seguido nada.
 function FollowButton({ org }: { org: ShowcaseOrg }) {
-  const router = useRouter();
   const pathname = usePathname();
   const me = useCurrentUser();
   const loggedIn = !!me.data?.user;
   const { isFollowing, toggle, isPending } = useFollow(org.id);
+  const [signInOpen, setSignInOpen] = useState(false);
 
   return (
-    <button
-      type="button"
-      onClick={() => {
-        if (!loggedIn) {
-          router.push(`/login?next=${pathname}` as never);
-          return;
+    <>
+      <button
+        type="button"
+        onClick={() => {
+          if (!loggedIn) {
+            setSignInOpen(true);
+            return;
+          }
+          toggle();
+        }}
+        disabled={isPending}
+        aria-pressed={isFollowing}
+        className={
+          "flex-none rounded-lg px-4 py-2 text-[12.5px] font-semibold transition disabled:opacity-60 " +
+          (isFollowing
+            ? "border border-cart-line bg-cart-bg-elev-2 text-cart-ink-3"
+            : "border border-cart-line-strong bg-cart-bg text-cart-ink hover:border-cart-ink-4")
         }
-        toggle();
-      }}
-      disabled={isPending}
-      aria-pressed={isFollowing}
-      className={
-        "flex-none rounded-lg px-4 py-2 text-[12.5px] font-semibold transition disabled:opacity-60 " +
-        (isFollowing
-          ? "border border-cart-line bg-cart-bg-elev-2 text-cart-ink-3"
-          : "border border-cart-line-strong bg-cart-bg text-cart-ink hover:border-cart-ink-4")
-      }
-    >
-      {isFollowing ? "Siguiendo" : "Seguir"}
-    </button>
+      >
+        {isFollowing ? "Siguiendo" : "Seguir"}
+      </button>
+      <SignInDrawer
+        open={signInOpen}
+        onClose={() => setSignInOpen(false)}
+        redirectTo={pathname}
+      />
+    </>
   );
 }
 
