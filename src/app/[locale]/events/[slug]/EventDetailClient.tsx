@@ -493,7 +493,6 @@ export function EventDetailClient({ slug }: { slug: string }) {
         slug={slug}
         items={checkoutItems}
         promo={promo}
-        coverUrl={event.coverUrl}
         accent={palette?.accent}
         summaryLabel={selectionLabel}
         fallbackTotalCents={liveTotalCents}

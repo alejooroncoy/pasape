@@ -27,7 +27,6 @@ import {
 } from "@/lib/_shared/checkoutSessionStorage";
 import { persistOrderToken, processingQuery } from "@/lib/tickets/orderTokenStorage";
 import { formatPrice } from "@/lib/_shared/format";
-import { optimizeImageUrl } from "@/lib/images/optimizeUrl";
 import { DatosForm } from "./DatosForm";
 
 type CheckoutItem = { ticketTypeId: string; qty: number };
@@ -39,7 +38,6 @@ export function CheckoutSheet({
   slug,
   items,
   promo,
-  coverUrl,
   accent,
   summaryLabel,
   fallbackTotalCents,
@@ -50,7 +48,6 @@ export function CheckoutSheet({
   slug: string;
   items: CheckoutItem[];
   promo: string | null;
-  coverUrl: string | null;
   accent?: string | null;
   /** "2 entradas · 1 box" — resumen legible de lo elegido. */
   summaryLabel: string;
@@ -185,33 +182,20 @@ export function CheckoutSheet({
         ? "Confirmar · Gratis"
         : `Ir a pagar · ${formatPrice(totalCents, "PEN")}`;
 
-  const blurred = coverUrl ? optimizeImageUrl(coverUrl, "card") ?? coverUrl : null;
-
   return (
     <div
       className="fixed inset-0 z-[80]"
       aria-hidden={!open}
       style={{ pointerEvents: open ? "auto" : "none" }}
     >
-      {/* Fondo: flyer del evento difuminado + scrim (identidad viva detrás). */}
+      {/* Mismo scrim centralizado que todos los modales (app-scrim). */}
       <div
         onClick={onClose}
         className={
-          "absolute inset-0 transition-opacity duration-300 " +
+          "absolute inset-0 app-scrim transition-opacity duration-300 " +
           (open ? "opacity-100" : "opacity-0")
         }
-      >
-        {blurred && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={blurred}
-            alt=""
-            aria-hidden
-            className="absolute inset-0 h-full w-full scale-110 object-cover blur-2xl"
-          />
-        )}
-        <div className="absolute inset-0" style={{ background: "var(--overlay-scrim)" }} />
-      </div>
+      />
 
       <motion.div
         role="dialog"
