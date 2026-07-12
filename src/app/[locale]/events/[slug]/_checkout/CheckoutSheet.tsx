@@ -14,8 +14,8 @@
 // mutación (`useBuyTickets`) que /buy — no duplica pricing ni validación.
 
 import { useEffect, useRef, useState } from "react";
-import { motion, useDragControls } from "motion/react";
 import { useRouter } from "@/i18n/navigation";
+import { Sheet } from "@/components/ui/Sheet";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { useBuyTickets, useOrderQuote } from "@/lib/tickets/hooks/useTickets";
 import type { OrderQuote } from "@/server/tickets/domain/Ticket";
@@ -69,7 +69,6 @@ export function CheckoutSheet({
   const [guestEmail, setGuestEmail] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const dragControls = useDragControls();
   const submittingRef = useRef(false);
 
   // Al abrir: pide el quote autoritativo para mostrar el total exacto.
@@ -94,16 +93,6 @@ export function CheckoutSheet({
     if (u.phone) setGuestPhone((prev) => prev || u.phone!);
     if (u.email) setGuestEmail((prev) => prev || u.email!);
   }, [me.data?.user]);
-
-  // Escape cierra.
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
 
   // Validación idéntica a /buy.
   const emailOk = /.+@.+\..+/.test(guestEmail.trim());
@@ -183,83 +172,14 @@ export function CheckoutSheet({
         : `Ir a pagar · ${formatPrice(totalCents, "PEN")}`;
 
   return (
-    <div
-      className="fixed inset-0 z-[80]"
-      aria-hidden={!open}
-      style={{ pointerEvents: open ? "auto" : "none" }}
-    >
-      {/* Mismo scrim centralizado que todos los modales (app-scrim). */}
-      <div
-        onClick={onClose}
-        className={
-          "absolute inset-0 app-scrim transition-opacity duration-300 " +
-          (open ? "opacity-100" : "opacity-0")
-        }
-      />
-
-      <motion.div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Completa tus datos"
-        className="absolute inset-x-0 bottom-0 mx-auto flex max-h-[92vh] w-full max-w-[520px] flex-col rounded-t-[24px] border-t border-cart-line bg-cart-bg text-cart-ink shadow-[0_-24px_60px_-20px_rgba(20,10,60,0.5)]"
-        initial={false}
-        animate={{ y: open ? "0%" : "100%" }}
-        transition={{ type: "spring", stiffness: 460, damping: 40 }}
-        drag="y"
-        dragControls={dragControls}
-        dragListener={false}
-        dragConstraints={{ top: 0, bottom: 0 }}
-        dragElastic={{ top: 0, bottom: 0.6 }}
-        onDragEnd={(_, info) => {
-          if (info.offset.y > 110 || info.velocity.y > 650) onClose();
-        }}
-      >
-        {/* Header = zona de arrastre (el cuerpo scrollea normal). */}
-        <div
-          className="shrink-0 cursor-grab touch-none px-5 pt-2 active:cursor-grabbing"
-          onPointerDown={(e) => dragControls.start(e)}
-        >
-          <div className="mx-auto mb-3 h-1.5 w-9 rounded-full bg-cart-line-strong" />
-          {/* Resumen de lo que se lleva + total (el total lo pisa el quote). */}
-          <div className="flex items-center justify-between gap-3 pb-3">
-            <span className="text-[13px] text-cart-ink-3">{summaryLabel}</span>
-            <span
-              className="text-[15px] font-bold"
-              style={{ color: accent ?? "var(--color-cart-accent)" }}
-            >
-              {isFree ? "Gratis" : formatPrice(totalCents, "PEN")}
-            </span>
-          </div>
-        </div>
-
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 pt-2">
-          <DatosForm
-            isLogged={isLogged}
-            userIdent={me.data?.user?.email ?? me.data?.user?.phone ?? null}
-            isForeigner={isForeigner}
-            setIsForeigner={setIsForeigner}
-            guestDni={guestDni}
-            setGuestDni={setGuestDni}
-            guestName={guestName}
-            setGuestName={setGuestName}
-            guestPhone={guestPhone}
-            setGuestPhone={setGuestPhone}
-            guestEmail={guestEmail}
-            setGuestEmail={setGuestEmail}
-          />
-          {submitError && (
-            <p className="mt-4 text-center text-[12.5px] text-rose-300">
-              No pudimos crear tu pedido. Revisa tu conexión e intenta de nuevo.
-            </p>
-          )}
-          <div aria-hidden className="h-4" />
-        </div>
-
-        {/* CTA fijo al pie de la hoja. */}
-        <div
-          className="shrink-0 border-t border-cart-line px-5 pt-3"
-          style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 14px)" }}
-        >
+    <Sheet
+      open={open}
+      onOpenChange={(o) => !o && onClose()}
+      title="Completa tus datos"
+      description="Con esto armamos tu entrada y te enviamos el QR."
+      maxWidth={520}
+      footer={
+        <>
           <button
             type="button"
             onClick={submit}
@@ -273,8 +193,39 @@ export function CheckoutSheet({
               El pago (Yape o tarjeta) es el siguiente paso.
             </p>
           )}
-        </div>
-      </motion.div>
-    </div>
+        </>
+      }
+    >
+      {/* Resumen de lo que se lleva + total (el total lo pisa el quote). */}
+      <div className="mb-1 flex items-center justify-between gap-3 pb-1">
+        <span className="text-[13px] text-cart-ink-3">{summaryLabel}</span>
+        <span
+          className="text-[15px] font-bold"
+          style={{ color: accent ?? "var(--color-cart-accent)" }}
+        >
+          {isFree ? "Gratis" : formatPrice(totalCents, "PEN")}
+        </span>
+      </div>
+
+      <DatosForm
+        isLogged={isLogged}
+        userIdent={me.data?.user?.email ?? me.data?.user?.phone ?? null}
+        isForeigner={isForeigner}
+        setIsForeigner={setIsForeigner}
+        guestDni={guestDni}
+        setGuestDni={setGuestDni}
+        guestName={guestName}
+        setGuestName={setGuestName}
+        guestPhone={guestPhone}
+        setGuestPhone={setGuestPhone}
+        guestEmail={guestEmail}
+        setGuestEmail={setGuestEmail}
+      />
+      {submitError && (
+        <p className="mt-4 text-center text-[12.5px] text-rose-300">
+          No pudimos crear tu pedido. Revisa tu conexión e intenta de nuevo.
+        </p>
+      )}
+    </Sheet>
   );
 }

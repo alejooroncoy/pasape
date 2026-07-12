@@ -82,8 +82,8 @@ export function DatosForm({
         title="Tus datos"
         hint={
           isLogged
-            ? "De tu cuenta — edítalos si algo cambió"
-            : "Con esto armamos tu entrada y te enviamos el QR"
+            ? "De tu cuenta — edítalos si algo cambió."
+            : "Con estos datos generamos tu entrada y te enviamos el QR."
         }
       >
         <div className="flex flex-col gap-3">
@@ -246,9 +246,11 @@ export function Section({
 }) {
   return (
     <section>
-      <div className="mb-3 flex items-baseline justify-between">
-        <h2 className="text-[18px] font-bold tracking-[-0.01em]">{title}</h2>
-        {hint && <span className="text-[11.5px] text-cart-ink-3">{hint}</span>}
+      <div className="mb-3">
+        <h2 className="text-[19px] font-bold tracking-[-0.01em]">{title}</h2>
+        {hint && (
+          <p className="mt-0.5 text-[12.5px] leading-snug text-cart-ink-3">{hint}</p>
+        )}
       </div>
       {children}
     </section>
