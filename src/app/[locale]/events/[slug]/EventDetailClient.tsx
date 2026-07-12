@@ -1357,7 +1357,7 @@ function BoxPickerSheet({
       <div
         onClick={onClose}
         className={
-          "absolute inset-0 bg-[rgba(12,7,20,0.45)] transition-opacity duration-300 " +
+          "absolute inset-0 bg-[var(--overlay-scrim)] transition-opacity duration-300 " +
           (open ? "opacity-100" : "opacity-0")
         }
       />

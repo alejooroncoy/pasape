@@ -15,7 +15,7 @@ type Props = {
 export const Sheet = ({ open, onOpenChange, title, children, side = "bottom" }: Props) => (
   <Dialog.Root open={open} onOpenChange={onOpenChange}>
     <Dialog.Portal>
-      <Dialog.Overlay className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm data-[state=open]:animate-in data-[state=open]:fade-in" />
+      <Dialog.Overlay className="fixed inset-0 z-40 app-scrim data-[state=open]:animate-in data-[state=open]:fade-in" />
       <Dialog.Content
         className={cn(
           "fixed z-50 flex flex-col gap-4 bg-(--color-bg-elevated) p-6 shadow-2xl",

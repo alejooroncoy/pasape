@@ -475,7 +475,7 @@ function ComposerSheet({
 
   return (
     <>
-      <div className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm" onClick={onClose} aria-hidden />
+      <div className="fixed inset-0 z-[80] app-scrim" onClick={onClose} aria-hidden />
       <div
         role="dialog"
         aria-modal="true"

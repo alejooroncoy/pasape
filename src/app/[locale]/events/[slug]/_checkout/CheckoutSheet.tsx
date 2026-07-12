@@ -210,7 +210,7 @@ export function CheckoutSheet({
             className="absolute inset-0 h-full w-full scale-110 object-cover blur-2xl"
           />
         )}
-        <div className="absolute inset-0 bg-[rgba(10,6,18,0.6)]" />
+        <div className="absolute inset-0" style={{ background: "var(--overlay-scrim)" }} />
       </div>
 
       <motion.div

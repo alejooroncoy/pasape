@@ -289,7 +289,7 @@ export function OrgShell({ children }: { children: ReactNode }) {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.18 }}
-              className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden"
+              className="fixed inset-0 z-40 app-scrim lg:hidden"
               onClick={() => setMobileNavOpen(false)}
               aria-hidden
             />

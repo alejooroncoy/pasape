@@ -52,7 +52,7 @@ export function SignInDrawer({ open, onClose, redirectTo }: Props) {
           exit={{ opacity: 0 }}
           transition={{ duration: 0.18 }}
           onClick={onClose}
-          className="fixed inset-0 z-[90] flex items-end justify-center bg-black/60 backdrop-blur-sm lg:items-center"
+          className="fixed inset-0 z-[90] flex items-end justify-center app-scrim lg:items-center"
         >
           <motion.div
             initial={{ y: "100%" }}

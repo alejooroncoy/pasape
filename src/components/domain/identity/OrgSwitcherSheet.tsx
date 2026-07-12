@@ -396,7 +396,7 @@ export const OrgSwitcherSheet = ({
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.18 }}
-                className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm"
+                className="fixed inset-0 z-[60] app-scrim"
               />
             </Dialog.Overlay>
             <Dialog.Content asChild aria-describedby={undefined}>

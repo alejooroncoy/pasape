@@ -37,7 +37,7 @@ export function AccountSheet({ open, onClose }: { open: boolean; onClose: () => 
             transition={{ duration: 0.18 }}
             onClick={onClose}
             aria-hidden
-            className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm lg:hidden"
+            className="fixed inset-0 z-[80] app-scrim lg:hidden"
           />
           <motion.div
             key="sheet"

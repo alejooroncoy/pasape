@@ -79,11 +79,11 @@ export function DatosForm({
   return (
     <div className="flex flex-col gap-8">
       <Section
-        title={isLogged ? "Tus datos" : "¿Quién va?"}
+        title="Tus datos"
         hint={
           isLogged
             ? "De tu cuenta — edítalos si algo cambió"
-            : "Para enviarte el QR por WhatsApp"
+            : "Con esto armamos tu entrada y te enviamos el QR"
         }
       >
         <div className="flex flex-col gap-3">

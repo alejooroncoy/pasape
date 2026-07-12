@@ -16,6 +16,11 @@
   --color-danger: #ff4d5e;
   --color-warning: #ffce3b;
 
+  /* Scrim único de TODOS los modales/drawers (clase .app-scrim). Cambiarlo acá
+     se propaga a todo. Más claro que el black/60 anterior (tinte morado, no
+     negro plano), acorde a la paleta clara — deja ver el contenido detrás. */
+  --overlay-scrim: rgba(20, 15, 40, 0.38);
+
   /* Tokens específicos del landing Cartelera v2 (escala visual diferente). */
   --color-cart-bg: #0a0a0f;
   --color-cart-bg-elev: #12121a;
@@ -61,6 +66,12 @@ body:has(.home-light) {
 
 * {
   box-sizing: border-box;
+}
+
+/* Scrim centralizado de modales/drawers. Un solo lugar → un solo estilo para
+   todos. Reemplaza el disperso `bg-black/60 backdrop-blur-sm`. */
+.app-scrim {
+  background: var(--overlay-scrim);
 }
 
 button, [role="button"], a {

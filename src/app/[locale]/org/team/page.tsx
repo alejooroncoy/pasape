@@ -1081,7 +1081,7 @@ function Sheet({
           exit={{ opacity: 0 }}
           onClick={onClose}
           aria-hidden
-          className="fixed inset-0 z-80 bg-black/60 backdrop-blur-sm"
+          className="fixed inset-0 z-80 app-scrim"
         />
         <motion.div
           key="sh-desktop"
@@ -1136,7 +1136,7 @@ function Sheet({
         exit={{ opacity: 0 }}
         onClick={onClose}
         aria-hidden
-        className="fixed inset-0 z-80 bg-black/60 backdrop-blur-sm"
+        className="fixed inset-0 z-80 app-scrim"
       />
       <motion.div
         key="sh-mobile"

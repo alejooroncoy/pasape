@@ -331,7 +331,7 @@ function EditNumberRow({
               exit={{ opacity: 0 }}
               onClick={close}
               aria-hidden
-              className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm"
+              className="fixed inset-0 z-[80] app-scrim"
             />
             <motion.div
               role="dialog"
@@ -425,7 +425,7 @@ function ConfirmSheet({
         exit={{ opacity: 0 }}
         onClick={onCancel}
         aria-hidden
-        className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm"
+        className="fixed inset-0 z-[80] app-scrim"
       />
       <motion.div
         key="sh"
@@ -484,7 +484,7 @@ function ConfirmCloseSheet({
         exit={{ opacity: 0 }}
         onClick={onCancel}
         aria-hidden
-        className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm"
+        className="fixed inset-0 z-[80] app-scrim"
       />
       <motion.div
         key="close-sh"

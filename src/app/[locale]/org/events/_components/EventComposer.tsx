@@ -2186,7 +2186,7 @@ function Sheet({
         transition={{ duration: 0.18 }}
         onClick={onClose}
         aria-hidden
-        className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm"
+        className="fixed inset-0 z-[100] app-scrim"
       />
       <motion.div
         key="sh"

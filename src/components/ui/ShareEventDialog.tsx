@@ -81,7 +81,7 @@ export function ShareEventDialog({
             exit={{ opacity: 0 }}
             onClick={onClose}
             aria-hidden
-            className="fixed inset-0 z-90 bg-black/60 backdrop-blur-sm"
+            className="fixed inset-0 z-90 app-scrim"
           />
           <motion.div
             key="dlg"
