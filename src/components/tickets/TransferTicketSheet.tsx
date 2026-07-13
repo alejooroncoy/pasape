@@ -48,7 +48,7 @@ export function TransferTicketSheet({
     >
       <h2 className="text-[20px] font-bold tracking-[-0.02em]">Enviar entrada</h2>
       <p className="mt-2 text-[13px] leading-normal text-cart-ink-3">
-        Le llega por WhatsApp. La entrada <span className="font-semibold text-white">sigue siendo tuya</span> hasta
+        Le llega por WhatsApp. La entrada <span className="font-semibold text-cart-ink">sigue siendo tuya</span> hasta
         que la abra y la reclame.
       </p>
 
@@ -78,11 +78,11 @@ export function TransferTicketSheet({
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
               <path d="M3 8l3.5 3.5L13 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
-            Envío a <strong className="text-white">{recipientLookup.result.displayHint}</strong>
+            Envío a <strong className="text-cart-ink">{recipientLookup.result.displayHint}</strong>
           </span>
         ) : recipientDigits.length >= 9 ? (
           <span className="text-cart-ink-3">
-            Le llegará al <strong className="text-white">{formatPhone(recipientDigits)}</strong> por WhatsApp.
+            Le llegará al <strong className="text-cart-ink">{formatPhone(recipientDigits)}</strong> por WhatsApp.
           </span>
         ) : null}
       </div>

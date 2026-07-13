@@ -57,7 +57,7 @@ export function HolderEditSheet({
 
   return (
     <TicketActionSurface open={open} onClose={onClose} anchorRef={anchorRef}>
-      <p className="text-[15px] font-bold text-white">
+      <p className="text-[15px] font-bold text-cart-ink">
         {variant === "gift" ? "Poner datos del titular" : "Tus datos en la puerta"}
       </p>
       <p className="text-[12px] text-cart-ink-3">
@@ -77,7 +77,7 @@ export function HolderEditSheet({
             onChange={(e) => setName(sanitizePersonNameLive(e.target.value))}
             placeholder="Ej. María García"
             autoFocus
-            className="mt-1 w-full rounded-xl border border-cart-line bg-cart-bg px-3 py-2.5 text-[14px] text-white outline-none focus:border-cart-accent/60"
+            className="mt-1 w-full rounded-xl border border-cart-line bg-cart-bg px-3 py-2.5 text-[14px] text-cart-ink outline-none focus:border-cart-accent/60"
           />
         </div>
         <div>
@@ -91,14 +91,14 @@ export function HolderEditSheet({
             Es extranjero (no tiene DNI)
           </label>
           <label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-cart-ink-3">
-            {isForeigner ? "Pasaporte / documento" : "DNI"} <span className="text-white/25">(opcional)</span>
+            {isForeigner ? "Pasaporte / documento" : "DNI"} <span className="text-cart-ink-4">(opcional)</span>
           </label>
           <input
             value={dni}
             onChange={(e) => setDni(sanitizeDocument(e.target.value, isForeigner))}
             inputMode={isForeigner ? "text" : "numeric"}
             placeholder={isForeigner ? "AB123456" : currentDniLast2 ? `•••••• ${currentDniLast2}` : "8 dígitos"}
-            className="mt-1 w-full rounded-xl border border-cart-line bg-cart-bg px-3 py-2.5 text-[14px] text-white outline-none focus:border-cart-accent/60"
+            className="mt-1 w-full rounded-xl border border-cart-line bg-cart-bg px-3 py-2.5 text-[14px] text-cart-ink outline-none focus:border-cart-accent/60"
           />
           {!dniValid && (
             <p className="mt-1 text-[11px] text-red-400">
