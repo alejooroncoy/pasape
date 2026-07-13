@@ -20,7 +20,7 @@
 
 import * as Dialog from "@radix-ui/react-dialog";
 import { AnimatePresence, motion, useDragControls } from "motion/react";
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 type Props = {
   open: boolean;
@@ -169,11 +169,13 @@ export function Sheet({
                       onExpandComplete?.();
                     }
                   }}
-                  // Al crecer a pantalla completa (móvil) ocupa el 100% del ancho
-                  // — el maxWidth solo aplica a la hoja/modal normal, no al full-screen.
-                  style={{ maxWidth: growFull ? undefined : maxWidth }}
+                  // El maxWidth SOLO aplica al modal de desktop (lg): en móvil la
+                  // hoja es un bottom-sheet a ancho completo (borde a borde), tanto
+                  // normal como al crecer a pantalla completa. `--sheet-mw` alimenta
+                  // el cap de desktop vía Tailwind arbitrario.
+                  style={{ "--sheet-mw": `${maxWidth}px` } as CSSProperties}
                   className={
-                    "pointer-events-auto flex w-full flex-col border-cart-line bg-cart-bg-elev text-cart-ink " +
+                    "pointer-events-auto flex w-full flex-col border-cart-line bg-cart-bg-elev text-cart-ink lg:max-w-[var(--sheet-mw)] " +
                     (growFull
                       ? "max-h-none border-t "
                       : "max-h-[92vh] rounded-t-[26px] border-t shadow-[0_-16px_50px_-18px_rgba(20,10,60,0.28)] lg:rounded-[26px] lg:border lg:shadow-[0_28px_70px_-20px_rgba(20,10,60,0.4)] ") +
