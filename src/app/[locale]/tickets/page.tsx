@@ -12,6 +12,8 @@ import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { useBoxForTicket } from "@/lib/boxes/hooks/useBoxes";
 import { LoginGate } from "@/components/ui/LoginGate";
 import { TicketActionSurface } from "@/components/tickets/TicketActionSurface";
+import { TransferTicketSheet } from "@/components/tickets/TransferTicketSheet";
+import { HolderEditSheet } from "@/components/tickets/HolderEditSheet";
 import { useOnline } from "@/lib/_shared/useOnline";
 import { formatDate, eventDatePillParts } from "@/lib/_shared/format";
 import { optimizeImageUrl } from "@/lib/images/optimizeUrl";
@@ -24,18 +26,23 @@ function fallbackGradient(ticket: WalletTicket): string {
   return "linear-gradient(150deg, rgba(124,58,237,0.55), rgba(124,58,237,0.12))";
 }
 
-// Paleta de gradientes para avatares: determinística por posición, para que la
-// misma persona salga siempre del mismo color (sin estado ni cálculo de negocio).
-const AVATAR_GRADIENTS = [
-  "linear-gradient(135deg,#7c3aed,#4f6df5)",
-  "linear-gradient(135deg,#0ea5e9,#6366f1)",
-  "linear-gradient(135deg,#ec4899,#8b5cf6)",
-  "linear-gradient(135deg,#22c55e,#0ea5e9)",
-  "linear-gradient(135deg,#f59e0b,#ef4444)",
-  "linear-gradient(135deg,#ff8fab,#ec4899)",
+// Avatares: color plano sólido derivado del nombre (estilo Google Contactos),
+// no gradientes — los degradados arcoíris se leían como plantilla de IA. La misma
+// persona sale siempre del mismo color (determinístico, sin estado).
+const AVATAR_COLORS = [
+  "#1a73e8", // azul
+  "#d93025", // rojo
+  "#188038", // verde
+  "#e37400", // ámbar
+  "#8430ce", // morado
+  "#12805c", // teal
+  "#c2185b", // rosa
+  "#3949ab", // índigo
 ];
-function avatarGradient(seed: number): string {
-  return AVATAR_GRADIENTS[((seed % AVATAR_GRADIENTS.length) + AVATAR_GRADIENTS.length) % AVATAR_GRADIENTS.length];
+function avatarColorForName(name: string): string {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  return AVATAR_COLORS[h % AVATAR_COLORS.length];
 }
 
 function cap(s: string): string {
@@ -113,23 +120,9 @@ function TicketHeroCard({ group, onOpen }: { group: EventGroup; onOpen: () => vo
   const gradient = tickets[0] ? fallbackGradient(tickets[0]) : "linear-gradient(140deg,#4B1F9A,#7C3AED 40%,#FF4D5E 90%)";
 
   return (
-    <div className="relative w-full overflow-hidden rounded-[24px] border border-cart-line bg-cart-bg-elev">
-      {/* Blur-fill: el propio flyer difuminado baña la cabecera con su color */}
-      {cover ? (
-        <div
-          className="absolute inset-0 scale-110 bg-cover bg-center opacity-30 blur-2xl saturate-125"
-          style={{ backgroundImage: `url("${optimizeImageUrl(cover, "hero-blur") ?? cover}")` }}
-        />
-      ) : (
-        <div className="absolute inset-0" style={{ background: gradient }} />
-      )}
-      <div
-        className="absolute inset-0"
-        style={{
-          background:
-            "linear-gradient(180deg, rgba(251,250,255,0.4) 0%, rgba(251,250,255,0) 32%, rgba(251,250,255,0.6) 100%)",
-        }}
-      />
+    <div className="relative w-full overflow-hidden rounded-[24px] border border-cart-line bg-cart-bg-elev shadow-[0_1px_2px_rgba(20,10,60,0.05),0_18px_44px_-24px_rgba(20,10,60,0.35)]">
+      {/* Fondo limpio (sin blur): solo gradiente de marca cuando no hay flyer */}
+      {!cover && <div className="absolute inset-0" style={{ background: gradient }} />}
 
       {/* Póster completo (object-contain) — nunca se recorta */}
       <button type="button" onClick={onOpen} className="relative block w-full text-left">
@@ -142,8 +135,8 @@ function TicketHeroCard({ group, onOpen }: { group: EventGroup; onOpen: () => vo
               width={864}
               height={1080}
               onError={() => setImgFailed(true)}
-              className="relative z-[1] mx-auto my-5 block h-auto max-h-[42vh] w-auto max-w-[calc(100%-2.5rem)] rounded-[20px] object-contain"
-              style={{ filter: "drop-shadow(0 8px 22px rgba(40,20,90,0.18))" }}
+              className="relative z-[1] mx-auto my-6 block h-auto max-h-[44vh] w-auto max-w-[calc(100%-3rem)] rounded-[18px] object-contain"
+              style={{ filter: "drop-shadow(0 10px 26px rgba(40,20,90,0.22))" }}
             />
           )}
         </div>
@@ -234,7 +227,7 @@ function EventMiniRow({ group, past, onClick }: { group: EventGroup; past: boole
 }
 
 // ── Avatar cuadrado de una entrada ───────────────────────────────────────────
-function EntryAvatar({ label, seed, kind }: { label: string; seed: number; kind: "you" | "person" | "empty" }) {
+function EntryAvatar({ label, color, kind }: { label: string; color: string; kind: "you" | "person" | "empty" }) {
   if (kind === "empty") {
     return (
       <span className="grid size-[38px] shrink-0 place-items-center rounded-[11px] border-2 border-dashed border-cart-line-strong text-[16px] font-medium text-cart-ink-4">
@@ -245,7 +238,7 @@ function EntryAvatar({ label, seed, kind }: { label: string; seed: number; kind:
   return (
     <span
       className="grid size-[38px] shrink-0 place-items-center rounded-[11px] text-[14px] font-extrabold text-white"
-      style={{ background: avatarGradient(seed) }}
+      style={{ background: color }}
     >
       {label}
     </span>
@@ -257,18 +250,18 @@ type EntradaState = "you" | "held" | "sent" | "review" | "unassigned" | "used" |
 
 function EntradaRow({
   ticket,
-  index,
   isYou,
   past,
   onSelect,
   onAssign,
+  onSend,
 }: {
   ticket: WalletTicket;
-  index: number;
   isYou: boolean;
   past: boolean;
   onSelect: (t: WalletTicket) => void;
   onAssign: (t: WalletTicket) => void;
+  onSend: (t: WalletTicket) => void;
 }) {
   const inReview = ticket.orderStatus === "pending";
   const state: EntradaState = past
@@ -321,7 +314,7 @@ function EntradaRow({
       >
         <EntryAvatar
           label={avatarLabel}
-          seed={index}
+          color={isYou ? "var(--color-cart-accent)" : avatarColorForName(name)}
           kind={state === "unassigned" ? "empty" : "person"}
         />
         <div className="min-w-0 flex-1">
@@ -337,6 +330,20 @@ function EntradaRow({
         >
           Asignar
         </button>
+      ) : state === "held" ? (
+        // "En tu cel" → acción rápida: enviársela sin entrar al QR.
+        <div className="flex shrink-0 items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => onSend(ticket)}
+            className="rounded-full border border-cart-accent/40 px-3.5 py-1.5 text-[12px] font-bold text-cart-accent transition hover:bg-cart-accent-soft active:scale-95"
+          >
+            Enviar ↗
+          </button>
+          <button type="button" onClick={() => onSelect(ticket)} aria-label="Ver QR" className="text-[19px] text-cart-ink-4">
+            ›
+          </button>
+        </div>
       ) : (
         <button type="button" onClick={() => onSelect(ticket)} className="flex shrink-0 items-center gap-1.5">
           {pill}
@@ -382,7 +389,7 @@ function BoxSummaryCard({ boxTicket, onOpen }: { boxTicket: WalletTicket; onOpen
               <span
                 key={m.profileId}
                 className="grid size-[26px] place-items-center rounded-[8px] text-[9px] font-extrabold text-white ring-2 ring-white"
-                style={{ background: avatarGradient(i), marginLeft: i === 0 ? 0 : -7 }}
+                style={{ background: avatarColorForName(m.name ?? ""), marginLeft: i === 0 ? 0 : -7 }}
               >
                 {(m.name?.trim()?.[0] ?? "?").toUpperCase()}
               </span>
@@ -433,6 +440,7 @@ function TicketSelectScreen({
   onBack,
   onSelect,
   onAssign,
+  onSend,
 }: {
   group: EventGroup;
   past: boolean;
@@ -440,6 +448,7 @@ function TicketSelectScreen({
   onBack: () => void;
   onSelect: (ticket: WalletTicket) => void;
   onAssign: (ticket: WalletTicket) => void;
+  onSend: (ticket: WalletTicket) => void;
 }) {
   const { event, tickets } = group;
   const cover = event.coverUrl;
@@ -507,15 +516,15 @@ function TicketSelectScreen({
               : "Toca una para ver su QR · así repartes a tu gente"}
           </SectionSub>
           <div className="overflow-hidden rounded-[18px] border border-cart-line bg-white">
-            {singles.map((t, i) => (
+            {singles.map((t) => (
               <EntradaRow
                 key={t.id}
                 ticket={t}
-                index={i}
                 isYou={t.id === youId}
                 past={past}
                 onSelect={onSelect}
                 onAssign={onAssign}
+                onSend={onSend}
               />
             ))}
           </div>
@@ -624,8 +633,13 @@ function WalletPageInner() {
   const [view, setView] = useState<"list" | "select">("list");
   const [activeGroup, setActiveGroup] = useState<EventGroup | null>(null);
 
-  // Fase 4: sheet "¿para quién es?" para una entrada sin asignar.
-  const [assignTicket, setAssignTicket] = useState<WalletTicket | null>(null);
+  // Reparto inline (rápido, sin salir de la lista):
+  // - chooserTicket → sheet "¿para quién es?" (entrada sin asignar)
+  // - sendTicket    → sheet Enviar (transferir por WhatsApp)
+  // - editTicket    → sheet Cambiar datos (nombre/DNI del titular)
+  const [chooserTicket, setChooserTicket] = useState<WalletTicket | null>(null);
+  const [sendTicket, setSendTicket] = useState<WalletTicket | null>(null);
+  const [editTicket, setEditTicket] = useState<WalletTicket | null>(null);
 
   const all = useMemo(() => tickets.data ?? [], [tickets.data]);
 
@@ -826,7 +840,8 @@ function WalletPageInner() {
                   youId={youId}
                   onBack={handleBack}
                   onSelect={handleSelectTicket}
-                  onAssign={setAssignTicket}
+                  onAssign={setChooserTicket}
+                  onSend={setSendTicket}
                 />
               </motion.div>
             )
@@ -834,20 +849,40 @@ function WalletPageInner() {
         </AnimatePresence>
       </div>
 
-      {/* Fase 4: sheet de reparto (2 caminos → detalle de la entrada) */}
+      {/* Reparto: sheet "¿para quién es?" (entrada sin asignar) → Enviar / Cambiar datos */}
       <AssignChooserSheet
-        open={!!assignTicket}
-        onClose={() => setAssignTicket(null)}
+        open={!!chooserTicket}
+        onClose={() => setChooserTicket(null)}
         onSend={() => {
-          const t = assignTicket;
-          setAssignTicket(null);
-          if (t) router.push(`/tickets/${t.id}?action=transfer` as never);
+          const t = chooserTicket;
+          setChooserTicket(null);
+          if (t) setSendTicket(t);
         }}
         onSetData={() => {
-          const t = assignTicket;
-          setAssignTicket(null);
-          if (t) router.push(`/tickets/${t.id}?action=holder` as never);
+          const t = chooserTicket;
+          setChooserTicket(null);
+          if (t) setEditTicket(t);
         }}
+      />
+
+      {/* Enviar entrada — inline, sin salir de la lista (rápido y de primera mano) */}
+      <TransferTicketSheet
+        open={!!sendTicket}
+        ticketId={sendTicket?.id ?? ""}
+        online={online}
+        onClose={() => setSendTicket(null)}
+      />
+
+      {/* Cambiar datos del titular — inline */}
+      <HolderEditSheet
+        open={!!editTicket}
+        ticketId={editTicket?.id ?? ""}
+        currentName={editTicket?.holderName ?? null}
+        currentDniLast2={editTicket?.holderDniLast2 ?? null}
+        ticketTypeName={editTicket?.ticketType.name ?? ""}
+        online={online}
+        variant="gift"
+        onClose={() => setEditTicket(null)}
       />
     </div>
   );
