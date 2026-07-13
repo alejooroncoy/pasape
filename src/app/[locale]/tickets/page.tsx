@@ -254,14 +254,12 @@ function EntradaRow({
   past,
   onSelect,
   onAssign,
-  onSend,
 }: {
   ticket: WalletTicket;
   isYou: boolean;
   past: boolean;
   onSelect: (t: WalletTicket) => void;
   onAssign: (t: WalletTicket) => void;
-  onSend: (t: WalletTicket) => void;
 }) {
   const inReview = ticket.orderStatus === "pending";
   const state: EntradaState = past
@@ -331,14 +329,14 @@ function EntradaRow({
           Asignar
         </button>
       ) : state === "held" ? (
-        // "En tu cel" → acción rápida: enviársela sin entrar al QR.
+        // Palabra plana: abre el drawer para elegir (enviar / poner los datos).
         <div className="flex shrink-0 items-center gap-1.5">
           <button
             type="button"
-            onClick={() => onSend(ticket)}
+            onClick={() => onAssign(ticket)}
             className="rounded-full border border-cart-accent/40 px-3.5 py-1.5 text-[12px] font-bold text-cart-accent transition hover:bg-cart-accent-soft active:scale-95"
           >
-            Enviar ↗
+            Asignar
           </button>
           <button type="button" onClick={() => onSelect(ticket)} aria-label="Ver QR" className="text-[19px] text-cart-ink-4">
             ›
@@ -440,7 +438,6 @@ function TicketSelectScreen({
   onBack,
   onSelect,
   onAssign,
-  onSend,
 }: {
   group: EventGroup;
   past: boolean;
@@ -448,7 +445,6 @@ function TicketSelectScreen({
   onBack: () => void;
   onSelect: (ticket: WalletTicket) => void;
   onAssign: (ticket: WalletTicket) => void;
-  onSend: (ticket: WalletTicket) => void;
 }) {
   const { event, tickets } = group;
   const cover = event.coverUrl;
@@ -524,7 +520,6 @@ function TicketSelectScreen({
                 past={past}
                 onSelect={onSelect}
                 onAssign={onAssign}
-                onSend={onSend}
               />
             ))}
           </div>
@@ -841,7 +836,6 @@ function WalletPageInner() {
                   onBack={handleBack}
                   onSelect={handleSelectTicket}
                   onAssign={setChooserTicket}
-                  onSend={setSendTicket}
                 />
               </motion.div>
             )
