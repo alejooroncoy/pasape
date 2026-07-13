@@ -25,7 +25,7 @@ function FollowRow({ org }: { org: FollowedOrg }) {
   return (
     <Link
       href={`/${org.slug}` as never}
-      className="flex items-center gap-3 rounded-2xl border border-cart-line bg-cart-bg-elev px-3.5 py-3 transition hover:border-white/20"
+      className="flex items-center gap-3 rounded-2xl border border-cart-line bg-cart-bg-elev px-3.5 py-3 transition hover:border-cart-line-strong"
     >
       {org.logoUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
@@ -44,10 +44,10 @@ function FollowRow({ org }: { org: FollowedOrg }) {
         </div>
       )}
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[14.5px] font-semibold leading-tight">{org.name}</p>
-        <p className="mt-0.5 truncate text-[12px] text-white/55">@{org.slug}</p>
+        <p className="truncate text-[14.5px] font-semibold leading-tight text-cart-ink">{org.name}</p>
+        <p className="mt-0.5 truncate text-[12px] text-cart-ink-3">@{org.slug}</p>
       </div>
-      <span className="shrink-0 rounded-full bg-white/8 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.04em] text-white/55">
+      <span className="shrink-0 rounded-full bg-cart-bg-elev-2 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.04em] text-cart-ink-3">
         Siguiendo
       </span>
     </Link>
@@ -66,14 +66,14 @@ export default function BuyerFollowingPage() {
       {isLoading && (
         <div className="flex flex-col gap-2.5 pt-5">
           {[0, 1, 2].map((i) => (
-            <div key={i} className="h-[68px] animate-pulse rounded-2xl bg-white/[0.04]" />
+            <div key={i} className="h-[68px] animate-pulse rounded-2xl bg-cart-bg-elev" />
           ))}
         </div>
       )}
-      {error && <p className="pt-6 text-[13px] text-red-300">{(error as Error).message}</p>}
+      {error && <p className="pt-6 text-[13px] text-red-600">{(error as Error).message}</p>}
 
       {!isLoading && !error && items.length === 0 && (
-        <div className="mt-6 rounded-2xl border border-cart-line bg-cart-bg-elev p-6 text-center text-[13.5px] text-white/55">
+        <div className="mt-6 rounded-2xl border border-cart-line bg-cart-bg-elev p-6 text-center text-[13.5px] text-cart-ink-3">
           Aún no sigues a ningún organizador.
         </div>
       )}

@@ -1,7 +1,7 @@
 "use client";
 
 import { ButtonHTMLAttributes, useEffect, useMemo, useRef, useState } from "react";
-import { AnimatePresence, motion, useDragControls } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { CheckoutSheet } from "./_checkout/CheckoutSheet";
@@ -31,6 +31,7 @@ import {
 import { Footer } from "@/app/[locale]/_home/Footer";
 import type { TicketType } from "@/server/events/domain/Event";
 import { VenueLayoutModal } from "@/components/ui/VenueLayoutModal";
+import { Sheet } from "@/components/ui/Sheet";
 import { PresaleCountdown } from "@/components/ui/PresaleCountdown";
 import { activePricing } from "@/lib/events/pricing";
 import { optimizeImageUrl } from "@/lib/images/optimizeUrl";
@@ -113,17 +114,15 @@ export function EventDetailClient({
   // hoja inferior (BoxPickerSheet) que muestra el plano como referencia.
   const [selectedBoxIds, setSelectedBoxIds] = useState<string[]>([]);
   const [boxSheetOpen, setBoxSheetOpen] = useState(false);
-  // El paso de datos ("¿Quién va?") se resuelve en un bottom-sheet sobre el
-  // evento (no navegando): gratis se completa acá, pagado entrega al pago.
-  const [checkoutOpen, setCheckoutOpen] = useState(false);
   // Reanudar pago tras recargar la URL interceptada: /buy?…&inline=1 (hard-nav)
   // redirige aquí con ?pay=order&k=token. Abrimos la hoja DIRECTO en pago en vez
   // de mostrar la página completa de /buy (evita el salto de UI en el reload).
   const resumePayOrder = search.get("pay");
   const resumePayToken = search.get("k");
-  useEffect(() => {
-    if (resumePayOrder) setCheckoutOpen(true);
-  }, [resumePayOrder]);
+  // El paso de datos ("¿Quién va?") se resuelve en un bottom-sheet sobre el
+  // evento (no navegando): gratis se completa acá, pagado entrega al pago. Si
+  // venimos con ?pay (reanudar), arranca abierto en pago sin efecto extra.
+  const [checkoutOpen, setCheckoutOpen] = useState(() => Boolean(resumePayOrder));
   // Ancla del selector (móvil): sin selección, el CTA lleva aquí en vez de a un
   // /buy vacío. La selección vive solo en esta página; /buy es datos + pago.
   const selectorRef = useRef<HTMLDivElement>(null);
@@ -1347,8 +1346,6 @@ function BoxPickerSheet({
 }) {
   const [pending, setPending] = useState<string[]>(selectedIds);
   const [planoOpen, setPlanoOpen] = useState(false);
-  // Drag-to-dismiss: solo el header arrastra la hoja (el grid scrollea normal).
-  const dragControls = useDragControls();
   // Al abrir, arranca desde la selección actual (para editar/agregar). Al cerrar
   // la hoja, cierra también el plano ampliado.
   useEffect(() => {
@@ -1356,14 +1353,6 @@ function BoxPickerSheet({
     else setPlanoOpen(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
 
   const toggle = (id: string) =>
     setPending((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
@@ -1371,49 +1360,40 @@ function BoxPickerSheet({
   const multiNoun = boxGroups.length > 1;
 
   return (
-    <div
-      className="fixed inset-0 z-[70]"
-      aria-hidden={!open}
-      style={{ pointerEvents: open ? "auto" : "none" }}
-    >
-      <div
-        onClick={onClose}
-        className={
-          "absolute inset-0 bg-[var(--overlay-scrim)] transition-opacity duration-300 " +
-          (open ? "opacity-100" : "opacity-0")
+    <>
+      {/* Primitivo Sheet compartido: bottom-sheet en móvil, MODAL centrado en
+          desktop — misma experiencia que el resto (scrim, a11y, cierre) sin
+          reimplementar un drawer a mano. */}
+      <Sheet
+        open={open}
+        onOpenChange={(o) => !o && onClose()}
+        title="Elige tu box"
+        description="Un espacio para tu grupo — toca los que quieras"
+        maxWidth={520}
+        footer={
+          <button
+            type="button"
+            onClick={() => {
+              onConfirm(pending);
+              onClose();
+            }}
+            className="w-full rounded-full bg-cart-accent py-3.5 text-[14.5px] font-semibold text-white shadow-[0_2px_8px_-2px_rgba(50,30,120,0.28)] transition hover:brightness-110 active:scale-[0.99]"
+          >
+            {pending.length === 0
+              ? "Listo"
+              : pending.length === 1
+                ? "Confirmar · 1 box"
+                : `Confirmar · ${pending.length} boxes`}
+          </button>
         }
-      />
-      <motion.div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Elige tu box"
-        className="absolute inset-x-0 bottom-0 mx-auto flex max-h-[86vh] w-full max-w-[520px] flex-col rounded-t-[24px] border-t border-cart-line bg-cart-bg shadow-[0_-24px_60px_-20px_rgba(20,10,60,0.4)]"
-        style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 16px)" }}
-        initial={false}
-        animate={{ y: open ? "0%" : "100%" }}
-        transition={{ type: "spring", stiffness: 460, damping: 40 }}
-        drag="y"
-        dragControls={dragControls}
-        dragListener={false}
-        dragConstraints={{ top: 0, bottom: 0 }}
-        dragElastic={{ top: 0, bottom: 0.6 }}
-        onDragEnd={(_, info) => {
-          // Cerrar si arrastraste bastante hacia abajo o con impulso.
-          if (info.offset.y > 110 || info.velocity.y > 650) onClose();
-        }}
       >
-        <div
-          className="shrink-0 cursor-grab touch-none px-4 pt-2 active:cursor-grabbing"
-          onPointerDown={(e) => dragControls.start(e)}
-        >
-          <div className="mx-auto mb-3 h-1.5 w-9 rounded-full bg-cart-line-strong" />
+        {/* Encabezado visible (el title del Sheet es sr-only). */}
+        <div className="mb-3">
           <h3 className="text-[16.5px] font-bold tracking-[-0.01em] text-cart-ink">Elige tu box</h3>
           <p className="mt-0.5 text-[12px] text-cart-ink-3">
             Un espacio para tu grupo — toca los que quieras
           </p>
         </div>
-
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-3">
           {/* Solo si el organizador subió una imagen de distribución. Tira
               compacta (no empuja el grid) — "Ampliar" la abre a pantalla
               completa con zoom (reusa VenueLayoutModal). */}
@@ -1509,25 +1489,7 @@ function BoxPickerSheet({
               </div>
             );
           })}
-        </div>
-
-        <div className="shrink-0 px-4 pt-3">
-          <button
-            type="button"
-            onClick={() => {
-              onConfirm(pending);
-              onClose();
-            }}
-            className="w-full rounded-full bg-cart-accent py-3.5 text-[14.5px] font-semibold text-white shadow-[0_2px_8px_-2px_rgba(50,30,120,0.28)] transition hover:brightness-110 active:scale-[0.99]"
-          >
-            {pending.length === 0
-              ? "Listo"
-              : pending.length === 1
-                ? "Confirmar · 1 box"
-                : `Confirmar · ${pending.length} boxes`}
-          </button>
-        </div>
-      </motion.div>
+      </Sheet>
 
       {venueLayoutUrl && (
         <VenueLayoutModal
@@ -1537,7 +1499,7 @@ function BoxPickerSheet({
           caption="Distribución del local · referencia"
         />
       )}
-    </div>
+    </>
   );
 }
 

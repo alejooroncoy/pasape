@@ -32,7 +32,7 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span className="mb-1.5 block text-[12px] font-medium text-white/55">{label}</span>
+      <span className="mb-1.5 block text-[12px] font-medium text-cart-ink-3">{label}</span>
       <input
         type={type}
         value={value}
@@ -40,7 +40,7 @@ function Field({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         className={
-          "w-full rounded-2xl border border-cart-line bg-cart-bg-elev px-4 py-3 text-[15px] text-white outline-none transition placeholder:text-white/30 focus:border-cart-accent/60 " +
+          "w-full rounded-2xl border border-cart-line bg-cart-bg-elev px-4 py-3 text-[15px] text-cart-ink outline-none transition placeholder:text-cart-ink-4 focus:border-cart-accent/60 " +
           (mono ? "font-mono tracking-[0.02em]" : "")
         }
       />
@@ -106,7 +106,7 @@ export default function BuyerProfileEditPage() {
       </div>
 
       {isLoading ? (
-        <p className="py-6 text-center text-[13.5px] text-white/55">Cargando…</p>
+        <p className="py-6 text-center text-[13.5px] text-cart-ink-3">Cargando…</p>
       ) : (
         <div className="flex flex-col gap-3.5">
           <Field label="Nombre completo" value={fullName} onChange={setFullNameDraft} placeholder="Juan Pérez García" />
@@ -118,7 +118,7 @@ export default function BuyerProfileEditPage() {
           <Field label="DNI" value={dni} onChange={setDni} placeholder="71234567" mono inputMode="numeric" />
 
           {mutation.error && (
-            <p className="text-[12.5px] text-red-300">{(mutation.error as Error).message}</p>
+            <p className="text-[12.5px] text-red-600">{(mutation.error as Error).message}</p>
           )}
 
           <button

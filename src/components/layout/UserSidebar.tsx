@@ -60,11 +60,11 @@ export function UserSidebar() {
               aria-current={isOn ? "page" : undefined}
               className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 text-[14px] font-medium transition-colors ${
                 isOn
-                  ? "bg-cart-accent/15 text-white"
-                  : "text-cart-ink-2 hover:bg-cart-bg-elev hover:text-white"
+                  ? "bg-cart-accent-soft text-cart-accent"
+                  : "text-cart-ink-2 hover:bg-cart-bg-elev hover:text-cart-ink"
               }`}
             >
-              <span className={isOn ? "text-cart-accent" : "text-cart-ink-3 group-hover:text-white"}>
+              <span className={isOn ? "text-cart-accent" : "text-cart-ink-3 group-hover:text-cart-ink"}>
                 <Icon />
               </span>
               {label}
@@ -79,14 +79,9 @@ export function UserSidebar() {
         })}
       </nav>
 
-      <div className="mt-1.5 border-t border-cart-line-2 pt-1.5">
-        <Link
-          href={"/organizadores" as never}
-          className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13.5px] font-medium text-cart-ink-3 transition-colors hover:bg-cart-bg-elev hover:text-white"
-        >
-          Soy organizador
-        </Link>
-      </div>
+      {/* "Soy organizador" ya NO vive aquí: se movió al CTA contextual del
+          header (SellerCta), que además distingue fan vs. ya-vende. Repetirlo
+          era el duplicado que se veía raro. */}
 
       {/* Identidad (abajo): abre un popover con Cuenta / Cerrar sesión */}
       <div className="mt-auto">
@@ -140,7 +135,7 @@ function IdentityPill({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 6, scale: 0.97 }}
             transition={{ duration: 0.15 }}
-            className="absolute bottom-[calc(100%+8px)] left-0 right-0 z-10 overflow-hidden rounded-2xl border border-cart-line bg-cart-bg-elev p-1 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.7)]"
+            className="absolute bottom-[calc(100%+8px)] left-0 right-0 z-10 overflow-hidden rounded-2xl border border-cart-line bg-cart-bg-elev p-1 shadow-[0_20px_50px_-12px_rgba(20,10,60,0.28)]"
             role="menu"
           >
             <button
@@ -150,7 +145,7 @@ function IdentityPill({
                 setOpen(false);
                 router.push("/profile" as never);
               }}
-              className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-[13.5px] font-medium text-cart-ink-2 transition-colors hover:bg-cart-bg-elev-2 hover:text-white"
+              className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-[13.5px] font-medium text-cart-ink-2 transition-colors hover:bg-cart-bg-elev-2 hover:text-cart-ink"
             >
               <UserIcon />
               Cuenta
@@ -163,7 +158,7 @@ function IdentityPill({
                 await signOut();
                 router.replace("/");
               }}
-              className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-[13.5px] font-medium text-rose-300 transition-colors hover:bg-rose-500/10"
+              className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-[13.5px] font-medium text-rose-600 transition-colors hover:bg-rose-500/10"
             >
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
                 <path d="M11 4H4v10h7M14 9H7M11 6l3 3-3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
@@ -191,7 +186,7 @@ function IdentityPill({
           fallbackClassName="bg-gradient-to-br from-[#7C3AED] to-[#b87cff] text-[13px]"
         />
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[13.5px] font-semibold text-white">{name}</p>
+          <p className="truncate text-[13.5px] font-semibold text-cart-ink">{name}</p>
           {sub && <p className="truncate text-[11.5px] text-cart-ink-3">{sub}</p>}
         </div>
         <svg

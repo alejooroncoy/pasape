@@ -20,7 +20,7 @@
 
 import * as Dialog from "@radix-ui/react-dialog";
 import { AnimatePresence, motion, useDragControls } from "motion/react";
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 type Props = {
   open: boolean;
@@ -66,15 +66,28 @@ export function Sheet({
   // y en el siguiente frame lo animamos a innerHeight. Ir de "auto"→px→100dvh
   // evita el salto que daría animar desde un alto content-driven. Cuando no está
   // expandida no tocamos el alto (queda content-driven con max-h). Ver Plan A.
+  // El crecimiento a pantalla completa es un patrón MÓVIL. En desktop (≥lg) la
+  // hoja expandida se queda como MODAL centrado normal (sin height:100dvh, con
+  // esquinas redondeadas) — más simple y natural en pantalla grande.
+  const [isDesktop, setIsDesktop] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const on = () => setIsDesktop(mq.matches);
+    on();
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
+  const growFull = expanded && !isDesktop;
+
   const contentRef = useRef<HTMLDivElement>(null);
   const targetHRef = useRef(0);
   const wasExpandedRef = useRef(false);
   const [grownH, setGrownH] = useState<number | "auto" | null>(null);
   useLayoutEffect(() => {
-    if (!expanded) {
+    if (!growFull) {
       // Colapso ANIMADO: si veníamos de pantalla completa (X → volver a datos),
       // animamos el alto de vuelta a "auto" (framer mide el contenido de datos)
-      // en vez de saltar. Si nunca expandió, no controlamos el alto (CSS manda).
+      // en vez de saltar. Si nunca creció (o es desktop), no controlamos el alto.
       setGrownH(wasExpandedRef.current ? "auto" : null);
       wasExpandedRef.current = false;
       return;
@@ -87,7 +100,14 @@ export function Sheet({
       requestAnimationFrame(() => setGrownH(targetHRef.current)),
     );
     return () => cancelAnimationFrame(id);
-  }, [expanded]);
+  }, [growFull]);
+
+  // Desktop: no hay animación de crecimiento que esperar → avisamos "asentado"
+  // de una vez para que el consumidor monte el contenido (campos MP) sin demora.
+  useEffect(() => {
+    if (expanded && isDesktop) onExpandComplete?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expanded, isDesktop]);
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -107,13 +127,13 @@ export function Sheet({
             </Dialog.Overlay>
 
             {/* Contenedor de posición (bottom en móvil, centro en desktop). No
-                captura clicks salvo la hoja: Radix cierra al tocar fuera. En
-                `expanded` se ancla abajo (aunque sea desktop): la hoja crece
-                hacia arriba hasta llenar. */}
+                captura clicks salvo la hoja: Radix cierra al tocar fuera. Solo
+                el crecimiento móvil (`growFull`) se ancla abajo a pantalla
+                completa; en desktop queda centrado (modal) aun expandida. */}
             <div
               className={
                 "home-light pointer-events-none fixed inset-0 z-[91] flex justify-center " +
-                (expanded ? "items-end" : "items-end lg:items-center lg:p-6")
+                (growFull ? "items-end" : "items-end lg:items-center lg:p-6")
               }
             >
               <Dialog.Content asChild forceMount>
@@ -121,7 +141,7 @@ export function Sheet({
                   ref={contentRef}
                   initial={{ y: "100%" }}
                   animate={
-                    expanded
+                    growFull
                       ? { y: 0, height: grownH ?? undefined, borderTopLeftRadius: 0, borderTopRightRadius: 0 }
                       : {
                           y: 0,
@@ -134,7 +154,7 @@ export function Sheet({
                   }
                   exit={{ y: "100%" }}
                   transition={{ type: "spring", damping: 34, stiffness: 340, mass: 0.9 }}
-                  drag={expanded ? false : "y"}
+                  drag={!isDesktop && !expanded ? "y" : false}
                   dragControls={dragControls}
                   dragListener={false}
                   dragConstraints={{ top: 0, bottom: 0 }}
@@ -152,15 +172,16 @@ export function Sheet({
                   style={{ maxWidth }}
                   className={
                     "pointer-events-auto flex w-full flex-col border-cart-line bg-cart-bg-elev text-cart-ink " +
-                    (expanded
+                    (growFull
                       ? "max-h-none border-t "
                       : "max-h-[92vh] rounded-t-[26px] border-t shadow-[0_-16px_50px_-18px_rgba(20,10,60,0.28)] lg:rounded-[26px] lg:border lg:shadow-[0_28px_70px_-20px_rgba(20,10,60,0.4)] ") +
                     (className ?? "")
                   }
                 >
-                  {/* Asa = única zona que inicia el arrastre (el cuerpo scrollea).
-                      Se oculta al crecer (ya no es una hoja arrastrable). */}
-                  {!expanded && (
+                  {/* Asa de arrastre: SOLO en la hoja móvil (bottom-sheet). En
+                      desktop es un modal centrado — sin detalles de drawer. Se
+                      oculta también al crecer a pantalla completa. */}
+                  {!isDesktop && !expanded && (
                     <div
                       className="shrink-0 cursor-grab touch-none pt-3 active:cursor-grabbing"
                       onPointerDown={(e) => dragControls.start(e)}
@@ -178,8 +199,13 @@ export function Sheet({
                       deslizan en horizontal y no deben generar scroll lateral).
                       Expandida: respeta el notch arriba (ya no hay asa). */}
                   <div
-                    className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-[22px] pb-2 pt-1"
-                    style={expanded ? { paddingTop: "max(env(safe-area-inset-top, 0px), 10px)" } : undefined}
+                    className={
+                      "min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-[22px] pb-3 " +
+                      // Sin asa arriba (modal desktop o pago) → padding-y para
+                      // que respire; con asa (hoja móvil) el asa ya da el espacio.
+                      (!isDesktop && !expanded ? "pt-1" : "pt-5")
+                    }
+                    style={growFull ? { paddingTop: "max(env(safe-area-inset-top, 0px), 12px)" } : undefined}
                   >
                     {children}
                   </div>

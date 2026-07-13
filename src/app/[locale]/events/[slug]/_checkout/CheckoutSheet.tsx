@@ -379,38 +379,60 @@ export function CheckoutSheet({
       }
     >
       {step === "pay" && payInfo ? (
-        <div className="pb-6">
-          {/* Cabecera del pago (la hoja ya es pantalla completa): cerrar + título. */}
-          <div className="mb-2 flex items-center gap-3">
+        <motion.div
+          className="pb-6"
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+        >
+          {/* Cabecera del pago: "volver" (chevron ‹) — vuelve al paso de datos.
+              Título del paso. */}
+          <div className="mb-3 flex items-center gap-3">
             <button
               type="button"
               onClick={handleDismiss}
-              aria-label="Cerrar"
+              aria-label="Volver"
               className="grid size-9 shrink-0 place-items-center rounded-full bg-cart-bg-elev-2 text-cart-ink-2 transition hover:text-cart-ink"
             >
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
-                <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M10 3.5 5.5 8l4.5 4.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </button>
             <span className="text-[15px] font-bold tracking-[-0.01em] text-cart-ink">Pago</span>
           </div>
-          {payArrived ? (
-            <CheckoutPaySurface
-              slug={slug}
-              orderId={payInfo.orderId}
-              orderToken={payInfo.orderToken}
-            />
-          ) : (
-            // Placeholder mientras la hoja termina de crecer — los campos de MP
-            // se montan recién en `payArrived` (si no, el transform los rompe).
-            // Alto modesto (≈ el del "¡Perfecto!" previo) para que el crecimiento
-            // arranque desde ahí y se sienta la hoja subiendo, sin salto.
-            <div className="flex flex-col items-center justify-center py-14 text-center">
-              <div className="size-11 rounded-full border-[3px] border-cart-line-strong border-t-cart-accent animate-[spin_0.8s_linear_infinite]" />
-              <p className="mt-4 text-[13.5px] text-cart-ink-2">Preparando el pago…</p>
-            </div>
-          )}
-        </div>
+          {/* Crossfade entre "preparando" y el pago real (montado en payArrived,
+              tras asentar el crecimiento — los campos MP se rompen si se montan
+              durante el transform). */}
+          <AnimatePresence mode="wait" initial={false}>
+            {payArrived ? (
+              <motion.div
+                key="surface"
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+              >
+                <CheckoutPaySurface
+                  slug={slug}
+                  orderId={payInfo.orderId}
+                  orderToken={payInfo.orderToken}
+                />
+              </motion.div>
+            ) : (
+              <motion.div
+                key="preparing"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="flex flex-col items-center justify-center py-14 text-center"
+              >
+                <div className="size-11 rounded-full border-[3px] border-cart-line-strong border-t-cart-accent animate-[spin_0.8s_linear_infinite]" />
+                <p className="mt-4 text-[13.5px] text-cart-ink-2">Preparando el pago…</p>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.div>
       ) : (
       /* Un paso a la vez, con deslizamiento: "revisar" entra desde la derecha,
           "corregir" vuelve desde la izquierda — el mismo modelo espacial que un

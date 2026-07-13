@@ -151,13 +151,13 @@ const NotifCard = ({ n }: { n: Notification }) => {
         <NotifIcon kind={n.kind} />
       </span>
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5 text-[14px] font-semibold">
+        <div className="flex items-center gap-1.5 text-[14px] font-semibold text-cart-ink">
           {labelFor(n.kind)}
           {isUnread && (
             <span className="size-1.5 rounded-full bg-cart-accent shadow-[0_0_8px_var(--color-cart-accent)]" />
           )}
         </div>
-        <p className="mt-0.5 text-[12.5px] leading-snug text-white/55">{summaryFor(n)}</p>
+        <p className="mt-0.5 text-[12.5px] leading-snug text-cart-ink-3">{summaryFor(n)}</p>
       </div>
     </div>
   );
@@ -176,21 +176,21 @@ export default function BuyerNotificationsPage() {
       {isLoading && (
         <div className="flex flex-col gap-2.5 pt-5">
           {[0, 1, 2].map((i) => (
-            <div key={i} className="h-[68px] animate-pulse rounded-2xl bg-white/[0.04]" />
+            <div key={i} className="h-[68px] animate-pulse rounded-2xl bg-cart-bg-elev" />
           ))}
         </div>
       )}
-      {error && <p className="pt-6 text-[13px] text-red-300">{(error as Error).message}</p>}
+      {error && <p className="pt-6 text-[13px] text-red-600">{(error as Error).message}</p>}
 
       {!isLoading && !error && items.length === 0 && (
-        <div className="mt-6 rounded-2xl border border-cart-line bg-cart-bg-elev p-6 text-center text-[13.5px] text-white/55">
+        <div className="mt-6 rounded-2xl border border-cart-line bg-cart-bg-elev p-6 text-center text-[13.5px] text-cart-ink-3">
           Sin novedades por ahora.
         </div>
       )}
 
       {groups.map(([label, list]) => (
         <div key={label} className="pt-5">
-          <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/45">{label}</p>
+          <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-cart-ink-3">{label}</p>
           <div className="flex flex-col gap-2.5">
             {list.map((n) => (
               <NotifCard key={n.id} n={n} />

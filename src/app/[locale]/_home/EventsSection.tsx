@@ -207,11 +207,18 @@ export function EventsSection({
                 key={id}
                 onClick={() => onCategoryChange(active ? null : id)}
                 className={`rounded-full px-4 py-1.5 text-[12.5px] font-semibold transition-colors duration-150 ${
-                  active ? "text-white" : "border border-cart-line bg-cart-bg text-cart-ink-2 hover:text-cart-ink"
+                  active ? "" : "border border-cart-line bg-cart-bg text-cart-ink-2 hover:text-cart-ink"
                 }`}
                 style={
                   active
-                    ? { background: color, boxShadow: `0 6px 16px -6px ${color}99` }
+                    ? {
+                        background: color,
+                        // Los colores de categoría son CLAROS (diseñados para
+                        // fondo oscuro): texto oscuro para contraste, no blanco
+                        // (mismo criterio que el strip móvil).
+                        color: "#0a0a0f",
+                        boxShadow: `0 6px 16px -6px ${color}99`,
+                      }
                     : undefined
                 }
                 onMouseEnter={(e) => {
