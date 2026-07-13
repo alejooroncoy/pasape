@@ -169,7 +169,9 @@ export function Sheet({
                       onExpandComplete?.();
                     }
                   }}
-                  style={{ maxWidth }}
+                  // Al crecer a pantalla completa (móvil) ocupa el 100% del ancho
+                  // — el maxWidth solo aplica a la hoja/modal normal, no al full-screen.
+                  style={{ maxWidth: growFull ? undefined : maxWidth }}
                   className={
                     "pointer-events-auto flex w-full flex-col border-cart-line bg-cart-bg-elev text-cart-ink " +
                     (growFull
