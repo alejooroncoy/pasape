@@ -11,7 +11,7 @@ import { useSessionReady } from "@/lib/identity/hooks/useSessionReady";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { useBoxForTicket } from "@/lib/boxes/hooks/useBoxes";
 import { LoginGate } from "@/components/ui/LoginGate";
-import { TicketActionSurface } from "@/components/tickets/TicketActionSurface";
+import { Sheet } from "@/components/ui/Sheet";
 import { TransferTicketSheet } from "@/components/tickets/TransferTicketSheet";
 import { HolderEditSheet } from "@/components/tickets/HolderEditSheet";
 import { useOnline } from "@/lib/_shared/useOnline";
@@ -529,28 +529,31 @@ function TicketSelectScreen({
   );
 }
 
-// ── Fase 4: sheet "¿para quién es?" — 2 caminos de reparto ───────────────────
+// ── Sheet "¿para quién es?" — mismo primitivo Sheet del login ────────────────
 function AssignChooserSheet({
   open,
   onClose,
   onSend,
   onSetData,
-  anchorRef,
 }: {
   open: boolean;
   onClose: () => void;
   onSend: () => void;
   onSetData: () => void;
-  anchorRef?: React.RefObject<HTMLElement | null>;
 }) {
   return (
-    <TicketActionSurface open={open} onClose={onClose} anchorRef={anchorRef} side="bottom" align="end">
-      <p className="text-[18px] font-extrabold tracking-[-0.02em] text-cart-ink">Este acceso · ¿para quién es?</p>
-      <p className="mt-1 text-[12px] font-medium text-cart-ink-3">Elige cómo lo repartes. Lo puedes cambiar después.</p>
+    <Sheet
+      open={open}
+      onOpenChange={(o) => !o && onClose()}
+      title="¿Para quién es este acceso?"
+      description="Elige cómo lo repartes: enviársela a alguien o poner sus datos."
+    >
+      <p className="mb-1 text-[22px] font-bold leading-tight tracking-[-0.03em] text-cart-ink">Este acceso · ¿para quién es?</p>
+      <p className="mb-5 text-[13px] leading-[1.5] text-cart-ink-3">Elige cómo lo repartes. Lo puedes cambiar después.</p>
       <button
         type="button"
         onClick={onSend}
-        className="mt-4 flex w-full items-center gap-3 rounded-[17px] border border-cart-line bg-cart-bg px-3.5 py-3.5 text-left transition hover:border-cart-accent/40 active:scale-[0.99]"
+        className="flex w-full items-center gap-3 rounded-[17px] border border-cart-line bg-cart-bg px-3.5 py-3.5 text-left transition hover:border-cart-accent/40 active:scale-[0.99]"
       >
         <span className="grid size-10 shrink-0 place-items-center rounded-[12px] bg-cart-accent-soft text-[19px]">📲</span>
         <span className="min-w-0">
@@ -572,7 +575,7 @@ function AssignChooserSheet({
       <button type="button" onClick={onClose} className="mt-2 w-full py-3 text-center text-[14px] font-bold text-cart-ink-3">
         Ahora no
       </button>
-    </TicketActionSurface>
+    </Sheet>
   );
 }
 
