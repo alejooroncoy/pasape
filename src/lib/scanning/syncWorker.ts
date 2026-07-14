@@ -1,5 +1,6 @@
 import { listPending, markSynced, recordSyncError } from "./scanQueue";
 import { deviceHeaders } from "./deviceId";
+import { resolveUrl } from "@/lib/_shared/api-client";
 
 let inFlight = false;
 
@@ -16,7 +17,7 @@ export async function syncPending(slug: string): Promise<{ ok: number; failed: n
           item.kind === "manual"
             ? ["/api/scanning/admit", { ticketId: item.ticketId, eventSlug: slug, offlineScannedAt: item.scannedAt }]
             : ["/api/scanning/scan", { qrCode: item.token, eventSlug: slug, offlineScannedAt: item.scannedAt }];
-        const res = await fetch(url, {
+        const res = await fetch(resolveUrl(url), {
           method: "POST",
           headers: { "content-type": "application/json", ...deviceHeaders() },
           body: JSON.stringify(payload),

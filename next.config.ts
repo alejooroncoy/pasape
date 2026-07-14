@@ -70,10 +70,13 @@ const nextConfig: NextConfig = {
   // Permite que el dev server acepte requests proxied desde ngrok (HTTPS).
   // Necesario para probar Mercado Pago localmente: MP rechaza CORS desde
   // localhost HTTP en /v1/card_tokens. Con ngrok obtenemos HTTPS válido.
+  // También habilita la red local (192.168.*) para probar la app del
+  // portero (Capacitor) contra el dev server desde el celular.
   allowedDevOrigins: [
     "*.ngrok-free.dev",
     "*.ngrok.io",
     "*.ngrok.app",
+    "192.168.*.*",
   ],
   // La ruta opengraph-image lee el logo desde public/ con fs en runtime; el
   // tracer no detecta esa lectura dinámica, así que forzamos su inclusión en

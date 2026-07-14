@@ -146,7 +146,7 @@ export async function lookupTicketById(
 
 export async function markUsedLocalById(ticketId: string): Promise<void> {
   const d = await db();
-  const t = await d.getFromIndex(STORE, "ticketId", ticketId);
+  const t = await d.get(STORE, ticketId);
   if (t) await d.put(STORE, { ...t, status: "used" });
 }
 
