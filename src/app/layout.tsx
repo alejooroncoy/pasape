@@ -43,7 +43,9 @@ export const metadata: Metadata = {
       { url: "/icon.svg", type: "image/svg+xml" },
       { url: "/icons/logo-icon-min-48.png", sizes: "48x48", type: "image/png" },
     ],
-    apple: [{ url: "/icons/logo-dark-square-180.png", sizes: "180x180", type: "image/png" }],
+    // Icono horneado con fondo claro (ver pwa-icon route): un PNG transparente
+    // en iOS cae sobre negro y el logo oscuro se pierde. Este trae su fondo.
+    apple: [{ url: "/pwa-icon/180.png", sizes: "180x180", type: "image/png" }],
   },
   robots: {
     index: true,
