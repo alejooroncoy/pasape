@@ -115,7 +115,7 @@ export function TicketActionSurface({
             className="fixed inset-x-0 bottom-0 z-[81] mx-auto w-full max-w-[480px] rounded-t-[28px] border-t border-cart-line bg-cart-bg-elev px-5 pt-3 shadow-[0_-20px_60px_-10px_rgba(0,0,0,0.7)]"
             style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 22px)" }}
           >
-            <div className="mx-auto mb-3 h-1 w-9 rounded-full bg-white/15" />
+            <div className="mx-auto mb-3 h-1 w-9 rounded-full bg-cart-line-strong" />
             {children}
           </motion.div>
         </>

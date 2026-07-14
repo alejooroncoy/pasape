@@ -69,7 +69,12 @@ export function Sheet({
   // El crecimiento a pantalla completa es un patrón MÓVIL. En desktop (≥lg) la
   // hoja expandida se queda como MODAL centrado normal (sin height:100dvh, con
   // esquinas redondeadas) — más simple y natural en pantalla grande.
-  const [isDesktop, setIsDesktop] = useState(false);
+  // Init lazy con el valor real: el primer render ya sabe si es desktop, así una
+  // hoja que monta abierta (deep-link) entra con el fade/scale correcto y no con
+  // el slide móvil de un frame. En SSR no hay window (la hoja monta cerrada).
+  const [isDesktop, setIsDesktop] = useState(
+    () => typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches,
+  );
   useEffect(() => {
     const mq = window.matchMedia("(min-width: 1024px)");
     const on = () => setIsDesktop(mq.matches);
@@ -121,7 +126,10 @@ export function Sheet({
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                transition={{ duration: 0.2 }}
+                // Mismo tiempo/easing que la hoja: velo y hoja salen en bloque
+                // (si el velo se va antes, la hoja queda deslizándose sola y se
+                // ve "entrecortado").
+                transition={{ duration: 0.3, ease: [0.42, 0, 0.58, 1] }}
                 className="home-light fixed inset-0 z-[90] app-scrim"
               />
             </Dialog.Overlay>
@@ -139,21 +147,34 @@ export function Sheet({
               <Dialog.Content asChild forceMount>
                 <motion.div
                   ref={contentRef}
-                  initial={{ y: "100%" }}
+                  // Móvil = bottom-sheet: entra/sale deslizando en Y. Desktop =
+                  // modal centrado: entra/sale con opacity + scale (fade), NO con
+                  // el slide vertical largo — ese viaje se veía entrecortado.
+                  initial={isDesktop ? { opacity: 0, scale: 0.97 } : { y: "100%" }}
                   animate={
                     growFull
                       ? { y: 0, height: grownH ?? undefined, borderTopLeftRadius: 0, borderTopRightRadius: 0 }
-                      : {
-                          y: 0,
-                          // Si veníamos de expandida, animamos el alto de vuelta a
-                          // "auto" (encoge suave); si no, no controlamos el alto.
-                          height: grownH === "auto" ? "auto" : undefined,
-                          borderTopLeftRadius: 26,
-                          borderTopRightRadius: 26,
-                        }
+                      : isDesktop
+                        ? { opacity: 1, scale: 1, borderTopLeftRadius: 26, borderTopRightRadius: 26 }
+                        : {
+                            y: 0,
+                            // Si veníamos de expandida, animamos el alto de vuelta a
+                            // "auto" (encoge suave); si no, no controlamos el alto.
+                            height: grownH === "auto" ? "auto" : undefined,
+                            borderTopLeftRadius: 26,
+                            borderTopRightRadius: 26,
+                          }
                   }
-                  exit={{ y: "100%" }}
-                  transition={{ type: "spring", damping: 34, stiffness: 340, mass: 0.9 }}
+                  exit={
+                    isDesktop
+                      ? { opacity: 0, scale: 0.97, transition: { duration: 0.18, ease: [0.4, 0, 1, 1] } }
+                      : { y: "100%", transition: { type: "tween", duration: 0.3, ease: [0.42, 0, 0.58, 1] } }
+                  }
+                  transition={
+                    isDesktop
+                      ? { duration: 0.22, ease: [0.16, 1, 0.3, 1] }
+                      : { type: "spring", damping: 34, stiffness: 340, mass: 0.9 }
+                  }
                   drag={!isDesktop && !expanded ? "y" : false}
                   dragControls={dragControls}
                   dragListener={false}
@@ -169,7 +190,9 @@ export function Sheet({
                       onExpandComplete?.();
                     }
                   }}
-                  style={{ maxWidth }}
+                  // will-change: la hoja va a su propia capa GPU, así el slide/fade
+                  // no repinta el contenido (evita el stutter/"entrecortado").
+                  style={{ maxWidth, willChange: "transform, opacity" }}
                   className={
                     "pointer-events-auto flex w-full flex-col border-cart-line bg-cart-bg-elev text-cart-ink " +
                     (growFull

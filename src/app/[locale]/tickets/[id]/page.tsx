@@ -38,17 +38,17 @@ const cardVariants = {
 
 function TicketSkeleton() {
   return (
-    <div className="cart-dark-scope min-h-dvh bg-cart-bg text-white">
+    <div className="min-h-dvh bg-cart-bg text-cart-ink">
       <header className="sticky top-0 z-30 border-b border-cart-line bg-cart-bg/85 backdrop-blur-md">
         <div className="mx-auto flex max-w-[640px] items-center justify-between px-5 py-3">
-          <div className="h-5 w-16 animate-pulse rounded bg-white/[0.06]" />
-          <div className="h-5 w-24 animate-pulse rounded bg-white/[0.06]" />
+          <div className="h-5 w-16 animate-pulse rounded bg-cart-bg-elev-2" />
+          <div className="h-5 w-24 animate-pulse rounded bg-cart-bg-elev-2" />
         </div>
       </header>
       <div className="mx-auto max-w-[640px] px-5 pt-6">
-        <div className="aspect-square w-full animate-pulse rounded-3xl bg-white/[0.04]" />
-        <div className="mt-5 h-6 w-1/2 animate-pulse rounded bg-white/[0.06]" />
-        <div className="mt-2 h-4 w-2/3 animate-pulse rounded bg-white/[0.05]" />
+        <div className="aspect-square w-full animate-pulse rounded-3xl bg-cart-bg-elev" />
+        <div className="mt-5 h-6 w-1/2 animate-pulse rounded bg-cart-bg-elev-2" />
+        <div className="mt-2 h-4 w-2/3 animate-pulse rounded bg-cart-bg-elev-2" />
       </div>
     </div>
   );
@@ -271,14 +271,14 @@ function TicketDetailInner({ id }: { id: string }) {
 
   if (isLoading || noSession) {
     return (
-      <div className="cart-dark-scope grid min-h-dvh place-items-center bg-cart-bg text-cart-ink-3">
+      <div className="grid min-h-dvh place-items-center bg-cart-bg text-cart-ink-3">
         <span className="text-[13px]">Cargando…</span>
       </div>
     );
   }
   if (error || !data) {
     return (
-      <div className="cart-dark-scope grid min-h-dvh place-items-center bg-cart-bg px-6 text-center text-cart-ink-2">
+      <div className="grid min-h-dvh place-items-center bg-cart-bg px-6 text-center text-cart-ink-2">
         <div>
           <p className="text-[15px]">No pudimos cargar tu entrada.</p>
           <button
@@ -304,14 +304,14 @@ function TicketDetailInner({ id }: { id: string }) {
       : "/tickets";
 
   return (
-    <div className="cart-dark-scope min-h-dvh bg-cart-bg text-white">
+    <div className="min-h-dvh bg-cart-bg text-cart-ink">
       {/* Top bar */}
       <header className="sticky top-0 z-30 border-b border-cart-line bg-cart-bg/85 backdrop-blur-md">
         <div className="mx-auto flex max-w-[640px] items-center justify-between px-5 py-3.5">
           <Link
             href={backHref}
             aria-label="Volver"
-            className="grid size-9 place-items-center rounded-full bg-cart-bg-elev text-cart-ink-2 transition hover:bg-cart-bg-elev-2 hover:text-white"
+            className="grid size-9 place-items-center rounded-full bg-cart-bg-elev text-cart-ink-2 transition hover:bg-cart-bg-elev-2 hover:text-cart-ink"
           >
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
               <path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
@@ -349,12 +349,9 @@ function TicketDetailInner({ id }: { id: string }) {
             if (power < -threshold) goToTicket(nextTicketId, 1);
             else if (power > threshold) goToTicket(prevTicketId, -1);
           }}
-          className="touch-pan-y overflow-hidden rounded-[28px] border border-cart-accent/40"
+          className="touch-pan-y overflow-hidden rounded-[28px] border border-cart-accent/40 bg-cart-bg-elev"
           style={{
-            background:
-              "linear-gradient(180deg, rgba(124,58,237,0.28), rgba(20,12,40,0.6))",
-            boxShadow:
-              "0 30px 60px -20px rgba(124,58,237,0.5), 0 0 0 1px rgba(255,255,255,0.04) inset",
+            boxShadow: "0 24px 50px -22px rgba(40,20,90,0.35)",
           }}
         >
           {/* Héroe: portada del evento con estado, fecha y título */}
@@ -499,7 +496,7 @@ function TicketDetailInner({ id }: { id: string }) {
                   onClick={() => setEditOpen(true)}
                   disabled={!online}
                   title={online ? undefined : "Necesitas conexión para esto"}
-                  className="flex-1 rounded-full bg-white/10 px-3.5 py-2.5 text-[12.5px] font-semibold text-white transition hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="flex-1 rounded-full bg-cart-bg-elev-2 px-3.5 py-2.5 text-[12.5px] font-semibold text-cart-ink-2 transition hover:bg-cart-accent-soft hover:text-cart-ink disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Cambiar datos
                 </button>
@@ -509,7 +506,7 @@ function TicketDetailInner({ id }: { id: string }) {
                   onClick={() => setOpen(true)}
                   disabled={!online}
                   title={online ? undefined : "Necesitas conexión para enviar"}
-                  className="flex-1 rounded-full bg-white/10 px-3.5 py-2.5 text-[12.5px] font-semibold text-white transition hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="flex-1 rounded-full bg-cart-bg-elev-2 px-3.5 py-2.5 text-[12.5px] font-semibold text-cart-ink-2 transition hover:bg-cart-accent-soft hover:text-cart-ink disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Enviar
                 </button>
@@ -528,7 +525,7 @@ function TicketDetailInner({ id }: { id: string }) {
               onClick={() => goToTicket(prevTicketId, -1)}
               disabled={!prevTicketId}
               aria-label="Entrada anterior"
-              className="grid size-8 place-items-center rounded-full bg-cart-bg-elev text-cart-ink-2 transition hover:bg-cart-bg-elev-2 hover:text-white disabled:opacity-30"
+              className="grid size-8 place-items-center rounded-full bg-cart-bg-elev text-cart-ink-2 transition hover:bg-cart-bg-elev-2 hover:text-cart-ink disabled:opacity-30"
             >
               <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
                 <path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
@@ -545,7 +542,7 @@ function TicketDetailInner({ id }: { id: string }) {
                     aria-label={`Entrada ${i + 1}`}
                     aria-current={i === currentIndex}
                     className={`h-1.5 rounded-full transition-all ${
-                      i === currentIndex ? "w-5 bg-cart-accent" : "w-1.5 bg-white/20 hover:bg-white/35"
+                      i === currentIndex ? "w-5 bg-cart-accent" : "w-1.5 bg-cart-ink-4/25 hover:bg-cart-ink-4/40"
                     }`}
                   />
                 ))}
@@ -562,7 +559,7 @@ function TicketDetailInner({ id }: { id: string }) {
               onClick={() => goToTicket(nextTicketId, 1)}
               disabled={!nextTicketId}
               aria-label="Entrada siguiente"
-              className="grid size-8 place-items-center rounded-full bg-cart-bg-elev text-cart-ink-2 transition hover:bg-cart-bg-elev-2 hover:text-white disabled:opacity-30"
+              className="grid size-8 place-items-center rounded-full bg-cart-bg-elev text-cart-ink-2 transition hover:bg-cart-bg-elev-2 hover:text-cart-ink disabled:opacity-30"
             >
               <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
                 <path d="M6 3l5 5-5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
@@ -585,10 +582,10 @@ function TicketDetailInner({ id }: { id: string }) {
               <path d="M14 7v10" stroke="currentColor" strokeWidth="1.5" strokeDasharray="2 2" />
             </svg>
             <div className="min-w-0 flex-1">
-              <p className="text-[13.5px] font-semibold text-white">
+              <p className="text-[13.5px] font-semibold text-cart-ink">
                 {siblingTickets.length === 1 ? "Tienes 1 entrada más" : `Tienes ${siblingTickets.length} entradas más`}
               </p>
-              <p className="text-[11.5px] text-white/45">
+              <p className="text-[11.5px] text-cart-ink-3">
                 Deslízalas o velas todas para repartirlas
               </p>
             </div>
@@ -606,14 +603,14 @@ function TicketDetailInner({ id }: { id: string }) {
         {data.status === "active" && data.pendingTransferTo && (
           <div className="mt-4 rounded-2xl border border-amber-400/30 bg-amber-400/[0.06] px-4 py-3.5">
             <div className="flex items-start gap-3">
-              <span className="mt-0.5 text-amber-300">
+              <span className="mt-0.5 text-amber-500">
                 <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
                   <circle cx="9" cy="9" r="6.5" stroke="currentColor" strokeWidth="1.5" />
                   <path d="M9 5.5V9l2.3 1.6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </span>
               <div className="min-w-0 flex-1">
-                <div className="text-[13.5px] font-semibold text-white">
+                <div className="text-[13.5px] font-semibold text-cart-ink">
                   Enviada al {maskPhone(data.pendingTransferTo)}
                 </div>
                 <p className="mt-0.5 text-[11.5px] leading-[1.45] text-cart-ink-3">
@@ -626,7 +623,7 @@ function TicketDetailInner({ id }: { id: string }) {
                     onClick={() => cancelTransfer.mutate({ ticketId: data.id })}
                     disabled={cancelTransfer.isPending || !online}
                     title={online ? undefined : "Necesitas conexión para cancelar"}
-                    className="text-[12.5px] font-semibold text-amber-300 transition hover:text-amber-200 disabled:opacity-50"
+                    className="text-[12.5px] font-semibold text-amber-600 transition hover:text-amber-700 disabled:opacity-50"
                   >
                     {cancelTransfer.isPending ? "Recuperando…" : "Cancelar envío"}
                   </button>
@@ -666,7 +663,7 @@ function TicketDetailInner({ id }: { id: string }) {
               </svg>
             </span>
             <div className="text-[13px] leading-[1.45]">
-              <div className="font-semibold text-white">Tu QR cambia cada 10 segundos</div>
+              <div className="font-semibold text-cart-ink">Tu QR cambia cada 10 segundos</div>
               <div className="mt-0.5 text-[11.5px] text-cart-ink-3">
                 Las capturas no sirven. Mantén esta página abierta al entrar.
               </div>
@@ -948,28 +945,53 @@ function BoxPanel({
 
   return (
     <div id="box-panel" className="mt-4 scroll-mt-4 rounded-2xl border border-cart-accent/25 bg-cart-accent/[0.06] p-4">
-      {/* Ancla: nombre del box + capacidad (conecta con el modelo de ViaPase) */}
-      <div className="flex items-baseline justify-between gap-2">
-        <h2 className="text-[17px] font-bold tracking-[-0.01em] text-white">
-          {boxName} <span className="font-semibold text-white/45">· {box.capacity} personas</span>
-        </h2>
+      {/* Header claro del box: identidad + para cuántos (nada de bloque morado) */}
+      <div className="flex items-center gap-3">
+        <span className="inline-flex shrink-0 items-baseline gap-1.5 rounded-[12px] bg-cart-accent px-2.5 py-1.5 text-white">
+          <span className="text-[9px] font-extrabold uppercase tracking-[0.14em] opacity-85">Box</span>
+          <span className="text-[18px] font-black leading-none tracking-[-0.02em]">
+            {(box.boxNumber ?? "").replace(/^box\s*/i, "").trim() || boxName}
+          </span>
+        </span>
+        <div className="min-w-0 flex-1">
+          <h2 className="text-[18px] font-extrabold tracking-[-0.02em] text-cart-ink">Para {box.capacity} personas</h2>
+          <p className="truncate text-[11.5px] font-semibold text-cart-ink-3">Reservado a tu nombre · invítalos a llenar tu box</p>
+        </div>
+      </div>
+
+      {/* Barra de progreso con acento */}
+      <div className="mt-4 flex items-center gap-3">
+        <div className="h-2 flex-1 overflow-hidden rounded-full bg-cart-bg-elev-2">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-cart-accent to-cart-accent-2"
+            style={{ width: `${Math.round((filled / Math.max(1, box.capacity)) * 100)}%` }}
+          />
+        </div>
+        <span className="shrink-0 text-[12px] font-bold text-cart-ink-2">
+          <b className="text-cart-accent">{filled}</b> con lugar
+          {remaining > 0 && (
+            <>
+              {" "}· faltan <b className="text-cart-accent">{remaining}</b>
+            </>
+          )}
+        </span>
       </div>
 
       {/* Invitar: un CTA protagonista (WhatsApp) + copiar link como ícono */}
-      <div className="mt-3 grid grid-cols-[1fr_auto] gap-2">
+      <div className="mt-4 grid grid-cols-[1fr_auto] gap-2">
         <button
           type="button"
           onClick={share}
           className="flex items-center justify-center gap-2 rounded-xl bg-[#25D366] py-3 text-[14px] font-bold text-[#062315] transition active:scale-[0.98]"
         >
           <MessageCircle size={17} strokeWidth={2.2} className="fill-[#062315]" />
-          Invitar al box
+          Invitar ↗
         </button>
         <button
           type="button"
           onClick={copy}
           aria-label="Copiar link de invitación"
-          className="grid w-[52px] place-items-center rounded-xl bg-black/35 text-cart-accent shadow-[0_0_0_1px_rgba(255,255,255,0.08)_inset] transition active:scale-[0.96]"
+          className="grid w-[52px] place-items-center rounded-xl bg-cart-bg-elev-2 text-cart-accent shadow-[0_0_0_1px_var(--color-cart-line)_inset] transition active:scale-[0.96]"
         >
           {copied ? (
             <Check size={18} strokeWidth={2.4} />
@@ -979,15 +1001,17 @@ function BoxPanel({
         </button>
       </div>
       {/* Tranquilidad como hint, no banner */}
-      <p className="mt-2 text-center text-[11.5px] text-white/45">
+      <p className="mt-2 text-center text-[11.5px] text-cart-ink-3">
         Tu QR ya sirve aunque el box no se complete.
       </p>
 
       {/* Roster: una línea por persona, el chip dice el estado */}
-      <div className="mt-4 flex items-baseline justify-between px-0.5">
-        <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-white/40">En el box</p>
-        <p className="text-[13px] font-bold">
-          {filled} <span className="font-semibold text-white/40">/ {box.capacity}</span>
+      <div className="mt-5 flex items-baseline justify-between px-0.5">
+        <p className="text-[11px] font-extrabold uppercase tracking-[0.1em] text-cart-ink-4">
+          Quiénes van<span className="text-cart-accent">.</span>
+        </p>
+        <p className="text-[13px] font-bold text-cart-ink">
+          {filled} <span className="font-semibold text-cart-ink-4">/ {box.capacity}</span>
         </p>
       </div>
       <div className="mt-2">
@@ -1017,7 +1041,7 @@ function BoxPanel({
                     type="button"
                     aria-label="Cancelar"
                     onClick={() => setConfirmId(null)}
-                    className="grid size-9 shrink-0 place-items-center rounded-[10px] bg-white/[0.08] text-white/70 transition hover:bg-white/[0.14] active:scale-95"
+                    className="grid size-9 shrink-0 place-items-center rounded-[10px] bg-cart-bg-elev-2 text-cart-ink-3 transition hover:bg-cart-accent-soft active:scale-95"
                   >
                     <X size={16} strokeWidth={2.2} />
                   </button>
@@ -1026,10 +1050,10 @@ function BoxPanel({
                     className={
                       "grid size-9 shrink-0 place-items-center rounded-[10px] text-[14px] font-bold transition " +
                       (isHostMember
-                        ? "bg-cart-accent text-cart-bg"
+                        ? "bg-cart-accent text-white"
                         : heldByYou
                           ? "bg-gradient-to-br from-cart-accent to-cart-accent-2 text-white"
-                          : "bg-white/[0.08] text-white")
+                          : "bg-cart-bg-elev-2 text-cart-ink")
                     }
                   >
                     {initial}
@@ -1042,10 +1066,10 @@ function BoxPanel({
                   <button
                     type="button"
                     onClick={() => onNavigate(m.ticketId as string)}
-                    className="flex flex-1 items-center gap-1 truncate text-left text-[14px] font-semibold text-white transition active:scale-[0.99]"
+                    className="flex flex-1 items-center gap-1 truncate text-left text-[14px] font-semibold text-cart-ink transition active:scale-[0.99]"
                   >
                     <span className="truncate">{confirming ? `¿Quitar a ${m.name}?` : isHostMember ? "Tú" : m.name}</span>
-                    <ChevronRight size={14} strokeWidth={2.4} className="shrink-0 text-white/35" />
+                    <ChevronRight size={14} strokeWidth={2.4} className="shrink-0 text-cart-ink-4" />
                   </button>
                 ) : (
                   <span className="flex-1 truncate text-[14px] font-semibold">
@@ -1072,15 +1096,15 @@ function BoxPanel({
                 ) : (
                   <div className="flex shrink-0 items-center gap-2">
                     {m.used ? (
-                      <span className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-300">
-                        <span className="size-1.5 rounded-full bg-emerald-400" /> entró
+                      <span className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600">
+                        <span className="size-1.5 rounded-full bg-emerald-500" /> entró
                       </span>
                     ) : heldByYou ? (
                       <span className="rounded-full bg-cart-accent-soft px-2 py-0.5 text-[11px] font-semibold text-cart-accent">
                         📱 lo llevas tú
                       </span>
                     ) : (
-                      <span className="text-[11px] font-medium text-white/40">en el box</span>
+                      <span className="text-[11px] font-medium text-cart-ink-4">en el box</span>
                     )}
                     {/* Solo se puede quitar mientras no haya entrado (status "used"). */}
                     {!m.used && (
@@ -1094,7 +1118,7 @@ function BoxPanel({
                             3000,
                           );
                         }}
-                        className="-mr-1.5 grid size-9 place-items-center rounded-full text-red-400 transition hover:bg-red-500/15 hover:text-red-300 active:scale-95"
+                        className="-mr-1.5 grid size-9 place-items-center rounded-full text-red-500 transition hover:bg-red-500/10 hover:text-red-600 active:scale-95"
                       >
                         <X size={15} strokeWidth={2.4} aria-hidden />
                       </button>
@@ -1126,7 +1150,7 @@ function BoxPanel({
               className="w-full rounded-xl border border-cart-line bg-cart-bg px-3 py-2.5 text-[14px] outline-none focus:border-cart-accent/60"
             />
             {addCompanion.isError && (
-              <p className="text-[11.5px] text-red-400">No se pudo agregar. Reintenta.</p>
+              <p className="text-[11.5px] text-red-500">No se pudo agregar. Reintenta.</p>
             )}
             <div className="flex gap-2">
               <button
@@ -1140,12 +1164,12 @@ function BoxPanel({
               <button
                 type="button"
                 onClick={() => setAddMode("choose")}
-                className="rounded-full border border-cart-line px-4 py-2.5 text-[13px] font-semibold text-white/70"
+                className="rounded-full border border-cart-line px-4 py-2.5 text-[13px] font-semibold text-cart-ink-3"
               >
                 Volver
               </button>
             </div>
-            <p className="text-[11px] leading-snug text-white/45">
+            <p className="text-[11px] leading-snug text-cart-ink-3">
               Su QR queda en tu celular — lo muestras tú en la puerta.
             </p>
           </div>
@@ -1161,7 +1185,7 @@ function BoxPanel({
                 <Link2 size={17} strokeWidth={2} />
               </span>
               <span className="text-[13px] font-semibold">Mandarle el link
-                <span className="block text-[11px] font-normal text-white/45">Llega solo y recibe su QR</span>
+                <span className="block text-[11px] font-normal text-cart-ink-3">Llega solo y recibe su QR</span>
               </span>
             </button>
             <button
@@ -1173,13 +1197,13 @@ function BoxPanel({
                 <Smartphone size={17} strokeWidth={2} />
               </span>
               <span className="text-[13px] font-semibold">No tiene celular
-                <span className="block text-[11px] font-normal text-white/45">Su QR lo llevas tú</span>
+                <span className="block text-[11px] font-normal text-cart-ink-3">Su QR lo llevas tú</span>
               </span>
             </button>
             <button
               type="button"
               onClick={() => setAddMode("closed")}
-              className="w-full pt-1 text-center text-[12px] font-semibold text-white/45"
+              className="w-full pt-1 text-center text-[12px] font-semibold text-cart-ink-3"
             >
               Cancelar
             </button>
@@ -1193,8 +1217,8 @@ function BoxPanel({
             <span className="grid size-9 shrink-0 place-items-center rounded-[10px] bg-cart-accent-soft text-cart-accent">
               <Plus size={20} strokeWidth={2.4} />
             </span>
-            <span className="text-[13.5px] font-semibold text-white/90">Agregar a alguien
-              <span className="block text-[11px] font-normal text-white/45">
+            <span className="text-[13.5px] font-semibold text-cart-ink">Agregar a alguien
+              <span className="block text-[11px] font-normal text-cart-ink-3">
                 {remaining === 1 ? "Queda 1 lugar" : `Quedan ${remaining} lugares`}
               </span>
             </span>
