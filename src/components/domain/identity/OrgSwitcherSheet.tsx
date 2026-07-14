@@ -109,7 +109,7 @@ function ListContents({
     <>
       {isSheet && (
         <div className="mb-3 flex justify-center">
-          <div className="h-1 w-9 rounded-full bg-white/15" aria-hidden />
+          <div className="h-1 w-9 rounded-full bg-cart-ink/15" aria-hidden />
         </div>
       )}
 
@@ -117,8 +117,8 @@ function ListContents({
         <div
           className={
             isSheet
-              ? "text-[17px] font-semibold tracking-[-0.01em] text-white"
-              : "text-[13px] font-semibold tracking-[-0.005em] text-white"
+              ? "text-[17px] font-semibold tracking-[-0.01em] text-cart-ink"
+              : "text-[13px] font-semibold tracking-[-0.005em] text-cart-ink"
           }
         >
           Mis clientes
@@ -223,8 +223,8 @@ function ListContents({
                           <span
                             className={
                               isSheet
-                                ? "truncate text-[15px] font-semibold text-white"
-                                : "truncate text-[13.5px] font-semibold text-white"
+                                ? "truncate text-[15px] font-semibold text-cart-ink"
+                                : "truncate text-[13.5px] font-semibold text-cart-ink"
                             }
                           >
                             {org.name}
@@ -287,7 +287,7 @@ function ListContents({
             </span>
             <span
               className={
-                isSheet ? "text-[15px] font-semibold text-white" : "text-[12.5px] font-semibold"
+                isSheet ? "text-[15px] font-semibold text-cart-ink" : "text-[12.5px] font-semibold"
               }
             >
               Nueva razón social
@@ -299,7 +299,7 @@ function ListContents({
             className={
               isSheet
                 ? "flex w-full items-center gap-3 rounded-2xl border border-cart-line bg-transparent px-3.5 py-3 text-left transition-colors active:bg-cart-bg-elev-2"
-                : "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[12.5px] font-medium text-cart-ink-2 transition-colors hover:bg-cart-bg-elev-2 hover:text-white"
+                : "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[12.5px] font-medium text-cart-ink-2 transition-colors hover:bg-cart-bg-elev-2 hover:text-cart-ink"
             }
           >
             <span
@@ -312,7 +312,7 @@ function ListContents({
             >
               <PlusIcon />
             </span>
-            <span className={isSheet ? "text-[15px] font-medium text-white" : ""}>
+            <span className={isSheet ? "text-[15px] font-medium text-cart-ink" : ""}>
               Nueva marca
             </span>
           </button>
@@ -370,7 +370,7 @@ export const OrgSwitcherSheet = ({
                   exit={{ opacity: 0, scale: 0.97, x: -4 }}
                   transition={{ type: "spring", damping: 28, stiffness: 380, mass: 0.55 }}
                   style={{ transformOrigin: "left top" }}
-                  className="z-50 w-[320px] rounded-2xl border border-cart-line-strong bg-cart-bg-elev p-3 shadow-[0_30px_60px_-20px_rgba(0,0,0,0.7)]"
+                  className="home-light z-50 w-[320px] rounded-2xl border border-cart-line-strong bg-cart-bg-elev p-3 shadow-[0_30px_60px_-20px_rgba(0,0,0,0.7)]"
                 >
                   {content}
                 </motion.div>
@@ -405,7 +405,7 @@ export const OrgSwitcherSheet = ({
                 animate={{ y: 0 }}
                 exit={{ y: "100%" }}
                 transition={{ type: "spring", damping: 30, stiffness: 360, mass: 0.8 }}
-                className="fixed inset-x-0 bottom-0 z-[61] flex flex-col rounded-t-[26px] border-t border-cart-line-strong bg-cart-bg-elev pt-2.5 pb-[calc(env(safe-area-inset-bottom,0px)+18px)] shadow-[0_-30px_60px_-10px_rgba(0,0,0,0.7)]"
+                className="home-light fixed inset-x-0 bottom-0 z-[61] flex flex-col rounded-t-[26px] border-t border-cart-line-strong bg-cart-bg-elev pt-2.5 pb-[calc(env(safe-area-inset-bottom,0px)+18px)] shadow-[0_-30px_60px_-10px_rgba(0,0,0,0.7)]"
               >
                 <Dialog.Title className="sr-only">Mis clientes</Dialog.Title>
                 {content}

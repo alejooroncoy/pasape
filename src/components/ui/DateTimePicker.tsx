@@ -95,7 +95,7 @@ export function DatePicker({ value, onChange, placeholder = "Elegir fecha", minD
         <button
           type="button"
           className={`flex w-full items-center gap-2.5 rounded-xl border border-cart-line bg-cart-bg-elev-2 px-3.5 py-2.5 text-left text-[14px] transition hover:border-cart-line-strong ${
-            selected ? "text-white" : "text-cart-ink-3"
+            selected ? "text-cart-ink" : "text-cart-ink-3"
           }`}
         >
           <CalendarIcon />
@@ -111,25 +111,25 @@ export function DatePicker({ value, onChange, placeholder = "Elegir fecha", minD
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: -4, scale: 0.98 }}
                 transition={{ duration: 0.14 }}
-                className="z-50 w-[300px] rounded-2xl border border-cart-line-strong bg-cart-bg-elev p-3 shadow-[0_20px_60px_-10px_rgba(0,0,0,0.7)]"
+                className="home-light z-50 w-[300px] rounded-2xl border border-cart-line-strong bg-cart-bg-elev p-3 shadow-[0_20px_60px_-10px_rgba(0,0,0,0.7)]"
               >
                 {/* Nav */}
                 <div className="mb-2 flex items-center justify-between px-1">
                   <button
                     type="button"
                     onClick={() => setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() - 1, 1))}
-                    className="grid size-8 place-items-center rounded-lg text-cart-ink-2 transition hover:bg-cart-bg-elev-2 hover:text-white"
+                    className="grid size-8 place-items-center rounded-lg text-cart-ink-2 transition hover:bg-cart-bg-elev-2 hover:text-cart-ink"
                     aria-label="Mes anterior"
                   >
                     <ChevronLeft />
                   </button>
-                  <div className="text-[13.5px] font-semibold text-white tabular-nums">
+                  <div className="text-[13.5px] font-semibold text-cart-ink tabular-nums">
                     {MONTHS_ES[viewMonth.getMonth()]} {viewMonth.getFullYear()}
                   </div>
                   <button
                     type="button"
                     onClick={() => setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 1))}
-                    className="grid size-8 place-items-center rounded-lg text-cart-ink-2 transition hover:bg-cart-bg-elev-2 hover:text-white"
+                    className="grid size-8 place-items-center rounded-lg text-cart-ink-2 transition hover:bg-cart-bg-elev-2 hover:text-cart-ink"
                     aria-label="Mes siguiente"
                   >
                     <ChevronRight />
@@ -164,7 +164,7 @@ export function DatePicker({ value, onChange, placeholder = "Elegir fecha", minD
                             : disabled
                             ? "text-cart-ink-4/40"
                             : cell.inMonth
-                            ? "text-white hover:bg-cart-bg-elev-2"
+                            ? "text-cart-ink hover:bg-cart-bg-elev-2"
                             : "text-cart-ink-4 hover:bg-cart-bg-elev-2"
                         }`}
                       >
@@ -190,7 +190,7 @@ export function DatePicker({ value, onChange, placeholder = "Elegir fecha", minD
                       setViewMonth(today);
                       setOpen(false);
                     }}
-                    className="rounded-md px-2 py-1 text-[12px] font-medium text-cart-ink-2 hover:text-white"
+                    className="rounded-md px-2 py-1 text-[12px] font-medium text-cart-ink-2 hover:text-cart-ink"
                   >
                     Hoy
                   </button>
@@ -201,7 +201,7 @@ export function DatePicker({ value, onChange, placeholder = "Elegir fecha", minD
                         onChange("");
                         setOpen(false);
                       }}
-                      className="rounded-md px-2 py-1 text-[12px] font-medium text-cart-ink-3 hover:text-white"
+                      className="rounded-md px-2 py-1 text-[12px] font-medium text-cart-ink-3 hover:text-cart-ink"
                     >
                       Limpiar
                     </button>
@@ -261,7 +261,7 @@ export function TimePicker({ value, onChange, placeholder = "Elegir hora", stepM
         <button
           type="button"
           className={`flex w-full items-center gap-2.5 rounded-xl border border-cart-line bg-cart-bg-elev-2 px-3.5 py-2.5 text-left text-[14px] transition hover:border-cart-line-strong ${
-            value ? "text-white" : "text-cart-ink-3"
+            value ? "text-cart-ink" : "text-cart-ink-3"
           }`}
         >
           <ClockIcon />
@@ -277,7 +277,7 @@ export function TimePicker({ value, onChange, placeholder = "Elegir hora", stepM
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: -4, scale: 0.98 }}
                 transition={{ duration: 0.14 }}
-                className="z-50 max-h-[260px] w-[180px] overflow-y-auto rounded-2xl border border-cart-line-strong bg-cart-bg-elev p-1.5 shadow-[0_20px_60px_-10px_rgba(0,0,0,0.7)]"
+                className="home-light z-50 max-h-[260px] w-[180px] overflow-y-auto rounded-2xl border border-cart-line-strong bg-cart-bg-elev p-1.5 shadow-[0_20px_60px_-10px_rgba(0,0,0,0.7)]"
               >
                 {slots.map((slot) => {
                   const isSelected = slot === value;
@@ -295,7 +295,7 @@ export function TimePicker({ value, onChange, placeholder = "Elegir hora", stepM
                       className={`block w-full rounded-lg px-3 py-2 text-left text-[13.5px] font-medium tabular-nums transition ${
                         isSelected
                           ? "bg-cart-accent text-white shadow-[0_0_0_1px_rgba(255,255,255,0.1)_inset]"
-                          : "text-white hover:bg-cart-bg-elev-2"
+                          : "text-cart-ink hover:bg-cart-bg-elev-2"
                       }`}
                     >
                       {formatTimePretty(slot)}

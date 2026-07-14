@@ -45,6 +45,12 @@ export function PayDrawer({
 
   useEffect(() => setMounted(true), []);
 
+  const requestClose = () => {
+    if (closingRef.current) return;
+    closingRef.current = true;
+    setOpen(false); // dispara exit → onExitComplete → onClosed
+  };
+
   // Escape cierra (con la salida animada).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -52,13 +58,8 @@ export function PayDrawer({
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const requestClose = () => {
-    if (closingRef.current) return;
-    closingRef.current = true;
-    setOpen(false); // dispara exit → onExitComplete → onClosed
-  };
 
   if (!mounted) return null;
 

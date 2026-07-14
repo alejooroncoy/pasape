@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
 import { Link, useRouter } from "@/i18n/navigation";
-import { OrgShell } from "@/app/[locale]/org/_shell/OrgShell";
 import { SettingsCard, SettingsRow } from "@/app/[locale]/org/settings/_components/SettingsCard";
 import { TextInput } from "@/app/[locale]/org/settings/_components/Field";
 import { useUpdateLegalEntity } from "@/lib/identity/organizations/hooks/useUpdateLegalEntity";
@@ -106,12 +105,12 @@ export function LegalEntityClient({ entity, orgs }: { entity: Entity; orgs: Org[
   };
 
   return (
-    <OrgShell>
+    <>
       <div className="mb-8 sm:mb-10">
         <button
           type="button"
           onClick={() => router.back()}
-          className="mb-3 inline-flex items-center gap-1.5 text-[12.5px] font-medium text-cart-ink-3 transition hover:text-white"
+          className="mb-3 inline-flex items-center gap-1.5 text-[12.5px] font-medium text-cart-ink-3 transition hover:text-cart-ink"
         >
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
             <path
@@ -127,7 +126,7 @@ export function LegalEntityClient({ entity, orgs }: { entity: Entity; orgs: Org[
         <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-cart-ink-3">
           Productora
         </div>
-        <h1 className="mt-1 font-sans text-[clamp(28px,5vw,36px)] font-bold leading-[1.05] tracking-[-0.035em] text-white">
+        <h1 className="mt-1 font-sans text-[clamp(28px,5vw,36px)] font-bold leading-[1.05] tracking-[-0.035em] text-cart-ink">
           {entity.displayName || entity.name}
         </h1>
         <p className="mt-2 max-w-prose text-[13.5px] leading-snug text-cart-ink-3">
@@ -206,7 +205,7 @@ export function LegalEntityClient({ entity, orgs }: { entity: Entity; orgs: Org[
                       </span>
                     )}
                     {slug && !slugValid && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/12 px-1.5 py-px text-[9.5px] font-semibold tracking-[0.1em] text-amber-300">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/12 px-1.5 py-px text-[9.5px] font-semibold tracking-[0.1em] text-amber-700">
                         REVISAR
                       </span>
                     )}
@@ -220,7 +219,7 @@ export function LegalEntityClient({ entity, orgs }: { entity: Entity; orgs: Org[
                     value={slug}
                     onChange={(e) => setSlug(slugify(e.target.value))}
                     placeholder="inpuntahermosa"
-                    className="flex-1 bg-transparent font-mono text-[13.5px] font-semibold text-white outline-none placeholder:text-cart-ink-4"
+                    className="flex-1 bg-transparent font-mono text-[13.5px] font-semibold text-cart-ink outline-none placeholder:text-cart-ink-4"
                   />
                 </div>
               </SettingsRow>
@@ -263,7 +262,7 @@ export function LegalEntityClient({ entity, orgs }: { entity: Entity; orgs: Org[
               {publicHref && (
                 <Link
                   href={publicHref as never}
-                  className="inline-flex items-center gap-1.5 rounded-full bg-white/5 px-2.5 py-1 font-medium text-cart-ink-2 transition hover:text-white"
+                  className="inline-flex items-center gap-1.5 rounded-full bg-cart-bg-elev-2 px-2.5 py-1 font-medium text-cart-ink-2 transition hover:text-cart-ink"
                   target="_blank"
                 >
                   Ver página →
@@ -307,10 +306,10 @@ export function LegalEntityClient({ entity, orgs }: { entity: Entity; orgs: Org[
           </SettingsRow>
           <div className="flex flex-wrap items-center justify-end gap-3 border-t border-cart-line px-6 py-4 sm:px-8">
             {update.isSuccess && !legalDirty && !publicDirty && (
-              <span className="text-[12px] text-emerald-300">Cambios guardados.</span>
+              <span className="text-[12px] text-emerald-600">Cambios guardados.</span>
             )}
             {update.error && (
-              <span className="text-[12px] text-rose-300">
+              <span className="text-[12px] text-rose-600">
                 No se pudo guardar. Intenta de nuevo.
               </span>
             )}
@@ -354,13 +353,13 @@ export function LegalEntityClient({ entity, orgs }: { entity: Entity; orgs: Org[
                 <Link
                   href={`/${org.slug}` as never}
                   target="_blank"
-                  className="rounded-full bg-white/5 px-3 py-1.5 text-[12px] font-medium text-cart-ink-2 transition hover:text-white"
+                  className="rounded-full bg-cart-bg-elev-2 px-3 py-1.5 text-[12px] font-medium text-cart-ink-2 transition hover:text-cart-ink"
                 >
                   Ver página
                 </Link>
                 <Link
                   href={"/org/settings" as never}
-                  className="rounded-full border border-cart-line bg-cart-bg px-3.5 py-1.5 text-[12.5px] font-medium text-cart-ink-2 hover:border-cart-line-strong hover:text-white"
+                  className="rounded-full border border-cart-line bg-cart-bg px-3.5 py-1.5 text-[12.5px] font-medium text-cart-ink-2 hover:border-cart-line-strong hover:text-cart-ink"
                 >
                   Gestionar
                 </Link>
@@ -379,7 +378,7 @@ export function LegalEntityClient({ entity, orgs }: { entity: Entity; orgs: Org[
       </motion.div>
 
       <div className="h-[env(safe-area-inset-bottom)]" />
-    </OrgShell>
+    </>
   );
 }
 
@@ -396,7 +395,7 @@ function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void 
         "relative h-7 w-[52px] shrink-0 rounded-full transition-colors duration-200 " +
         (on
           ? "bg-cart-accent shadow-[0_0_12px_var(--color-cart-accent-glow)]"
-          : "bg-white/10")
+          : "bg-[color:var(--color-cart-line-strong)]")
       }
     >
       <span

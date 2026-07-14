@@ -158,7 +158,7 @@ function SchemeSection({
           setOpen((o) => !o);
         }}
         aria-expanded={open}
-        className="flex w-full items-center gap-3 px-4 py-4 text-left transition hover:bg-white/[0.02] lg:px-5"
+        className="flex w-full items-center gap-3 px-4 py-4 text-left transition hover:bg-cart-line-2 lg:px-5"
       >
         <svg
           width="14"
@@ -169,7 +169,7 @@ function SchemeSection({
         >
           <path d="M5 3l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
-        <span className="text-[15.5px] font-semibold tracking-[-0.01em] text-white">{title}</span>
+        <span className="text-[15.5px] font-semibold tracking-[-0.01em] text-cart-ink">{title}</span>
         {summary != null && (
           <span className="ml-auto text-[12.5px] font-medium text-cart-ink-3">{summary}</span>
         )}
@@ -228,7 +228,7 @@ function PctField({
             "rounded-xl px-3.5 py-2 text-[13.5px] font-semibold transition " +
             (value == null
               ? "bg-cart-accent text-white shadow-[0_8px_20px_-6px_var(--color-cart-accent-glow)]"
-              : "bg-cart-bg-elev-2 text-cart-ink-2 hover:text-white")
+              : "bg-cart-bg-elev-2 text-cart-ink-2 hover:text-cart-ink")
           }
         >
           Igual que {inheritLabel ?? "el default"}
@@ -246,7 +246,7 @@ function PctField({
             "rounded-xl px-3.5 py-2 text-[13.5px] font-semibold transition " +
             (value === p
               ? "bg-cart-accent text-white shadow-[0_8px_20px_-6px_var(--color-cart-accent-glow)]"
-              : "bg-cart-bg-elev-2 text-cart-ink-2 hover:text-white")
+              : "bg-cart-bg-elev-2 text-cart-ink-2 hover:text-cart-ink")
           }
         >
           {p}%

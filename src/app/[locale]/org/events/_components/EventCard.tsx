@@ -98,7 +98,7 @@ export function EventCard({ event, variant }: { event: Event; variant: Variant }
           {/* Body desktop */}
           <div className="flex flex-1 flex-col gap-3 p-4">
             <div className="min-w-0">
-              <h3 className="truncate text-[15px] font-semibold tracking-[-0.01em] text-white">
+              <h3 className="truncate text-[15px] font-semibold tracking-[-0.01em] text-cart-ink">
                 {event.title}
               </h3>
               <p className="mt-1 text-[12.5px] text-cart-ink-3">
@@ -121,7 +121,7 @@ export function EventCard({ event, variant }: { event: Event; variant: Variant }
                 </span>
                 <span className="text-cart-ink-4">{pct}%</span>
               </div>
-              <div className="h-1 w-full overflow-hidden rounded-full bg-white/5">
+              <div className="h-1 w-full overflow-hidden rounded-full bg-cart-line">
                 <motion.div
                   initial={{ width: 0 }}
                   animate={{ width: `${pct}%` }}
@@ -141,7 +141,7 @@ export function EventCard({ event, variant }: { event: Event; variant: Variant }
                 {status.label}
               </Badge>
             </div>
-            <h3 className="line-clamp-2 text-[15.5px] font-semibold leading-tight tracking-[-0.01em] text-white">
+            <h3 className="line-clamp-2 text-[15.5px] font-semibold leading-tight tracking-[-0.01em] text-cart-ink">
               {event.title}
             </h3>
             <p className="mt-1 text-[12.5px] text-cart-accent">
@@ -154,7 +154,7 @@ export function EventCard({ event, variant }: { event: Event; variant: Variant }
             )}
           </div>
           <div className="flex items-center gap-2">
-            <div className="h-1 flex-1 overflow-hidden rounded-full bg-white/5">
+            <div className="h-1 flex-1 overflow-hidden rounded-full bg-cart-line">
               <motion.div
                 initial={{ width: 0 }}
                 animate={{ width: `${pct}%` }}
@@ -179,19 +179,19 @@ export function EventCardSkeleton() {
       transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
       className="flex overflow-hidden rounded-2xl border border-cart-line bg-cart-bg-elev sm:block"
     >
-      <div className="h-auto w-28 flex-shrink-0 bg-white/[0.04] sm:h-32 sm:w-full" />
+      <div className="h-auto w-28 flex-shrink-0 bg-cart-line sm:h-32 sm:w-full" />
       <div className="hidden space-y-3 p-4 sm:block">
-        <div className="h-4 w-3/4 rounded bg-white/[0.06]" />
-        <div className="h-3 w-1/2 rounded bg-white/[0.04]" />
-        <div className="h-1 w-full rounded-full bg-white/[0.04]" />
+        <div className="h-4 w-3/4 rounded bg-cart-line-strong" />
+        <div className="h-3 w-1/2 rounded bg-cart-line" />
+        <div className="h-1 w-full rounded-full bg-cart-line" />
       </div>
       <div className="flex flex-1 flex-col justify-between gap-2 p-3.5 sm:hidden">
         <div className="space-y-2">
-          <div className="h-3 w-16 rounded-full bg-white/[0.06]" />
-          <div className="h-4 w-3/4 rounded bg-white/[0.06]" />
-          <div className="h-3 w-1/2 rounded bg-white/[0.04]" />
+          <div className="h-3 w-16 rounded-full bg-cart-line-strong" />
+          <div className="h-4 w-3/4 rounded bg-cart-line-strong" />
+          <div className="h-3 w-1/2 rounded bg-cart-line" />
         </div>
-        <div className="h-1 w-full rounded-full bg-white/[0.04]" />
+        <div className="h-1 w-full rounded-full bg-cart-line" />
       </div>
     </motion.div>
   );

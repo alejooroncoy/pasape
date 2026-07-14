@@ -31,7 +31,7 @@ export default function OrgPromoterTiersPage({ params }: { params: Params }) {
             <div className="flex items-center gap-2 text-[12px] text-cart-ink-3">
               <Link
                 href={`/org/events/${slug}/team` as never}
-                className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-cart-ink-3 transition hover:bg-white/5 hover:text-white"
+                className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-cart-ink-3 transition hover:bg-cart-line-2 hover:text-cart-ink"
               >
                 <svg width="11" height="11" viewBox="0 0 14 14" fill="none">
                   <path d="M10 3L5 7l5 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />

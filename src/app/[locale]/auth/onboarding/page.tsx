@@ -24,6 +24,7 @@ import {
   type OrganizerCopy,
   type OrganizerType,
 } from "@/lib/identity/organizerType";
+import { computeOnboardingSteps, type OnboardingStepKey } from "@/lib/identity/onboardingSteps";
 import { clientEvents } from "@/lib/analytics/clientEvents";
 
 // ============================================================
@@ -43,7 +44,8 @@ import { clientEvents } from "@/lib/analytics/clientEvents";
 //  Si el perfil ya tiene organizer_type, saltamos el paso de tipo.
 // ============================================================
 
-type StepKey = "type" | "identity" | "contact" | "entity" | "brand";
+type StepKey = OnboardingStepKey;
+
 type Vals = {
   fullName: string;
   dni: string;
@@ -133,21 +135,31 @@ function OnboardingInner() {
 
   const isOrganizerIntent = params.get("intent") === "organizer";
   const organizerType = me?.user?.organizerType ?? null;
-  const copy: OrganizerCopy = useMemo(() => copyFor(organizerType), [organizerType]);
+  // onPickType guarda en DB de forma optimista (fire-and-forget) — el cache de
+  // useCurrentUser puede tardar en reflejar el nuevo organizerType. Este state
+  // local captura la elección al instante para que `steps` reaccione ya mismo,
+  // sin esperar el refetch.
+  const [pickedType, setPickedType] = useState<OrganizerType | null>(null);
+  const effectiveOrganizerType = pickedType ?? organizerType;
+  const copy: OrganizerCopy = useMemo(() => copyFor(effectiveOrganizerType), [effectiveOrganizerType]);
 
-  // Steps son fijos por intent — NO los filtramos al guardar organizer_type,
-  // porque eso impediría que el usuario volviera atrás a cambiarlo.
-  const steps: StepKey[] = useMemo(() => {
-    if (!isOrganizerIntent) return ["identity", "contact"];
-    return ["type", "identity", "contact", "entity", "brand"];
-  }, [isOrganizerIntent]);
+  // Steps por intent. Para "independent_host" (artista/banda independiente)
+  // saltamos "entity"/"brand" — son pasos pensados para productoras (razón
+  // social, marca comercial) y no aplican a un artista publicando su propio
+  // show. `CompleteOnboarding.ts` ya usa el fallback fullName → brandName sin
+  // necesidad de que esos campos existan. Recomputa si el usuario vuelve a
+  // "type" y cambia de elección — no pierde progreso, solo ajusta el recorrido.
+  const steps: StepKey[] = useMemo(
+    () => computeOnboardingSteps(isOrganizerIntent, effectiveOrganizerType),
+    [isOrganizerIntent, effectiveOrganizerType],
+  );
 
   // Step actual viene del URL (?step=...). Default en primer load:
   //  · Sin ?step= y sin organizer_type guardado → empezamos en el primer step
   //  · Sin ?step= pero con organizer_type ya elegido → saltamos a identity
   //  · Con ?step= → respetamos lo que diga el URL (permite volver a "type")
   const stepFromUrl = params.get("step") as StepKey | null;
-  const defaultStep: StepKey = organizerType && isOrganizerIntent ? "identity" : steps[0];
+  const defaultStep: StepKey = effectiveOrganizerType && isOrganizerIntent ? "identity" : steps[0];
   const stepIndex = Math.max(
     0,
     steps.indexOf(stepFromUrl ?? defaultStep),
@@ -214,7 +226,10 @@ function OnboardingInner() {
   const hasGoogle = !!me?.user?.email;
 
   const onPickType = async (type: OrganizerType) => {
-    // Optimistic: guardar en DB y avanzar de inmediato.
+    // Optimistic: guardar en DB y avanzar de inmediato. pickedType local evita
+    // esperar el refetch de useCurrentUser para que `steps` ya sepa saltar
+    // entity/brand si el tipo elegido es independent_host.
+    setPickedType(type);
     void updateProfile.mutateAsync({ organizerType: type }).catch(() => {});
     setStep("identity");
   };
@@ -302,13 +317,17 @@ function OnboardingInner() {
                 isOrganizerIntent={isOrganizerIntent}
                 onChange={(p) => setVals(p)}
                 onAdvance={() => {
-                  if (isOrganizerIntent) setStep("entity");
-                  else void submit();
+                  if (isOrganizerIntent && effectiveOrganizerType !== "independent_host") {
+                    setStep("entity");
+                  } else {
+                    void submit();
+                  }
                 }}
-                isFinal={!isOrganizerIntent}
+                isFinal={!isOrganizerIntent || effectiveOrganizerType === "independent_host"}
                 submitting={onboarding.isPending}
                 error={
-                  !isOrganizerIntent && onboarding.error
+                  (!isOrganizerIntent || effectiveOrganizerType === "independent_host") &&
+                  onboarding.error
                     ? (onboarding.error as Error).message
                     : null
                 }
@@ -347,8 +366,8 @@ function OnboardingInner() {
 const ONBOARDING_CSS = `
 .pasape-onb-canvas {
   min-height: 100dvh;
-  background: #0a0a0f;
-  color: #fff;
+  background: var(--color-cart-bg);
+  color: var(--color-cart-ink);
   font-family: var(--font-general-sans), system-ui, -apple-system, sans-serif;
   display: flex;
   flex-direction: column;
@@ -371,7 +390,7 @@ const ONBOARDING_CSS = `
 .pasape-onb-main { display: flex; flex-direction: column; flex: 1; min-width: 0; }
 .pasape-onb-brand {
   display: flex; align-items: center; gap: 8px;
-  color: #fff; font-weight: 600; letter-spacing: -0.01em;
+  color: var(--color-cart-ink); font-weight: 600; letter-spacing: -0.01em;
 }
 .pasape-onb-frame {
   width: 100%; max-width: 480px; margin: 0 auto;
@@ -408,7 +427,7 @@ const ONBOARDING_CSS = `
   .pasape-onb-stepper-line {
     position: absolute; top: 13px; right: 50%;
     width: 100%; height: 1.5px;
-    background: rgba(255,255,255,0.1);
+    background: var(--color-cart-line);
     transform: translateX(-14px); z-index: 0;
   }
   .pasape-onb-stepper-item:first-child .pasape-onb-stepper-line { display: none; }
@@ -417,25 +436,25 @@ const ONBOARDING_CSS = `
     width: 26px; height: 26px; border-radius: 999px;
     display: grid; place-items: center;
     font-size: 12px; font-weight: 600;
-    color: rgba(255,255,255,0.55); background: #0a0a0f;
-    box-shadow: 0 0 0 1.5px rgba(255,255,255,0.14) inset;
+    color: var(--color-cart-ink-3); background: var(--color-cart-bg);
+    box-shadow: 0 0 0 1.5px var(--color-cart-line-strong) inset;
     transition: all .2s;
   }
   .pasape-onb-stepper-dot.is-active {
-    color: #fff; background: #7c3aed;
-    box-shadow: 0 0 0 1.5px #7c3aed inset, 0 0 0 4px rgba(124,58,237,0.18);
+    color: #fff; background: linear-gradient(135deg, var(--color-cart-accent), var(--color-cart-accent-blue));
+    box-shadow: 0 0 0 1.5px var(--color-cart-accent) inset, 0 0 0 4px var(--color-cart-accent-soft);
   }
   .pasape-onb-stepper-dot.is-done {
-    color: #fff; background: #7c3aed;
-    box-shadow: 0 0 0 1.5px #7c3aed inset;
+    color: #fff; background: linear-gradient(135deg, var(--color-cart-accent), var(--color-cart-accent-blue));
+    box-shadow: 0 0 0 1.5px var(--color-cart-accent) inset;
   }
-  .pasape-onb-stepper-line.is-done { background: #7c3aed; }
+  .pasape-onb-stepper-line.is-done { background: linear-gradient(90deg, var(--color-cart-accent), var(--color-cart-accent-blue)); }
   .pasape-onb-stepper-label {
     margin-top: 8px; font-size: 11px;
-    color: rgba(255,255,255,0.55);
+    color: var(--color-cart-ink-3);
     letter-spacing: 0.02em; white-space: nowrap;
   }
-  .pasape-onb-stepper-label.is-active { color: #fff; font-weight: 600; }
+  .pasape-onb-stepper-label.is-active { color: var(--color-cart-ink); font-weight: 600; }
   .pasape-onb-step { padding: 4px 8px 0 !important; flex: initial !important; }
   .pasape-onb-header { text-align: center; margin-bottom: 28px; padding: 0 8px; }
   .pasape-onb-header p { max-width: 360px; margin-left: auto !important; margin-right: auto !important; }
@@ -446,9 +465,9 @@ const ONBOARDING_CSS = `
   }
   .pasape-onb-card {
     border-radius: 22px !important;
-    background: rgba(255,255,255,0.035) !important;
+    background: var(--color-cart-bg-elev) !important;
     box-shadow:
-      0 0 0 1px rgba(255,255,255,0.07) inset,
+      0 0 0 1px var(--color-cart-line) inset,
       0 30px 60px -30px rgba(0,0,0,0.6) !important;
   }
   .pasape-onb-card-row { padding: 18px 18px !important; }
@@ -471,8 +490,8 @@ const ONBOARDING_CSS = `
     width: 380px;
     flex-shrink: 0;
     padding: 36px 36px 32px;
-    background: linear-gradient(180deg, #0e0e18 0%, #0a0a0f 70%);
-    box-shadow: inset -1px 0 0 rgba(255,255,255,0.06);
+    background: linear-gradient(180deg, var(--color-cart-bg-elev) 0%, var(--color-cart-bg) 70%);
+    box-shadow: inset -1px 0 0 var(--color-cart-line);
     position: relative;
     overflow: hidden;
   }
@@ -495,13 +514,16 @@ const ONBOARDING_CSS = `
     font-weight: 700;
     letter-spacing: -0.03em;
     line-height: 1.15;
-    color: #fff;
+    background: linear-gradient(90deg, var(--color-cart-ink) 0%, var(--color-cart-accent) 65%, var(--color-cart-accent-blue) 100%);
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
   }
   .pasape-onb-side-sub {
     margin-top: 10px;
     font-size: 13.5px;
     line-height: 1.55;
-    color: rgba(255,255,255,0.55);
+    color: var(--color-cart-ink-3);
     max-width: 280px;
   }
   .pasape-onb-vstepper {
@@ -526,40 +548,40 @@ const ONBOARDING_CSS = `
     top: 36px;
     bottom: -10px;
     width: 1.5px;
-    background: rgba(255,255,255,0.1);
+    background: var(--color-cart-line);
   }
   .pasape-onb-vstepper-item:last-child::before { display: none; }
   .pasape-onb-vstepper-item.is-done::before,
   .pasape-onb-vstepper-item.is-active::before {
-    background: #7c3aed;
+    background: linear-gradient(180deg, var(--color-cart-accent), var(--color-cart-accent-blue));
   }
   .pasape-onb-vstepper-dot {
     width: 28px; height: 28px; border-radius: 999px;
     display: grid; place-items: center;
     font-size: 12.5px; font-weight: 600;
-    color: rgba(255,255,255,0.55);
-    background: #0a0a0f;
-    box-shadow: 0 0 0 1.5px rgba(255,255,255,0.14) inset;
+    color: var(--color-cart-ink-3);
+    background: var(--color-cart-bg);
+    box-shadow: 0 0 0 1.5px var(--color-cart-line-strong) inset;
     flex-shrink: 0;
     transition: all .2s;
   }
   .pasape-onb-vstepper-item.is-active .pasape-onb-vstepper-dot {
     color: #fff;
-    background: #7c3aed;
-    box-shadow: 0 0 0 1.5px #7c3aed inset, 0 0 0 4px rgba(124,58,237,0.18);
+    background: linear-gradient(135deg, var(--color-cart-accent), var(--color-cart-accent-blue));
+    box-shadow: 0 0 0 1.5px var(--color-cart-accent) inset, 0 0 0 4px var(--color-cart-accent-soft);
   }
   .pasape-onb-vstepper-item.is-done .pasape-onb-vstepper-dot {
     color: #fff;
-    background: #7c3aed;
-    box-shadow: 0 0 0 1.5px #7c3aed inset;
+    background: linear-gradient(135deg, var(--color-cart-accent), var(--color-cart-accent-blue));
+    box-shadow: 0 0 0 1.5px var(--color-cart-accent) inset;
   }
   .pasape-onb-vstepper-label {
     font-size: 14px;
-    color: rgba(255,255,255,0.55);
+    color: var(--color-cart-ink-3);
     letter-spacing: -0.005em;
   }
   .pasape-onb-vstepper-item.is-active .pasape-onb-vstepper-label {
-    color: #fff;
+    color: var(--color-cart-ink);
     font-weight: 600;
   }
   .pasape-onb-side-footer { padding-top: 16px; }
@@ -613,14 +635,14 @@ function Shell({
   userEmail: string | null;
 }) {
   return (
-    <div className="pasape-onb-canvas">
+    <div className="home-light pasape-onb-canvas bg-cart-bg text-cart-ink">
       <style dangerouslySetInnerHTML={{ __html: ONBOARDING_CSS }} />
       {/* Sidebar — solo visible en desktop ≥1024px (Remote-style) */}
       <aside className="pasape-onb-sidebar">
         <div className="pasape-onb-brand">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <Logo className="size-[26px]" />
-          <span style={{ fontSize: 12, letterSpacing: "0.22em", fontWeight: 700, color: "#fff" }}>
+          <span style={{ fontSize: 12, letterSpacing: "0.22em", fontWeight: 700, color: C.text }}>
             PASAPE
           </span>
         </div>
@@ -666,14 +688,14 @@ function Shell({
         </div>
         {userEmail && (
           <div className="pasape-onb-side-footer">
-            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", letterSpacing: "0.06em" }}>
+            <div style={{ fontSize: 11, color: "var(--color-cart-ink-4)", letterSpacing: "0.06em" }}>
               SESIÓN
             </div>
             <div
               style={{
                 marginTop: 4,
                 fontSize: 12.5,
-                color: "rgba(255,255,255,0.75)",
+                color: "var(--color-cart-ink-2)",
                 whiteSpace: "nowrap",
                 overflow: "hidden",
                 textOverflow: "ellipsis",
@@ -742,9 +764,9 @@ function TopBar({
           width: 40,
           height: 40,
           borderRadius: 999,
-          background: "rgba(255,255,255,0.06)",
+          background: "var(--color-cart-bg-elev-2)",
           border: 0,
-          color: "#fff",
+          color: C.text,
           display: "grid",
           placeItems: "center",
           cursor: "pointer",
@@ -813,7 +835,7 @@ function TopBar({
           flex: 1,
           height: 4,
           borderRadius: 999,
-          background: "rgba(255,255,255,0.08)",
+          background: "var(--color-cart-line)",
           overflow: "hidden",
         }}
       >
@@ -843,11 +865,11 @@ function TypeStep({ onPick }: { onPick: (t: OrganizerType) => void }) {
           height: 64,
           margin: "0 auto 22px",
           borderRadius: 18,
-          background: C.purple,
+          background: "linear-gradient(135deg, var(--color-cart-accent), var(--color-cart-accent-blue))",
           display: "grid",
           placeItems: "center",
           boxShadow:
-            "0 12px 28px -8px rgba(124,58,237,0.55), 0 0 0 1px rgba(255,255,255,0.05) inset",
+            "0 12px 28px -8px var(--color-cart-accent-glow), 0 0 0 1px rgba(255,255,255,0.05) inset",
           color: "#fff",
         }}
       >
@@ -891,8 +913,8 @@ function TypeStep({ onPick }: { onPick: (t: OrganizerType) => void }) {
         style={{
           marginTop: 24,
           borderRadius: 18,
-          background: "rgba(255,255,255,0.04)",
-          boxShadow: "0 0 0 1px rgba(255,255,255,0.06) inset",
+          background: C.bg2,
+          boxShadow: "0 0 0 1px var(--color-cart-line) inset",
           overflow: "hidden",
         }}
       >
@@ -910,7 +932,7 @@ function TypeStep({ onPick }: { onPick: (t: OrganizerType) => void }) {
               padding: "14px 14px",
               background: "transparent",
               border: 0,
-              borderTop: i === 0 ? "none" : "1px solid rgba(255,255,255,0.06)",
+              borderTop: i === 0 ? "none" : "1px solid var(--color-cart-line)",
               cursor: "pointer",
               textAlign: "left",
             }}
@@ -936,7 +958,7 @@ function TypeStep({ onPick }: { onPick: (t: OrganizerType) => void }) {
                   fontFamily: FONT_DISPLAY,
                   fontSize: 15.5,
                   fontWeight: 600,
-                  color: "#fff",
+                  color: C.text,
                   letterSpacing: "-0.01em",
                 }}
               >
@@ -1134,7 +1156,10 @@ function ContactStep({
                   height: 42,
                   borderRadius: 12,
                   border: 0,
-                  background: vals.role === r ? C.purple : "rgba(255,255,255,0.05)",
+                  background:
+                    vals.role === r
+                      ? "linear-gradient(135deg, var(--color-cart-accent), var(--color-cart-accent-blue))"
+                      : C.bg2,
                   color: vals.role === r ? "#fff" : C.dim,
                   fontWeight: 600,
                   fontSize: 12.5,
@@ -1251,8 +1276,8 @@ function BrandStep({
           marginTop: 4,
           padding: "12px 14px",
           borderRadius: 14,
-          background: "rgba(255,255,255,0.04)",
-          boxShadow: "0 0 0 1px rgba(255,255,255,0.06) inset",
+          background: C.bg2,
+          boxShadow: "0 0 0 1px var(--color-cart-line) inset",
         }}
       >
         <div
@@ -1270,7 +1295,7 @@ function BrandStep({
             marginTop: 4,
             fontSize: 14,
             fontWeight: 600,
-            color: "#fff",
+            color: C.text,
             whiteSpace: "nowrap",
             overflow: "hidden",
             textOverflow: "ellipsis",
@@ -1325,7 +1350,7 @@ function StepBody({
               lineHeight: 1.0,
               margin: 0,
               marginBottom: 8,
-              color: "#fff",
+              color: C.text,
             }}
           >
             {title}

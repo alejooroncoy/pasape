@@ -140,7 +140,7 @@ export function InviteSheet({ open, onClose }: Props) {
               <div>
                 <h3
                   id="invite-sheet-title"
-                  className="text-[17px] font-semibold tracking-[-0.01em] text-white"
+                  className="text-[17px] font-semibold tracking-[-0.01em] text-cart-ink"
                 >
                   {created ? (created.sent ? "Invitación enviada" : "Invitación creada") : "Invitar a tu equipo"}
                 </h3>
@@ -159,7 +159,7 @@ export function InviteSheet({ open, onClose }: Props) {
               <button
                 type="button"
                 onClick={onClose}
-                className="grid size-8 shrink-0 place-items-center rounded-full border border-cart-line bg-cart-bg-elev-2 text-cart-ink-2 transition hover:text-white"
+                className="grid size-8 shrink-0 place-items-center rounded-full border border-cart-line bg-cart-bg-elev-2 text-cart-ink-2 transition hover:text-cart-ink"
                 aria-label="Cerrar"
               >
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -185,7 +185,7 @@ export function InviteSheet({ open, onClose }: Props) {
                               className={`rounded-lg px-3 py-2 text-[13px] font-medium transition ${
                                 selected
                                   ? "bg-cart-accent text-white shadow-[0_0_0_1px_rgba(255,255,255,0.08)_inset]"
-                                  : "text-cart-ink-2 hover:text-white"
+                                  : "text-cart-ink-2 hover:text-cart-ink"
                               }`}
                             >
                               {c === "email" ? "Correo" : "WhatsApp"}
@@ -204,7 +204,7 @@ export function InviteSheet({ open, onClose }: Props) {
                           placeholder="persona@ejemplo.com"
                           required
                           autoComplete="email"
-                          className="block w-full rounded-xl border border-cart-line bg-cart-bg-elev-2 px-3.5 py-2.5 text-[14px] text-white placeholder:text-cart-ink-3 focus:border-cart-accent focus:outline-none"
+                          className="block w-full rounded-xl border border-cart-line bg-cart-bg-elev-2 px-3.5 py-2.5 text-[14px] text-cart-ink placeholder:text-cart-ink-3 focus:border-cart-accent focus:outline-none"
                         />
                         <p className="mt-1.5 text-[11.5px] leading-snug text-cart-ink-3">
                           Debe aceptar con Google usando ese correo.
@@ -227,7 +227,7 @@ export function InviteSheet({ open, onClose }: Props) {
                       placeholder="persona@ejemplo.com"
                       required
                       autoComplete="email"
-                      className="block w-full rounded-xl border border-cart-line bg-cart-bg-elev-2 px-3.5 py-2.5 text-[14px] text-white placeholder:text-cart-ink-3 focus:border-cart-accent focus:outline-none"
+                      className="block w-full rounded-xl border border-cart-line bg-cart-bg-elev-2 px-3.5 py-2.5 text-[14px] text-cart-ink placeholder:text-cart-ink-3 focus:border-cart-accent focus:outline-none"
                     />
                     <p className="mt-1.5 text-[11.5px] leading-snug text-cart-ink-3">
                       Solo podrá aceptar entrando con Google usando ese correo.
@@ -261,7 +261,7 @@ export function InviteSheet({ open, onClose }: Props) {
                             {selected ? <span className="size-1.5 rounded-full bg-black" /> : null}
                           </span>
                           <span className="min-w-0 flex-1">
-                            <span className="block text-[13.5px] font-medium text-white">
+                            <span className="block text-[13.5px] font-medium text-cart-ink">
                               {s.label}
                             </span>
                             <span className="mt-0.5 block text-[12px] leading-snug text-cart-ink-3">
@@ -299,7 +299,7 @@ export function InviteSheet({ open, onClose }: Props) {
                             {selected ? <span className="size-1.5 rounded-full bg-black" /> : null}
                           </span>
                           <span className="min-w-0 flex-1">
-                            <span className="block text-[13.5px] font-medium text-white">
+                            <span className="block text-[13.5px] font-medium text-cart-ink">
                               {r.label}
                             </span>
                             <span className="mt-0.5 block text-[12px] leading-snug text-cart-ink-3">
@@ -313,7 +313,7 @@ export function InviteSheet({ open, onClose }: Props) {
                 </div>
 
                 {mutation.error && (
-                  <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3.5 py-2.5 text-[12.5px] text-rose-200">
+                  <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3.5 py-2.5 text-[12.5px] text-rose-600">
                     No se pudo crear la invitación. Intenta de nuevo.
                   </div>
                 )}
@@ -336,7 +336,7 @@ export function InviteSheet({ open, onClose }: Props) {
               <div className="space-y-4">
                 <div
                   className={`grid size-14 place-items-center rounded-full mx-auto ${
-                    created.sent ? "bg-emerald-500/15 text-emerald-300" : "bg-rose-500/15 text-rose-300"
+                    created.sent ? "bg-emerald-500/15 text-emerald-600" : "bg-rose-500/15 text-rose-600"
                   }`}
                   aria-hidden
                 >
@@ -352,7 +352,7 @@ export function InviteSheet({ open, onClose }: Props) {
                   )}
                 </div>
                 <div className="text-center">
-                  <div className="text-[15px] font-semibold text-white">
+                  <div className="text-[15px] font-semibold text-cart-ink">
                     {created.sent ? "Ya está en camino" : "Inténtalo de nuevo"}
                   </div>
                   <div className="mt-1 text-[12.5px] text-cart-ink-3">

@@ -3,11 +3,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Link } from "@/i18n/navigation";
-import { OrgShell } from "../../_shell/OrgShell";
 import { useMyEvents } from "@/lib/events/hooks/useEvents";
 import type { Event } from "@/server/events/domain/Event";
 import { EventCard, EventCardSkeleton } from "./EventCard";
 import { EmptyState } from "./EmptyState";
+import { useNewEventHref } from "@/lib/events/hooks/useNewEventHref";
 
 type TabKey = "upcoming" | "past" | "draft";
 
@@ -27,6 +27,7 @@ export function OrgEventsClient({ initialOrgSlug }: { initialOrgSlug: string | n
   // initialOrgSlug viene del server → useMyEvents arranca sin esperar a
   // useCurrentUser (mata el waterfall) y su queryKey coincide con el prefetch.
   const events = useMyEvents(initialOrgSlug);
+  const newEventHref = useNewEventHref();
   const [tab, setTab] = useState<TabKey>("upcoming");
   const [search, setSearch] = useState("");
   const [searchFocused, setSearchFocused] = useState(false);
@@ -77,12 +78,12 @@ export function OrgEventsClient({ initialOrgSlug }: { initialOrgSlug: string | n
   }, [events.data, tab, search]);
 
   return (
-    <OrgShell>
+    <>
       {/* Header — iOS large title on mobile */}
       <div className="mb-5 flex flex-col gap-4 pt-2 sm:mb-6 sm:pt-0 lg:mb-8 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-start justify-between gap-3 lg:min-w-0 lg:block">
           <div className="min-w-0">
-            <h1 className="text-[34px] font-bold leading-[1.05] tracking-[-0.03em] text-white sm:text-[26px] sm:font-semibold sm:tracking-[-0.02em] lg:text-[30px]">
+            <h1 className="text-[34px] font-bold leading-[1.05] tracking-[-0.03em] text-cart-ink sm:text-[26px] sm:font-semibold sm:tracking-[-0.02em] lg:text-[30px]">
               Eventos
             </h1>
             <p className="mt-1.5 text-[15px] leading-snug text-cart-ink-3 sm:mt-1 sm:text-[13px]">
@@ -92,7 +93,7 @@ export function OrgEventsClient({ initialOrgSlug }: { initialOrgSlug: string | n
 
           {/* Mobile-only inline + button (iOS nav style) */}
           <Link
-            href={"/org/events/new" as never}
+            href={newEventHref as never}
             aria-label="Crear evento"
             className="inline-flex size-10 flex-shrink-0 items-center justify-center rounded-full bg-cart-accent text-white shadow-[0_8px_24px_-8px_var(--color-cart-accent-glow)] active:scale-95 transition-transform lg:hidden"
           >
@@ -140,7 +141,7 @@ export function OrgEventsClient({ initialOrgSlug }: { initialOrgSlug: string | n
               onFocus={() => setSearchFocused(true)}
               onBlur={() => setSearchFocused(false)}
               placeholder="Buscar eventos"
-              className="w-full bg-transparent py-3 pl-10 pr-3 text-[15px] text-white placeholder:text-cart-ink-4 focus:outline-none sm:py-2.5 sm:pl-9 sm:pr-16 sm:text-[13.5px]"
+              className="w-full bg-transparent py-3 pl-10 pr-3 text-[15px] text-cart-ink placeholder:text-cart-ink-4 focus:outline-none sm:py-2.5 sm:pl-9 sm:pr-16 sm:text-[13.5px]"
             />
             <kbd className="pointer-events-none absolute right-3 hidden items-center gap-0.5 rounded-md border border-cart-line bg-cart-bg px-1.5 py-0.5 text-[10px] font-medium text-cart-ink-3 sm:inline-flex">
               ⌘K
@@ -149,7 +150,7 @@ export function OrgEventsClient({ initialOrgSlug }: { initialOrgSlug: string | n
 
           {/* Desktop-only "Crear evento" CTA */}
           <Link
-            href={"/org/events/new" as never}
+            href={newEventHref as never}
             className="hidden flex-shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-cart-accent px-4 py-2.5 text-[13.5px] font-medium text-white shadow-[0_8px_24px_-8px_var(--color-cart-accent-glow)] transition-transform hover:scale-[1.03] lg:inline-flex"
           >
             <span className="text-[15px] leading-none">+</span>
@@ -164,7 +165,7 @@ export function OrgEventsClient({ initialOrgSlug }: { initialOrgSlug: string | n
         <div
           role="tablist"
           aria-label="Filtrar eventos"
-          className="relative flex w-full items-center gap-1 rounded-xl bg-white/[0.06] p-1 sm:hidden"
+          className="relative flex w-full items-center gap-1 rounded-xl bg-cart-line p-1 sm:hidden"
         >
           {TABS.map((t) => {
             const active = tab === t.key;
@@ -176,7 +177,7 @@ export function OrgEventsClient({ initialOrgSlug }: { initialOrgSlug: string | n
                 aria-selected={active}
                 onClick={() => setTab(t.key)}
                 className={`relative flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-[13px] font-semibold transition-colors ${
-                  active ? "text-white" : "text-cart-ink-3"
+                  active ? "text-cart-ink" : "text-cart-ink-3"
                 }`}
               >
                 {active && (
@@ -191,7 +192,7 @@ export function OrgEventsClient({ initialOrgSlug }: { initialOrgSlug: string | n
                   className={`relative z-10 rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums ${
                     active
                       ? "bg-cart-accent-soft text-cart-accent"
-                      : "bg-white/5 text-cart-ink-4"
+                      : "bg-cart-line text-cart-ink-4"
                   }`}
                 >
                   {count}
@@ -218,7 +219,7 @@ export function OrgEventsClient({ initialOrgSlug }: { initialOrgSlug: string | n
                   aria-selected={active}
                   onClick={() => setTab(t.key)}
                   className={`relative flex items-center gap-2 px-3 py-2.5 text-[13.5px] font-medium transition-colors lg:px-4 ${
-                    active ? "text-white" : "text-cart-ink-3 hover:text-cart-ink-2"
+                    active ? "text-cart-ink" : "text-cart-ink-3 hover:text-cart-ink-2"
                   }`}
                 >
                   {t.label}
@@ -226,7 +227,7 @@ export function OrgEventsClient({ initialOrgSlug }: { initialOrgSlug: string | n
                     className={`rounded-full px-1.5 py-0.5 text-[10.5px] font-medium ${
                       active
                         ? "bg-cart-accent-soft text-cart-accent"
-                        : "bg-white/5 text-cart-ink-4"
+                        : "bg-cart-line text-cart-ink-4"
                     }`}
                   >
                     {count}
@@ -272,7 +273,7 @@ export function OrgEventsClient({ initialOrgSlug }: { initialOrgSlug: string | n
                 <div className="mx-auto max-w-md py-12 text-center">
                   <p className="text-[14px] text-cart-ink-2">
                     Sin resultados para{" "}
-                    <span className="font-medium text-white">“{search}”</span>
+                    <span className="font-medium text-cart-ink">“{search}”</span>
                   </p>
                   {otherTabMatches.length > 0 ? (
                     <p className="mt-2 flex flex-wrap items-center justify-center gap-1.5 text-[12.5px] text-cart-ink-4">
@@ -282,7 +283,7 @@ export function OrgEventsClient({ initialOrgSlug }: { initialOrgSlug: string | n
                           key={m.tab}
                           type="button"
                           onClick={() => setTab(m.tab)}
-                          className="rounded-full bg-cart-bg-elev-2 px-2 py-0.5 font-medium text-cart-accent transition hover:bg-white/10"
+                          className="rounded-full bg-cart-bg-elev-2 px-2 py-0.5 font-medium text-cart-accent transition hover:bg-cart-line-strong"
                         >
                           {TABS.find((t) => t.key === m.tab)?.label} ({m.count})
                         </button>
@@ -329,6 +330,6 @@ export function OrgEventsClient({ initialOrgSlug }: { initialOrgSlug: string | n
           )}
         </AnimatePresence>
       </div>
-    </OrgShell>
+    </>
   );
 }

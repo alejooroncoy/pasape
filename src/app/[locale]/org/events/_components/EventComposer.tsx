@@ -13,10 +13,11 @@ import {
 import { AnimatePresence, motion } from "motion/react";
 import { toast } from "sonner";
 import { Money } from "@/lib/_shared/money";
-import { useRouter } from "@/i18n/navigation";
+import { useRouter, Link } from "@/i18n/navigation";
 import { PhoneField } from "@/components/design/PhoneField";
 import { useCreateEvent } from "@/lib/events/hooks/useCreateEvent";
 import { useUpdateEvent } from "@/lib/events/hooks/useUpdateEvent";
+import { setComposerModePreference } from "@/lib/events/composerModePreference";
 import { useEvent } from "@/lib/events/hooks/useEvents";
 import { useSetPromos, type PromoDraft } from "@/lib/events/hooks/usePromos";
 import {
@@ -40,7 +41,7 @@ import type {
   TicketTypeKind,
 } from "@/server/events/domain/Event";
 import { CATEGORIES } from "../../../_home/categories";
-import { createSupabaseBrowserClient } from "@/server/_shared/supabase/client";
+import { uploadEventAsset } from "@/lib/events/uploadEventAsset";
 import { extractFlyerPaletteFromUrl } from "@/lib/_shared/extractFlyerPalette";
 import { derivePalette, readableTextColor, type Palette } from "@/lib/_shared/color";
 import {
@@ -189,7 +190,7 @@ function PriceFeeHint({ priceSoles, feeMode }: { priceSoles: string; feeMode: Fe
   const hint = priceFeeHint(priceSoles, feeMode);
   if (!hint) return null;
   const color =
-    hint.tone === "error" ? "text-rose-300" : hint.tone === "warn" ? "text-amber-300" : "text-cart-ink-3";
+    hint.tone === "error" ? "text-rose-600" : hint.tone === "warn" ? "text-amber-700" : "text-cart-ink-3";
   return <p className={`mt-1.5 text-[11px] ${color}`}>{hint.text}</p>;
 }
 const fromCents = (n: number) => Money.toSoles(n).toString();
@@ -253,44 +254,6 @@ const TICKET_KIND_META: Record<TicketKind, { label: string; tint: string }> = {
   general: { label: "General", tint: "rgba(184,124,255,0.55)" },
   box: { label: "Box", tint: "rgba(34,209,127,0.55)" },
 };
-
-const EVENT_ASSETS_BUCKET = "event-assets";
-
-const slugifyForPath = (s: string): string =>
-  s
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 48) || "event";
-
-const extFromFile = (file: File): string => {
-  const fromName = file.name.includes(".") ? file.name.split(".").pop()! : "";
-  if (fromName) return fromName.toLowerCase().replace(/[^a-z0-9]/g, "") || "bin";
-  const m = /\/([a-z0-9]+)/i.exec(file.type);
-  return (m?.[1] ?? "bin").toLowerCase();
-};
-
-
-async function uploadEventAsset(
-  file: File,
-  opts: { slugHint: string; kind: "cover" | "layout" },
-): Promise<string> {
-  const supabase = createSupabaseBrowserClient();
-  const folder = slugifyForPath(opts.slugHint);
-  const path = `events/${folder}/${opts.kind}-${Date.now()}.${extFromFile(file)}`;
-  const { error } = await supabase.storage
-    .from(EVENT_ASSETS_BUCKET)
-    .upload(path, file, {
-      cacheControl: "3600",
-      upsert: false,
-      contentType: file.type || undefined,
-    });
-  if (error) throw new Error(`upload_failed: ${error.message}`);
-  const { data } = supabase.storage.from(EVENT_ASSETS_BUCKET).getPublicUrl(path);
-  return data.publicUrl;
-}
 
 const truncate = (s: string, n: number): string =>
   s.length > n ? s.slice(0, n - 1) + "…" : s;
@@ -775,6 +738,9 @@ export function EventComposer(props: EventComposerProps) {
           // ignora — queda en draft
         }
       }
+      // Publicó desde el composer completo → la próxima vez que toque "Crear
+      // evento" en cualquier parte del panel, arranca de nuevo acá.
+      setComposerModePreference("full");
       router.push(
         `/org/events/new/success?slug=${ev.slug ?? ""}&status=${finalStatus}${promoterAssignError ? "&promoters=failed" : ""}` as never,
       );
@@ -863,9 +829,29 @@ export function EventComposer(props: EventComposerProps) {
         patch.status = desiredStatus;
       }
 
-      if (Object.keys(patch).length > 0) {
-        await update.mutateAsync(patch);
-      }
+      // Promos: reemplazo total, pero solo si de verdad cambiaron — evita un
+      // DELETE+INSERT y un refetch de más en cada guardado (antes se mandaba
+      // siempre, incluso sin tocar Promociones).
+      const validTicketIds = new Set(validTickets.map((t) => t.id).filter(Boolean));
+      const currentPromos = promos.filter((p) => validTicketIds.has(p.ticketTypeId));
+      const promoKey = (arr: PromoDraft[]) =>
+        arr
+          .map((p) => `${p.ticketTypeId}:${p.kind}:${p.endsAt ?? ""}`)
+          .sort()
+          .join("|");
+      const originalPromos: PromoDraft[] = (eventQuery.data?.promos ?? []).map((p) => ({
+        ticketTypeId: p.ticketTypeId,
+        kind: p.kind,
+        endsAt: p.endsAt,
+      }));
+      const promosChanged = promoKey(currentPromos) !== promoKey(originalPromos);
+
+      // El PATCH del evento y el reemplazo de promos tocan tablas distintas y
+      // no dependen entre sí — en paralelo en vez de en serie.
+      await Promise.all([
+        Object.keys(patch).length > 0 ? update.mutateAsync(patch) : null,
+        promosChanged ? setPromosMut.mutateAsync(currentPromos) : null,
+      ]);
 
       // Diff de ticket types: crear nuevos, actualizar cambiados, borrar removidos.
       const currentIds = new Set(
@@ -978,12 +964,6 @@ export function EventComposer(props: EventComposerProps) {
         }
       }
 
-      // Guardar promos (reemplazo total). Solo las que apuntan a una entrada real.
-      const validTicketIds = new Set(validTickets.map((t) => t.id).filter(Boolean));
-      await setPromosMut.mutateAsync(
-        promos.filter((p) => validTicketIds.has(p.ticketTypeId)),
-      );
-
       // Si algún box con ventas no se pudo quitar, guardamos el resto pero
       // dejamos el editor abierto con el aviso (no cerramos en silencio).
       if (soldBlocked.length > 0) {
@@ -1095,7 +1075,7 @@ export function EventComposer(props: EventComposerProps) {
                   : router.push("/org/events" as never)
               }
               aria-label="Cancelar"
-              className="grid size-9 place-items-center rounded-full border border-cart-line bg-cart-bg-elev text-cart-ink-2 transition hover:border-cart-line-strong hover:text-white"
+              className="grid size-9 place-items-center rounded-full border border-cart-line bg-cart-bg-elev text-cart-ink-2 transition hover:border-cart-line-strong hover:text-cart-ink"
             >
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                 <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
@@ -1105,8 +1085,17 @@ export function EventComposer(props: EventComposerProps) {
               Nuevo evento
             </h1>
           </div>
-          <div className="hidden lg:block">
-            <PublishToggle value={publishNow} onChange={setPublishNow} />
+          <div className="flex items-center gap-3">
+            <Link
+              href={"/org/events/quick-create" as never}
+              onClick={() => setComposerModePreference("simple")}
+              className="hidden text-[12.5px] font-medium text-cart-ink-3 underline decoration-cart-ink-4 underline-offset-2 transition hover:text-cart-ink-2 sm:inline"
+            >
+              Versión rápida
+            </Link>
+            <div className="hidden lg:block">
+              <PublishToggle value={publishNow} onChange={setPublishNow} />
+            </div>
           </div>
         </div>
       )}
@@ -1216,11 +1205,11 @@ export function EventComposer(props: EventComposerProps) {
                     type="button"
                     onClick={() => setCategory(id)}
                     className={`rounded-full border px-3 py-1 text-[11.5px] font-medium transition-colors ${
-                      active ? "" : "border-cart-line text-cart-ink-3 hover:border-cart-line-strong hover:text-white"
+                      active ? "text-cart-ink" : "border-cart-line text-cart-ink-3 hover:border-cart-line-strong hover:text-cart-ink"
                     }`}
                     style={
                       active
-                        ? { borderColor: color, background: `${color}1f`, color: "#fff" }
+                        ? { borderColor: color, background: `${color}1f` }
                         : undefined
                     }
                   >
@@ -1276,8 +1265,8 @@ export function EventComposer(props: EventComposerProps) {
                   onClick={() => setDurationHours(durationHours === h ? "" : h)}
                   className={`rounded-full border px-3 py-1 text-[11.5px] font-medium transition-colors ${
                     durationHours === h
-                      ? "border-cart-accent bg-cart-accent/15 text-white"
-                      : "border-cart-line text-cart-ink-3 hover:border-cart-line-strong hover:text-white"
+                      ? "border-cart-accent bg-cart-accent/15 text-cart-ink"
+                      : "border-cart-line text-cart-ink-3 hover:border-cart-line-strong hover:text-cart-ink"
                   }`}
                 >
                   {h}h
@@ -1297,7 +1286,7 @@ export function EventComposer(props: EventComposerProps) {
                   }}
                   placeholder="otro"
                   maxLength={3}
-                  className="w-9 bg-transparent text-[11.5px] font-medium text-white outline-none placeholder:text-cart-ink-4"
+                  className="w-9 bg-transparent text-[11.5px] font-medium text-cart-ink outline-none placeholder:text-cart-ink-4"
                 />
                 {durationHours && !["2","4","6","8","12","24"].includes(durationHours) && (
                   <span className="text-[11.5px] text-cart-ink-3">h</span>
@@ -1324,7 +1313,7 @@ export function EventComposer(props: EventComposerProps) {
                 const isMadrugada = isNextDay && endHour >= 0 && endHour < 5;
                 return (
                   <span className="text-[11px] text-cart-ink-3">
-                    → <span className="font-medium text-white/70">{endLabel}</span>
+                    → <span className="font-medium text-cart-ink/70">{endLabel}</span>
                     {isMadrugada && (
                       <span className="ml-1 text-violet-400">madrugada</span>
                     )}
@@ -1371,10 +1360,10 @@ export function EventComposer(props: EventComposerProps) {
                     className={`flex flex-col items-start rounded-xl border px-3 py-2 text-left transition-colors ${
                       active
                         ? "border-cart-accent bg-cart-accent/10"
-                        : "border-cart-line text-cart-ink-3 hover:border-cart-line-strong hover:text-white"
+                        : "border-cart-line text-cart-ink-3 hover:border-cart-line-strong hover:text-cart-ink"
                     }`}
                   >
-                    <span className={`text-[12.5px] font-medium ${active ? "text-white" : ""}`}>{label}</span>
+                    <span className={`text-[12.5px] font-medium ${active ? "text-cart-ink" : ""}`}>{label}</span>
                     <span className="text-[11px] text-cart-ink-3">{hint}</span>
                   </button>
                 );
@@ -1420,13 +1409,13 @@ export function EventComposer(props: EventComposerProps) {
                     setMaxPerPerson(v);
                   }}
                   placeholder="∞"
-                  className="w-20 rounded-xl border border-cart-line bg-cart-bg-elev-2 px-3 py-2 text-center text-[15px] font-medium text-white outline-none placeholder:text-cart-ink-3 focus:border-cart-accent"
+                  className="w-20 rounded-xl border border-cart-line bg-cart-bg-elev-2 px-3 py-2 text-center text-[15px] font-medium text-cart-ink outline-none placeholder:text-cart-ink-3 focus:border-cart-accent"
                 />
                 {maxPerPerson.trim() !== "" && (
                   <button
                     type="button"
                     onClick={() => setMaxPerPerson("")}
-                    className="text-[11px] font-medium text-cart-ink-3 underline underline-offset-2 hover:text-white"
+                    className="text-[11px] font-medium text-cart-ink-3 underline underline-offset-2 hover:text-cart-ink"
                   >
                     Sin límite
                   </button>
@@ -1481,7 +1470,7 @@ export function EventComposer(props: EventComposerProps) {
                   <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">
                     Distribución del local
                   </div>
-                  <div className="text-[13px] font-medium text-white">
+                  <div className="text-[13px] font-medium text-cart-ink">
                     {layoutPreview ? "Plano cargado" : "Opcional"}
                   </div>
                 </div>
@@ -1510,17 +1499,17 @@ export function EventComposer(props: EventComposerProps) {
           {isEdit &&
             props.initial.event.status === "draft" &&
             props.initial.event.rejectedReason && (
-              <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
-                <p className="font-semibold text-amber-100">Pasape rechazó este evento</p>
-                <p className="mt-1 text-amber-200/90">{props.initial.event.rejectedReason}</p>
-                <p className="mt-1.5 text-[13px] text-amber-200/70">
+              <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-700">
+                <p className="font-semibold text-amber-800">Pasape rechazó este evento</p>
+                <p className="mt-1 text-amber-700/90">{props.initial.event.rejectedReason}</p>
+                <p className="mt-1.5 text-[13px] text-amber-700/70">
                   Corrígelo y vuelve a enviarlo a revisión cuando quieras.
                 </p>
               </div>
             )}
 
           {submitError && (
-            <div className="rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+            <div className="rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-600">
               {submitError}
             </div>
           )}
@@ -1682,7 +1671,7 @@ function PaletteEditor({
           type="button"
           onClick={onResetToDefault}
           disabled={loading}
-          className="rounded-full border border-cart-line px-3 py-1.5 text-[11.5px] font-medium text-cart-ink-2 transition hover:border-cart-line-strong hover:text-white disabled:pointer-events-none disabled:opacity-40"
+          className="rounded-full border border-cart-line px-3 py-1.5 text-[11.5px] font-medium text-cart-ink-2 transition hover:border-cart-line-strong hover:text-cart-ink disabled:pointer-events-none disabled:opacity-40"
         >
           Volver a original
         </button>
@@ -1691,7 +1680,7 @@ function PaletteEditor({
           onClick={onExtractFromCover}
           disabled={!canExtractFromCover || loading}
           title={canExtractFromCover ? undefined : "Sube una portada primero"}
-          className="rounded-full border border-cart-line px-3 py-1.5 text-[11.5px] font-medium text-cart-ink-2 transition hover:border-cart-line-strong hover:text-white disabled:pointer-events-none disabled:opacity-40"
+          className="rounded-full border border-cart-line px-3 py-1.5 text-[11.5px] font-medium text-cart-ink-2 transition hover:border-cart-line-strong hover:text-cart-ink disabled:pointer-events-none disabled:opacity-40"
         >
           Color de la portada
         </button>
@@ -1953,7 +1942,7 @@ function TitleField({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder="Reverb x La Selva"
-        className="mt-1.5 w-full bg-transparent font-sans text-[22px] font-semibold leading-tight tracking-[-0.02em] text-white outline-none placeholder:text-cart-ink-4 lg:text-[26px]"
+        className="mt-1.5 w-full bg-transparent font-sans text-[22px] font-semibold leading-tight tracking-[-0.02em] text-cart-ink outline-none placeholder:text-cart-ink-4 lg:text-[26px]"
       />
     </div>
   );
@@ -2032,12 +2021,12 @@ function CardButton({
         <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">
           {label}
           {required && (
-            <span className="rounded-full bg-amber-500/15 px-1.5 py-px text-[9px] font-semibold tracking-widest text-amber-300">
+            <span className="rounded-full bg-amber-500/15 px-1.5 py-px text-[9px] font-semibold tracking-widest text-amber-700">
               REQUERIDO
             </span>
           )}
         </div>
-        <div className="mt-0.5 truncate text-[13.5px] font-medium text-white">{hint}</div>
+        <div className="mt-0.5 truncate text-[13.5px] font-medium text-cart-ink">{hint}</div>
       </div>
       <svg
         width="14"
@@ -2084,8 +2073,8 @@ function ToggleOpt({
         (active
           ? tone === "live"
             ? "bg-[#22D17F]/15 text-[#22D17F]"
-            : "bg-cart-bg-elev-2 text-white"
-          : "text-cart-ink-3 hover:text-white")
+            : "bg-cart-bg-elev-2 text-cart-ink"
+          : "text-cart-ink-3 hover:text-cart-ink")
       }
     >
       <span
@@ -2133,14 +2122,14 @@ function SmartCta({
       disabled={isPending}
       whileTap={{ scale: 0.98 }}
       className={
-        "inline-flex h-14 items-center justify-center gap-2 rounded-full px-7 text-[15px] font-semibold text-white transition-all disabled:cursor-not-allowed disabled:opacity-60 " +
+        "inline-flex h-14 items-center justify-center gap-2 rounded-full px-7 text-[15px] font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-60 " +
         (full ? "w-full " : "") +
         (!ready
-          ? "border border-amber-500/60 bg-amber-500/15 text-amber-200 "
+          ? "border border-amber-500/60 bg-amber-500/15 text-amber-700 "
           : publishNow
-            ? "shadow-[0_14px_36px_-8px_var(--color-cart-accent-glow-strong)] hover:-translate-y-px " +
+            ? "text-white shadow-[0_14px_36px_-8px_var(--color-cart-accent-glow-strong)] hover:-translate-y-px " +
               (tinted ? "" : "bg-cart-accent ")
-            : "border border-cart-line-strong bg-cart-bg-elev hover:border-white/40 ")
+            : "border border-cart-line-strong bg-cart-bg-elev text-cart-ink hover:border-cart-ink-3 ")
       }
       style={
         tinted
@@ -2207,7 +2196,7 @@ function Sheet({
         style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 22px)" }}
       >
         <div className="sticky top-0 z-10 -mx-px flex flex-col bg-cart-bg-elev/95 px-5 pt-3 backdrop-blur">
-          <div className="mx-auto mb-3 h-1 w-9 rounded-full bg-white/15" />
+          <div className="mx-auto mb-3 h-1 w-9 rounded-full bg-cart-ink/15" />
           <div className="mb-4 flex items-center justify-between">
             <h3 className="font-sans text-[20px] font-semibold tracking-[-0.02em]">{title}</h3>
             <button
@@ -2250,7 +2239,7 @@ function PresaleTiersEditor({
         <button
           type="button"
           onClick={addTier}
-          className="flex items-center gap-2 rounded-xl bg-cart-bg-elev px-3 py-2.5 text-[13px] font-medium text-cart-ink-2 transition hover:text-white w-full"
+          className="flex items-center gap-2 rounded-xl bg-cart-bg-elev px-3 py-2.5 text-[13px] font-medium text-cart-ink-2 transition hover:text-cart-ink w-full"
         >
           <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
             <path d="M7 2v10M2 7h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
@@ -2275,7 +2264,7 @@ function PresaleTiersEditor({
                   value={tier.priceSoles}
                   onChange={e => updateTier(tier.rowKey, { priceSoles: e.target.value.replace(/[^0-9.]/g, "") })}
                   placeholder="20"
-                  className="w-[54px] rounded-lg bg-cart-bg-elev-2 px-2 py-1 text-right text-[13px] font-semibold text-white outline-none ring-1 ring-cart-line focus:ring-cart-accent"
+                  className="w-[54px] rounded-lg bg-cart-bg-elev-2 px-2 py-1 text-right text-[13px] font-semibold text-cart-ink outline-none ring-1 ring-cart-line focus:ring-cart-accent"
                 />
                 <span className="text-[11px] text-cart-ink-4 shrink-0">hasta</span>
                 <div className="flex-1 min-w-[110px]">
@@ -2288,7 +2277,7 @@ function PresaleTiersEditor({
                 <button
                   type="button"
                   onClick={() => removeTier(tier.rowKey)}
-                  className="grid size-5 shrink-0 place-items-center rounded-full text-cart-ink-4 transition hover:text-red-300"
+                  className="grid size-5 shrink-0 place-items-center rounded-full text-cart-ink-4 transition hover:text-red-600"
                   aria-label="Quitar tramo"
                 >
                   <svg width="9" height="9" viewBox="0 0 14 14" fill="none">
@@ -2301,7 +2290,7 @@ function PresaleTiersEditor({
           <button
             type="button"
             onClick={addTier}
-            className="flex items-center gap-1.5 text-[11.5px] text-cart-ink-3 transition hover:text-white mt-0.5"
+            className="flex items-center gap-1.5 text-[11.5px] text-cart-ink-3 transition hover:text-cart-ink mt-0.5"
           >
             <svg width="10" height="10" viewBox="0 0 14 14" fill="none">
               <path d="M7 2v10M2 7h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
@@ -2338,7 +2327,7 @@ function FreeReleaseEditor({
     <div className="mt-2 rounded-xl bg-cart-bg-elev px-3 py-2.5">
       <div className="flex items-center gap-3">
         <div className="flex-1">
-          <span className="text-[13px] font-semibold text-white">Liberar gratis</span>
+          <span className="text-[13px] font-semibold text-cart-ink">Liberar gratis</span>
           <p className="text-[10.5px] leading-tight text-cart-ink-4">
             Suéltala a S/ 0 sin tocar su precio. Vuelve a cobrarse cuando la cierres.
           </p>
@@ -2356,7 +2345,7 @@ function FreeReleaseEditor({
         >
           <span
             className={
-              "absolute top-0.5 size-5 rounded-full bg-white transition-all " +
+              "absolute top-0.5 size-5 rounded-full bg-cart-ink transition-all " +
               (isFree ? "left-[22px]" : "left-0.5")
             }
           />
@@ -2398,7 +2387,7 @@ function DescriptionField({ value, onChange }: { value: string; onChange: (v: st
         placeholder="Ej: Incluye camping, paradas vivenciales y activaciones en ruta"
         maxLength={300}
         rows={2}
-        className="w-full resize-none bg-transparent text-[13px] text-white outline-none placeholder:text-cart-ink-4"
+        className="w-full resize-none bg-transparent text-[13px] text-cart-ink outline-none placeholder:text-cart-ink-4"
       />
       {value.length > 0 && (
         <span className="text-right text-[10px] text-cart-ink-4">{value.length}/300</span>
@@ -2465,7 +2454,7 @@ function BoxGroupEditor({
             onChange={(e) => onUpdateAll({ unitNoun: e.target.value })}
             placeholder="Box, Mesa, Lounge…"
             maxLength={24}
-            className="min-w-0 flex-1 border-b border-white/20 bg-transparent pb-0.5 text-[15px] font-semibold tracking-[-0.01em] text-white outline-none transition-colors placeholder:text-cart-ink-3 focus:border-cart-accent"
+            className="min-w-0 flex-1 border-b border-cart-line-strong bg-transparent pb-0.5 text-[15px] font-semibold tracking-[-0.01em] text-cart-ink outline-none transition-colors placeholder:text-cart-ink-3 focus:border-cart-accent"
           />
           <span className="shrink-0 font-mono text-[12px] font-normal text-cart-ink-3">
             {nounPlural} ({boxes.length})
@@ -2519,14 +2508,14 @@ function BoxGroupEditor({
                     maxLength={20}
                     className={
                       "w-[4.5rem] bg-transparent font-mono text-[12.5px] font-semibold outline-none " +
-                      (isDup ? "text-rose-300" : b.boxLabel.trim() ? "text-white" : "text-amber-300")
+                      (isDup ? "text-rose-600" : b.boxLabel.trim() ? "text-cart-ink" : "text-amber-700")
                     }
                   />
                   {canDelete && (
                     <button
                       type="button"
                       onClick={() => onRemove(b.rowKey)}
-                      className="grid size-4 shrink-0 place-items-center rounded-full text-cart-ink-4 transition hover:text-red-300"
+                      className="grid size-4 shrink-0 place-items-center rounded-full text-cart-ink-4 transition hover:text-red-600"
                       aria-label="Eliminar"
                     >
                       <svg width="9" height="9" viewBox="0 0 14 14" fill="none">
@@ -2546,7 +2535,7 @@ function BoxGroupEditor({
                     onChange={(e) => onUpdateOne(b.rowKey, { priceSoles: e.target.value.replace(/[^\d]/g, "") })}
                     className={
                       "w-[3.5rem] bg-transparent font-mono text-[11px] outline-none " +
-                      (priceOverridden ? "font-semibold text-white" : "text-cart-ink-4")
+                      (priceOverridden ? "font-semibold text-cart-ink" : "text-cart-ink-4")
                     }
                   />
                 </div>
@@ -2556,7 +2545,7 @@ function BoxGroupEditor({
           <button
             type="button"
             onClick={onAddOne}
-            className="flex items-center gap-1 rounded-lg border border-dashed border-cart-line px-2.5 py-1 text-[12px] text-cart-ink-3 transition hover:border-cart-line-strong hover:text-white"
+            className="flex items-center gap-1 rounded-lg border border-dashed border-cart-line px-2.5 py-1 text-[12px] text-cart-ink-3 transition hover:border-cart-line-strong hover:text-cart-ink"
           >
             <svg width="10" height="10" viewBox="0 0 14 14" fill="none">
               <path d="M7 2v10M2 7h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
@@ -2565,7 +2554,7 @@ function BoxGroupEditor({
           </button>
         </div>
         {boxes.some((b) => dupKeys.has(b.rowKey)) && (
-          <p className="mt-1.5 text-[11px] font-medium text-rose-300">
+          <p className="mt-1.5 text-[11px] font-medium text-rose-600">
             Dos {nounPlural.toLowerCase()} tienen la misma etiqueta — el portero no podrá distinguirlos. Ponles etiquetas distintas.
           </p>
         )}
@@ -2600,7 +2589,7 @@ function AdvancedToggle({ open, onToggle, hasContent }: { open: boolean; onToggl
     <button
       type="button"
       onClick={onToggle}
-      className="mt-2 flex items-center gap-1.5 text-[11.5px] font-medium text-cart-ink-3 transition hover:text-white"
+      className="mt-2 flex items-center gap-1.5 text-[11.5px] font-medium text-cart-ink-3 transition hover:text-cart-ink"
     >
       <svg
         width="10" height="10" viewBox="0 0 10 10" fill="none"
@@ -2744,8 +2733,8 @@ function TicketsEditor({
                 value={t.name}
                 onChange={(e) => update(t.rowKey, { name: e.target.value })}
                 className={
-                  "flex-1 bg-transparent text-[15px] font-semibold tracking-[-0.01em] text-white outline-none placeholder:text-cart-ink-3 border-b pb-0.5 transition-colors " +
-                  (isDup ? "border-rose-400/70 focus:border-rose-400" : "border-white/20 focus:border-cart-accent")
+                  "flex-1 bg-transparent text-[15px] font-semibold tracking-[-0.01em] text-cart-ink outline-none placeholder:text-cart-ink-3 border-b pb-0.5 transition-colors " +
+                  (isDup ? "border-rose-400/70 focus:border-rose-400" : "border-cart-line-strong focus:border-cart-accent")
                 }
                 placeholder="Nombre — ej. General, VIP, After"
               />
@@ -2753,7 +2742,7 @@ function TicketsEditor({
                 <button
                   type="button"
                   onClick={() => remove(t.rowKey)}
-                  className="grid size-7 place-items-center rounded-full text-cart-ink-3 transition hover:bg-white/5 hover:text-red-300"
+                  className="grid size-7 place-items-center rounded-full text-cart-ink-3 transition hover:bg-cart-ink/5 hover:text-red-600"
                   aria-label="Eliminar"
                 >
                   <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
@@ -2764,7 +2753,7 @@ function TicketsEditor({
             </div>
           </div>
           {isDup && (
-            <p className="mt-1.5 text-[11px] font-medium text-rose-300">
+            <p className="mt-1.5 text-[11px] font-medium text-rose-600">
               Ya tienes una entrada con este nombre. Ponle uno distinto (ej. General, VIP, General VIP).
             </p>
           )}
@@ -2777,7 +2766,7 @@ function TicketsEditor({
                 onChange={(v) => update(t.rowKey, { priceSoles: v })}
               />
               {t.priceSoles === "0" && (
-                <span className="absolute right-2 top-2 rounded-full bg-emerald-500/20 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em] text-emerald-300">
+                <span className="absolute right-2 top-2 rounded-full bg-emerald-500/20 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em] text-emerald-600">
                   Gratis
                 </span>
               )}
@@ -2867,14 +2856,14 @@ function TicketsEditor({
                   // El noun del espacio sale del nombre que pone el organizador
                   // (agrupa y alimenta el copy del comprador) — sin selector aparte.
                   onChange={(e) => update(t.rowKey, { name: e.target.value, unitNoun: e.target.value })}
-                  className="flex-1 bg-transparent text-[15px] font-semibold tracking-[-0.01em] text-white outline-none placeholder:text-cart-ink-3 border-b border-white/20 pb-0.5 focus:border-cart-accent transition-colors"
+                  className="flex-1 bg-transparent text-[15px] font-semibold tracking-[-0.01em] text-cart-ink outline-none placeholder:text-cart-ink-3 border-b border-cart-line-strong pb-0.5 focus:border-cart-accent transition-colors"
                   placeholder="Nombre — ej. Box VIP, Mesa Premium"
                 />
                 {tickets.length > 1 && (
                   <button
                     type="button"
                     onClick={() => remove(t.rowKey)}
-                    className="grid size-7 place-items-center rounded-full text-cart-ink-3 transition hover:bg-white/5 hover:text-red-300"
+                    className="grid size-7 place-items-center rounded-full text-cart-ink-3 transition hover:bg-cart-ink/5 hover:text-red-600"
                     aria-label="Eliminar"
                   >
                     <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
@@ -2896,7 +2885,7 @@ function TicketsEditor({
                 onChange={(e) => update(t.rowKey, { boxLabel: e.target.value })}
                 placeholder="A · VIP-1"
                 maxLength={20}
-                className={"w-full bg-transparent font-mono text-[15px] font-semibold tracking-[0.04em] outline-none " + (t.boxLabel.trim() ? "text-white" : "text-amber-300 placeholder:text-amber-300/60")}
+                className={"w-full bg-transparent font-mono text-[15px] font-semibold tracking-[0.04em] outline-none " + (t.boxLabel.trim() ? "text-cart-ink" : "text-amber-700 placeholder:text-amber-700/60")}
               />
               <span className="text-[10.5px] text-cart-ink-4">Se imprime en el QR de cada invitado al box · obligatorio.</span>
             </label>
@@ -2935,7 +2924,7 @@ function TicketsEditor({
         <button
           type="button"
           onClick={() => add("general")}
-          className="inline-flex items-center gap-2 rounded-full border border-dashed border-cart-line-strong px-4 py-1.5 text-[13px] font-medium text-cart-ink-2 transition hover:border-white/40 hover:text-white"
+          className="inline-flex items-center gap-2 rounded-full border border-dashed border-cart-line-strong px-4 py-1.5 text-[13px] font-medium text-cart-ink-2 transition hover:border-cart-ink-3 hover:text-cart-ink"
         >
           <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
             <circle cx="7" cy="4.5" r="2.5" stroke="currentColor" strokeWidth="1.4" />
@@ -2948,7 +2937,7 @@ function TicketsEditor({
         <button
           type="button"
           onClick={() => setSpaceGroups((prev) => [...prev, newSpaceGroup()])}
-          className="inline-flex items-center gap-2 rounded-full border border-dashed border-cart-line-strong px-4 py-1.5 text-[13px] font-medium text-cart-ink-2 transition hover:border-white/40 hover:text-white"
+          className="inline-flex items-center gap-2 rounded-full border border-dashed border-cart-line-strong px-4 py-1.5 text-[13px] font-medium text-cart-ink-2 transition hover:border-cart-ink-3 hover:text-cart-ink"
         >
           <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
             <rect x="1.5" y="1.5" width="4.5" height="4.5" rx="1" stroke="currentColor" strokeWidth="1.4" />
@@ -2984,7 +2973,7 @@ function Stepper({
           inputMode="numeric"
           value={value}
           onChange={(e) => onChange(e.target.value.replace(/[^\d]/g, ""))}
-          className="w-full bg-transparent font-mono text-[15px] font-semibold text-white outline-none"
+          className="w-full bg-transparent font-mono text-[15px] font-semibold text-cart-ink outline-none"
         />
       </div>
     </label>
@@ -3053,7 +3042,7 @@ function PromoterPoolPicker({
         <button
           type="button"
           onClick={() => setAdding(true)}
-          className="rounded-2xl border border-dashed border-cart-line-strong bg-cart-bg-elev-2 px-4 py-6 text-center text-[13.5px] font-medium text-cart-ink-2 transition hover:border-white/40 hover:text-white"
+          className="rounded-2xl border border-dashed border-cart-line-strong bg-cart-bg-elev-2 px-4 py-6 text-center text-[13.5px] font-medium text-cart-ink-2 transition hover:border-cart-ink-3 hover:text-cart-ink"
         >
           + Agregar tu primer promotor
         </button>
@@ -3084,7 +3073,7 @@ function PromoterPoolPicker({
                     <div className="flex items-center gap-1.5">
                       <span className="truncate text-[14px] font-semibold">{p.name}</span>
                       {!p.profileId && (
-                        <span className="rounded-full bg-amber-400/12 px-1.5 py-px text-[9px] font-semibold tracking-[0.08em] text-amber-300">
+                        <span className="rounded-full bg-amber-400/12 px-1.5 py-px text-[9px] font-semibold tracking-[0.08em] text-amber-700">
                           SIN ACTIVAR
                         </span>
                       )}
@@ -3124,7 +3113,7 @@ function PromoterPoolPicker({
             <button
               type="button"
               onClick={() => setAdding(false)}
-              className="text-[11.5px] text-cart-ink-3 hover:text-white"
+              className="text-[11.5px] text-cart-ink-3 hover:text-cart-ink"
             >
               Cancelar
             </button>
@@ -3145,7 +3134,7 @@ function PromoterPoolPicker({
                   "rounded-xl px-3 py-2 text-[13px] font-semibold transition " +
                   (pct == null
                     ? "bg-cart-accent text-white shadow-[0_8px_20px_-6px_var(--color-cart-accent-glow)]"
-                    : "bg-cart-bg-elev text-cart-ink-2 hover:text-white")
+                    : "bg-cart-bg-elev text-cart-ink-2 hover:text-cart-ink")
                 }
               >
                 Igual que la marca
@@ -3159,7 +3148,7 @@ function PromoterPoolPicker({
                     "flex-1 rounded-xl px-3 py-2 text-[13px] font-semibold transition " +
                     (pct === p
                       ? "bg-cart-accent text-white shadow-[0_8px_20px_-6px_var(--color-cart-accent-glow)]"
-                      : "bg-cart-bg-elev text-cart-ink-2 hover:text-white")
+                      : "bg-cart-bg-elev text-cart-ink-2 hover:text-cart-ink")
                   }
                 >
                   {p}%
@@ -3167,7 +3156,7 @@ function PromoterPoolPicker({
               ))}
             </div>
             {error && (
-              <div className="rounded-lg bg-red-500/10 px-3 py-2 text-[11.5px] text-red-300">
+              <div className="rounded-lg bg-red-500/10 px-3 py-2 text-[11.5px] text-red-600">
                 {error}
               </div>
             )}
@@ -3186,7 +3175,7 @@ function PromoterPoolPicker({
           <button
             type="button"
             onClick={() => setAdding(true)}
-            className="rounded-xl border border-dashed border-cart-line-strong bg-cart-bg-elev py-2.5 text-[13px] font-medium text-cart-ink-2 transition hover:text-white"
+            className="rounded-xl border border-dashed border-cart-line-strong bg-cart-bg-elev py-2.5 text-[13px] font-medium text-cart-ink-2 transition hover:text-cart-ink"
           >
             + Crear nuevo promotor
           </button>
@@ -3241,7 +3230,7 @@ function UploadChip({
       <button
         type="button"
         onClick={() => ref.current?.click()}
-        className="rounded-full bg-cart-bg-elev-2 px-3 py-1 text-[11.5px] font-medium text-cart-ink-2 transition hover:text-white"
+        className="rounded-full bg-cart-bg-elev-2 px-3 py-1 text-[11.5px] font-medium text-cart-ink-2 transition hover:text-cart-ink"
       >
         {label}
       </button>
@@ -3364,12 +3353,12 @@ function SpaceGroupCard({
             onChange={(e) => onChange({ name: e.target.value })}
             placeholder="Box, Mesa, Lounge…"
             maxLength={24}
-            className="flex-1 border-b border-white/20 bg-transparent pb-0.5 text-[15px] font-semibold tracking-[-0.01em] text-white outline-none transition-colors placeholder:text-cart-ink-3 focus:border-cart-accent"
+            className="flex-1 border-b border-cart-line-strong bg-transparent pb-0.5 text-[15px] font-semibold tracking-[-0.01em] text-cart-ink outline-none transition-colors placeholder:text-cart-ink-3 focus:border-cart-accent"
           />
           <button
             type="button"
             onClick={onRemove}
-            className="grid size-7 place-items-center rounded-full text-cart-ink-3 transition hover:bg-white/5 hover:text-red-300"
+            className="grid size-7 place-items-center rounded-full text-cart-ink-3 transition hover:bg-cart-ink/5 hover:text-red-600"
             aria-label="Eliminar"
           >
             <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
@@ -3386,7 +3375,7 @@ function SpaceGroupCard({
         <Stepper label="Cuántos" value={group.count} onChange={(v) => onChange({ count: v })} />
       </div>
       {(Number(group.count) || 0) > MAX_BOXES_PER_GROUP && (
-        <p className="mt-1.5 text-[11.5px] leading-[1.4] text-amber-300">
+        <p className="mt-1.5 text-[11.5px] leading-[1.4] text-amber-700">
           Máximo {MAX_BOXES_PER_GROUP} boxes por grupo — se crearán {MAX_BOXES_PER_GROUP}. Si
           necesitas más, agrega otro grupo.
         </p>
@@ -3406,7 +3395,7 @@ function SpaceGroupCard({
                 onClick={() => onChange({ scheme: s })}
                 className={
                   "rounded-full border px-3 py-1 text-[12px] font-medium transition-colors " +
-                  (active ? "border-cart-accent bg-cart-accent/15 text-white" : "border-cart-line text-cart-ink-3 hover:text-white")
+                  (active ? "border-cart-accent bg-cart-accent/15 text-cart-ink" : "border-cart-line text-cart-ink-3 hover:text-cart-ink")
                 }
               >
                 {s === "alpha" ? "Letras · A B C" : "Números · 1 2 3"}
@@ -3449,11 +3438,11 @@ function SpaceGroupCard({
                     <input
                       value={group.overrides[i]?.label ?? spaceBoxLabel(group, i)}
                       onChange={(e) => setOv(i, { label: e.target.value })}
-                      className="min-w-0 flex-1 rounded-lg border border-cart-line bg-cart-bg-elev-2 px-2 py-1 font-mono text-[13px] font-semibold text-white outline-none focus:border-cart-accent"
+                      className="min-w-0 flex-1 rounded-lg border border-cart-line bg-cart-bg-elev-2 px-2 py-1 font-mono text-[13px] font-semibold text-cart-ink outline-none focus:border-cart-accent"
                     />
                     <div className={"flex w-[84px] shrink-0 items-center gap-1 rounded-lg border bg-cart-bg-elev-2 px-2 py-1 " + (b.custom ? "border-cart-accent/60" : "border-cart-line")}>
                       <span className="font-mono text-[11px] text-cart-ink-3">S/</span>
-                      <input inputMode="numeric" value={group.overrides[i]?.price ?? ""} onChange={(e) => setOv(i, { price: e.target.value.replace(/[^\d]/g, "") })} placeholder={String(priceN)} className="w-full bg-transparent font-mono text-[13px] font-semibold text-white outline-none placeholder:text-cart-ink-4" />
+                      <input inputMode="numeric" value={group.overrides[i]?.price ?? ""} onChange={(e) => setOv(i, { price: e.target.value.replace(/[^\d]/g, "") })} placeholder={String(priceN)} className="w-full bg-transparent font-mono text-[13px] font-semibold text-cart-ink outline-none placeholder:text-cart-ink-4" />
                     </div>
                   </div>
                 ))}
@@ -3463,7 +3452,7 @@ function SpaceGroupCard({
               <div className="flex flex-wrap gap-1.5">
                 {boxes.map((b, i) => (
                   <span key={i} className="inline-flex items-center gap-1.5 rounded-full border border-cart-line bg-cart-bg-elev-2 px-2.5 py-1 text-[12px]">
-                    <span className="font-mono font-semibold tracking-[0.04em] text-white">{b.label}</span>
+                    <span className="font-mono font-semibold tracking-[0.04em] text-cart-ink">{b.label}</span>
                     <span className="text-cart-ink-4">· {seatsN}p</span>
                     {b.custom && <span className="font-mono text-cart-accent">· S/{b.price.toLocaleString("es-PE")}</span>}
                   </span>
@@ -3473,8 +3462,8 @@ function SpaceGroupCard({
           </div>
         </div>
         <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1 border-t border-cart-line pt-2 text-[12px] text-cart-ink-3">
-          <span><span className="font-semibold text-white">{n}</span> boxes</span>
-          <span><span className="font-semibold text-white">{n * seatsN}</span> personas</span>
+          <span><span className="font-semibold text-cart-ink">{n}</span> boxes</span>
+          <span><span className="font-semibold text-cart-ink">{n * seatsN}</span> personas</span>
           <span>{anyCustom ? `S/ ${Math.min(...boxes.map((b) => b.price)).toLocaleString("es-PE")}–${Math.max(...boxes.map((b) => b.price)).toLocaleString("es-PE")}` : `S/ ${priceN.toLocaleString("es-PE")} c/u`}</span>
         </div>
       </div>
@@ -3547,7 +3536,7 @@ function PromosEditor({
             <select
               value={promo.ticketTypeId}
               onChange={(e) => patch(i, { ticketTypeId: e.target.value })}
-              className="flex-1 rounded-lg bg-cart-bg-elev px-2.5 py-1.5 text-[13.5px] font-semibold text-white outline-none ring-1 ring-cart-line focus:ring-cart-accent"
+              className="flex-1 rounded-lg bg-cart-bg-elev px-2.5 py-1.5 text-[13.5px] font-semibold text-cart-ink outline-none ring-1 ring-cart-line focus:ring-cart-accent"
             >
               {options.map((o) => (
                 <option key={o.id} value={o.id!}>
@@ -3558,7 +3547,7 @@ function PromosEditor({
             <button
               type="button"
               onClick={() => remove(i)}
-              className="grid size-7 place-items-center rounded-full text-cart-ink-3 transition hover:bg-white/5 hover:text-red-300"
+              className="grid size-7 place-items-center rounded-full text-cart-ink-3 transition hover:bg-cart-ink/5 hover:text-red-600"
               aria-label="Eliminar promo"
             >
               <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
@@ -3590,14 +3579,14 @@ function PromosEditor({
           <button
             type="button"
             onClick={() => add("2x1")}
-            className="flex-1 rounded-xl border border-dashed border-cart-line py-2.5 text-[13px] font-semibold text-cart-ink-2 transition hover:border-white/25 hover:text-white"
+            className="flex-1 rounded-xl border border-dashed border-cart-line py-2.5 text-[13px] font-semibold text-cart-ink-2 transition hover:border-cart-ink-3 hover:text-cart-ink"
           >
             + 2x1
           </button>
           <button
             type="button"
             onClick={() => add("3x2")}
-            className="flex-1 rounded-xl border border-dashed border-cart-line py-2.5 text-[13px] font-semibold text-cart-ink-2 transition hover:border-white/25 hover:text-white"
+            className="flex-1 rounded-xl border border-dashed border-cart-line py-2.5 text-[13px] font-semibold text-cart-ink-2 transition hover:border-cart-ink-3 hover:text-cart-ink"
           >
             + 3x2
           </button>

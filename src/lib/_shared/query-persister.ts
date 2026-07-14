@@ -1,6 +1,6 @@
 "use client";
 
-import { openDB, type IDBPDatabase } from "idb";
+import { deleteDB, openDB, type IDBPDatabase } from "idb";
 import type { Persister, PersistedClient } from "@tanstack/react-query-persist-client";
 
 // Persister de React Query sobre IndexedDB. Guarda el snapshot del cache para
@@ -18,38 +18,90 @@ const KEY = "client";
 // y el próximo persistClient() fallaría con "InvalidStateError: the database
 // connection is closing". Abrir una conexión nueva por operación (igual que
 // ticketKeyStore.ts / scanCache.ts / claimedOrderStore.ts) evita el problema.
-const getDb = (): Promise<IDBPDatabase> | null => {
+//
+// Nunca dejar que un fallo de IndexedDB se propague: WebKit/Safari puede
+// lanzar "UnknownError: An internal error was encountered in the Indexed
+// Database server" de forma espontánea (bug conocido de WebKit, sobre todo
+// en Private Browsing o con el storage bajo presión). Esta persistencia es
+// solo un cache offline — degradar a "sin persistencia" en vez de romper la
+// carga de la app con una promise rejection sin manejar.
+const getDb = async (): Promise<IDBPDatabase | null> => {
   if (typeof indexedDB === "undefined") return null;
-  return openDB(DB_NAME, 1, {
-    upgrade(db) {
-      if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
-    },
-  });
+  try {
+    return await openDB(DB_NAME, 1, {
+      upgrade(db) {
+        if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
+      },
+    });
+  } catch (err) {
+    console.error("[query-persister] no se pudo abrir IndexedDB", err);
+    return null;
+  }
 };
 
 // Standalone (no depende de la instancia de persister del provider): usado en
 // logout para borrar el snapshot guardado y que un siguiente login en el mismo
 // device/navegador no arranque mostrando datos de la cuenta anterior.
+//
+// A diferencia de persistClient/restoreClient/removeClient (best-effort, un
+// fallo solo pierde cache offline), acá un fallo silencioso es una fuga de
+// datos entre cuentas: si el delete puntual falla, la wallet/DNI de la
+// cuenta anterior queda en IndexedDB y un siguiente login en el mismo device
+// compartido podría rehidratarla. Por eso, si falla, se fuerza el borrado
+// completo de la base (deleteDB) en vez de degradar en silencio.
 export const clearPersistedQueryCache = async () => {
+  if (typeof indexedDB === "undefined") return;
   const db = await getDb();
-  if (!db) return;
-  await db.delete(STORE, KEY);
+  try {
+    if (db) {
+      await db.delete(STORE, KEY);
+      return;
+    }
+  } catch (err) {
+    console.error("[query-persister] fallo al borrar el cache persistido, forzando deleteDB", err);
+  } finally {
+    db?.close();
+  }
+  try {
+    await deleteDB(DB_NAME);
+  } catch (err) {
+    console.error("[query-persister] deleteDB también falló, no se pudo garantizar el borrado", err);
+  }
 };
 
 export const createIdbPersister = (): Persister => ({
   async persistClient(client: PersistedClient) {
     const db = await getDb();
     if (!db) return;
-    await db.put(STORE, client, KEY);
+    try {
+      await db.put(STORE, client, KEY);
+    } catch (err) {
+      console.error("[query-persister] no se pudo persistir el cache", err);
+    } finally {
+      db.close();
+    }
   },
   async restoreClient() {
     const db = await getDb();
     if (!db) return undefined;
-    return (await db.get(STORE, KEY)) as PersistedClient | undefined;
+    try {
+      return (await db.get(STORE, KEY)) as PersistedClient | undefined;
+    } catch (err) {
+      console.error("[query-persister] no se pudo restaurar el cache", err);
+      return undefined;
+    } finally {
+      db.close();
+    }
   },
   async removeClient() {
     const db = await getDb();
     if (!db) return;
-    await db.delete(STORE, KEY);
+    try {
+      await db.delete(STORE, KEY);
+    } catch (err) {
+      console.error("[query-persister] no se pudo borrar el cache", err);
+    } finally {
+      db.close();
+    }
   },
 });

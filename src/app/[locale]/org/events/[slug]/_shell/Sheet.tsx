@@ -75,7 +75,7 @@ export function Sheet({
               type="button"
               onClick={onClose}
               aria-label="Cerrar"
-              className="grid size-8 place-items-center rounded-full text-cart-ink-3 transition hover:bg-white/5 hover:text-white"
+              className="grid size-8 place-items-center rounded-full text-cart-ink-3 transition hover:bg-cart-ink/5 hover:text-cart-ink"
             >
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                 <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
@@ -119,7 +119,7 @@ export function Sheet({
         style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 22px)" }}
       >
         <div className="sticky top-0 z-10 -mx-px flex flex-col bg-cart-bg-elev/95 px-5 pt-3 backdrop-blur">
-          <div className="mx-auto mb-3 h-1 w-9 rounded-full bg-white/15" />
+          <div className="mx-auto mb-3 h-1 w-9 rounded-full bg-cart-ink/15" />
           <div className="mb-4 flex items-center justify-between">
             <h3 className="font-sans text-[20px] font-semibold tracking-[-0.02em]">{title}</h3>
             <button

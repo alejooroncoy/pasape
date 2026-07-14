@@ -149,7 +149,7 @@ export default function PromoProfilePage() {
                     )}
                   </div>
                 </div>
-                <span className="rounded-full bg-white/5 px-2 py-0.5 font-mono text-[11px] font-semibold text-cart-ink-2">
+                <span className="rounded-full bg-cart-bg-elev-2 px-2 py-0.5 font-mono text-[11px] font-semibold text-cart-ink-2">
                   {e.commissionPct}%
                 </span>
               </li>
@@ -171,7 +171,7 @@ export default function PromoProfilePage() {
             type="button"
             onClick={handleSignOut}
             disabled={signingOut}
-            className="self-start rounded-full border border-red-500/40 bg-red-500/10 px-4 py-2 text-[12.5px] font-semibold text-red-200 transition hover:bg-red-500/20 disabled:opacity-60 sm:self-auto"
+            className="self-start rounded-full border border-red-500/40 bg-red-500/10 px-4 py-2 text-[12.5px] font-semibold text-red-600 transition hover:bg-red-500/20 disabled:opacity-60 sm:self-auto"
           >
             {signingOut ? "Cerrando…" : "Cerrar sesión"}
           </button>
@@ -198,7 +198,7 @@ function ProfileRow({
       <span className="flex items-center gap-2">
         <span
           className={
-            "text-right text-[13.5px] font-medium text-white " + (mono ? "font-mono" : "")
+            "text-right text-[13.5px] font-medium text-cart-ink " + (mono ? "font-mono" : "")
           }
         >
           {value}

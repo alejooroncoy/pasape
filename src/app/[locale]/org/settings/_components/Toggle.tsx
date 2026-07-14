@@ -23,10 +23,10 @@ export function Switch({ checked, onChange }: { checked: boolean; onChange: (nex
       onClick={() => onChange(!checked)}
       className="relative inline-flex h-[30px] w-[50px] flex-shrink-0 items-center rounded-full transition-colors"
       style={{
-        backgroundColor: checked ? "#7C3AED" : "rgba(255,255,255,0.10)",
+        backgroundColor: checked ? "#7C3AED" : "var(--color-cart-line-strong)",
         boxShadow: checked
-          ? "0 0 14px var(--color-cart-accent-glow), inset 0 0 0 1px rgba(255,255,255,0.06)"
-          : "inset 0 0 0 1px rgba(255,255,255,0.06)",
+          ? "0 0 14px var(--color-cart-accent-glow), inset 0 0 0 1px var(--color-cart-line)"
+          : "inset 0 0 0 1px var(--color-cart-line)",
       }}
     >
       <motion.span
@@ -56,7 +56,7 @@ export function Toggle({ label, description, checked, onChange, bare }: Props) {
       }
     >
       <span className="min-w-0">
-        <span className="block truncate text-[14px] font-medium text-white">{label}</span>
+        <span className="block truncate text-[14px] font-medium text-cart-ink">{label}</span>
         {description ? (
           <span className="mt-0.5 block text-[12px] leading-snug text-cart-ink-3">
             {description}
@@ -65,12 +65,12 @@ export function Toggle({ label, description, checked, onChange, bare }: Props) {
       </span>
       <motion.span
         className="relative inline-flex h-[30px] w-[50px] flex-shrink-0 items-center rounded-full transition-colors"
-        animate={{ backgroundColor: checked ? "#7C3AED" : "rgba(255,255,255,0.10)" }}
+        animate={{ backgroundColor: checked ? "#7C3AED" : "var(--color-cart-line-strong)" }}
         transition={{ duration: 0.18 }}
         style={{
           boxShadow: checked
-            ? "0 0 14px var(--color-cart-accent-glow), inset 0 0 0 1px rgba(255,255,255,0.06)"
-            : "inset 0 0 0 1px rgba(255,255,255,0.06)",
+            ? "0 0 14px var(--color-cart-accent-glow), inset 0 0 0 1px var(--color-cart-line)"
+            : "inset 0 0 0 1px var(--color-cart-line)",
         }}
       >
         <motion.span

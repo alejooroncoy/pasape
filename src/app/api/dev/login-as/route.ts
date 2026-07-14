@@ -15,18 +15,19 @@ export async function POST() {
 
   const admin = supabaseAdmin();
 
-  // Busca el usuario de prueba; si no existe, lo crea con el password fijo.
-  const { data: existing } = await admin.auth.admin.listUsers();
-  const already = existing?.users?.find((u) => u.email === DEV_EMAIL);
-
-  if (!already) {
-    const { error: createError } = await admin.auth.admin.createUser({
-      email: DEV_EMAIL,
-      password: DEV_PASSWORD,
-      email_confirm: true,
-      user_metadata: { full_name: "Dev Test" },
-    });
-    if (createError) return fail(createError.message, 500);
+  // Crea el usuario de prueba si no existe. `listUsers()` sin paginar solo
+  // trae la primera página — con muchos usuarios de prueba en local, el
+  // dev-test podía quedar fuera de esa página y createUser fallaba con
+  // "already registered". Más simple y robusto: intentar crear, e ignorar
+  // solo ese error puntual (el usuario ya existe, seguimos al login).
+  const { error: createError } = await admin.auth.admin.createUser({
+    email: DEV_EMAIL,
+    password: DEV_PASSWORD,
+    email_confirm: true,
+    user_metadata: { full_name: "Dev Test" },
+  });
+  if (createError && !createError.message.includes("already been registered")) {
+    return fail(createError.message, 500);
   }
 
   // Login real: setAll de este cliente escribe las cookies de sesión en el

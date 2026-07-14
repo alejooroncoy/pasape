@@ -90,7 +90,7 @@ export function TeamSection({ currentProfileId }: Props) {
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="truncate text-[13.5px] font-medium text-white">
+                      <span className="truncate text-[13.5px] font-medium text-cart-ink">
                         {display}
                       </span>
                       {isMe ? (
@@ -132,7 +132,7 @@ export function TeamSection({ currentProfileId }: Props) {
                   </svg>
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-[13.5px] font-medium text-white">
+                  <div className="truncate text-[13.5px] font-medium text-cart-ink">
                     {inv.email ?? "Invitación por link"}
                   </div>
                   <div className="truncate text-[12px] text-cart-ink-3">
@@ -143,14 +143,14 @@ export function TeamSection({ currentProfileId }: Props) {
                   {ROLE_LABEL[inv.role]}
                 </span>
                 <div className="flex items-center gap-2 sm:w-24 sm:justify-end">
-                  <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-300">
+                  <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
                     {STATUS_LABEL[inv.status]}
                   </span>
                   <button
                     type="button"
                     onClick={() => revoke.mutate(inv.id)}
                     disabled={revoke.isPending}
-                    className="text-[12px] font-medium text-rose-300 transition hover:text-rose-200 disabled:opacity-50"
+                    className="text-[12px] font-medium text-rose-600 transition hover:text-rose-700 disabled:opacity-50"
                   >
                     Revocar
                   </button>

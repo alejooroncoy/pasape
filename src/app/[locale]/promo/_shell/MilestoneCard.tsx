@@ -58,13 +58,13 @@ export function MilestoneCard({
         <span
           className={
             "grid size-12 flex-shrink-0 place-items-center rounded-xl " +
-            (unlocked ? "bg-cart-accent/20 text-cart-accent" : "bg-white/[0.05] text-cart-ink-2")
+            (unlocked ? "bg-cart-accent/20 text-cart-accent" : "bg-cart-bg-elev-2 text-cart-ink-2")
           }
         >
           <RewardIcon kind={kind} />
         </span>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[15px] font-semibold text-white">{label}</div>
+          <div className="truncate text-[15px] font-semibold text-cart-ink">{label}</div>
           <div
             className={
               "mt-0.5 flex items-center gap-1 text-[12.5px] " +
@@ -86,7 +86,7 @@ export function MilestoneCard({
       </div>
       {!unlocked && (
         <div>
-          <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+          <div className="h-1.5 overflow-hidden rounded-full bg-cart-line-strong">
             <div
               className="h-full rounded-full bg-cart-accent transition-[width] duration-500"
               style={{ width: `${pct}%` }}

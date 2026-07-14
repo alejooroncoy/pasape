@@ -523,12 +523,6 @@ function BuyFlowInner({ params }: Props) {
   // Al aterrizar en "datos" saltándonos "pick", pedimos el quote autoritativo
   // una vez para mostrar el total exacto (en "pick" esto lo disparaba el CTA).
   const quotedOnLandRef = useRef(false);
-  useEffect(() => {
-    if (phase !== "data" || items.length === 0 || quotedOnLandRef.current) return;
-    quotedOnLandRef.current = true;
-    requestQuote();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, items.length]);
   // Subtotal "todo incluido" del comprador: suma los `buyerPriceCents` que YA
   // vienen calculados del backend (comisión horneada cuando aplica) × promos
   // 2x1/3x2. El cliente NO recalcula la comisión — solo suma precios que le dio
@@ -585,6 +579,13 @@ function BuyFlowInner({ params }: Props) {
       },
     );
   };
+
+  useEffect(() => {
+    if (phase !== "data" || items.length === 0 || quotedOnLandRef.current) return;
+    quotedOnLandRef.current = true;
+    requestQuote();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, items.length]);
 
   // Vence la reserva localmente cuando se cumplen los 30 min (el backend ya la
   // expira en paralelo). Solo corre durante la fase de pago.

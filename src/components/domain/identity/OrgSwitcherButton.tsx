@@ -52,7 +52,7 @@ export const OrgSwitcherButton = ({ onBeforeOpen }: Props = {}) => {
           </svg>
         </span>
         <span className="flex min-w-0 flex-1 flex-col">
-          <span className="truncate text-[13.5px] font-semibold text-white">
+          <span className="truncate text-[13.5px] font-semibold text-cart-ink">
             Crear tu primera marca
           </span>
           <span className="truncate text-[11.5px] text-cart-ink-3">
@@ -97,7 +97,7 @@ export const OrgSwitcherButton = ({ onBeforeOpen }: Props = {}) => {
           )}
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[14px] font-semibold text-white">
+          <span className="block truncate text-[14px] font-semibold text-cart-ink">
             {active.name}
           </span>
           <span className="block truncate text-[11.5px] text-cart-ink-3">{subtitle}</span>
@@ -108,7 +108,7 @@ export const OrgSwitcherButton = ({ onBeforeOpen }: Props = {}) => {
           viewBox="0 0 14 14"
           fill="none"
           aria-hidden
-          className="flex-shrink-0 text-cart-ink-3 transition-colors group-hover:text-white"
+          className="flex-shrink-0 text-cart-ink-3 transition-colors group-hover:text-cart-ink"
         >
           <path
             d="M4 5.5L7 2.5l3 3M4 8.5L7 11.5l3-3"

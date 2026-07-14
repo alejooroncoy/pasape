@@ -163,7 +163,7 @@ function Inner({ params }: Props) {
   }, [eventData, search]);
 
   return (
-    <div className="grid min-h-dvh place-items-center bg-cart-bg px-6 text-center text-white">
+    <div className="home-light home-wash grid min-h-dvh place-items-center bg-cart-bg px-6 text-center text-cart-ink">
       <style>{`
         @keyframes pasape-spin { to { transform: rotate(360deg); } }
         @keyframes pasape-pop {
@@ -186,7 +186,7 @@ function Inner({ params }: Props) {
       `}</style>
 
       {paid ? (
-        <div className="flex max-w-[420px] flex-col items-center">
+        <div className="relative z-10 flex max-w-[420px] flex-col items-center">
           <div
             className="grid size-[140px] place-items-center rounded-full"
             style={{
@@ -225,13 +225,13 @@ function Inner({ params }: Props) {
           </p>
         </div>
       ) : (
-        <div className="flex max-w-[420px] flex-col items-center">
+        <div className="relative z-10 flex max-w-[420px] flex-col items-center">
           <div className="relative size-[140px]">
             <div
               className="absolute inset-0 rounded-full"
               style={{
                 background:
-                  "conic-gradient(from 0deg, transparent, var(--color-cart-accent))",
+                  "conic-gradient(from 0deg, transparent, var(--color-cart-accent-blue), var(--color-cart-accent))",
                 animation: "pasape-spin 1.4s linear infinite",
                 WebkitMask:
                   "radial-gradient(closest-side, transparent calc(50% - 4px), #000 calc(50% - 3px))",
@@ -268,7 +268,13 @@ function Inner({ params }: Props) {
               )}
             </div>
           </div>
-          <h1 className="mt-8 text-[22px] font-bold tracking-[-0.02em]">
+          <h1
+            className="mt-8 bg-clip-text text-[22px] font-bold tracking-[-0.02em] text-transparent"
+            style={{
+              backgroundImage:
+                "linear-gradient(90deg, var(--color-cart-ink) 0%, var(--color-cart-accent) 60%, var(--color-cart-accent-blue) 100%)",
+            }}
+          >
             {summary?.price === "Gratis" ? "Confirmando entrada…" : "Procesando tu pago…"}
           </h1>
           <p className="mt-2 text-[14px] leading-[1.5] text-cart-ink-2">
@@ -277,12 +283,12 @@ function Inner({ params }: Props) {
             Tu QR llega en segundos.
           </p>
           {pollError && (
-            <p className="mt-4 max-w-[360px] text-[13px] leading-[1.5] text-amber-200">
+            <p className="mt-4 max-w-[360px] text-[13px] leading-[1.5] text-amber-700">
               {pollError}
             </p>
           )}
           {summary && (
-            <div className="mt-7 rounded-full bg-cart-bg-elev px-4 py-2 font-mono text-[12px] text-cart-ink-3">
+            <div className="mt-7 rounded-full border border-cart-line bg-cart-bg-elev px-4 py-2 font-mono text-[12px] text-cart-ink-3 shadow-[0_0_0_1px_var(--color-cart-accent-soft)_inset]">
               {summary.price ? `${summary.price} · ` : ""}
               {summary.title}
             </div>

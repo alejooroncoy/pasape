@@ -136,7 +136,7 @@ function ScopeChip({
         ? "Razón social"
         : "Marca";
   return (
-    <span className="hidden rounded-full bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-cart-ink-3 sm:inline-flex">
+    <span className="hidden rounded-full bg-cart-line-2 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-cart-ink-3 sm:inline-flex">
       {label}
     </span>
   );
@@ -220,7 +220,7 @@ function EventCoOrganizersSection({ slug }: { slug: string }) {
                       remove.mutate(c.profileId);
                     }
                   }}
-                  className="rounded-full bg-cart-bg-elev-2 px-3 py-1.5 text-[12px] font-medium text-cart-ink-2 transition hover:bg-red-500/10 hover:text-red-300"
+                  className="rounded-full bg-cart-bg-elev-2 px-3 py-1.5 text-[12px] font-medium text-cart-ink-2 transition hover:bg-red-500/10 hover:text-red-600"
                 >
                   Quitar
                 </button>
@@ -430,7 +430,7 @@ export function RequestsSheet({ slug }: { slug: string }) {
   return (
     <div className="flex flex-col">
       {notice && (
-        <p className="mb-3 rounded-xl bg-emerald-500/15 px-3 py-2 text-[13px] font-medium text-emerald-200">
+        <p className="mb-3 rounded-xl bg-emerald-500/15 px-3 py-2 text-[13px] font-medium text-emerald-600">
           {notice}
         </p>
       )}
@@ -441,7 +441,7 @@ export function RequestsSheet({ slug }: { slug: string }) {
       </h4>
       <p className="mt-2 text-[13px] leading-relaxed text-cart-ink-3">
         Entraron por tu link. Acepta solo a los que conozcas — al aceptar recibirán{" "}
-        <span className="font-semibold text-white">{commissionLabel}</span> de comisión
+        <span className="font-semibold text-cart-ink">{commissionLabel}</span> de comisión
         (según el esquema del evento).
       </p>
 
@@ -477,7 +477,7 @@ export function RequestsSheet({ slug }: { slug: string }) {
                       { onSuccess: () => flash(`Solicitud de ${req.applicantName} rechazada`) },
                     )
                   }
-                  className="h-10 flex-1 rounded-xl bg-cart-bg-elev-2 text-[13px] font-semibold text-cart-ink-3 transition hover:text-white disabled:opacity-50"
+                  className="h-10 flex-1 rounded-xl bg-cart-bg-elev-2 text-[13px] font-semibold text-cart-ink-3 transition hover:text-cart-ink disabled:opacity-50"
                 >
                   Rechazar
                 </button>
@@ -694,7 +694,7 @@ function SavedFlash({ saved }: { saved: boolean }) {
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.18 }}
-          className="text-[11.5px] font-semibold text-emerald-300"
+          className="text-[11.5px] font-semibold text-emerald-600"
         >
           ✓ Guardado
         </motion.span>
@@ -793,7 +793,7 @@ function SchemeCupo({
               onChange(null);
               setEditing(false);
             }}
-            className="text-[11.5px] font-medium text-cart-ink-3 transition hover:text-white"
+            className="text-[11.5px] font-medium text-cart-ink-3 transition hover:text-cart-ink"
           >
             Sin tope
           </button>
@@ -802,7 +802,7 @@ function SchemeCupo({
         <button
           type="button"
           onClick={start}
-          className="mt-1.5 inline-flex items-center gap-1.5 rounded-lg text-[18px] font-bold text-white transition hover:text-cart-accent"
+          className="mt-1.5 inline-flex items-center gap-1.5 rounded-lg text-[18px] font-bold text-cart-ink transition hover:text-cart-accent"
         >
           {value == null ? "sin tope" : value}
           <svg width="13" height="13" viewBox="0 0 14 14" fill="none" className="text-cart-ink-4" aria-hidden>
@@ -874,7 +874,7 @@ function AssignmentRow({
               </span>
             ) : (
               !a.profileId && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/12 px-1.5 py-px text-[9px] font-semibold tracking-[0.08em] text-amber-300">
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/12 px-1.5 py-px text-[9px] font-semibold tracking-[0.08em] text-amber-700">
                   <span className="size-1 rounded-full bg-amber-300" />
                   SIN ACTIVAR
                 </span>
@@ -894,7 +894,7 @@ function AssignmentRow({
         onClick={onCopy}
         disabled={inactive}
         title={inactive ? "Link desactivado" : undefined}
-        className="shrink-0 rounded-full bg-cart-bg-elev-2 px-3 py-1.5 text-[12px] font-medium transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-cart-bg-elev-2"
+        className="shrink-0 rounded-full bg-cart-bg-elev-2 px-3 py-1.5 text-[12px] font-medium transition hover:bg-cart-line-strong disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-cart-bg-elev-2"
       >
         {copied ? "✓" : "Copiar link"}
       </button>
@@ -1032,7 +1032,7 @@ export function PersonalizeSheet({
       <button
         type="button"
         onClick={onRemove}
-        className="mt-4 self-start text-[12.5px] font-medium text-rose-300/80 transition hover:text-rose-300"
+        className="mt-4 self-start text-[12.5px] font-medium text-rose-600/80 transition hover:text-rose-600"
       >
         Quitar del evento
       </button>
@@ -1072,7 +1072,7 @@ function PayEditor({
         <button
           type="button"
           onClick={() => onSet({ commissionPct: null, commissionConfig: null })}
-          className="self-start rounded-full bg-cart-bg-elev-2 px-3 py-1.5 text-[12.5px] font-semibold text-cart-ink-2 ring-1 ring-cart-line-strong transition hover:text-white"
+          className="self-start rounded-full bg-cart-bg-elev-2 px-3 py-1.5 text-[12.5px] font-semibold text-cart-ink-2 ring-1 ring-cart-line-strong transition hover:text-cart-ink"
         >
           Usar el del evento
         </button>
@@ -1194,7 +1194,7 @@ function InlineField({
                   "rounded-full px-3 py-1.5 text-[12.5px] font-semibold transition " +
                   (ownValue === -1
                     ? "bg-cart-accent-soft text-cart-accent"
-                    : "bg-cart-bg-elev-2 text-cart-ink-2 ring-1 ring-cart-line-strong hover:text-white")
+                    : "bg-cart-bg-elev-2 text-cart-ink-2 ring-1 ring-cart-line-strong hover:text-cart-ink")
                 }
               >
                 Sin tope
@@ -1208,7 +1208,7 @@ function InlineField({
                     onReset();
                     flash();
                   }}
-                  className="rounded-full bg-cart-bg-elev-2 px-3 py-1.5 text-[12.5px] font-semibold text-cart-ink-2 ring-1 ring-cart-line-strong transition hover:text-white"
+                  className="rounded-full bg-cart-bg-elev-2 px-3 py-1.5 text-[12.5px] font-semibold text-cart-ink-2 ring-1 ring-cart-line-strong transition hover:text-cart-ink"
                 >
                   Usar el del evento
                 </button>
@@ -1288,7 +1288,7 @@ function PoolPicker({
                 <div className="flex items-center gap-1.5">
                   <span className="truncate text-[14px] font-semibold">{p.name}</span>
                   {!p.profileId && (
-                    <span className="rounded-full bg-amber-400/12 px-1.5 py-px text-[9px] font-semibold tracking-[0.08em] text-amber-300">
+                    <span className="rounded-full bg-amber-400/12 px-1.5 py-px text-[9px] font-semibold tracking-[0.08em] text-amber-700">
                       SIN ACTIVAR
                     </span>
                   )}
@@ -1376,7 +1376,7 @@ function DoorSection({ slug }: { slug: string }) {
             <div className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">
               {copied ? "Copiado" : "Link"}
             </div>
-            <div className="mt-1 truncate font-mono text-[12px] font-semibold text-white">
+            <div className="mt-1 truncate font-mono text-[12px] font-semibold text-cart-ink">
               {door.data.url}
             </div>
           </div>
@@ -1389,7 +1389,7 @@ function DoorSection({ slug }: { slug: string }) {
           <button
             type="button"
             onClick={copy}
-            className="flex-1 rounded-xl bg-cart-bg-elev-2 px-3 py-2 text-[12.5px] font-medium transition hover:bg-white/10"
+            className="flex-1 rounded-xl bg-cart-bg-elev-2 px-3 py-2 text-[12.5px] font-medium transition hover:bg-cart-line-strong"
           >
             {copied ? "✓ Copiado" : "Copiar"}
           </button>
@@ -1411,7 +1411,7 @@ function DoorSection({ slug }: { slug: string }) {
               <span className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">
                 Código
               </span>
-              <span className="ml-2 font-mono text-[12px] font-semibold text-white">
+              <span className="ml-2 font-mono text-[12px] font-semibold text-cart-ink">
                 {door.data.code}
               </span>
             </div>
@@ -1436,7 +1436,7 @@ function DoorSection({ slug }: { slug: string }) {
                 }
               />
               <div className="min-w-0 flex-1">
-                <p className="truncate text-[13px] font-semibold text-white">{p.holderName}</p>
+                <p className="truncate text-[13px] font-semibold text-cart-ink">{p.holderName}</p>
                 <p className="mt-0.5 text-[11px] text-cart-ink-3">
                   {p.dniLast2 ? `DNI ··${p.dniLast2}` : "DNI no registrado"}
                   {p.zoneName ? ` · ${p.zoneName}` : ""}
