@@ -121,7 +121,7 @@ export function Sheet({
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                transition={{ duration: 0.2 }}
+                transition={{ duration: 0.28, ease: [0.4, 0, 0.2, 1] }}
                 className="home-light fixed inset-0 z-[90] app-scrim"
               />
             </Dialog.Overlay>
@@ -152,11 +152,11 @@ export function Sheet({
                           borderTopRightRadius: 26,
                         }
                   }
-                  // Salida con tween corto y determinista: un spring deja la hoja
-                  // "colgando" (se desliza y recién desmonta cuando el resorte
-                  // asienta), así que al cerrar baja y desaparece limpio, en sync
-                  // con el fade del velo (0.2s). La entrada/gestos siguen con spring.
-                  exit={{ y: "100%", transition: { type: "tween", duration: 0.22, ease: [0.32, 0, 0.67, 0] } }}
+                  // Salida con tween determinista (no spring, que deja la hoja
+                  // "colgando" y desmonta de golpe). Easing que desacelera al final
+                  // (curva estándar) → baja suave y se asienta, en sync con el fade
+                  // del velo. La entrada y los gestos siguen con spring.
+                  exit={{ y: "100%", transition: { type: "tween", duration: 0.32, ease: [0.4, 0, 0.2, 1] } }}
                   transition={{ type: "spring", damping: 34, stiffness: 340, mass: 0.9 }}
                   drag={!isDesktop && !expanded ? "y" : false}
                   dragControls={dragControls}
