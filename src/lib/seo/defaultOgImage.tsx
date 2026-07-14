@@ -2,6 +2,23 @@ import { ImageResponse } from "next/og";
 
 export const DEFAULT_OG_SIZE = { width: 1200, height: 630 };
 
+// Paleta clara (home-light): la app del consumidor se rediseñó a claro, así que
+// el OG que la representa va en la misma piel. Sombras suaves de marca
+// (morado + azul) en las tarjetas, sin saturar. Ver globals.css .home-light.
+const BG = "#fbfaff";
+const INK = "#1c1030"; // texto principal (near-black morado)
+const INK_MUTED = "#6b6480";
+const ACCENT = "#7c3aed";
+const BLUE = "#4f6df5";
+const GREEN = "#15a35a"; // más oscuro que el dark para leer sobre claro
+const CARD = "#ffffff";
+const CARD_BORDER = "rgba(28,16,48,0.08)";
+const SUBTLE = "#f3f1fb"; // paneles internos (cart-bg-elev light)
+const LINE = "rgba(28,16,48,0.08)";
+// Sombra de marca reutilizable: morado + azul, suave (como las cart-cards).
+const CARD_SHADOW =
+  "0 30px 80px rgba(124,58,237,0.16), 0 10px 26px rgba(79,109,245,0.10)";
+
 export async function createDefaultOgImage() {
   const [logoSrc, fonts] = await Promise.all([loadLogo(), loadFonts()]);
 
@@ -14,8 +31,8 @@ export async function createDefaultOgImage() {
           position: "relative",
           display: "flex",
           overflow: "hidden",
-          background: "#0A0A0F",
-          color: "#fff",
+          background: BG,
+          color: INK,
           fontFamily: "Pasape Sans",
         }}
       >
@@ -33,15 +50,15 @@ export async function createDefaultOgImage() {
         >
           {logoSrc ? (
             // eslint-disable-next-line @next/next/no-img-element
-            // logo-mark no es cuadrado (viewBox 346x565, ratio ~0.61) — ancho
-            // derivado de la altura para no aplastarlo.
-            <img src={logoSrc} width={27} height={44} alt="" />
+            // Perrito oscuro cuadrado: se lee sobre el fondo claro (el logo-mark
+            // era solo la orejita lavanda, casi invisible en claro).
+            <img src={logoSrc} width={42} height={42} alt="" />
           ) : null}
           <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
             <span style={{ fontSize: 30, fontWeight: 700, lineHeight: 1 }}>
               Pasape
             </span>
-            <span style={{ fontSize: 15, color: "#8E8EA1", fontWeight: 400 }}>
+            <span style={{ fontSize: 15, color: INK_MUTED, fontWeight: 400 }}>
               Sistema operativo para eventos
             </span>
           </div>
@@ -74,9 +91,9 @@ export async function createDefaultOgImage() {
                 gap: 10,
                 padding: "9px 14px",
                 borderRadius: 999,
-                border: "1px solid rgba(255,255,255,0.12)",
-                background: "rgba(255,255,255,0.045)",
-                color: "#D6D6E0",
+                border: `1px solid ${ACCENT}2e`,
+                background: "rgba(124,58,237,0.07)",
+                color: "#5b28c0",
                 fontSize: 18,
                 fontWeight: 600,
               }}
@@ -86,8 +103,7 @@ export async function createDefaultOgImage() {
                   width: 8,
                   height: 8,
                   borderRadius: 8,
-                  background: "#B87CFF",
-                  boxShadow: "0 0 18px #B87CFF",
+                  background: ACCENT,
                   display: "flex",
                 }}
               />
@@ -108,11 +124,10 @@ export async function createDefaultOgImage() {
               <span>Vende entradas.</span>
               <span
                 style={{
-                  color: "#B87CFF",
+                  color: ACCENT,
                   fontFamily: "Pasape Sans",
                   fontWeight: 400,
                   letterSpacing: -1.2,
-                  textShadow: "0 0 34px rgba(184,124,255,0.42)",
                 }}
               >
                 Controla todo.
@@ -123,7 +138,7 @@ export async function createDefaultOgImage() {
               style={{
                 margin: "24px 0 0",
                 maxWidth: 548,
-                color: "#D6D6E0",
+                color: INK_MUTED,
                 fontSize: 23,
                 lineHeight: 1.32,
                 fontWeight: 400,
@@ -162,7 +177,8 @@ function BackgroundTexture() {
           position: "absolute",
           inset: 0,
           background:
-            "radial-gradient(ellipse 60% 48% at 34% 22%, rgba(184,124,255,0.16), transparent 62%), radial-gradient(ellipse 44% 38% at 86% 76%, rgba(168,85,247,0.12), transparent 64%), linear-gradient(135deg, #0A0A0F 0%, #0F0620 100%)",
+            "radial-gradient(ellipse 60% 48% at 32% 20%, rgba(124,58,237,0.10), transparent 60%), radial-gradient(ellipse 46% 40% at 88% 78%, rgba(79,109,245,0.09), transparent 62%), " +
+            BG,
           display: "flex",
         }}
       />
@@ -173,10 +189,10 @@ function BackgroundTexture() {
           top: -90,
           width: 520,
           height: 820,
-          border: "1px solid rgba(255,255,255,0.06)",
+          border: "1px solid rgba(124,58,237,0.10)",
           transform: "rotate(13deg)",
           background:
-            "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.006))",
+            "linear-gradient(180deg, rgba(255,255,255,0.6), rgba(255,255,255,0.05))",
           display: "flex",
         }}
       />
@@ -188,7 +204,7 @@ function BackgroundTexture() {
           bottom: 0,
           height: 1,
           background:
-            "linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,0.18), rgba(255,255,255,0))",
+            "linear-gradient(90deg, rgba(124,58,237,0), rgba(124,58,237,0.22), rgba(124,58,237,0))",
           display: "flex",
         }}
       />
@@ -206,17 +222,6 @@ function ProductPreview() {
         display: "flex",
       }}
     >
-      <div
-        style={{
-          position: "absolute",
-          inset: 28,
-          borderRadius: 999,
-          background:
-            "radial-gradient(closest-side, rgba(184,124,255,0.32), transparent 72%)",
-          filter: "blur(20px)",
-          display: "flex",
-        }}
-      />
       <DashboardCard />
       <TicketCard />
       <FanPassCard />
@@ -234,9 +239,9 @@ function DashboardCard() {
         width: 386,
         height: 298,
         borderRadius: 28,
-        background: "#12121A",
-        border: "1px solid rgba(255,255,255,0.14)",
-        boxShadow: "0 28px 90px rgba(0,0,0,0.55)",
+        background: CARD,
+        border: `1px solid ${CARD_BORDER}`,
+        boxShadow: CARD_SHADOW,
         padding: 22,
         display: "flex",
         flexDirection: "column",
@@ -244,10 +249,10 @@ function DashboardCard() {
     >
       <div style={{ display: "flex", justifyContent: "space-between" }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <span style={{ color: "#8E8EA1", fontSize: 13, fontWeight: 700 }}>
+          <span style={{ color: INK_MUTED, fontSize: 13, fontWeight: 700 }}>
             EN VIVO
           </span>
-          <span style={{ fontSize: 25, fontWeight: 700 }}>Evento Demo</span>
+          <span style={{ fontSize: 25, fontWeight: 700, color: INK }}>Evento Demo</span>
         </div>
         <LiveBadge />
       </div>
@@ -258,14 +263,14 @@ function DashboardCard() {
           value="319"
           detail="72% del objetivo"
           progress={72}
-          accent="#B87CFF"
+          accent={ACCENT}
         />
         <Kpi
           title="Accesos"
           value="287"
           detail="90% validadas"
           progress={90}
-          accent="#22D17F"
+          accent={GREEN}
         />
       </div>
 
@@ -275,8 +280,8 @@ function DashboardCard() {
           marginTop: 18,
           height: 88,
           borderRadius: 18,
-          background: "#0A0A0F",
-          border: "1px solid rgba(255,255,255,0.08)",
+          background: SUBTLE,
+          border: `1px solid ${LINE}`,
           padding: "14px 14px 12px",
           gap: 11,
         }}
@@ -297,10 +302,10 @@ function DashboardCard() {
                 borderRadius: 8,
                 background:
                   index === 5
-                    ? "linear-gradient(180deg, #B87CFF, #7C3AED)"
+                    ? ACCENT
                     : index === 3
-                      ? "linear-gradient(180deg, rgba(34,209,127,0.85), rgba(34,209,127,0.38))"
-                      : "rgba(255,255,255,0.16)",
+                      ? GREEN
+                      : "rgba(28,16,48,0.12)",
                 display: "flex",
               }}
             />
@@ -321,9 +326,10 @@ function TicketCard() {
         width: 286,
         height: 164,
         borderRadius: 24,
-        background: "#F5F1FF",
-        color: "#0A0A0F",
-        boxShadow: "0 28px 70px rgba(0,0,0,0.42)",
+        background: CARD,
+        color: INK,
+        border: `1px solid ${CARD_BORDER}`,
+        boxShadow: CARD_SHADOW,
         padding: 20,
         display: "flex",
         flexDirection: "column",
@@ -333,22 +339,22 @@ function TicketCard() {
     >
       <div style={{ display: "flex", justifyContent: "space-between", gap: 18 }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: "#7C3AED" }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: ACCENT }}>
             PASAPE
           </span>
           <span style={{ fontSize: 28, lineHeight: 1.04, fontWeight: 700 }}>
             Tu entrada
           </span>
-          <span style={{ color: "#6F6680", fontSize: 13, fontWeight: 700 }}>
+          <span style={{ color: INK_MUTED, fontSize: 13, fontWeight: 700 }}>
             lista para entrar
           </span>
         </div>
         <TicketStamp />
       </div>
       <div style={{ display: "flex", gap: 8 }}>
-        <Bar width={82} color="#0A0A0F" />
-        <Bar width={48} color="rgba(10,10,15,0.25)" />
-        <Bar width={72} color="rgba(10,10,15,0.16)" />
+        <Bar width={82} color={INK} />
+        <Bar width={48} color="rgba(28,16,48,0.28)" />
+        <Bar width={72} color="rgba(28,16,48,0.16)" />
       </div>
     </div>
   );
@@ -364,9 +370,10 @@ function FanPassCard() {
         width: 184,
         height: 168,
         borderRadius: 30,
-        background: "#FFFFFF",
-        color: "#0A0A0F",
-        boxShadow: "0 24px 70px rgba(0,0,0,0.38)",
+        background: CARD,
+        color: INK,
+        border: `1px solid ${CARD_BORDER}`,
+        boxShadow: CARD_SHADOW,
         padding: 16,
         display: "flex",
         flexDirection: "column",
@@ -376,7 +383,7 @@ function FanPassCard() {
     >
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-          <span style={{ color: "#7C3AED", fontSize: 12, fontWeight: 700 }}>
+          <span style={{ color: ACCENT, fontSize: 12, fontWeight: 700 }}>
             FAN PASS
           </span>
           <span style={{ fontSize: 24, lineHeight: 1, fontWeight: 700 }}>
@@ -388,16 +395,15 @@ function FanPassCard() {
             width: 36,
             height: 36,
             borderRadius: 18,
-            background: "#22D17F",
-            color: "#0A0A0F",
+            background: GREEN,
+            color: "#ffffff",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            
             fontWeight: 700,
           }}
         >
-          <CheckMark color="#0A0A0F" size={18} />
+          <CheckMark color="#ffffff" size={18} />
         </div>
       </div>
 
@@ -408,11 +414,11 @@ function FanPassCard() {
           gap: 8,
           padding: "12px 12px",
           borderRadius: 18,
-          background: "#F3EEFF",
+          background: SUBTLE,
         }}
       >
         <span style={{ fontSize: 14, fontWeight: 700 }}>Vie · 10:00 p.m.</span>
-        <span style={{ color: "#6F6680", fontSize: 12, fontWeight: 700 }}>
+        <span style={{ color: INK_MUTED, fontSize: 12, fontWeight: 700 }}>
           Guardado en tu celular
         </span>
       </div>
@@ -427,7 +433,7 @@ function TicketStamp() {
         width: 56,
         height: 56,
         borderRadius: 18,
-        background: "#0A0A0F",
+        background: ACCENT,
         color: "#fff",
         fontSize: 30,
         fontWeight: 700,
@@ -482,8 +488,8 @@ function Kpi({
       style={{
         flex: 1,
         borderRadius: 16,
-        background: "#16161F",
-        border: "1px solid rgba(255,255,255,0.08)",
+        background: SUBTLE,
+        border: `1px solid ${LINE}`,
         padding: 13,
         display: "flex",
         flexDirection: "column",
@@ -491,21 +497,21 @@ function Kpi({
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-        <span style={{ color: "#8E8EA1", fontSize: 12, fontWeight: 700 }}>
+        <span style={{ color: INK_MUTED, fontSize: 12, fontWeight: 700 }}>
           {title}
         </span>
         <span style={{ color: accent, fontSize: 12, fontWeight: 700 }}>
           {progress}%
         </span>
       </div>
-      <span style={{ color: "#fff", fontSize: 31, lineHeight: 1, fontWeight: 700 }}>
+      <span style={{ color: INK, fontSize: 31, lineHeight: 1, fontWeight: 700 }}>
         {value}
       </span>
       <div
         style={{
           height: 5,
           borderRadius: 99,
-          background: "rgba(255,255,255,0.08)",
+          background: "rgba(28,16,48,0.10)",
           overflow: "hidden",
           display: "flex",
         }}
@@ -516,12 +522,11 @@ function Kpi({
             height: "100%",
             borderRadius: 99,
             background: accent,
-            boxShadow: `0 0 18px ${accent}`,
             display: "flex",
           }}
         />
       </div>
-      <span style={{ color: "#8E8EA1", fontSize: 11, fontWeight: 600 }}>
+      <span style={{ color: INK_MUTED, fontSize: 11, fontWeight: 600 }}>
         {detail}
       </span>
     </div>
@@ -537,8 +542,8 @@ function LiveBadge() {
         gap: 7,
         alignSelf: "flex-start",
         borderRadius: 999,
-        background: "rgba(34,209,127,0.14)",
-        color: "#22D17F",
+        background: "rgba(21,163,90,0.12)",
+        color: GREEN,
         padding: "7px 10px",
         fontSize: 12,
         fontWeight: 700,
@@ -549,7 +554,7 @@ function LiveBadge() {
           width: 7,
           height: 7,
           borderRadius: 7,
-          background: "#22D17F",
+          background: GREEN,
           display: "flex",
         }}
       />
@@ -577,7 +582,7 @@ async function loadLogo(): Promise<string | null> {
     const { readFile } = await import("node:fs/promises");
     const { join } = await import("node:path");
     const buf = await readFile(
-      join(process.cwd(), "public/icons/logo-mark-512.png"),
+      join(process.cwd(), "public/icons/logo-dark-square-512.png"),
     );
     return `data:image/png;base64,${buf.toString("base64")}`;
   } catch {
