@@ -4,6 +4,7 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
+import { Send, Pencil } from "lucide-react";
 import { Link, useRouter } from "@/i18n/navigation";
 import { useMyTickets } from "@/lib/tickets/hooks/useTickets";
 import { usePrefetchWallet } from "@/lib/tickets/prefetchWallet";
@@ -555,7 +556,7 @@ function AssignChooserSheet({
         onClick={onSend}
         className="flex w-full items-center gap-3 rounded-[17px] border border-cart-line bg-cart-bg px-3.5 py-3.5 text-left transition hover:border-cart-accent/40 active:scale-[0.99]"
       >
-        <span className="grid size-10 shrink-0 place-items-center rounded-[12px] bg-cart-accent-soft text-[19px]">📲</span>
+        <span className="grid size-10 shrink-0 place-items-center rounded-[12px] bg-cart-accent-soft text-cart-accent"><Send size={19} strokeWidth={2} /></span>
         <span className="min-w-0">
           <span className="block text-[14.5px] font-extrabold tracking-[-0.01em] text-cart-ink">Enviársela a alguien</span>
           <span className="mt-0.5 block text-[11.5px] font-medium leading-snug text-cart-ink-3">Le llega por WhatsApp y la abre en su celular · queda a su nombre</span>
@@ -566,7 +567,7 @@ function AssignChooserSheet({
         onClick={onSetData}
         className="mt-2.5 flex w-full items-center gap-3 rounded-[17px] border border-cart-line bg-cart-bg px-3.5 py-3.5 text-left transition hover:border-cart-accent/40 active:scale-[0.99]"
       >
-        <span className="grid size-10 shrink-0 place-items-center rounded-[12px] bg-cart-accent-soft text-[19px]">✏️</span>
+        <span className="grid size-10 shrink-0 place-items-center rounded-[12px] bg-cart-accent-soft text-cart-accent"><Pencil size={19} strokeWidth={2} /></span>
         <span className="min-w-0">
           <span className="block text-[14.5px] font-extrabold tracking-[-0.01em] text-cart-ink">Solo poner sus datos</span>
           <span className="mt-0.5 block text-[11.5px] font-medium leading-snug text-cart-ink-3">La guardas tú · nombre y DNI para el control en la puerta</span>
