@@ -18,8 +18,9 @@ import { getMyTicketById, getMyTickets } from "../../application/GetMyTickets";
 import { transferTicket } from "../../application/TransferTicket";
 import { claimTransfer } from "../../application/ClaimTransfer";
 import { claimOrder } from "../../application/ClaimOrder";
+import { requestRefund } from "../../application/RequestRefund";
 import type { OrderQuote, Ticket, TransferOutcome, WalletTicket } from "../../domain/Ticket";
-import type { BuyOutput } from "../../ports/TicketRepository";
+import type { BuyOutput, RefundRequestSummary } from "../../ports/TicketRepository";
 
 // Why: el QR llega por WhatsApp o email — exigimos al menos uno. DNI es
 // obligatorio (lo verifica el portero en puerta).
@@ -87,6 +88,11 @@ const transferSchema = z.object({
   // Solo por WhatsApp: la transferencia siempre queda en espera de reclamo y
   // el link viaja al número del receptor.
   toPhone: z.string().transform(sanitizePhone).pipe(z.string().min(6)),
+});
+
+const requestRefundSchema = z.object({
+  ticketId: z.string().uuid(),
+  reason: z.string().trim().min(1).max(500),
 });
 
 const claimObject = z.object({
@@ -233,6 +239,21 @@ export const TicketsController = {
         fromProfile: auth.value.profileId,
         fromName: prof?.full_name ?? null,
         toPhone: parsed.data.toPhone,
+      },
+    );
+  },
+
+  async requestRefund(input: unknown): Promise<Result<RefundRequestSummary>> {
+    const auth = await getAuthContext();
+    if (!auth.ok) return err(auth.error);
+    const parsed = requestRefundSchema.safeParse(input);
+    if (!parsed.success) return err("invalid_input");
+    return requestRefund(
+      { repo },
+      {
+        ticketId: parsed.data.ticketId,
+        profileId: auth.value.profileId,
+        reason: parsed.data.reason,
       },
     );
   },

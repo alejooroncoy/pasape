@@ -3,6 +3,7 @@ import type { Event } from "../domain/Event";
 import type { EventRepository, UpdateEventInput } from "../ports/EventRepository";
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
 import { notifyPendingReview } from "@/server/notifications/application/NotifyPendingReview";
+import { notifyEventCancelled } from "@/server/notifications/application/NotifyEventCancelled";
 
 type Deps = { repo: EventRepository };
 
@@ -142,6 +143,17 @@ export const updateEvent = async (
   if (gatedInput.status === "pending_review" && before?.status !== "pending_review") {
     notifyPendingReview(eventId).catch((notifyErr) =>
       console.error("[updateEvent] notifyPendingReview falló:", notifyErr),
+    );
+  }
+
+  // Cancelar un evento SOLO avisa a los compradores in-app (notifyBuyers abajo)
+  // — ningún reembolso se dispara automático. Este correo es la señal para que
+  // el equipo ejecute el plan de reembolso a mano (ver RequestRefund.ts para el
+  // mismo patrón a nivel de una sola entrada). Solo en la TRANSICIÓN real a
+  // "cancelled", no en cada guardado de un evento ya cancelado.
+  if (gatedInput.status === "cancelled" && before?.status !== "cancelled") {
+    notifyEventCancelled(eventId, result.value.title, orgId).catch((notifyErr) =>
+      console.error("[updateEvent] notifyEventCancelled falló:", notifyErr),
     );
   }
 

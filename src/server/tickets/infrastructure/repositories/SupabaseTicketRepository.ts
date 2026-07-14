@@ -1380,6 +1380,58 @@ export const supabaseTicketRepository: TicketRepository = {
     }
     return markByQrCode(db, row.qr_code, scanner, opts.usedAt, ticketId);
   },
+
+  async requestRefund(input) {
+    const db = supabaseAdmin();
+    const { data: tk } = await db
+      .from("tickets")
+      .select("id, current_holder, order:orders!inner(id, event_id, buyer_id, event:events!inner(title))")
+      .eq("id", input.ticketId)
+      .maybeSingle();
+    if (!tk) return err("ticket_not_found");
+    type Joined = {
+      id: string;
+      current_holder: string;
+      order: { id: string; event_id: string; buyer_id: string; event: { title: string } };
+    };
+    const ticket = tk as unknown as Joined;
+    if (ticket.current_holder !== input.profileId) return err("not_owner");
+
+    // Solo órdenes con un pago real (no cortesía/gratis) califican — sin
+    // payment_id no hay nada que reembolsar.
+    const { data: payment } = await db
+      .from("payments")
+      .select("id, amount_cents, currency")
+      .eq("order_id", ticket.order.id)
+      .eq("status", "paid")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle<{ id: string; amount_cents: number; currency: string }>();
+    if (!payment) return err("no_payment_found");
+
+    const { error: insErr } = await db.from("refunds").insert({
+      payment_id: payment.id,
+      amount_cents: payment.amount_cents,
+      reason: input.reason,
+      status: "requested",
+    });
+    if (insErr) return err(insErr.message);
+
+    const { data: buyer } = await db
+      .from("profiles")
+      .select("full_name, email")
+      .eq("id", ticket.order.buyer_id)
+      .maybeSingle<{ full_name: string | null; email: string | null }>();
+
+    return ok({
+      orderId: ticket.order.id,
+      eventTitle: ticket.order.event.title,
+      amountCents: payment.amount_cents,
+      currency: payment.currency,
+      buyerName: buyer?.full_name ?? null,
+      buyerEmail: buyer?.email ?? null,
+    });
+  },
 };
 
 // ¿La entrada del QR está permitida en la puerta `zoneId`?

@@ -153,7 +153,26 @@ export interface TicketRepository {
     ticketId: string,
     viewerId: string,
   ): Promise<Result<{ ids: string[]; currentIndex: number; eventTicketCount: number }>>;
+  /** Registra una solicitud de reembolso (tabla `refunds`, status "requested").
+      No procesa el reembolso — eso lo hace el equipo a mano tras el correo de
+      aviso. Solo el dueño actual del ticket puede solicitarlo, y solo si su
+      orden tiene un pago (`payments`) — pedidos gratis/cortesía no aplican. */
+  requestRefund(input: {
+    ticketId: string;
+    profileId: string;
+    reason: string;
+  }): Promise<Result<RefundRequestSummary>>;
 }
+
+/** Datos para el correo de aviso a team@pasape.lat tras una solicitud. */
+export type RefundRequestSummary = {
+  orderId: string;
+  eventTitle: string;
+  amountCents: number;
+  currency: string;
+  buyerName: string | null;
+  buyerEmail: string | null;
+};
 
 export type MarkUsedResult = {
   ticket: Ticket;

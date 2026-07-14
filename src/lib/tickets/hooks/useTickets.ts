@@ -200,6 +200,24 @@ export const useSetHolder = () => {
   });
 };
 
+export type RefundRequestOutcome = {
+  orderId: string;
+  eventTitle: string;
+  amountCents: number;
+  currency: string;
+};
+
+// Flujo no escalable a propósito: solo registra la solicitud y avisa por
+// correo al equipo — el reembolso en sí se procesa a mano (ver TODOS.md).
+export const useRequestRefund = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { ticketId: string; reason: string }) =>
+      api.post<RefundRequestOutcome>("/api/tickets/request-refund", input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ticketsRoot }),
+  });
+};
+
 export const useCarouselScope = (ticketId: string) =>
   useQuery({
     queryKey: carouselScopeKey(ticketId),

@@ -112,8 +112,9 @@ export default function OrgEventConfigPage({ params }: { params: Params }) {
             <div>
               <div className="text-[14.5px] font-semibold text-red-600">Cancelar evento</div>
               <div className="mt-1 text-[12.5px] leading-relaxed text-cart-ink-3">
-                El evento no va a ocurrir. Notificamos a los compradores e iniciamos reembolsos.
-                Esta acción no se puede deshacer.
+                El evento no va a ocurrir. Avisamos a todos los compradores, y nuestro equipo se
+                contacta con cada uno en menos de 48 horas para coordinar su reembolso. Esta
+                acción no se puede deshacer.
               </div>
             </div>
             {ev?.status === "cancelled" ? (
@@ -441,8 +442,8 @@ function ConfirmSheet({
         <div className="mx-auto mb-3 h-1 w-9 rounded-full bg-cart-ink/15" />
         <div className="text-[20px] font-semibold tracking-[-0.02em]">¿Cancelar el evento?</div>
         <p className="mt-1.5 text-[13.5px] leading-relaxed text-cart-ink-3">
-          Vamos a notificar a todos los compradores y empezar los reembolsos.
-          Esto no se puede deshacer.
+          Vamos a avisar a todos los compradores. Nuestro equipo se contacta con cada uno en
+          menos de 48 horas para coordinar su reembolso. Esto no se puede deshacer.
         </p>
         <div className="mt-5 flex gap-2.5">
           <button
