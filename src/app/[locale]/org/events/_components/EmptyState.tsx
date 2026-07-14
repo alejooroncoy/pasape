@@ -2,6 +2,7 @@
 
 import { motion } from "motion/react";
 import { Link } from "@/i18n/navigation";
+import { useNewEventHref } from "@/lib/events/hooks/useNewEventHref";
 
 const COPY = {
   upcoming: {
@@ -26,6 +27,10 @@ const COPY = {
 
 export function EmptyState({ variant }: { variant: "upcoming" | "past" | "draft" }) {
   const copy = COPY[variant];
+  // "draft" apunta siempre al composer completo — es el único con la opción
+  // "guardar como borrador"; el flujo rápido publica de una, no tiene draft.
+  const newEventHref = useNewEventHref();
+  const href = variant === "draft" ? "/org/events/new" : newEventHref;
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
@@ -69,7 +74,7 @@ export function EmptyState({ variant }: { variant: "upcoming" | "past" | "draft"
         </motion.div>
       </div>
       <div className="space-y-2">
-        <h3 className="text-[20px] font-semibold tracking-[-0.02em] text-white sm:text-[18px]">
+        <h3 className="text-[20px] font-semibold tracking-[-0.02em] text-cart-ink sm:text-[18px]">
           {copy.title}
         </h3>
         <p className="text-[14.5px] leading-relaxed text-cart-ink-3 sm:text-[13px]">
@@ -78,7 +83,7 @@ export function EmptyState({ variant }: { variant: "upcoming" | "past" | "draft"
       </div>
       {copy.showCta && (
         <Link
-          href={"/org/events/new" as never}
+          href={href as never}
           className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-full bg-cart-accent px-6 py-3.5 text-[15px] font-semibold text-white shadow-[0_8px_24px_-8px_var(--color-cart-accent-glow)] transition-transform active:scale-[0.98] sm:w-auto sm:px-5 sm:py-2.5 sm:text-[13px]"
         >
           <span className="text-[17px] leading-none sm:text-[15px]">+</span> {copy.cta}

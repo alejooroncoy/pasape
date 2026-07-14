@@ -134,7 +134,7 @@ function SuccessContent() {
           {isLive ? (
             <button
               type="button"
-              onClick={() => router.push("/org")}
+              onClick={() => router.push(`/org/events/${slug}` as never)}
               className="relative flex h-[58px] items-center justify-center gap-2.5 overflow-hidden rounded-2xl bg-cart-accent text-[15.5px] font-semibold tracking-[-0.01em] text-white shadow-[0_14px_32px_-10px_var(--color-cart-accent-glow-strong)]"
             >
               Ir a mi panel
@@ -176,7 +176,7 @@ function SuccessContent() {
               {isLive ? (
                 <button
                   type="button"
-                  onClick={() => router.push("/org")}
+                  onClick={() => router.push(`/org/events/${slug}` as never)}
                   className="relative flex h-[56px] items-center gap-2.5 overflow-hidden rounded-full bg-cart-accent px-7 text-[15px] font-semibold tracking-[-0.01em] text-white shadow-[0_18px_40px_-12px_var(--color-cart-accent-glow-strong)] transition hover:-translate-y-[1px]"
                 >
                   Ir a mi panel

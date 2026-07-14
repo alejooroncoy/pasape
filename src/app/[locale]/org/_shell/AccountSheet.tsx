@@ -37,7 +37,7 @@ export function AccountSheet({ open, onClose }: { open: boolean; onClose: () => 
             transition={{ duration: 0.18 }}
             onClick={onClose}
             aria-hidden
-            className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm lg:hidden"
+            className="fixed inset-0 z-[80] app-scrim lg:hidden"
           />
           <motion.div
             key="sheet"
@@ -57,7 +57,7 @@ export function AccountSheet({ open, onClose }: { open: boolean; onClose: () => 
             className="fixed inset-x-0 bottom-0 z-[81] mx-auto w-full max-w-[480px] touch-none rounded-t-[24px] border-t border-cart-line-strong bg-cart-bg-elev px-4 pb-[calc(env(safe-area-inset-bottom,0px)+18px)] pt-3 shadow-[0_-20px_50px_-10px_rgba(0,0,0,0.7)] lg:hidden"
           >
             <div className="mb-4 flex justify-center">
-              <div className="h-1 w-9 rounded-full bg-white/15" />
+              <div className="h-1 w-9 rounded-full bg-cart-line-strong" />
             </div>
 
             {user ? (
@@ -78,7 +78,7 @@ export function AccountSheet({ open, onClose }: { open: boolean; onClose: () => 
                     {initialsOf(user.fullName, user.email)}
                   </motion.span>
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-[15px] font-semibold text-white">
+                    <div className="truncate text-[15px] font-semibold text-cart-ink">
                       {user.fullName || user.email?.split("@")[0] || "Tú"}
                     </div>
                     {user.email && (
@@ -111,7 +111,7 @@ export function AccountSheet({ open, onClose }: { open: boolean; onClose: () => 
                 transition={{ delay: 0.08, duration: 0.25 }}
                 className="px-1 pb-2"
               >
-                <div className="mb-1.5 font-sans text-[20px] font-semibold tracking-[-0.02em] text-white">
+                <div className="mb-1.5 font-sans text-[20px] font-semibold tracking-[-0.02em] text-cart-ink">
                   Entra a Pasape
                 </div>
                 <div className="mb-5 text-[13px] text-cart-ink-3">

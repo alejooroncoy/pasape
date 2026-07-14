@@ -96,8 +96,8 @@ function EventCard({
       className={
         "flex w-full items-stretch overflow-hidden rounded-2xl border text-left transition " +
         (today
-          ? "border-cart-accent/40 shadow-[0_8px_32px_-16px_rgba(124,58,237,0.5)]"
-          : "border-cart-line bg-cart-bg-elev hover:border-white/20")
+          ? "border-cart-accent/40 bg-cart-accent-soft shadow-[0_8px_32px_-16px_rgba(124,58,237,0.35)]"
+          : "border-cart-line bg-cart-bg-elev hover:border-cart-line-strong")
       }
     >
       {/* Cover */}
@@ -125,8 +125,8 @@ function EventCard({
         {!today && (
           <span
             className={
-              "absolute left-2 top-2 size-2 rounded-full ring-2 ring-black/40 " +
-              (past ? "bg-white/30" : "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]")
+              "absolute left-2 top-2 size-2 rounded-full ring-2 ring-cart-bg " +
+              (past ? "bg-cart-ink-4/50" : "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]")
             }
           />
         )}
@@ -137,15 +137,15 @@ function EventCard({
         <p className="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-cart-accent">
           {countLabel}
         </p>
-        <p className="truncate text-[15px] font-bold leading-tight">{event.title}</p>
-        {event.venue && <p className="truncate text-[12px] text-white/45">{event.venue}</p>}
-        <p className="mt-0.5 text-[11px] text-white/30">{formatDate(event.startsAt, event.timezone)}</p>
+        <p className="truncate text-[15px] font-bold leading-tight text-cart-ink">{event.title}</p>
+        {event.venue && <p className="truncate text-[12px] text-cart-ink-3">{event.venue}</p>}
+        <p className="mt-0.5 text-[11px] text-cart-ink-4">{formatDate(event.startsAt, event.timezone)}</p>
       </div>
 
       {/* Chevron */}
-      <div className="flex items-center pr-4">
+      <div className="flex items-center pr-4 text-cart-ink-4">
         <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
-          <path d="M7 5l5 5-5 5" stroke="white" strokeOpacity="0.25" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M7 5l5 5-5 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </div>
     </motion.button>
@@ -191,7 +191,7 @@ function TicketSelectScreen({
       <button
         type="button"
         onClick={onBack}
-        className="mb-4 flex items-center gap-1.5 text-[12.5px] text-white/45 transition hover:text-white/70"
+        className="mb-4 flex items-center gap-1.5 text-[12.5px] text-cart-ink-3 transition hover:text-cart-ink"
       >
         <svg width="14" height="14" viewBox="0 0 20 20" fill="none">
           <path d="M13 5l-5 5 5 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
@@ -206,23 +206,23 @@ function TicketSelectScreen({
           <img src={cover} alt="" className={"size-14 rounded-xl object-cover " + (past ? "grayscale" : "")} />
         ) : (
           <div
-            className="flex size-14 shrink-0 items-center justify-center rounded-xl text-[20px] font-black text-white/80"
+            className="flex size-14 shrink-0 items-center justify-center rounded-xl text-[20px] font-black text-white"
             style={{ background: tickets[0] ? fallbackGradient(tickets[0]) : "rgba(124,58,237,0.3)" }}
           >
             {event.title.charAt(0)}
           </div>
         )}
         <div className="min-w-0">
-          <p className="truncate text-[16px] font-bold">{event.title}</p>
-          <p className="text-[12px] text-white/40">{shortDateTime(event.startsAt, event.timezone)}</p>
-          {event.venue && <p className="truncate text-[11.5px] text-white/30">{event.venue}</p>}
+          <p className="truncate text-[16px] font-bold text-cart-ink">{event.title}</p>
+          <p className="text-[12px] text-cart-ink-3">{shortDateTime(event.startsAt, event.timezone)}</p>
+          {event.venue && <p className="truncate text-[11.5px] text-cart-ink-4">{event.venue}</p>}
         </div>
       </div>
 
       {/* Sección BOX: se ve distinto de una entrada suelta */}
       {boxTickets.length > 0 && (
         <>
-          <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-white/30">
+          <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-cart-ink-4">
             Tu box
           </p>
           <div className="mb-5 flex flex-col gap-2">
@@ -248,7 +248,7 @@ function TicketSelectScreen({
                   <span className="absolute right-3 top-3 rounded-full bg-cart-accent px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-[0.06em] text-cart-bg">
                     Tu box
                   </span>
-                  <div className="grid size-11 shrink-0 place-items-center rounded-xl bg-black/25 text-cart-accent">
+                  <div className="grid size-11 shrink-0 place-items-center rounded-xl bg-cart-accent-soft text-cart-accent">
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
                       <circle cx="8" cy="9" r="2.4" stroke="currentColor" strokeWidth="1.6" />
                       <circle cx="16" cy="9" r="2.4" stroke="currentColor" strokeWidth="1.6" />
@@ -256,11 +256,11 @@ function TicketSelectScreen({
                     </svg>
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-[16px] font-bold leading-tight">{label}</p>
-                    <p className="mt-0.5 text-[12px] text-white/55">Tu entrada + invitados</p>
+                    <p className="text-[16px] font-bold leading-tight text-cart-ink">{label}</p>
+                    <p className="mt-0.5 text-[12px] text-cart-ink-3">Tu entrada + invitados</p>
                     {active && (
-                      <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-emerald-400/12 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-300">
-                        <span className="size-1.5 rounded-full bg-emerald-400" /> Ya puedes entrar
+                      <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-emerald-500/12 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700">
+                        <span className="size-1.5 rounded-full bg-emerald-500" /> Ya puedes entrar
                       </span>
                     )}
                   </div>
@@ -274,7 +274,7 @@ function TicketSelectScreen({
       {/* Sección ENTRADAS individuales */}
       {singles.length > 0 && (
         <>
-          <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-white/30">
+          <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-cart-ink-4">
             {boxTickets.length > 0 ? "Tus entradas individuales" : "Seleccioná tu entrada"}
           </p>
           <div className="flex flex-col gap-2">
@@ -300,20 +300,20 @@ function TicketSelectScreen({
                     onClick={() => onSelect(t)}
                     className="flex w-full items-center gap-4 px-4 py-4 text-left"
                   >
-                    <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-white/[0.06] text-[15px] font-black text-white/60">
+                    <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-cart-bg-elev-2 text-[15px] font-black text-cart-ink-3">
                       {i + 1}
                     </div>
 
                     <div className="min-w-0 flex-1">
-                      <p className="text-[14.5px] font-semibold">{t.ticketType.name}</p>
+                      <p className="text-[14.5px] font-semibold text-cart-ink">{t.ticketType.name}</p>
                       <div className="mt-1 flex items-center gap-1.5">
                         <span
                           className={
                             "size-1.5 rounded-full " +
-                            (past ? "bg-white/30" : inReview ? "bg-amber-400" : t.status === "active" ? "bg-emerald-400 shadow-[0_0_5px_rgba(52,211,153,0.7)]" : "bg-amber-400")
+                            (past ? "bg-cart-ink-4/50" : inReview ? "bg-amber-500" : t.status === "active" ? "bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.6)]" : "bg-amber-500")
                           }
                         />
-                        <span className="text-[12px] text-white/40">
+                        <span className="text-[12px] text-cart-ink-3">
                           {inReview
                             ? "Pago en revisión"
                             : t.pendingTransferTo
@@ -330,7 +330,7 @@ function TicketSelectScreen({
                     </div>
 
                     {/* QR icon */}
-                    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" className="shrink-0 text-white/20">
+                    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" className="shrink-0 text-cart-ink-4">
                       <rect x="2" y="2" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="1.4" />
                       <rect x="11" y="2" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="1.4" />
                       <rect x="2" y="11" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="1.4" />
@@ -346,7 +346,7 @@ function TicketSelectScreen({
                       <button
                         type="button"
                         onClick={() => onAssignHolder(t)}
-                        className="flex-1 rounded-full bg-white/10 px-3.5 py-2 text-[12.5px] font-semibold text-white transition hover:bg-white/15 active:scale-95"
+                        className="flex-1 rounded-full bg-cart-bg-elev-2 px-3.5 py-2 text-[12.5px] font-semibold text-cart-ink-2 transition hover:bg-cart-accent-soft hover:text-cart-ink active:scale-95"
                       >
                         Cambiar datos
                       </button>
@@ -372,16 +372,16 @@ function TicketSelectScreen({
 // ── Skeleton de carga ──────────────────────────────────────────────────────
 function WalletSkeleton() {
   return (
-    <div className="cart-grain relative min-h-screen bg-cart-bg font-sans text-white">
+    <div className="cart-grain relative min-h-screen bg-cart-bg font-sans text-cart-ink">
       <div className="relative z-[1] mx-auto w-full max-w-[640px] px-4 pb-[96px] pt-[max(16px,env(safe-area-inset-top))] sm:px-6">
         <div className="py-3">
-          <div className="h-3 w-20 animate-pulse rounded bg-white/[0.06]" />
-          <div className="mt-2 h-7 w-32 animate-pulse rounded bg-white/[0.06]" />
+          <div className="h-3 w-20 animate-pulse rounded bg-cart-bg-elev-2" />
+          <div className="mt-2 h-7 w-32 animate-pulse rounded bg-cart-bg-elev-2" />
         </div>
-        <div className="mt-2 h-10 animate-pulse rounded-2xl bg-white/[0.04]" />
+        <div className="mt-2 h-10 animate-pulse rounded-2xl bg-cart-bg-elev" />
         <div className="flex flex-col gap-3 pt-5">
           {[0, 1, 2].map((i) => (
-            <div key={i} className="h-[88px] animate-pulse rounded-2xl bg-white/[0.04]" />
+            <div key={i} className="h-[88px] animate-pulse rounded-2xl bg-cart-bg-elev" />
           ))}
         </div>
       </div>
@@ -530,17 +530,17 @@ function WalletPageInner() {
   }
 
   return (
-    <div className="cart-grain relative min-h-screen bg-cart-bg font-sans text-white">
+    <div className="cart-grain relative min-h-screen bg-cart-bg font-sans text-cart-ink">
       <div
         aria-hidden
         className="pointer-events-none absolute left-1/2 top-[-120px] z-0 h-[600px] w-[900px] -translate-x-1/2 blur-[90px]"
-        style={{ background: "radial-gradient(closest-side, rgba(184,124,255,0.18), transparent 70%)" }}
+        style={{ background: "radial-gradient(closest-side, rgba(124,58,237,0.12), transparent 70%)" }}
       />
 
       <div className="relative z-[1] mx-auto w-full max-w-[640px] px-4 pb-[96px] pt-[max(16px,env(safe-area-inset-top))] sm:px-6">
         {!online && (
-          <div className="mt-2 flex items-center gap-2 rounded-xl border border-amber-400/25 bg-amber-400/[0.07] px-3 py-2 text-[12px] text-amber-200">
-            <span className="size-1.5 rounded-full bg-amber-400" />
+          <div className="mt-2 flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-400/[0.12] px-3 py-2 text-[12px] text-amber-700">
+            <span className="size-1.5 rounded-full bg-amber-500" />
             Sin conexión · mostramos tus entradas guardadas. Tu QR funciona igual.
           </div>
         )}
@@ -556,8 +556,8 @@ function WalletPageInner() {
             >
               {/* Header */}
               <header className="py-3">
-                <p className="text-[12px] font-medium text-white/50">Mis entradas</p>
-                <h1 className="text-[26px] font-bold leading-tight tracking-[-0.02em]">
+                <p className="text-[12px] font-medium text-cart-ink-3">Mis entradas</p>
+                <h1 className="text-[26px] font-bold leading-tight tracking-[-0.02em] text-cart-ink">
                   {currentGroups.length === 0
                     ? "Sin eventos"
                     : `${currentGroups.length} evento${currentGroups.length === 1 ? "" : "s"}`}
@@ -565,7 +565,7 @@ function WalletPageInner() {
               </header>
 
               {/* Tabs */}
-              <div className="mt-1 flex gap-1 rounded-2xl bg-white/[0.04] p-1 shadow-[0_0_0_1px_var(--color-cart-line)_inset] lg:mt-2 lg:gap-7 lg:rounded-none lg:border-b lg:border-cart-line lg:bg-transparent lg:p-0 lg:shadow-none">
+              <div className="mt-1 flex gap-1 rounded-2xl bg-cart-bg-elev p-1 shadow-[0_0_0_1px_var(--color-cart-line)_inset] lg:mt-2 lg:gap-7 lg:rounded-none lg:border-b lg:border-cart-line lg:bg-transparent lg:p-0 lg:shadow-none">
                 <TabBtn label="Próximas" count={upcomingGroups.length} on={tab === "next"} onClick={() => setTab("next")} />
                 <TabBtn label="Pasadas" count={pastGroups.length} on={tab === "past"} onClick={() => setTab("past")} />
               </div>
@@ -574,7 +574,7 @@ function WalletPageInner() {
               {tickets.isLoading && (
                 <div className="flex flex-col gap-3 pt-5">
                   {[0, 1, 2].map((i) => (
-                    <div key={i} className="h-[88px] animate-pulse rounded-2xl bg-white/[0.04]" />
+                    <div key={i} className="h-[88px] animate-pulse rounded-2xl bg-cart-bg-elev" />
                   ))}
                 </div>
               )}
@@ -587,7 +587,7 @@ function WalletPageInner() {
                 <div className="pt-5">
                   {groupedByMonth.map(([month, groups]) => (
                     <div key={month} className="mb-6">
-                      <p className="mb-2.5 text-[12px] font-semibold tracking-wide text-white/40">{month}</p>
+                      <p className="mb-2.5 text-[12px] font-semibold tracking-wide text-cart-ink-3">{month}</p>
                       <div className="flex flex-col gap-2.5">
                         {groups.map((g) => (
                           <EventCard
@@ -604,7 +604,7 @@ function WalletPageInner() {
               )}
 
               {!tickets.isLoading && tab === "past" && pastGroups.length === 0 && (
-                <p className="py-12 text-center text-[13.5px] text-white/40">Aún no hay entradas pasadas.</p>
+                <p className="py-12 text-center text-[13.5px] text-cart-ink-3">Aún no hay entradas pasadas.</p>
               )}
             </motion.div>
           ) : (
@@ -644,15 +644,15 @@ function TabBtn({ label, count, on, onClick }: { label: string; count: number; o
         "flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-[13.5px] font-semibold transition " +
         "lg:flex-none lg:justify-start lg:rounded-none lg:px-0 lg:pb-3 lg:pt-1 lg:-mb-px lg:border-b-2 " +
         (on
-          ? "bg-cart-accent text-white shadow-[0_8px_24px_-12px_var(--color-cart-accent-glow)] lg:bg-transparent lg:text-white lg:shadow-none lg:border-cart-accent"
-          : "text-white/55 hover:text-white lg:border-transparent")
+          ? "bg-cart-accent text-white shadow-[0_8px_24px_-12px_var(--color-cart-accent-glow)] lg:bg-transparent lg:text-cart-ink lg:shadow-none lg:border-cart-accent"
+          : "text-cart-ink-3 hover:text-cart-ink lg:border-transparent")
       }
     >
       {label}
       <span
         className={
           "rounded-full px-1.5 py-px text-[10.5px] font-bold " +
-          (on ? "bg-white/20 lg:bg-cart-accent/20 lg:text-cart-accent" : "bg-white/8 text-white/50")
+          (on ? "bg-white/25 lg:bg-cart-accent/15 lg:text-cart-accent" : "bg-cart-bg-elev-2 text-cart-ink-3")
         }
       >
         {count}
@@ -668,7 +668,7 @@ function EmptyState() {
         className="mb-5 grid size-20 place-items-center rounded-3xl"
         style={{ background: "linear-gradient(150deg, rgba(124,58,237,0.35), rgba(124,58,237,0.08))" }}
       >
-        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" className="text-white">
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" className="text-cart-accent">
           <path
             d="M4 9a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2 2 2 0 0 0 0 4 2 2 0 0 1-2 2H6a2 2 0 0 1-2-2 2 2 0 0 0 0-4z"
             stroke="currentColor"
@@ -678,13 +678,13 @@ function EmptyState() {
           <path d="M14 7v10" stroke="currentColor" strokeWidth="1.5" strokeDasharray="2 2" />
         </svg>
       </div>
-      <h2 className="text-[19px] font-bold tracking-[-0.01em]">Aún no tienes entradas</h2>
-      <p className="mt-1.5 max-w-[260px] text-[13.5px] text-white/55">
+      <h2 className="text-[19px] font-bold tracking-[-0.01em] text-cart-ink">Aún no tienes entradas</h2>
+      <p className="mt-1.5 max-w-[260px] text-[13.5px] text-cart-ink-3">
         Cuando compres una, aparecerá aquí lista para mostrar en la puerta.
       </p>
       <Link
         href={"/recover-tickets" as never}
-        className="mt-4 text-[13px] font-medium text-white/70 underline-offset-2 hover:text-white hover:underline"
+        className="mt-4 text-[13px] font-medium text-cart-ink-2 underline-offset-2 hover:text-cart-ink hover:underline"
       >
         ¿Compraste y no ves tu QR? Recuperar
       </Link>

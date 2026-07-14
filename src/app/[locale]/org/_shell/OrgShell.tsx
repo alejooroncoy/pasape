@@ -138,23 +138,14 @@ export function OrgShell({ children }: { children: ReactNode }) {
   const userInitials = initialsOf(user?.fullName, user?.email);
 
   return (
-    <div className="min-h-dvh bg-cart-bg text-white">
-      {/* Soft purple atmosphere */}
-      <div
-        aria-hidden
-        className="pointer-events-none fixed inset-x-0 top-0 z-0 h-[480px]"
-        style={{
-          background:
-            "radial-gradient(ellipse 80% 60% at 50% 0%, rgba(184,124,255,0.10), transparent 70%)",
-        }}
-      />
+    <div className="home-light home-wash min-h-dvh bg-cart-bg text-cart-ink">
 
       <div className="relative z-10 mx-auto flex w-full max-w-[1440px]">
         {/* Sidebar (desktop) */}
         <aside className="sticky top-0 hidden h-dvh w-[240px] flex-shrink-0 flex-col border-r border-cart-line px-3 py-5 lg:flex">
           <Link
             href={"/org" as never}
-            className="mb-3 inline-flex items-center gap-1.5 px-1 text-[11.5px] font-medium tracking-[0.08em] text-cart-ink-3 transition-colors hover:text-white"
+            className="mb-3 inline-flex items-center gap-1.5 px-1 text-[11.5px] font-medium tracking-[0.08em] text-cart-ink-3 transition-colors hover:text-cart-ink"
             aria-label="Pasape"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -183,12 +174,19 @@ export function OrgShell({ children }: { children: ReactNode }) {
                     <Link
                       key={item.href}
                       href={item.href as never}
-                      className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
+                      className={`relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
                         isActive
-                          ? "bg-cart-accent-soft text-white shadow-[0_0_0_1px_var(--color-cart-accent-soft)_inset]"
-                          : "text-cart-ink-2 hover:bg-cart-bg-elev hover:text-white"
+                          ? "text-cart-ink"
+                          : "text-cart-ink-2 hover:bg-cart-bg-elev hover:text-cart-ink"
                       }`}
                     >
+                      {isActive && (
+                        <motion.span
+                          layoutId="org-nav-active"
+                          className="absolute inset-0 -z-10 rounded-xl bg-cart-accent-soft shadow-[0_0_0_1px_var(--color-cart-accent-soft)_inset]"
+                          transition={{ type: "spring", stiffness: 460, damping: 36 }}
+                        />
+                      )}
                       <span className={isActive ? "text-cart-accent" : "text-cart-ink-3"}>{item.icon}</span>
                       {item.label}
                     </Link>
@@ -289,7 +287,7 @@ export function OrgShell({ children }: { children: ReactNode }) {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.18 }}
-              className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden"
+              className="fixed inset-0 z-40 app-scrim lg:hidden"
               onClick={() => setMobileNavOpen(false)}
               aria-hidden
             />
@@ -381,12 +379,19 @@ export function OrgShell({ children }: { children: ReactNode }) {
                             <Link
                               href={item.href as never}
                               onClick={() => setMobileNavOpen(false)}
-                              className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium ${
+                              className={`relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium ${
                                 isActive
-                                  ? "bg-cart-accent-soft text-white"
-                                  : "text-cart-ink-2 hover:bg-cart-bg-elev hover:text-white"
+                                  ? "text-cart-ink"
+                                  : "text-cart-ink-2 hover:bg-cart-bg-elev hover:text-cart-ink"
                               }`}
                             >
+                              {isActive && (
+                                <motion.span
+                                  layoutId="org-nav-mobile-active"
+                                  className="absolute inset-0 -z-10 rounded-xl bg-cart-accent-soft"
+                                  transition={{ type: "spring", stiffness: 460, damping: 36 }}
+                                />
+                              )}
                               <span className={isActive ? "text-cart-accent" : "text-cart-ink-3"}>
                                 {item.icon}
                               </span>

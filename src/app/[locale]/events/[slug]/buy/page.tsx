@@ -47,6 +47,8 @@ import { activePricing, applyPromos } from "@/lib/events/pricing";
 import { sanitizeDocument, sanitizeEmail, sanitizePersonNameLive } from "@/lib/input/sanitize";
 import { checkoutErrorMessage, payErrorReasonParam } from "@/lib/tickets/checkoutErrors";
 import { RecoverTicketsLink } from "@/components/tickets/RecoverTicketsLink";
+import { DatosForm, Section, Field } from "../_checkout/DatosForm";
+import { ContactConfirmSheet } from "../_checkout/ContactConfirmSheet";
 
 type Props = { params: Promise<{ slug: string }> };
 type Phase = "pick" | "data" | "pay";
@@ -139,7 +141,31 @@ function BuyFlowInner({ params }: Props) {
   const [quoted, setQuoted] = useState<{ sig: string; quote: OrderQuote } | null>(null);
   const [quoteFailed, setQuoteFailed] = useState(false);
   const search = useSearchParams();
-  const [phase, setPhase] = useState<Phase>("pick");
+  // La selección se hace ENTERA en el detalle del evento (entradas + boxes) y
+  // llega por `?sel` (o `?qty`/`?tt`). Por eso /buy ya no repite el paso de
+  // elegir: si venimos con una selección, arrancamos directo en "datos". El
+  // paso "pick" queda solo como red de seguridad (reintento tras vencer la
+  // reserva). Sin selección y sin orden que restaurar → se rebota al detalle.
+  const hasIncomingSelection = Boolean(
+    search.get("sel") || search.get("qty") || search.get("tt"),
+  );
+  // Recarga de la URL interceptada (/buy?…&inline=1): la ruta real solo monta en
+  // hard-nav. En vez de mostrar esta página completa (salto de UI), volvemos al
+  // evento y reabrimos la hoja de pago crecida (?pay). La sesión sellada
+  // sobrevive el reload en sessionStorage, así el pago se reanuda sin re-pedir
+  // datos. Sin `inline` (pago con URL propia intencional) la página rinde normal.
+  const inlineReload = search.get("inline") === "1";
+  useEffect(() => {
+    if (!inlineReload) return;
+    const order = search.get("order");
+    if (!order) return;
+    const k = search.get("k");
+    router.replace(
+      `/events/${slug}?pay=${order}${k ? `&k=${encodeURIComponent(k)}` : ""}` as never,
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inlineReload]);
+  const [phase, setPhase] = useState<Phase>(hasIncomingSelection ? "data" : "pick");
   const [qty, setQty] = useState<Record<string, number>>({});
   const [promoCode, setPromoCode] = useState<string | null>(null);
   const [, setPreferenceId] = useState<string | null>(null);
@@ -475,6 +501,28 @@ function BuyFlowInner({ params }: Props) {
         .map(([ticketTypeId, q]) => ({ ticketTypeId, qty: q })),
     [qty],
   );
+
+  // Sin selección: /buy no tiene nada que mostrar (el selector vive en el
+  // detalle). Si ya corrió la hidratación del `?sel` y el carrito quedó vacío
+  // —y no estamos restaurando una orden— rebotamos al detalle a elegir, en vez
+  // de dejar un checkout huérfano. `pay` nunca rebota (ya hay orden creada).
+  const bouncedRef = useRef(false);
+  useEffect(() => {
+    if (!data || bouncedRef.current) return;
+    // Con selección entrante (la hidrata el effect de `?sel`) o con orden que
+    // restaurar, el dueño de la fase es ese flujo — nunca rebotamos. Solo la
+    // entrada directa sin nada seleccionado cae al detalle a elegir.
+    if (hasIncomingSelection || search.get("order")) return;
+    if (phase === "pay") return;
+    if (items.length === 0) {
+      bouncedRef.current = true;
+      router.replace(`/events/${slug}` as never);
+    }
+  }, [data, hasIncomingSelection, items.length, phase, search, router, slug]);
+
+  // Al aterrizar en "datos" saltándonos "pick", pedimos el quote autoritativo
+  // una vez para mostrar el total exacto (en "pick" esto lo disparaba el CTA).
+  const quotedOnLandRef = useRef(false);
   // Subtotal "todo incluido" del comprador: suma los `buyerPriceCents` que YA
   // vienen calculados del backend (comisión horneada cuando aplica) × promos
   // 2x1/3x2. El cliente NO recalcula la comisión — solo suma precios que le dio
@@ -532,6 +580,13 @@ function BuyFlowInner({ params }: Props) {
     );
   };
 
+  useEffect(() => {
+    if (phase !== "data" || items.length === 0 || quotedOnLandRef.current) return;
+    quotedOnLandRef.current = true;
+    requestQuote();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, items.length]);
+
   // Vence la reserva localmente cuando se cumplen los 30 min (el backend ya la
   // expira en paralelo). Solo corre durante la fase de pago.
   useEffect(() => {
@@ -571,6 +626,9 @@ function BuyFlowInner({ params }: Props) {
   const orderValid = totalItems > 0 && guestValid;
 
   if (!data) return <PageLoader />;
+  // Redirigiendo al evento para reabrir la hoja de pago (ver efecto de arriba):
+  // no pintamos la página completa ni un instante.
+  if (inlineReload) return <PageLoader />;
 
   const startPayment = async () => {
     if (paymentInFlightRef.current) return;
@@ -658,6 +716,9 @@ function BuyFlowInner({ params }: Props) {
           guestPhone,
           orderToken: res.orderToken ?? null,
           reservedAt: reservedNow,
+          // Total autoritativo de la orden: deja que la superficie de pago
+          // (overlay/ruta) muestre y cobre sin re-cotizar ni depender de useEvent.
+          totalCents: res.order.totalCents,
         });
         sessionStorage.setItem(checkoutSessionKey(res.order.id), sealed);
         const url = new URL(window.location.href);
@@ -713,7 +774,9 @@ function BuyFlowInner({ params }: Props) {
       return;
     }
     if (phase === "data") {
-      setPhase("pick");
+      // El selector vive en el detalle: "atrás" regresa ahí a cambiar la
+      // selección, no a un paso de elegir dentro de /buy.
+      router.back();
       return;
     }
     router.back();
@@ -733,17 +796,20 @@ function BuyFlowInner({ params }: Props) {
     setPhase("pick");
   };
 
-  // Stepper honesto: gratis = 2 pasos (sin "Pago"); pagado = 3.
+  // La selección ya se hizo en el detalle, así que /buy solo cuenta los pasos
+  // que de verdad viven acá: datos (+ pago). Gratis = 1 solo paso (datos);
+  // pagado = 2 (datos → pago). "pick" es la red de seguridad (reintento) y
+  // lleva su propia etiqueta suelta, sin numerar el flujo principal.
   const phaseLabel: Record<Phase, string> = isFreeOrder
     ? {
-        pick: "1 de 2 · Tu pedido",
-        data: "2 de 2 · Tus datos",
-        pay: "2 de 2 · Tus datos",
+        pick: "Elige tus entradas",
+        data: "Tus datos",
+        pay: "Tus datos",
       }
     : {
-        pick: "1 de 3 · Tu pedido",
-        data: "2 de 3 · Tus datos",
-        pay: "3 de 3 · Pago",
+        pick: "Elige tus entradas",
+        data: "1 de 2 · Tus datos",
+        pay: "2 de 2 · Pago",
       };
 
   const primaryCtaLabel = (compact: boolean): string => {
@@ -768,7 +834,7 @@ function BuyFlowInner({ params }: Props) {
   })();
 
   return (
-    <div className="min-h-dvh bg-cart-bg text-white">
+    <div className="home-light home-wash cart-grain min-h-dvh bg-cart-bg text-cart-ink">
       {/* Header de usuario reutilizado */}
       <UserHeader />
 
@@ -779,7 +845,7 @@ function BuyFlowInner({ params }: Props) {
             type="button"
             onClick={onBack}
             aria-label="Volver"
-            className="grid size-9 shrink-0 place-items-center rounded-full bg-cart-bg-elev text-cart-ink-2 transition hover:bg-cart-bg-elev-2 hover:text-white"
+            className="grid size-9 shrink-0 place-items-center rounded-full bg-cart-bg-elev text-cart-ink-2 transition hover:bg-cart-bg-elev-2 hover:text-cart-ink"
           >
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
               <path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
@@ -804,7 +870,7 @@ function BuyFlowInner({ params }: Props) {
                 maxTicketsPerPerson={data.event.maxTicketsPerPerson}
               />
             ) : phase === "data" ? (
-              <DataPhase
+              <DatosForm
                 isLogged={isLogged}
                 userIdent={me.data?.user?.email ?? me.data?.user?.phone ?? null}
                 isForeigner={isForeigner}
@@ -972,126 +1038,14 @@ function BuyFlowInner({ params }: Props) {
       )}
 
       {/* Última revisión de contacto antes de pagar — solo guests */}
-      <AnimatePresence>
-        {confirmContactOpen && (
-          <ContactConfirmModal
-            phone={guestPhone}
-            email={guestEmail}
-            onConfirm={confirmContactAndPay}
-            onEdit={() => setConfirmContactOpen(false)}
-          />
-        )}
-      </AnimatePresence>
+      <ContactConfirmSheet
+        open={confirmContactOpen}
+        onOpenChange={setConfirmContactOpen}
+        phone={guestPhone}
+        email={guestEmail}
+        onConfirm={confirmContactAndPay}
+      />
     </div>
-  );
-}
-
-/* ============== Última revisión de contacto antes de pagar =============== */
-
-function ContactConfirmModal({
-  phone,
-  email,
-  onConfirm,
-  onEdit,
-}: {
-  phone: string;
-  email: string;
-  onConfirm: () => void;
-  onEdit: () => void;
-}) {
-  const { country, national } = parseE164(phone);
-
-  return (
-    <motion.div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm lg:items-center lg:px-6"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.2 }}
-      onClick={onEdit}
-    >
-      <motion.div
-        className="w-full max-w-[400px] touch-none rounded-t-2xl border border-cart-line bg-cart-bg-elev p-6 lg:rounded-2xl"
-        initial={{ y: "100%" }}
-        animate={{ y: 0 }}
-        exit={{ y: "100%" }}
-        transition={{ type: "spring", damping: 30, stiffness: 320, mass: 0.8 }}
-        onClick={(e) => e.stopPropagation()}
-        drag="y"
-        dragConstraints={{ top: 0, bottom: 0 }}
-        dragElastic={{ top: 0, bottom: 0.5 }}
-        onDragEnd={(_: unknown, info: { offset: { y: number }; velocity: { y: number } }) => {
-          if (info.offset.y > 120 || info.velocity.y > 800) onEdit();
-        }}
-      >
-        {/* Asa solo en móvil (bottom-sheet); en desktop es modal centrado. */}
-        <div className="mb-2 flex justify-center lg:hidden">
-          <div className="h-1 w-9 rounded-full bg-white/15" />
-        </div>
-        <div className="grid size-12 place-items-center rounded-2xl bg-cart-accent-soft text-cart-accent">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-            <rect x="2.5" y="4.5" width="19" height="15" rx="3" />
-            <circle cx="9" cy="10.3" r="2.1" />
-            <path d="M5.8 16.2c.5-1.7 1.9-2.6 3.2-2.6s2.7.9 3.2 2.6" />
-            <path d="M14.5 9.5h4M14.5 12.5h4" />
-          </svg>
-        </div>
-        <h2 className="mt-4 text-[20px] font-bold tracking-[-0.02em] text-white">
-          Revisa tus datos de contacto
-        </h2>
-        <p className="mt-1.5 text-[13.5px] leading-relaxed text-cart-ink-2">
-          Aquí te llega el QR de tu entrada apenas se confirme el pago.
-        </p>
-
-        <div className="mt-5 overflow-hidden rounded-xl border border-cart-line-strong bg-cart-bg-elev-2">
-          <div className="flex items-center gap-2.5 px-4 py-3">
-            <span className="grid size-6 shrink-0 place-items-center rounded-md bg-[rgba(52,211,153,0.16)]">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <path d="M12 3a9 9 0 0 0-7.75 13.5L3 21l4.65-1.22A9 9 0 1 0 12 3Z" />
-              </svg>
-            </span>
-            <div className="min-w-0">
-              <div className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-cart-ink-4">
-                WhatsApp
-              </div>
-              <div className="truncate text-[14.5px] font-bold tabular-nums text-white">
-                {country ? `${country.flag} +${country.dial} ` : ""}
-                {national || "—"}
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center gap-2.5 border-t border-cart-line px-4 py-3">
-            <span className="grid size-6 shrink-0 place-items-center rounded-md bg-cart-accent-soft">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--color-cart-accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <rect x="3" y="5" width="18" height="14" rx="2.5" />
-                <path d="m4 7 8 6 8-6" />
-              </svg>
-            </span>
-            <div className="min-w-0">
-              <div className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-cart-ink-4">
-                Correo
-              </div>
-              <div className="truncate text-[14.5px] font-bold text-white">{email || "—"}</div>
-            </div>
-          </div>
-        </div>
-
-        <button
-          type="button"
-          onClick={onConfirm}
-          className="mt-5 w-full rounded-full bg-cart-accent py-3 text-[14.5px] font-semibold text-cart-bg transition hover:brightness-110"
-        >
-          Sí, es correcto →
-        </button>
-        <button
-          type="button"
-          onClick={onEdit}
-          className="mt-2 w-full rounded-full py-2.5 text-[13.5px] font-medium text-cart-ink-3 transition hover:text-white"
-        >
-          Corregir datos
-        </button>
-      </motion.div>
-    </motion.div>
   );
 }
 
@@ -1143,7 +1097,7 @@ function ResumeNoticeBanner({ kind }: { kind: ResumeNotice }) {
   );
 }
 
-function ReservationCountdown({ reservedAt }: { reservedAt: number }) {
+export function ReservationCountdown({ reservedAt }: { reservedAt: number }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
@@ -1176,7 +1130,7 @@ function ReservationCountdown({ reservedAt }: { reservedAt: number }) {
   );
 }
 
-function ReservationExpiredModal({
+export function ReservationExpiredModal({
   onRetry,
   onCancel,
 }: {
@@ -1192,7 +1146,7 @@ function ReservationExpiredModal({
             <path d="M8 6v3l2 1.5M6 1.5h4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
           </svg>
         </div>
-        <h2 className="mt-4 text-[18px] font-semibold tracking-[-0.02em] text-white">
+        <h2 className="mt-4 text-[18px] font-semibold tracking-[-0.02em] text-cart-ink">
           Venció tu tiempo
         </h2>
         <p className="mt-2 text-[13.5px] leading-relaxed text-cart-ink-2">
@@ -1209,7 +1163,7 @@ function ReservationExpiredModal({
         <button
           type="button"
           onClick={onCancel}
-          className="mt-2 w-full rounded-full py-2.5 text-[13.5px] font-medium text-cart-ink-3 transition hover:text-white"
+          className="mt-2 w-full rounded-full py-2.5 text-[13.5px] font-medium text-cart-ink-3 transition hover:text-cart-ink"
         >
           Salir
         </button>
@@ -1411,129 +1365,6 @@ function Avatar({
   );
 }
 
-function DataPhase({
-  isLogged,
-  userIdent,
-  isForeigner,
-  setIsForeigner,
-  guestDni,
-  setGuestDni,
-  guestName,
-  setGuestName,
-  guestPhone,
-  setGuestPhone,
-  guestEmail,
-  setGuestEmail,
-}: {
-  isLogged: boolean;
-  userIdent: string | null;
-  isForeigner: boolean;
-  setIsForeigner: (v: boolean) => void;
-  guestDni: string;
-  setGuestDni: (v: string) => void;
-  guestName: string;
-  setGuestName: (v: string) => void;
-  guestPhone: string;
-  setGuestPhone: (v: string) => void;
-  guestEmail: string;
-  setGuestEmail: (v: string) => void;
-}) {
-  return (
-    <div className="flex flex-col gap-8">
-      <Section
-        title={isLogged ? "Tus datos" : "¿Quién va?"}
-        hint={
-          isLogged
-            ? "De tu cuenta — edítalos si algo cambió"
-            : "Para enviarte el QR por WhatsApp"
-        }
-      >
-        <div className="flex flex-col gap-3">
-          {isLogged && userIdent && (
-            <div className="flex items-center gap-2 rounded-xl bg-cart-accent-soft px-3.5 py-2.5 text-[12px] text-cart-accent ring-1 ring-cart-accent/30">
-              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" className="shrink-0">
-                <circle cx="8" cy="5.5" r="2.5" stroke="currentColor" strokeWidth="1.5" />
-                <path d="M3 13.5c0-2.5 2.2-4 5-4s5 1.5 5 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-              </svg>
-              <span className="truncate">
-                Conectado como <span className="font-semibold">{userIdent}</span>
-              </span>
-            </div>
-          )}
-          <label className="flex cursor-pointer items-center gap-2 text-[12.5px] text-cart-ink-2">
-            <input
-              type="checkbox"
-              checked={isForeigner}
-              onChange={(e) => setIsForeigner(e.target.checked)}
-              className="h-4 w-4 accent-cart-accent"
-            />
-            Soy extranjero (no tengo DNI)
-          </label>
-          <Field
-            label={isForeigner ? "Pasaporte / documento" : "DNI"}
-            value={guestDni}
-            onChange={(v) => setGuestDni(sanitizeDocument(v, isForeigner))}
-            placeholder={isForeigner ? "AB123456" : "71234567"}
-            mono
-            hint={
-              isForeigner
-                ? "Con lo que te identificas en la puerta."
-                : "Lo usa el portero para validar tu entrada."
-            }
-          />
-          <Field
-            label="Nombre completo"
-            value={guestName}
-            onChange={(v) => setGuestName(sanitizePersonNameLive(v))}
-            placeholder="Juan Pérez García"
-          />
-          <label className="block">
-            <span className="text-[11.5px] font-semibold uppercase tracking-[0.12em] text-cart-ink-3">
-              WhatsApp
-            </span>
-            <div className="mt-1.5">
-              {/* Selector de país (default Perú): el comprador puede ser
-                  extranjero aunque el evento sea en Perú. Guarda E.164. */}
-              <PhoneField value={guestPhone} onChange={setGuestPhone} />
-            </div>
-            <span className="mt-1.5 block text-[11.5px] text-cart-ink-4">
-              Tu QR llega por aquí.
-            </span>
-          </label>
-          <Field
-            label={isLogged ? "Email (opcional)" : "Email"}
-            type="email"
-            value={guestEmail}
-            onChange={(v) => setGuestEmail(sanitizeEmail(v))}
-            placeholder="juan@gmail.com"
-            hint={isLogged ? "Solo si pagas con tarjeta." : "Respaldo si no te llega el WhatsApp."}
-          />
-        </div>
-      </Section>
-    </div>
-  );
-}
-
-function Section({
-  title,
-  hint,
-  children,
-}: {
-  title: string;
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section>
-      <div className="mb-3 flex items-baseline justify-between">
-        <h2 className="text-[18px] font-bold tracking-[-0.01em]">{title}</h2>
-        {hint && <span className="text-[11.5px] text-cart-ink-3">{hint}</span>}
-      </div>
-      {children}
-    </section>
-  );
-}
-
 function TicketBadge({
   kind,
   boxLabel,
@@ -1631,7 +1462,7 @@ function BoxGrid({
             : "Tú invitas a tu grupo"}
         </p>
         {commonPriceCents !== null && (
-          <p className="text-[14px] font-bold tracking-[-0.01em] text-white">
+          <p className="text-[14px] font-bold tracking-[-0.01em] text-cart-ink">
             <Price cents={commonPriceCents} currency={currency} />
             {commonPriceCents > 0 && (
               <span className="ml-0.5 text-[10.5px] font-medium text-cart-ink-3">/{noun}</span>
@@ -1667,7 +1498,7 @@ function BoxGrid({
                   ? "cursor-not-allowed border border-cart-line bg-cart-bg-elev-2/40 text-cart-ink-4"
                   : selected
                     ? "bg-cart-accent text-cart-bg shadow-[0_6px_20px_-6px_var(--color-cart-accent-glow)]"
-                    : "border border-cart-line bg-cart-bg-elev-2 text-white hover:border-cart-accent hover:text-cart-accent")
+                    : "border border-cart-line bg-cart-bg-elev-2 text-cart-ink hover:border-cart-accent hover:text-cart-accent")
               }
             >
               <span className={"leading-none " + (showPriceOnTile ? "text-[13px]" : "text-[15px]")}>
@@ -1709,7 +1540,7 @@ function BoxGrid({
         ) : (
           <div className="flex items-baseline justify-between gap-3">
             <div className="min-w-0">
-              <p className="truncate text-[13.5px] font-semibold text-white">
+              <p className="truncate text-[13.5px] font-semibold text-cart-ink">
                 {selectedItems.map((s) => s.boxLabel ?? s.name).join(" · ")}
               </p>
               <p className="mt-0.5 text-[11.5px] text-cart-ink-3">
@@ -1955,7 +1786,7 @@ function QtyControl({
         type="button"
         onClick={() => onChange(Math.max(0, value - 1))}
         aria-label="Restar"
-        className="grid size-7 place-items-center rounded-full bg-cart-bg text-white transition hover:bg-cart-accent hover:text-cart-bg"
+        className="grid size-7 place-items-center rounded-full bg-cart-bg text-cart-ink transition hover:bg-cart-accent hover:text-cart-bg"
       >
         <svg width="10" height="10" viewBox="0 0 10 10"><path d="M2 5h6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
       </button>
@@ -1965,7 +1796,7 @@ function QtyControl({
         onClick={() => onChange(Math.min(max, value + 1))}
         aria-label="Sumar"
         disabled={value >= max}
-        className="grid size-7 place-items-center rounded-full bg-cart-bg text-white transition hover:bg-cart-accent hover:text-cart-bg disabled:cursor-not-allowed disabled:opacity-50"
+        className="grid size-7 place-items-center rounded-full bg-cart-bg text-cart-ink transition hover:bg-cart-accent hover:text-cart-bg disabled:cursor-not-allowed disabled:opacity-50"
       >
         <svg width="10" height="10" viewBox="0 0 10 10"><path d="M5 2v6M2 5h6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
       </button>
@@ -1973,51 +1804,9 @@ function QtyControl({
   );
 }
 
-function Field({
-  label,
-  value,
-  onChange,
-  placeholder,
-  hint,
-  mono,
-  type,
-  disabled,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-  hint?: string;
-  mono?: boolean;
-  type?: string;
-  disabled?: boolean;
-}) {
-  return (
-    <label className="block">
-      <span className="text-[11.5px] font-semibold uppercase tracking-[0.12em] text-cart-ink-3">
-        {label}
-      </span>
-      <input
-        type={type ?? "text"}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        disabled={disabled}
-        className={
-          "mt-1.5 block w-full rounded-2xl border border-cart-line bg-cart-bg-elev px-4 py-3.5 text-[15px] text-white outline-none transition focus:border-cart-accent focus:shadow-[0_0_0_3px_var(--color-cart-accent-soft)] disabled:cursor-not-allowed disabled:opacity-60 " +
-          (mono ? "font-mono tracking-[0.04em]" : "")
-        }
-      />
-      {hint && (
-        <span className="mt-1.5 block text-[11.5px] text-cart-ink-4">{hint}</span>
-      )}
-    </label>
-  );
-}
-
 /* ============================ Pay phase ============================ */
 
-function PayPhase({
+export function PayPhase({
   payMethod,
   setPayMethod,
   orderId,
@@ -2140,7 +1929,7 @@ function PayPhase({
             orderId={orderId}
             orderToken={orderToken}
             amount={totalCents / 100}
-            initialPhone={parseE164(isLogged ? userPhone : guestPhone).national}
+            initialPhone={parseE164(guestPhone || userPhone).national}
             onPaid={onPaid}
             onReview={() => setReview(true)}
             onError={(msg) => console.warn("yape error:", msg)}
@@ -2166,9 +1955,9 @@ function PayPhase({
             orderId={orderId}
             orderToken={orderToken}
             amount={totalCents / 100}
-            initialHolder={isLogged ? userName : guestName}
-            initialDni={isLogged ? "" : guestDni}
-            initialEmail={isLogged ? userEmail : guestEmail}
+            initialHolder={guestName || userName}
+            initialDni={guestDni}
+            initialEmail={guestEmail || userEmail}
             onPaid={onPaid}
             onReview={() => setReview(true)}
             onError={(msg) => console.warn("card error:", msg)}
@@ -2295,7 +2084,7 @@ function PaymentReviewScreen({
         type="button"
         onClick={() => setWaited(true)}
         disabled={busy}
-        className="mt-3 w-full rounded-full border border-cart-line bg-cart-bg-elev-2 py-3.5 text-[14px] font-semibold text-cart-ink-2 transition hover:border-cart-line-strong hover:text-white disabled:opacity-60"
+        className="mt-3 w-full rounded-full border border-cart-line bg-cart-bg-elev-2 py-3.5 text-[14px] font-semibold text-cart-ink-2 transition hover:border-cart-line-strong hover:text-cart-ink disabled:opacity-60"
       >
         Esperar la confirmación
       </button>
@@ -2418,7 +2207,7 @@ function OrderSummary({
             </svg>
           </span>
           <span className="truncate text-[11.5px] text-cart-ink-2">
-            Promotor: <span className="font-medium text-white">{promoterLabel}</span>
+            Promotor: <span className="font-medium text-cart-ink">{promoterLabel}</span>
           </span>
         </div>
       )}

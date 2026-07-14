@@ -151,7 +151,7 @@ export const PhoneField = ({ value, onChange, autoFocus, disabled }: Props) => {
                 border: 0,
                 borderBottom: `1px solid ${C.line}`,
                 outline: "none",
-                color: "#fff",
+                color: C.text,
                 fontSize: 14,
               }}
             />
@@ -177,7 +177,7 @@ export const PhoneField = ({ value, onChange, autoFocus, disabled }: Props) => {
                       border: 0,
                       cursor: "pointer",
                       textAlign: "left",
-                      color: "#fff",
+                      color: C.text,
                       fontSize: 14,
                     }}
                   >
@@ -214,7 +214,7 @@ export const PhoneField = ({ value, onChange, autoFocus, disabled }: Props) => {
           fontFamily: FONT_MONO,
           fontSize: 18,
           letterSpacing: "0.08em",
-          color: "#fff",
+          color: C.text,
           padding: 0,
         }}
       />

@@ -81,7 +81,7 @@ export function ShareEventDialog({
             exit={{ opacity: 0 }}
             onClick={onClose}
             aria-hidden
-            className="fixed inset-0 z-90 bg-black/60 backdrop-blur-sm"
+            className="fixed inset-0 z-90 app-scrim"
           />
           <motion.div
             key="dlg"
@@ -92,18 +92,18 @@ export function ShareEventDialog({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.97, y: 8 }}
             transition={{ type: "spring", stiffness: 380, damping: 32 }}
-            className="fixed left-1/2 top-1/2 z-91 w-full max-w-[460px] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-3xl border border-cart-line-strong bg-cart-bg-elev shadow-[0_30px_80px_-20px_rgba(0,0,0,0.7)]"
+            className="home-light fixed left-1/2 top-1/2 z-91 w-full max-w-[460px] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-3xl border border-cart-line-strong bg-cart-bg-elev shadow-[0_30px_80px_-20px_rgba(0,0,0,0.7)]"
           >
             {/* Header */}
             <div className="flex items-center justify-between border-b border-cart-line px-5 py-4">
-              <h3 className="font-sans text-[17px] font-semibold tracking-[-0.01em] text-white">
+              <h3 className="font-sans text-[17px] font-semibold tracking-[-0.01em] text-cart-ink">
                 Compartir evento
               </h3>
               <button
                 type="button"
                 onClick={onClose}
                 aria-label="Cerrar"
-                className="grid size-8 place-items-center rounded-full text-cart-ink-3 transition hover:bg-white/5 hover:text-white"
+                className="grid size-8 place-items-center rounded-full text-cart-ink-3 transition hover:bg-white/5 hover:text-cart-ink"
               >
                 <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
                   <path
@@ -134,7 +134,7 @@ export function ShareEventDialog({
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-[14px] font-semibold text-white">
+                  <div className="truncate text-[14px] font-semibold text-cart-ink">
                     {eventTitle}
                   </div>
                   <div className="mt-0.5 truncate font-mono text-[11.5px] text-cart-ink-3">
@@ -154,7 +154,7 @@ export function ShareEventDialog({
                   height="16"
                   viewBox="0 0 16 16"
                   fill="none"
-                  className="shrink-0 text-cart-ink-3 group-hover:text-white"
+                  className="shrink-0 text-cart-ink-3 group-hover:text-cart-ink"
                 >
                   <path
                     d="M6.5 9.5l3-3M5 11.5l-1 1a2.5 2.5 0 11-3.5-3.5l1-1M11 4.5l1-1a2.5 2.5 0 113.5 3.5l-1 1"
@@ -196,7 +196,7 @@ export function ShareEventDialog({
                 <button
                   type="button"
                   onClick={copy}
-                  className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-cart-line bg-cart-bg-elev-2/60 text-[14px] font-semibold text-white transition hover:bg-cart-bg-elev-2 active:scale-[0.98]"
+                  className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-cart-line bg-cart-bg-elev-2/60 text-[14px] font-semibold text-cart-ink transition hover:bg-cart-bg-elev-2 active:scale-[0.98]"
                 >
                   {copied ? (
                     <>
@@ -240,7 +240,7 @@ export function ShareEventDialog({
                 href={shareUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-cart-line py-2.5 text-[12.5px] font-medium text-cart-ink-2 transition hover:border-cart-line-strong hover:text-white"
+                className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-cart-line py-2.5 text-[12.5px] font-medium text-cart-ink-2 transition hover:border-cart-line-strong hover:text-cart-ink"
               >
                 Abrir página del evento
                 <svg width="11" height="11" viewBox="0 0 11 11" fill="none">

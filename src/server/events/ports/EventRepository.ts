@@ -310,7 +310,14 @@ export type EventExportData = {
 };
 
 export interface EventRepository {
-  listPublished(limit: number, cursor: string | null, category?: EventCategory | null): Promise<Event[]>;
+  listPublished(
+    limit: number,
+    cursor: string | null,
+    category?: EventCategory | null,
+    /** Búsqueda por título/lugar (ilike). El caller sanitiza longitud; el repo
+     *  escapa los caracteres especiales del filtro. */
+    search?: string | null,
+  ): Promise<Event[]>;
   listByOrganization(orgId: string): Promise<Event[]>;
   /** Solo eventos publicados de una org, ordenados por startsAt asc. */
   listPublishedByOrgSlug(orgSlug: string): Promise<Event[]>;

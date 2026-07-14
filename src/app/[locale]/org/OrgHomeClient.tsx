@@ -7,12 +7,12 @@ import { useEventStats } from "@/lib/events/hooks/useEventStats";
 import { useRealtimeEventStats } from "@/lib/events/hooks/useRealtimeEventStats";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { useMyOrgs } from "@/lib/identity/organizations/hooks/useMyOrgs";
+import { useNewEventHref } from "@/lib/events/hooks/useNewEventHref";
 import { formatDate, formatMoney } from "@/lib/_shared/format";
 import { setEventBackTarget } from "@/lib/_shared/eventBackTarget";
 import { Badge } from "@/components/ui/Badge";
 import { eventStatusLabel, eventStatusTone } from "@/lib/events/eventStatusDisplay";
 import type { EventStatus } from "@/server/events/domain/Event";
-import { OrgShell } from "./_shell/OrgShell";
 
 // Al entrar a un evento desde el home, el breadcrumb debe volver al home.
 const backToHome = () => setEventBackTarget({ href: "/org", label: "Inicio" });
@@ -23,6 +23,7 @@ export function OrgHomeClient() {
   const me = useCurrentUser();
   const orgs = useMyOrgs();
   const events = useMyEvents();
+  const newEventHref = useNewEventHref();
 
   const activeOrg = orgs.data?.find((o) => o.slug === me.data?.activeOrgSlug) ?? orgs.data?.[0];
   const firstName = me.data?.user?.fullName?.split(" ")[0];
@@ -47,7 +48,7 @@ export function OrgHomeClient() {
   useRealtimeEventStats(liveEvent?.id, liveEvent?.slug ?? "");
 
   return (
-    <OrgShell>
+    <>
       <header className="mb-6 pt-2 sm:mb-7 sm:pt-0">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div className="min-w-0">
@@ -59,7 +60,7 @@ export function OrgHomeClient() {
             </h1>
           </div>
           <Link
-            href={"/org/events/new" as never}
+            href={newEventHref as never}
             className="inline-flex min-h-[44px] items-center gap-2 rounded-full bg-cart-accent px-5 py-3 text-[14.5px] font-medium text-white shadow-[0_0_0_1px_rgba(255,255,255,0.08)_inset,0_8px_24px_-8px_var(--color-cart-accent-glow-strong)] transition-[transform,filter] duration-150 hover:-translate-y-px hover:brightness-110 active:scale-[0.97]"
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
@@ -98,7 +99,7 @@ export function OrgHomeClient() {
                 <Link
                   href={`/org/events/${liveEvent.slug}` as never}
                   onClick={backToHome}
-                  className="inline-flex min-h-[36px] items-center gap-1 text-[13px] font-medium text-cart-ink-2 hover:text-white"
+                  className="inline-flex min-h-[36px] items-center gap-1 text-[13px] font-medium text-cart-ink-2 hover:text-cart-ink"
                 >
                   Ver panel →
                 </Link>
@@ -124,7 +125,7 @@ export function OrgHomeClient() {
                   />
                   <div className="relative flex flex-wrap items-start gap-4">
                     <div className="min-w-0 flex-1">
-                      <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium uppercase tracking-wide text-emerald-300">
+                      <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium uppercase tracking-wide text-emerald-600">
                         <span className="size-1.5 animate-pulse rounded-full bg-emerald-400 shadow-[0_0_8px_currentColor]" />
                         Live
                       </div>
@@ -154,7 +155,7 @@ export function OrgHomeClient() {
                 </h2>
                 <Link
                   href={"/org/events" as never}
-                  className="inline-flex min-h-[36px] items-center text-[13px] font-medium text-cart-ink-2 hover:text-white"
+                  className="inline-flex min-h-[36px] items-center text-[13px] font-medium text-cart-ink-2 hover:text-cart-ink"
                 >
                   Ver todos →
                 </Link>
@@ -233,13 +234,13 @@ export function OrgHomeClient() {
           ) : null}
         </div>
       )}
-    </OrgShell>
+    </>
   );
 }
 
 function StatCard({ label, value, hint, tone }: { label: string; value: string; hint?: string; tone?: "accent" | "green" }) {
   const valueColor =
-    tone === "accent" ? "text-cart-accent" : tone === "green" ? "text-emerald-300" : "text-white";
+    tone === "accent" ? "text-cart-accent" : tone === "green" ? "text-emerald-600" : "text-cart-ink";
   return (
     <div className="rounded-2xl border border-cart-line bg-cart-bg-elev p-4">
       <div className="text-[11.5px] font-medium uppercase tracking-wide text-cart-ink-3">{label}</div>
@@ -253,7 +254,7 @@ function StatCard({ label, value, hint, tone }: { label: string; value: string; 
 
 function MiniStat({ label, value, tone }: { label: string; value: string; tone?: "accent" | "green" }) {
   const c =
-    tone === "accent" ? "text-cart-accent" : tone === "green" ? "text-emerald-300" : "text-white";
+    tone === "accent" ? "text-cart-accent" : tone === "green" ? "text-emerald-600" : "text-cart-ink";
   return (
     <div className="rounded-xl border border-cart-line bg-cart-bg/60 px-3 py-2.5 backdrop-blur-sm">
       <div className="text-[10.5px] font-medium uppercase tracking-wide text-cart-ink-3">{label}</div>
@@ -278,24 +279,25 @@ function OrgHomeSkeleton() {
       <section className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {Array.from({ length: 4 }).map((_, i) => (
           <div key={i} className="rounded-2xl border border-cart-line bg-cart-bg-elev p-4">
-            <div className="h-3 w-20 rounded bg-white/10" />
-            <div className="mt-3 h-7 w-12 rounded bg-white/10" />
-            <div className="mt-2.5 h-2.5 w-16 rounded bg-white/[0.06]" />
+            <div className="h-3 w-20 rounded bg-cart-line-strong" />
+            <div className="mt-3 h-7 w-12 rounded bg-cart-line-strong" />
+            <div className="mt-2.5 h-2.5 w-16 rounded bg-cart-line" />
           </div>
         ))}
       </section>
-      <div className="mb-3 h-3 w-24 rounded bg-white/10" />
+      <div className="mb-3 h-3 w-24 rounded bg-cart-line-strong" />
       <div className="rounded-3xl border border-cart-line bg-cart-bg-elev p-6 sm:p-10">
-        <div className="h-5 w-40 rounded bg-white/10" />
-        <div className="mt-4 h-3 w-full max-w-[44ch] rounded bg-white/[0.06]" />
-        <div className="mt-2 h-3 w-3/4 max-w-[40ch] rounded bg-white/[0.06]" />
-        <div className="mt-6 h-11 w-52 rounded-full bg-white/10" />
+        <div className="h-5 w-40 rounded bg-cart-line-strong" />
+        <div className="mt-4 h-3 w-full max-w-[44ch] rounded bg-cart-line" />
+        <div className="mt-2 h-3 w-3/4 max-w-[40ch] rounded bg-cart-line" />
+        <div className="mt-6 h-11 w-52 rounded-full bg-cart-line-strong" />
       </div>
     </div>
   );
 }
 
 function OrgEmpty() {
+  const newEventHref = useNewEventHref();
   return (
     <div className="grid items-center gap-8 rounded-3xl border border-cart-line bg-cart-bg-elev p-6 sm:p-10 lg:grid-cols-[1fr_auto]">
       <div>
@@ -311,7 +313,7 @@ function OrgEmpty() {
           Sin tarjeta · publicas y compartes en 60 segundos. El cobro va directo a tu cuenta y tus clientes reciben su entrada por WhatsApp.
         </p>
         <Link
-          href={"/org/events/new" as never}
+          href={newEventHref as never}
           className="mt-6 inline-flex min-h-[48px] items-center gap-2 rounded-full bg-cart-accent px-5 py-3 text-[15px] font-medium text-white shadow-[0_0_0_1px_rgba(255,255,255,0.08)_inset,0_8px_24px_-8px_var(--color-cart-accent-glow-strong)] transition-[transform,filter] duration-150 hover:-translate-y-px hover:brightness-110 active:scale-[0.97] sm:mt-5 sm:min-h-[44px] sm:text-[14.5px]"
         >
           + Crear mi primer evento

@@ -55,11 +55,11 @@ export default function BuyerProfilePage() {
   }
 
   return (
-    <div className="cart-grain relative min-h-screen bg-cart-bg font-sans text-white">
+    <div className="cart-grain relative min-h-screen bg-cart-bg font-sans text-cart-ink">
       <div
         aria-hidden
         className="pointer-events-none absolute left-1/2 top-[-120px] z-0 h-[560px] w-[900px] -translate-x-1/2 blur-[90px]"
-        style={{ background: "radial-gradient(closest-side, rgba(184,124,255,0.2), transparent 70%)" }}
+        style={{ background: "radial-gradient(closest-side, rgba(124,58,237,0.14), transparent 70%)" }}
       />
       <div className="relative z-[1] mx-auto w-full max-w-[640px] px-4 pb-[96px] pt-3 sm:px-6">
         {/* Tarjeta de perfil */}
@@ -97,17 +97,17 @@ export default function BuyerProfilePage() {
               <h1 className="truncate text-[22px] font-bold leading-tight tracking-[-0.02em]">
                 {isLoading ? "Cargando…" : fullName}
               </h1>
-              {sub && <p className="mt-1 truncate text-[12.5px] text-white/55">{sub}</p>}
+              {sub && <p className="mt-1 truncate text-[12.5px] text-cart-ink-3">{sub}</p>}
             </div>
             <Link
               href={"/profile/edit" as never}
-              className="shrink-0 rounded-full bg-white/10 px-3.5 py-1.5 text-[11.5px] font-semibold tracking-[0.03em] text-white transition hover:bg-white/15"
+              className="shrink-0 rounded-full bg-cart-bg-elev-2 px-3.5 py-1.5 text-[11.5px] font-semibold tracking-[0.03em] text-cart-ink-2 transition hover:bg-cart-accent-soft hover:text-cart-ink"
             >
               Editar
             </Link>
           </div>
 
-          <div className="mt-5 grid grid-cols-2 divide-x divide-white/10 border-t border-white/10 pt-4">
+          <div className="mt-5 grid grid-cols-2 divide-x divide-cart-line border-t border-cart-line pt-4">
             <Stat n={String(stats.entradas)} k="entradas" />
             <Stat n={String(stats.noches)} k="noches" />
           </div>
@@ -164,14 +164,14 @@ function Stat({ n, k }: { n: string; k: string }) {
   return (
     <div className="text-center">
       <div className="text-[26px] font-bold leading-none tracking-[-0.03em]">{n}</div>
-      <div className="mt-1.5 text-[10px] uppercase tracking-[0.08em] text-white/45">{k}</div>
+      <div className="mt-1.5 text-[10px] uppercase tracking-[0.08em] text-cart-ink-3">{k}</div>
     </div>
   );
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="mb-2 mt-6 px-1 text-[11px] font-semibold uppercase tracking-[0.1em] text-white/45">{children}</p>
+    <p className="mb-2 mt-6 px-1 text-[11px] font-semibold uppercase tracking-[0.1em] text-cart-ink-3">{children}</p>
   );
 }
 
@@ -202,23 +202,23 @@ function Row({
       className={
         "flex w-full items-center gap-3.5 px-4 py-3.5 text-left transition " +
         (last ? "" : "border-b border-cart-line ") +
-        (onClick ? "hover:bg-white/[0.03] " : "cursor-default ")
+        (onClick ? "hover:bg-cart-bg-elev-2 " : "cursor-default ")
       }
     >
       <span
         className={
           "grid size-9 shrink-0 place-items-center rounded-xl " +
-          (danger ? "bg-red-500/10 text-red-300" : "bg-white/5 text-cart-accent")
+          (danger ? "bg-red-500/10 text-red-600" : "bg-cart-accent-soft text-cart-accent")
         }
       >
         {icon}
       </span>
       <span className="min-w-0 flex-1">
-        <span className={"block text-[14px] font-semibold " + (danger ? "text-red-300" : "text-white")}>{label}</span>
-        {sub && <span className="mt-0.5 block text-[11.5px] text-white/50">{sub}</span>}
+        <span className={"block text-[14px] font-semibold " + (danger ? "text-red-600" : "text-cart-ink")}>{label}</span>
+        {sub && <span className="mt-0.5 block text-[11.5px] text-cart-ink-3">{sub}</span>}
       </span>
       {!danger && onClick && (
-        <svg width="16" height="16" viewBox="0 0 20 20" fill="none" className="shrink-0 text-white/30">
+        <svg width="16" height="16" viewBox="0 0 20 20" fill="none" className="shrink-0 text-cart-ink-4">
           <path d="M7 5l5 5-5 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       )}

@@ -5,6 +5,7 @@ import { createContext, Suspense, useContext, useEffect, useMemo, useRef, useSta
 import { useSearchParams } from "next/navigation";
 import { AnimatePresence, motion, useMotionValue, useTransform, animate } from "motion/react";
 import { useMyEvents } from "@/lib/events/hooks/useEvents";
+import { useNewEventHref } from "@/lib/events/hooks/useNewEventHref";
 import { useEventStats } from "@/lib/events/hooks/useEventStats";
 import type { EventStatsPayload } from "@/lib/events/hooks/useEventStats";
 import { useRealtimeEventStats } from "@/lib/events/hooks/useRealtimeEventStats";
@@ -13,7 +14,6 @@ import { useCourtesies } from "@/lib/events/hooks/useCourtesies";
 import { Badge } from "@/components/ui/Badge";
 import { eventStatusLabel, eventStatusTone } from "@/lib/events/eventStatusDisplay";
 import { formatMoney } from "@/lib/_shared/format";
-import { OrgShell } from "../_shell/OrgShell";
 import type { Event, TicketTypeKind } from "@/server/events/domain/Event";
 
 type RangeKey = "today" | "7d" | "30d" | "all";
@@ -126,14 +126,13 @@ function OrgReportsContent() {
 
   return (
     <ReportsViewContext.Provider value={view}>
-    <OrgShell>
       {/* Large title — iOS-style eyebrow + display */}
       <div className="mb-5 flex flex-wrap items-end justify-between gap-4 sm:mb-6">
         <div className="min-w-0">
           <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-cart-ink-3">
             Panel
           </div>
-          <h1 className="mt-1 font-sans text-[clamp(34px,7.2vw,42px)] font-bold leading-[1.05] tracking-[-0.035em] text-white">
+          <h1 className="mt-1 font-sans text-[clamp(34px,7.2vw,42px)] font-bold leading-[1.05] tracking-[-0.035em] text-cart-ink">
             Reportes
           </h1>
           <p className="mt-1.5 truncate text-[13px] text-cart-ink-3">
@@ -215,7 +214,7 @@ function OrgReportsContent() {
                 <div className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-cart-accent">
                   Origen de venta
                 </div>
-                <h2 className="mt-1 font-sans text-[18px] font-semibold tracking-[-0.015em] text-white">
+                <h2 className="mt-1 font-sans text-[18px] font-semibold tracking-[-0.015em] text-cart-ink">
                   Top promotores
                 </h2>
                 <p className="mt-0.5 text-[12.5px] text-cart-ink-3">
@@ -238,7 +237,7 @@ function OrgReportsContent() {
           <section className="mb-5 rounded-2xl border border-cart-line bg-cart-bg-elev p-4 sm:mb-6 sm:p-6">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
               <div>
-                <h2 className="font-sans text-[15.5px] font-semibold tracking-[-0.01em] text-white">
+                <h2 className="font-sans text-[15.5px] font-semibold tracking-[-0.01em] text-cart-ink">
                   Ventas en el tiempo
                 </h2>
                 <p className="mt-0.5 text-[12.5px] text-cart-ink-3">
@@ -281,7 +280,7 @@ function OrgReportsContent() {
               return (
                 <>
                   <div className="mb-4 flex items-center justify-between">
-                    <h2 className="font-sans text-[15.5px] font-semibold tracking-[-0.01em] text-white">
+                    <h2 className="font-sans text-[15.5px] font-semibold tracking-[-0.01em] text-cart-ink">
                       Por entrada
                     </h2>
                     <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-cart-ink-4">
@@ -302,7 +301,6 @@ function OrgReportsContent() {
 
       {/* iOS safe-area bottom inset */}
       <div className="h-[env(safe-area-inset-bottom)]" />
-    </OrgShell>
     </ReportsViewContext.Provider>
   );
 }
@@ -347,7 +345,7 @@ function EventSelector({
         type="button"
         onClick={() => setOpen((v) => !v)}
         whileTap={{ scale: 0.985 }}
-        className="inline-flex w-full items-center justify-between gap-2 rounded-full border border-cart-line bg-cart-bg-elev px-3.5 py-2 text-[13.5px] font-medium text-white hover:border-cart-line-strong sm:w-auto sm:justify-start"
+        className="inline-flex w-full items-center justify-between gap-2 rounded-full border border-cart-line bg-cart-bg-elev px-3.5 py-2 text-[13.5px] font-medium text-cart-ink hover:border-cart-line-strong sm:w-auto sm:justify-start"
       >
         <span className="flex min-w-0 items-center gap-2">
           <svg width="14" height="14" viewBox="0 0 20 20" fill="none" aria-hidden className="flex-shrink-0">
@@ -426,7 +424,7 @@ function DropdownItem({
       type="button"
       onClick={onClick}
       className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-[13.5px] transition-colors ${
-        active ? "bg-cart-accent-soft text-white" : "text-cart-ink-2 hover:bg-cart-bg-elev"
+        active ? "bg-cart-accent-soft text-cart-accent" : "text-cart-ink-2 hover:bg-cart-bg-elev"
       }`}
     >
       <span className="min-w-0 flex-1 truncate">{children}</span>
@@ -462,7 +460,7 @@ function RangeTabs({ value, onChange }: { value: RangeKey; onChange: (v: RangeKe
             aria-selected={active}
             onClick={() => onChange(r.key)}
             className={`relative z-10 flex-1 rounded-full px-3 py-1.5 text-[12.5px] font-medium transition-colors sm:flex-none sm:px-3.5 ${
-              active ? "text-white" : "text-cart-ink-3 hover:text-white"
+              active ? "text-cart-ink" : "text-cart-ink-3 hover:text-cart-ink"
             }`}
           >
             {active && (
@@ -528,7 +526,7 @@ function ExportButton({ slug, disabled }: { slug: string | null; disabled: boole
         className={`inline-flex items-center gap-2 rounded-full border px-3.5 py-2 text-[12.5px] font-medium transition-colors active:scale-[0.97] sm:px-4 sm:py-2.5 sm:text-[13.5px] ${
           isDisabled
             ? "cursor-not-allowed border-cart-line bg-cart-bg-elev text-cart-ink-4"
-            : "border-cart-accent/40 bg-cart-accent-soft text-white hover:border-cart-accent/70"
+            : "border-cart-accent/40 bg-cart-accent-soft text-cart-accent hover:border-cart-accent/70"
         }`}
       >
         {loading ? (
@@ -558,7 +556,7 @@ function ExportButton({ slug, disabled }: { slug: string | null; disabled: boole
         <span className="sm:hidden">{loading ? "…" : "Exportar"}</span>
       </button>
       {error && (
-        <div className="absolute right-0 top-full mt-2 whitespace-nowrap rounded-lg border border-rose-500/30 bg-rose-500/10 px-2.5 py-1.5 text-[11.5px] font-medium text-rose-200">
+        <div className="absolute right-0 top-full mt-2 whitespace-nowrap rounded-lg border border-rose-500/30 bg-rose-500/10 px-2.5 py-1.5 text-[11.5px] font-medium text-rose-600">
           {error}
         </div>
       )}
@@ -601,7 +599,7 @@ function KpiCard({
   }, [mv, value, index]);
 
   const valueColor =
-    tone === "accent" ? "text-cart-accent" : tone === "green" ? "text-emerald-300" : "text-white";
+    tone === "accent" ? "text-cart-accent" : tone === "green" ? "text-emerald-600" : "text-cart-ink";
 
   return (
     <motion.div
@@ -638,11 +636,11 @@ function KpiCard({
               <span>—</span>
             )
           ) : delta >= 0 ? (
-            <span className="inline-flex items-center gap-1 text-emerald-300">
+            <span className="inline-flex items-center gap-1 text-emerald-600">
               <Arrow up /> {delta.toFixed(1)}%
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1 text-rose-300">
+            <span className="inline-flex items-center gap-1 text-rose-600">
               <Arrow /> {Math.abs(delta).toFixed(1)}%
             </span>
           )}
@@ -772,7 +770,7 @@ function Sparkline({ data, range }: { data: number[]; range: RangeKey }) {
                 x2={w - padR}
                 y1={y}
                 y2={y}
-                stroke="rgba(255,255,255,0.06)"
+                stroke="var(--color-cart-line)"
                 strokeDasharray="2 4"
               />
               <text
@@ -780,7 +778,7 @@ function Sparkline({ data, range }: { data: number[]; range: RangeKey }) {
                 y={y}
                 textAnchor="end"
                 dominantBaseline="middle"
-                fill="rgba(255,255,255,0.45)"
+                fill="var(--color-cart-ink-4)"
                 style={{ font: "500 11px system-ui, sans-serif" }}
               >
                 {tick}
@@ -798,7 +796,7 @@ function Sparkline({ data, range }: { data: number[]; range: RangeKey }) {
               x={x}
               y={h - 8}
               textAnchor={i === 0 ? "start" : i === data.length - 1 ? "end" : "middle"}
-              fill="rgba(255,255,255,0.45)"
+              fill="var(--color-cart-ink-4)"
               style={{ font: "500 10.5px system-ui, sans-serif" }}
             >
               {label}
@@ -883,7 +881,7 @@ function SalesEmptyState() {
           />
         </svg>
       </motion.div>
-      <div className="relative mt-4 font-sans text-[16px] font-semibold tracking-[-0.015em] text-white">
+      <div className="relative mt-4 font-sans text-[16px] font-semibold tracking-[-0.015em] text-cart-ink">
         {isClosed ? "Sin ventas" : "Sin ventas todavía"}
       </div>
       <div className="relative mt-1 max-w-[36ch] text-[12.5px] leading-relaxed text-cart-ink-3">
@@ -976,13 +974,15 @@ function displayMetric(r: BreakdownRow): { sold: number; total: number; unitLabe
 /**
  * "Box 1" → "Box"; "Mesa M1" → "Mesa"; "Box S.VIP 3" → "Box S.VIP";
  * "Box A" → "Box" (esquema de etiqueta ALPHA, el default del composer);
- * "Preventa" → "Preventa".
+ * "Box AA".."Box AX" → "Box" (continuación estilo Excel, pasadas las 26
+ * letras); "Preventa" → "Preventa".
  */
 function baseName(name: string): string {
   // Quita sufijos finales de: dígitos con o sin letra previa (" 1", " 12",
-  // " M1", " A3") o UNA sola letra suelta (" A".." Z", el esquema alpha por
-  // defecto — LOW-15). No toca palabras de 2+ letras como "VIP"/"Alfa".
-  const trimmed = name.trim().replace(/\s+([A-Za-z]?\d+|[A-Za-z])\s*$/, "").trim();
+  // " M1", " A3") o de 1-2 letras sueltas (" A".." Z", " AA".." ZZ" — el
+  // esquema alpha por defecto y su continuación tipo Excel al pasar de 26
+  // boxes). No toca palabras de 3+ letras como "VIP"/"Alfa".
+  const trimmed = name.trim().replace(/\s+([A-Za-z]?\d+|[A-Za-z]{1,2})\s*$/, "").trim();
   return trimmed.length > 0 ? trimmed : name.trim();
 }
 
@@ -1010,7 +1010,7 @@ function TicketBreakdown({ rows }: { rows: BreakdownRow[] }) {
             >
               <div className="mb-2.5 flex items-center justify-between">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-[14.5px] font-semibold tracking-[-0.01em] text-white">
+                  <span className="text-[14.5px] font-semibold tracking-[-0.01em] text-cart-ink">
                     {r.name}
                     {r.count && r.count > 1 && (
                       <span className="ml-1.5 text-[11.5px] font-medium text-cart-ink-3">
@@ -1028,7 +1028,7 @@ function TicketBreakdown({ rows }: { rows: BreakdownRow[] }) {
                 </span>
               </div>
               <div className="flex items-center gap-2.5">
-                <div className="relative h-[7px] flex-1 overflow-hidden rounded-full bg-white/5">
+                <div className="relative h-[7px] flex-1 overflow-hidden rounded-full bg-cart-line">
                   <motion.div
                     initial={{ width: 0 }}
                     animate={{ width: `${pct}%` }}
@@ -1071,7 +1071,7 @@ function TicketBreakdown({ rows }: { rows: BreakdownRow[] }) {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.3, delay: 0.05 * i }}
                 >
-                  <td className="rounded-l-xl bg-cart-bg-elev-2/70 px-3 py-3 text-[13.5px] font-medium text-white">
+                  <td className="rounded-l-xl bg-cart-bg-elev-2/70 px-3 py-3 text-[13.5px] font-medium text-cart-ink">
                     {r.name}
                     {r.count && r.count > 1 && (
                       <span className="ml-1.5 text-[11.5px] font-normal text-cart-ink-3">
@@ -1082,7 +1082,7 @@ function TicketBreakdown({ rows }: { rows: BreakdownRow[] }) {
                   <td className="bg-cart-bg-elev-2/70 px-3 py-3 text-right text-[13px] tabular-nums text-cart-ink-2">
                     {formatPriceRange(r)}
                   </td>
-                  <td className="bg-cart-bg-elev-2/70 px-3 py-3 text-right text-[13px] tabular-nums text-white">
+                  <td className="bg-cart-bg-elev-2/70 px-3 py-3 text-right text-[13px] tabular-nums text-cart-ink">
                     {m.sold.toLocaleString("es-PE")}
                   </td>
                   <td className="bg-cart-bg-elev-2/70 px-3 py-3 text-right text-[13px] tabular-nums text-cart-ink-3">
@@ -1090,7 +1090,7 @@ function TicketBreakdown({ rows }: { rows: BreakdownRow[] }) {
                   </td>
                   <td className="rounded-r-xl bg-cart-bg-elev-2/70 px-3 py-3">
                     <div className="flex items-center gap-2">
-                      <div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-white/5">
+                      <div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-cart-line">
                         <motion.div
                           initial={{ width: 0 }}
                           animate={{ width: `${pct}%` }}
@@ -1158,7 +1158,7 @@ function ClosingReport({ slug, data }: { slug: string; data: EventStatsPayload }
         <div className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-cart-accent">
           Cierre del evento
         </div>
-        <h2 className="mt-1 font-sans text-[18px] font-semibold tracking-[-0.015em] text-white">
+        <h2 className="mt-1 font-sans text-[18px] font-semibold tracking-[-0.015em] text-cart-ink">
           Cuánto te queda
         </h2>
         <dl className="mt-4 flex flex-col gap-2.5">
@@ -1176,7 +1176,7 @@ function ClosingReport({ slug, data }: { slug: string; data: EventStatsPayload }
       <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 sm:gap-3">
         {/* Equipo / co-organizadores */}
         <div className="rounded-2xl border border-cart-line bg-cart-bg-elev p-4 sm:p-6">
-          <h3 className="font-sans text-[15px] font-semibold tracking-[-0.01em] text-white">
+          <h3 className="font-sans text-[15px] font-semibold tracking-[-0.01em] text-cart-ink">
             Equipo
           </h3>
           <p className="mt-0.5 text-[12px] text-cart-ink-3">
@@ -1196,7 +1196,7 @@ function ClosingReport({ slug, data }: { slug: string; data: EventStatsPayload }
                     {(m.fullName || m.email || "?").slice(0, 2)}
                   </span>
                   <div className="min-w-0">
-                    <div className="truncate text-[13.5px] font-medium text-white">
+                    <div className="truncate text-[13.5px] font-medium text-cart-ink">
                       {m.fullName || m.email || "Sin nombre"}
                     </div>
                     {m.email && (
@@ -1211,7 +1211,7 @@ function ClosingReport({ slug, data }: { slug: string; data: EventStatsPayload }
 
         {/* Cortesías */}
         <div className="rounded-2xl border border-cart-line bg-cart-bg-elev p-4 sm:p-6">
-          <h3 className="font-sans text-[15px] font-semibold tracking-[-0.01em] text-white">
+          <h3 className="font-sans text-[15px] font-semibold tracking-[-0.01em] text-cart-ink">
             Cortesías
           </h3>
           <p className="mt-0.5 text-[12px] text-cart-ink-3">Entradas de invitación que diste</p>
@@ -1250,7 +1250,7 @@ function FinRow({
         divider ? "border-t border-cart-line pt-2.5" : ""
       }`}
     >
-      <dt className={`text-[13.5px] ${strong ? "font-semibold text-white" : "text-cart-ink-3"}`}>
+      <dt className={`text-[13.5px] ${strong ? "font-semibold text-cart-ink" : "text-cart-ink-3"}`}>
         {label}
       </dt>
       <dd
@@ -1259,7 +1259,7 @@ function FinRow({
             ? "text-[19px] font-bold text-cart-accent"
             : muted
               ? "text-[13.5px] text-cart-ink-3"
-              : "text-[14px] font-medium text-white"
+              : "text-[14px] font-medium text-cart-ink"
         }`}
       >
         {value}
@@ -1334,7 +1334,7 @@ function PromotersTable({
                     <span className="inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-cart-accent-soft text-[11px] font-bold text-cart-accent">
                       {i + 1}
                     </span>
-                    <span className="truncate text-[14.5px] font-semibold tracking-[-0.01em] text-white">
+                    <span className="truncate text-[14.5px] font-semibold tracking-[-0.01em] text-cart-ink">
                       {r.name || r.code}
                     </span>
                   </div>
@@ -1391,7 +1391,7 @@ function PromotersTable({
                         {(r.name || r.code).slice(0, 2)}
                       </div>
                       <div className="min-w-0">
-                        <div className="truncate text-[13.5px] font-medium text-white">
+                        <div className="truncate text-[13.5px] font-medium text-cart-ink">
                           {r.name || r.code}
                         </div>
                         <div className="text-[11px] uppercase tracking-[0.08em] text-cart-ink-4">
@@ -1400,10 +1400,10 @@ function PromotersTable({
                       </div>
                     </div>
                   </td>
-                  <td className="bg-cart-bg-elev-2/70 px-3 py-3 text-right text-[13px] tabular-nums text-white">
+                  <td className="bg-cart-bg-elev-2/70 px-3 py-3 text-right text-[13px] tabular-nums text-cart-ink">
                     {r.ticketsSold.toLocaleString("es-PE")}
                   </td>
-                  <td className="bg-cart-bg-elev-2/70 px-3 py-3 text-right text-[13px] font-semibold tabular-nums text-white">
+                  <td className="bg-cart-bg-elev-2/70 px-3 py-3 text-right text-[13px] font-semibold tabular-nums text-cart-ink">
                     {formatMoney(r.revenueCents)}
                   </td>
                   <td className="bg-cart-bg-elev-2/70 px-3 py-3 text-right text-[13px] font-semibold tabular-nums text-cart-accent">
@@ -1434,18 +1434,18 @@ function PromotersTable({
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg bg-white/5 px-2 py-1.5">
+    <div className="rounded-lg bg-cart-line px-2 py-1.5">
       <div className="text-[10px] uppercase tracking-[0.1em] text-cart-ink-4">{label}</div>
-      <div className="mt-0.5 text-[12.5px] font-semibold tabular-nums text-white">{value}</div>
+      <div className="mt-0.5 text-[12.5px] font-semibold tabular-nums text-cart-ink">{value}</div>
     </div>
   );
 }
 
 function FlagBadge({ flag }: { flag: "ok" | "watch" | "suspect" }) {
   const map = {
-    ok: { label: "OK", cls: "bg-emerald-500/15 text-emerald-300" },
-    watch: { label: "Vigilar", cls: "bg-amber-500/15 text-amber-300" },
-    suspect: { label: "Revisar", cls: "bg-rose-500/15 text-rose-300" },
+    ok: { label: "OK", cls: "bg-emerald-500/15 text-emerald-600" },
+    watch: { label: "Vigilar", cls: "bg-amber-500/15 text-amber-700" },
+    suspect: { label: "Revisar", cls: "bg-rose-500/15 text-rose-600" },
   } as const;
   const it = map[flag];
   return (
@@ -1489,7 +1489,7 @@ function PromotersEmpty() {
           />
         </svg>
       </motion.div>
-      <div className="text-[15px] font-semibold tracking-[-0.01em] text-white">
+      <div className="text-[15px] font-semibold tracking-[-0.01em] text-cart-ink">
         {isClosed ? "Ningún promotor con ventas" : "Sin promotores con ventas aún"}
       </div>
       <p className="max-w-[40ch] text-[12.5px] leading-[1.55] text-cart-ink-3">
@@ -1506,6 +1506,7 @@ function PromotersEmpty() {
 /* ──────────────────────────────────────────────────────────────────────── */
 
 function NoEventsEmpty() {
+  const newEventHref = useNewEventHref();
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -1552,7 +1553,7 @@ function NoEventsEmpty() {
         </svg>
       </motion.div>
       <div className="relative max-w-[44ch]">
-        <h2 className="font-sans text-[22px] font-bold tracking-[-0.02em] text-white sm:text-[26px]">
+        <h2 className="font-sans text-[22px] font-bold tracking-[-0.02em] text-cart-ink sm:text-[26px]">
           Aún no tienes eventos
         </h2>
         <p className="mt-2 text-[13.5px] leading-[1.55] text-cart-ink-3">
@@ -1561,8 +1562,8 @@ function NoEventsEmpty() {
         </p>
       </div>
       <Link
-        href={"/org/events/new" as never}
-        className="relative mt-1 inline-flex items-center gap-2 rounded-full bg-cart-accent px-5 py-2.5 text-[13.5px] font-semibold text-cart-on-accent shadow-[0_0_30px_var(--color-cart-accent-glow)] transition-transform active:scale-95"
+        href={newEventHref as never}
+        className="relative mt-1 inline-flex items-center gap-2 rounded-full bg-cart-accent px-5 py-2.5 text-[13.5px] font-semibold text-white shadow-[0_0_30px_var(--color-cart-accent-glow)] transition-transform active:scale-95"
       >
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
           <path

@@ -90,12 +90,13 @@ export const eventDatePillParts = (
   iso: string,
   tz: string,
 ): { day: string; month: string; weekday: string; time: string } => {
-  const p = dateParts(iso, tz, false);
+  // 12h para casar con el resto del app (eventDateTime también es 12h): "10:00 PM".
+  const p = dateParts(iso, tz, true);
   return {
     day: p.day.padStart(2, "0"),
     month: p.month.toUpperCase(),
     weekday: p.weekday,
-    time: `${p.hour}:${p.minute}`,
+    time: `${p.hour}:${p.minute} ${p.ampm.replace(/[\s.]/g, "").toUpperCase()}`,
   };
 };
 

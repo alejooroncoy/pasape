@@ -145,11 +145,11 @@ export function YapeForm({ orderId, orderToken, amount, initialPhone = "", onPai
           style={{
             width: "100%",
             height: 46,
-            background: "rgba(255,255,255,0.04)",
+            background: C.bg3,
             border: 0,
             borderRadius: 12,
             padding: "0 14px",
-            color: "#fff",
+            color: C.text,
             fontFamily: "var(--font-jetbrains-mono), ui-monospace, monospace",
             fontSize: 15,
             letterSpacing: "0.04em",
@@ -180,14 +180,14 @@ export function YapeForm({ orderId, orderToken, amount, initialPhone = "", onPai
               style={{
                 width: 42,
                 height: 50,
-                background: "rgba(255,255,255,0.04)",
+                background: C.bg3,
                 border: 0,
                 borderRadius: 10,
                 textAlign: "center",
                 fontFamily: "var(--font-jetbrains-mono), ui-monospace, monospace",
                 fontSize: 18,
                 fontWeight: 700,
-                color: "#fff",
+                color: C.text,
                 outline: "none",
                 boxShadow: `0 0 0 1px ${d ? "rgba(124,58,237,0.45)" : C.line} inset`,
               }}
@@ -211,15 +211,20 @@ export function YapeForm({ orderId, orderToken, amount, initialPhone = "", onPai
           height: 50,
           borderRadius: 14,
           border: 0,
+          // Deshabilitado: fondo neutro + texto atenuado (C.dim), NO blanco
+          // sobre lavanda claro (contraste pobre en la paleta clara). Un anillo
+          // sutil lo define contra el fondo claro. Activo: gradiente + blanco.
           background: canSubmit
             ? "linear-gradient(180deg, #A855F7, #7C3AED)"
-            : "rgba(124,58,237,0.35)",
-          color: "#fff",
+            : C.bg3,
+          color: canSubmit ? "#fff" : C.dim,
           fontFamily: FONT_DISPLAY,
           fontSize: 15,
           fontWeight: 700,
           cursor: canSubmit ? "pointer" : "not-allowed",
-          boxShadow: "0 12px 32px -8px rgba(168,85,247,0.75)",
+          boxShadow: canSubmit
+            ? "0 12px 32px -8px rgba(168,85,247,0.75)"
+            : `0 0 0 1px ${C.line2} inset`,
         }}
       >
         {submitting ? "Confirmando con Yape…" : `Pagar S/ ${amount.toFixed(2)} con Yape`}

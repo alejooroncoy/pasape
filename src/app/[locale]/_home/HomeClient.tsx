@@ -6,10 +6,10 @@ import type { EventCategory } from "@/server/events/domain/Event";
 import { clientEvents } from "@/lib/analytics/clientEvents";
 import { Nav, type NavUser } from "./Nav";
 import { NextEventHero } from "./NextEventHero";
-import { HeroCarousel } from "./HeroCarousel";
+import { FeaturedBanner } from "./FeaturedBanner";
+import { HomeSidebar } from "./HomeSidebar";
 import { EventsSection } from "./EventsSection";
 import { Footer } from "./Footer";
-import { AmbientGlow } from "./AmbientGlow";
 import { SeoBrowseLead } from "@/components/seo/SeoBrowseLead";
 import { UserTabbar } from "@/components/layout/UserTabbar";
 
@@ -17,9 +17,6 @@ const SideDrawer = dynamic(() => import("./SideDrawer").then((m) => ({ default: 
   ssr: false,
 });
 const SignInDrawer = dynamic(() => import("./SignInDrawer").then((m) => ({ default: m.SignInDrawer })), {
-  ssr: false,
-});
-const WaFloat = dynamic(() => import("./WaFloat").then((m) => ({ default: m.WaFloat })), {
   ssr: false,
 });
 
@@ -36,6 +33,10 @@ type Props = {
   showHero?: boolean;
   seoLead?: SeoLead | null;
   searchLocation?: string;
+  /** "light" = fondo blanco + wash sutil (default, aprobado). "dark-ambient" =
+   *  variante de comparación en /2, fondo oscuro con degradado con movimiento
+   *  a la Partiful (sin el blob estático de antes). */
+  variant?: "light" | "dark-ambient";
 };
 
 export function HomeClient({
@@ -44,6 +45,7 @@ export function HomeClient({
   showHero = true,
   seoLead = null,
   searchLocation = "home",
+  variant = "light",
 }: Props) {
   const loggedIn = !!user;
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -52,11 +54,11 @@ export function HomeClient({
   const [search, setSearch] = useState("");
   const eventsSectionRef = useRef<HTMLElement>(null);
 
+  // Seleccionar categoría solo filtra en el sitio — sin auto-scroll. El salto
+  // hacia la sección se sentía brusco en móvil; el usuario ya ve la grilla
+  // reaccionar sin que la página se mueva.
   const selectCategoryFromNav = (cat: EventCategory | null) => {
     setCategory(cat);
-    setTimeout(() => {
-      eventsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 50);
   };
 
   const lastSearchTracked = useRef("");
@@ -70,9 +72,13 @@ export function HomeClient({
     return () => clearTimeout(timer);
   }, [search, searchLocation]);
 
+  const wrapperClass =
+    variant === "dark-ambient"
+      ? "home-dark-ambient cart-grain relative min-h-screen overflow-hidden text-cart-ink font-sans"
+      : "home-light home-wash cart-grain relative min-h-screen overflow-hidden bg-cart-bg text-cart-ink font-sans";
+
   return (
-    <div className="cart-grain relative min-h-screen overflow-hidden bg-cart-bg text-white font-sans">
-      <AmbientGlow />
+    <div className={wrapperClass}>
       <div className="relative z-[1]">
         <Nav
           user={user}
@@ -84,25 +90,44 @@ export function HomeClient({
         />
         <main className="pb-[72px] lg:pb-0">
           {showHero && loggedIn && <NextEventHero />}
-          {showHero && <HeroCarousel />}
           {seoLead ? (
-            <SeoBrowseLead
-              h1={seoLead.h1}
-              description={seoLead.description}
-              breadcrumbs={seoLead.breadcrumbs}
-              category={seoLead.category ?? initialCategory}
-            />
-          ) : null}
-          <EventsSection
-            sectionRef={eventsSectionRef}
-            category={category}
-            onCategoryChange={setCategory}
-            search={search}
-            compactHeader={!!seoLead}
-          />
+            <>
+              <SeoBrowseLead
+                h1={seoLead.h1}
+                description={seoLead.description}
+                breadcrumbs={seoLead.breadcrumbs}
+                category={seoLead.category ?? initialCategory}
+              />
+              <EventsSection
+                sectionRef={eventsSectionRef}
+                category={category}
+                onCategoryChange={setCategory}
+                search={search}
+                compactHeader
+              />
+            </>
+          ) : (
+            /* Layout de dos columnas del home (patrón Joinnus): contenido
+               principal a la izquierda, sidebar útil a la derecha bajando
+               junto a él. En mobile el sidebar se apila debajo. */
+            <div className="mx-auto grid max-w-[1320px] items-start gap-4 px-[clamp(20px,4vw,56px)] py-[clamp(16px,2.5vw,28px)] lg:grid-cols-[minmax(0,1fr)_300px]">
+              <div className="flex min-w-0 flex-col gap-4">
+                <FeaturedBanner />
+                {/* Sin prop `search`: en el home la búsqueda vive en el
+                    dropdown del header (backend); la grilla no se filtra al
+                    tipear. En las rutas SEO sí se mantiene el filtro. */}
+                <EventsSection
+                  sectionRef={eventsSectionRef}
+                  category={category}
+                  onCategoryChange={setCategory}
+                  framed
+                />
+              </div>
+              <HomeSidebar />
+            </div>
+          )}
         </main>
         <Footer />
-        <WaFloat />
         <UserTabbar />
         <SideDrawer
           user={user}
@@ -116,3 +141,4 @@ export function HomeClient({
     </div>
   );
 }
+

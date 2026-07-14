@@ -108,7 +108,7 @@ export function VenueInput({ value, onChange, placeholder = "Pega un link de Goo
             </svg>
           </span>
           <div className="min-w-0 flex-1">
-            <div className="truncate text-[14px] font-semibold text-white">{value.name}</div>
+            <div className="truncate text-[14px] font-semibold text-cart-ink">{value.name}</div>
             <div className="truncate text-[11.5px] text-cart-ink-3 tabular-nums">
               {value.lat?.toFixed(5)}, {value.lng?.toFixed(5)} ·{" "}
               <span className="capitalize">{value.source === "google" ? "Google Maps" : "Apple Maps"}</span>
@@ -117,7 +117,7 @@ export function VenueInput({ value, onChange, placeholder = "Pega un link de Goo
           <button
             type="button"
             onClick={reset}
-            className="rounded-full border border-cart-line bg-cart-bg px-3 py-1 text-[12px] font-medium text-cart-ink-2 hover:border-cart-line-strong hover:text-white"
+            className="rounded-full border border-cart-line bg-cart-bg px-3 py-1 text-[12px] font-medium text-cart-ink-2 hover:border-cart-line-strong hover:text-cart-ink"
           >
             Cambiar
           </button>
@@ -130,7 +130,7 @@ export function VenueInput({ value, onChange, placeholder = "Pega un link de Goo
               value={draft}
               onChange={(e) => void onTextChange(e.target.value)}
               placeholder={placeholder}
-              className="block w-full rounded-xl border border-cart-line bg-cart-bg-elev-2 px-3.5 py-2.5 pr-10 text-[14px] text-white placeholder:text-cart-ink-3 outline-none focus:border-cart-accent"
+              className="block w-full rounded-xl border border-cart-line bg-cart-bg-elev-2 px-3.5 py-2.5 pr-10 text-[14px] text-cart-ink placeholder:text-cart-ink-3 outline-none focus:border-cart-accent"
             />
             {loading && (
               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-cart-ink-3">

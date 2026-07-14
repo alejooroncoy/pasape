@@ -39,7 +39,7 @@ export default async function HomePage({ params }: Props) {
   }
 
   const lcpCover = eventsResult.ok
-    ? optimizeImageUrl(eventsResult.value[0]?.coverUrl, "hero-lcp")
+    ? optimizeImageUrl(eventsResult.value[0]?.coverUrl, "card")
     : null;
 
   return (

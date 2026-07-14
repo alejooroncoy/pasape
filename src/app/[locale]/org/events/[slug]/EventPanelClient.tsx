@@ -19,6 +19,7 @@ import {
   useUpdateAssignmentCommission,
 } from "@/lib/promoters/hooks/useEventPromoters";
 import { milestoneIcon } from "@/lib/promoters/milestoneDisplay";
+import { usePanelPromotersVisible } from "@/lib/events/hooks/usePanelPromotersVisible";
 import { PersonalizeSheet, type PayPatch } from "./team/page";
 import type { EventStatsPayload } from "@/lib/events/hooks/useEventStats";
 import type { EventPartner } from "@/server/events/application/EventPartners";
@@ -90,6 +91,7 @@ function LivePanel({
   const openAssignment =
     assignments.data?.find((a) => a.promoterLinkId === openPromoterId) ?? null;
   const closePromoterSheet = () => setOpenPromoterId(null);
+  const { visible: promotersVisible, unlock: unlockPromoters } = usePanelPromotersVisible();
 
   return (
     <>
@@ -126,7 +128,7 @@ function LivePanel({
               // "Recibes" es EL número que le importa al organizador — no puede
               // pasar desapercibido como una línea gris.
               <span className="flex flex-col gap-0.5">
-                <span className="text-[14px] font-semibold text-white">
+                <span className="text-[14px] font-semibold text-cart-ink">
                   Recibes {formatMoneyClean(stats?.netCents ?? 0, ev?.currency)}
                 </span>
                 <span>Servicio Pasape {formatMoneyClean(stats?.serviceFeeCents ?? 0, ev?.currency)}</span>
@@ -171,41 +173,57 @@ function LivePanel({
       {/* Body: 2 columnas en desktop, stack en mobile */}
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr] lg:gap-7">
         {/* Ranking de promotores */}
-        <section data-tour="promoters" className="rounded-2xl border border-cart-line bg-cart-bg-elev">
-          <header className="border-b border-cart-line">
-            <div className="flex items-center justify-between px-4 pt-3 pb-3 lg:px-5">
-              <h2 className="text-[15px] font-semibold tracking-[-0.01em]">Promotores</h2>
-              <Link
-                href={`/org/events/${slug}/promoters` as never}
-                className="rounded-full px-2.5 py-1 text-[11.5px] font-medium text-cart-ink-2 transition hover:bg-white/5 hover:text-white"
-              >
-                Ver links →
-              </Link>
-            </div>
-            <div className="grid grid-cols-[32px_1fr_36px_36px_56px] border-t border-cart-line items-center gap-3 px-4 py-1.5 lg:px-5">
-              <span aria-hidden="true" />
-              <span aria-hidden="true" />
-              <span className="text-right text-[10px] uppercase tracking-[0.04em] text-cart-ink-4">Vend.</span>
-              <span className="text-right text-[10px] uppercase tracking-[0.04em] text-cart-ink-4">Val.</span>
-              <span className="text-right text-[10px] uppercase tracking-[0.04em] text-cart-ink-4">Ingreso</span>
-            </div>
-          </header>
+        {promotersVisible ? (
+          <section data-tour="promoters" className="rounded-2xl border border-cart-line bg-cart-bg-elev">
+            <header className="border-b border-cart-line">
+              <div className="flex items-center justify-between px-4 pt-3 pb-3 lg:px-5">
+                <h2 className="text-[15px] font-semibold tracking-[-0.01em]">Promotores</h2>
+                <Link
+                  href={`/org/events/${slug}/promoters` as never}
+                  className="rounded-full px-2.5 py-1 text-[11.5px] font-medium text-cart-ink-2 transition hover:bg-cart-line-2 hover:text-cart-ink"
+                >
+                  Ver links →
+                </Link>
+              </div>
+              <div className="grid grid-cols-[32px_1fr_36px_36px_56px] border-t border-cart-line items-center gap-3 px-4 py-1.5 lg:px-5">
+                <span aria-hidden="true" />
+                <span aria-hidden="true" />
+                <span className="text-right text-[10px] uppercase tracking-[0.04em] text-cart-ink-4">Vend.</span>
+                <span className="text-right text-[10px] uppercase tracking-[0.04em] text-cart-ink-4">Val.</span>
+                <span className="text-right text-[10px] uppercase tracking-[0.04em] text-cart-ink-4">Ingreso</span>
+              </div>
+            </header>
 
-          {stats?.byPromoter?.length ? (
-            <div className="divide-y divide-cart-line">
-              {stats.byPromoter.map((p, i) => (
-                <PromoterRow
-                  key={p.promoterLinkId}
-                  rank={i + 1}
-                  promoter={p}
-                  onOpen={() => setOpenPromoterId(p.promoterLinkId)}
-                />
-              ))}
-            </div>
-          ) : (
-            <EmptyRow label="Sin ventas por promotor todavía." />
-          )}
-        </section>
+            {stats?.byPromoter?.length ? (
+              <div className="divide-y divide-cart-line">
+                {stats.byPromoter.map((p, i) => (
+                  <PromoterRow
+                    key={p.promoterLinkId}
+                    rank={i + 1}
+                    promoter={p}
+                    onOpen={() => setOpenPromoterId(p.promoterLinkId)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <EmptyRow label="Sin ventas por promotor todavía." />
+            )}
+          </section>
+        ) : (
+          <section data-tour="promoters" className="flex flex-col items-start gap-2 rounded-2xl border border-dashed border-cart-line bg-cart-bg-elev/40 p-4 lg:p-5">
+            <h2 className="text-[15px] font-semibold tracking-[-0.01em]">Promotores</h2>
+            <p className="text-[12.5px] text-cart-ink-3">
+              ¿Alguien más te ayuda a vender? Activa links de promotor para ver cuánto vendió cada uno.
+            </p>
+            <button
+              type="button"
+              onClick={unlockPromoters}
+              className="mt-1 rounded-full border border-cart-line-strong bg-cart-bg px-3.5 py-1.5 text-[12.5px] font-medium text-cart-ink-2 transition hover:border-cart-ink-3 hover:text-cart-ink"
+            >
+              Activar promotores
+            </button>
+          </section>
+        )}
 
         {/* Live feed */}
         <section data-tour="live-scans" className="rounded-2xl border border-cart-line bg-cart-bg-elev">
@@ -241,7 +259,7 @@ function LivePanel({
           <div className="border-t border-cart-line p-3 lg:p-4">
             <Link
               href={`/org/events/${slug}/scans` as never}
-              className="block rounded-xl border border-dashed border-cart-line-strong px-3.5 py-2.5 text-center text-[12.5px] font-medium text-cart-ink-2 transition hover:border-white/40 hover:text-white"
+              className="block rounded-xl border border-dashed border-cart-line-strong px-3.5 py-2.5 text-center text-[12.5px] font-medium text-cart-ink-2 transition hover:border-cart-ink-3 hover:text-cart-ink"
             >
               Ver historial completo
             </Link>
@@ -328,7 +346,7 @@ function FinalReport({
     <div className="flex flex-col gap-6">
       {/* Cabecera del reporte */}
       <div className="flex items-center justify-between">
-        <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1">
+        <div className="inline-flex items-center gap-2 rounded-full border border-cart-line bg-cart-line-2 px-3 py-1">
           <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
             <path d="M2 12V5l5-3 5 3v7" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
             <rect x="5" y="8" width="4" height="4" rx="0.5" stroke="currentColor" strokeWidth="1.4" />
@@ -340,7 +358,7 @@ function FinalReport({
         <button
           type="button"
           onClick={() => { window.location.href = `/api/events/${slug}/export`; }}
-          className="hidden items-center gap-1.5 rounded-full border border-cart-line bg-cart-bg-elev px-3.5 py-1.5 text-[12.5px] font-semibold text-white transition hover:border-cart-line-strong lg:inline-flex"
+          className="hidden items-center gap-1.5 rounded-full border border-cart-line bg-cart-bg-elev px-3.5 py-1.5 text-[12.5px] font-semibold text-cart-ink transition hover:border-cart-line-strong lg:inline-flex"
         >
           <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
             <path d="M7 2v8m0 0l-3-3m3 3l3-3M2 12h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
@@ -366,7 +384,7 @@ function FinalReport({
         {(stats?.serviceFeeCents ?? 0) > 0 && (
           <div className="mt-2 text-[13px] text-cart-ink-3">
             Recibes{" "}
-            <span className="font-semibold text-white">
+            <span className="font-semibold text-cart-ink">
               {formatMoneyClean(stats?.netCents ?? 0, ev?.currency)}
             </span>{" "}
             · Servicio Pasape {formatMoneyClean(stats?.serviceFeeCents ?? 0, ev?.currency)}
@@ -374,7 +392,7 @@ function FinalReport({
         )}
 
         {/* Trío de stats */}
-        <div className="mt-5 grid grid-cols-3 gap-3 border-t border-white/8 pt-5">
+        <div className="mt-5 grid grid-cols-3 gap-3 border-t border-cart-line pt-5">
           <div>
             <div className="font-sans text-[26px] font-semibold leading-none tracking-[-0.03em] lg:text-[32px]">
               {sold.toLocaleString("es-PE")}
@@ -402,7 +420,7 @@ function FinalReport({
               <span>Asistencia</span>
               <span className="font-semibold text-[#22D17F]">{attendancePct}%</span>
             </div>
-            <div className="h-1.5 overflow-hidden rounded-full bg-white/8">
+            <div className="h-1.5 overflow-hidden rounded-full bg-cart-line">
               <div
                 className="h-full rounded-full bg-[#22D17F] transition-[width] duration-700"
                 style={{ width: `${attendancePct}%` }}
@@ -416,9 +434,9 @@ function FinalReport({
           <div className="mt-4">
             <div className="mb-1.5 flex justify-between text-[11px] text-cart-ink-3">
               <span>Aforo cubierto</span>
-              <span className="font-semibold text-white">{soldPct}% de {capacity.toLocaleString("es-PE")}</span>
+              <span className="font-semibold text-cart-ink">{soldPct}% de {capacity.toLocaleString("es-PE")}</span>
             </div>
-            <div className="h-1.5 overflow-hidden rounded-full bg-white/8">
+            <div className="h-1.5 overflow-hidden rounded-full bg-cart-line">
               <div
                 className="h-full rounded-full bg-cart-accent transition-[width] duration-700"
                 style={{ width: `${soldPct}%` }}
@@ -439,7 +457,7 @@ function FinalReport({
             </div>
             <Link
               href={`/org/events/${slug}/promoters` as never}
-              className="rounded-full px-2.5 py-1 text-[11.5px] font-medium text-cart-ink-2 transition hover:bg-white/5 hover:text-white"
+              className="rounded-full px-2.5 py-1 text-[11.5px] font-medium text-cart-ink-2 transition hover:bg-cart-line-2 hover:text-cart-ink"
             >
               Ver detalle →
             </Link>
@@ -491,7 +509,7 @@ function FinalReport({
                           </div>
                         </div>
                       </div>
-                      <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/5">
+                      <div className="mt-2 h-1 overflow-hidden rounded-full bg-cart-line">
                         <div className="h-full rounded-full bg-cart-accent/60" style={{ width: `${fillPct}%` }} />
                       </div>
                     </div>
@@ -521,7 +539,7 @@ function FinalReport({
                           </div>
                         </div>
                       </div>
-                      <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/5">
+                      <div className="mt-2 h-1 overflow-hidden rounded-full bg-cart-line">
                         <div className="h-full rounded-full bg-cart-accent/60" style={{ width: `${fillPct}%` }} />
                       </div>
                     </div>
@@ -541,7 +559,7 @@ function FinalReport({
         <button
           type="button"
           onClick={() => { window.location.href = `/api/events/${slug}/export`; }}
-          className="flex w-full items-center justify-center gap-2 rounded-2xl border border-cart-line bg-cart-bg-elev py-3.5 text-[14px] font-semibold transition hover:border-cart-line-strong hover:text-white"
+          className="flex w-full items-center justify-center gap-2 rounded-2xl border border-cart-line bg-cart-bg-elev py-3.5 text-[14px] font-semibold transition hover:border-cart-line-strong hover:text-cart-ink"
         >
           <svg width="16" height="16" viewBox="0 0 14 14" fill="none">
             <path d="M7 2v8m0 0l-3-3m3 3l3-3M2 12h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
@@ -627,9 +645,9 @@ function BoxesSection({ ticketTypes }: { ticketTypes: EventStatsPayload["ticketT
                 )}
               </div>
               <div className="mt-1.5 font-mono text-[13px] text-cart-ink-3">
-                <span className="font-semibold text-white">{b.validated}</span> / {b.capacity} personas
+                <span className="font-semibold text-cart-ink">{b.validated}</span> / {b.capacity} personas
               </div>
-              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/8">
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-cart-line">
                 <div
                   className="h-full rounded-full bg-cart-accent transition-[width] duration-500"
                   style={{ width: `${pct}%` }}
@@ -660,7 +678,7 @@ function KpiCard({
   tone: "accent" | "green" | "neutral";
 }) {
   const barColor =
-    tone === "accent" ? "var(--color-cart-accent)" : tone === "green" ? "#22D17F" : "rgba(255,255,255,0.5)";
+    tone === "accent" ? "var(--color-cart-accent)" : tone === "green" ? "#22D17F" : "var(--color-cart-ink-3)";
   return (
     <div className="rounded-2xl border border-cart-line bg-cart-bg-elev p-4 lg:p-5">
       <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-cart-ink-3">
@@ -675,7 +693,7 @@ function KpiCard({
       </div>
       <div className="mt-2 text-[11.5px] text-cart-ink-3">{hint}</div>
       {typeof progress === "number" && (
-        <div className="mt-3 h-1 overflow-hidden rounded-full bg-white/5">
+        <div className="mt-3 h-1 overflow-hidden rounded-full bg-cart-line">
           <div
             className="h-full rounded-full transition-[width] duration-500"
             style={{ width: `${progress}%`, background: barColor }}
@@ -712,7 +730,7 @@ function PromoterRow({
     <button
       type="button"
       onClick={onOpen}
-      className="grid w-full grid-cols-[32px_1fr_36px_36px_56px] items-baseline gap-3 px-4 py-3 text-left transition hover:bg-white/[0.02] lg:px-5"
+      className="grid w-full grid-cols-[32px_1fr_36px_36px_56px] items-baseline gap-3 px-4 py-3 text-left transition hover:bg-cart-line-2 lg:px-5"
     >
       <div className="grid size-8 shrink-0 place-items-center self-center rounded-full bg-cart-bg-elev-2 text-[12px] font-semibold text-cart-ink-2">
         {rank}
@@ -833,9 +851,9 @@ function PromoterDetail({
       <div>
         <div className="flex items-center justify-between text-[12px] text-cart-ink-3">
           <span>Asistencia</span>
-          <span className="font-semibold text-white">{pct}%</span>
+          <span className="font-semibold text-cart-ink">{pct}%</span>
         </div>
-        <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/8">
+        <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-cart-line">
           <div
             className="h-full rounded-full transition-[width] duration-500"
             style={{ width: `${pct}%`, background: flagCfg.color }}
@@ -888,7 +906,7 @@ function PromoterDetail({
               type="button"
               onClick={() => setPersonalizeOpen((v) => !v)}
               aria-expanded={personalizeOpen}
-              className="flex w-full items-center justify-between gap-3 px-3.5 py-2.5 text-left text-[12.5px] font-medium text-cart-ink-2 transition hover:text-white"
+              className="flex w-full items-center justify-between gap-3 px-3.5 py-2.5 text-left text-[12.5px] font-medium text-cart-ink-2 transition hover:text-cart-ink"
             >
               Personalizar comisión
               <svg
@@ -930,7 +948,7 @@ function PromoterDetail({
         ) : (
           <Link
             href={`/org/events/${slug}/promoters` as never}
-            className="block rounded-xl border border-cart-line px-3.5 py-2.5 text-center text-[12.5px] font-medium text-cart-ink-2 transition hover:border-cart-line-strong hover:text-white"
+            className="block rounded-xl border border-cart-line px-3.5 py-2.5 text-center text-[12.5px] font-medium text-cart-ink-2 transition hover:border-cart-line-strong hover:text-cart-ink"
           >
             Personalizar comisión →
           </Link>
@@ -938,7 +956,7 @@ function PromoterDetail({
         {promoter.hasMilestones && (
           <Link
             href={`/org/events/${slug}/promoters/${promoter.promoterLinkId}/tiers` as never}
-            className="block rounded-xl border border-cart-line px-3.5 py-2.5 text-center text-[12.5px] font-medium text-cart-ink-2 transition hover:border-cart-line-strong hover:text-white"
+            className="block rounded-xl border border-cart-line px-3.5 py-2.5 text-center text-[12.5px] font-medium text-cart-ink-2 transition hover:border-cart-line-strong hover:text-cart-ink"
           >
             Ver hitos →
           </Link>
@@ -971,7 +989,7 @@ export function ScanRow({
     already_used: { color: "#FFCE3B", label: "Ya usado" },
     invalid: { color: "#FF4D5E", label: "Inválido" },
     void: { color: "#FF4D5E", label: "Anulado" },
-    unknown_event: { color: "rgba(255,255,255,0.45)", label: "Otro evento" },
+    unknown_event: { color: "var(--color-cart-ink-3)", label: "Otro evento" },
   }[result];
   const typeLabel =
     ticketTypeKind === "box"
@@ -1126,7 +1144,7 @@ function PartnersSection({ slug }: { slug: string }) {
         <div className="flex items-center gap-2">
           <span className="text-[13px] font-semibold text-cart-ink-2">Partners</span>
           {list.length > 0 && (
-            <span className="rounded-full bg-white/8 px-1.5 py-0.5 text-[10px] font-semibold text-cart-ink-3">
+            <span className="rounded-full bg-cart-line px-1.5 py-0.5 text-[10px] font-semibold text-cart-ink-3">
               {list.length}
             </span>
           )}
@@ -1135,7 +1153,7 @@ function PartnersSection({ slug }: { slug: string }) {
           <button
             type="button"
             onClick={() => setOpen(true)}
-            className="rounded-full border border-cart-line px-2.5 py-1 text-[11.5px] font-medium text-cart-ink-2 transition hover:border-cart-line-strong hover:text-white"
+            className="rounded-full border border-cart-line px-2.5 py-1 text-[11.5px] font-medium text-cart-ink-2 transition hover:border-cart-line-strong hover:text-cart-ink"
           >
             + Agregar
           </button>
@@ -1159,7 +1177,7 @@ function PartnersSection({ slug }: { slug: string }) {
             <button
               type="button"
               onClick={() => fileRef.current?.click()}
-              className="flex h-16 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-cart-line bg-cart-bg-elev-2 text-[12.5px] text-cart-ink-3 transition hover:border-cart-line-strong hover:text-white"
+              className="flex h-16 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-cart-line bg-cart-bg-elev-2 text-[12.5px] text-cart-ink-3 transition hover:border-cart-line-strong hover:text-cart-ink"
             >
               {logoPreview ? (
                 <img src={logoPreview} alt="" className="h-10 max-w-[120px] object-contain" />
@@ -1180,7 +1198,7 @@ function PartnersSection({ slug }: { slug: string }) {
               placeholder="Nombre del partner"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-xl border border-cart-line bg-cart-bg-elev-2 px-3 py-2.5 text-[13.5px] text-white placeholder-cart-ink-4 outline-none transition focus:border-cart-accent"
+              className="w-full rounded-xl border border-cart-line bg-cart-bg-elev-2 px-3 py-2.5 text-[13.5px] text-cart-ink placeholder-cart-ink-4 outline-none transition focus:border-cart-accent"
             />
 
             {/* URL */}
@@ -1189,7 +1207,7 @@ function PartnersSection({ slug }: { slug: string }) {
               placeholder="URL del sitio (opcional)"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
-              className="w-full rounded-xl border border-cart-line bg-cart-bg-elev-2 px-3 py-2.5 text-[13.5px] text-white placeholder-cart-ink-4 outline-none transition focus:border-cart-accent"
+              className="w-full rounded-xl border border-cart-line bg-cart-bg-elev-2 px-3 py-2.5 text-[13.5px] text-cart-ink placeholder-cart-ink-4 outline-none transition focus:border-cart-accent"
             />
 
             <div className="flex gap-2">
@@ -1204,7 +1222,7 @@ function PartnersSection({ slug }: { slug: string }) {
               <button
                 type="button"
                 onClick={reset}
-                className="rounded-full border border-cart-line px-4 py-2 text-[13px] font-medium text-cart-ink-2 transition hover:text-white"
+                className="rounded-full border border-cart-line px-4 py-2 text-[13px] font-medium text-cart-ink-2 transition hover:text-cart-ink"
               >
                 Cancelar
               </button>
@@ -1244,7 +1262,7 @@ function PartnerChip({ partner, onRemove }: { partner: EventPartner; onRemove: (
         onClick={handleRemove}
         // Siempre visible: en táctil no existe hover persistente, así que
         // depender de group-hover deja la X inalcanzable en móvil.
-        className="ml-0.5 grid size-4 place-items-center rounded-full text-cart-ink-4 opacity-70 transition hover:bg-white/10 hover:text-white hover:opacity-100"
+        className="ml-0.5 grid size-4 place-items-center rounded-full text-cart-ink-4 opacity-70 transition hover:bg-cart-line-strong hover:text-cart-ink hover:opacity-100"
         aria-label={`Quitar ${partner.name}`}
       >
         <svg width="8" height="8" viewBox="0 0 10 10" fill="none">

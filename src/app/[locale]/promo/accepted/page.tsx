@@ -45,8 +45,8 @@ export default function PromoAcceptedCelebratePage() {
   }
 
   return (
-    <div className="bg-cart-bg text-white lg:grid lg:min-h-dvh lg:place-items-center lg:p-8">
-      <div className="relative flex min-h-dvh flex-col overflow-hidden bg-cart-bg text-white lg:min-h-[560px] lg:w-full lg:max-w-[540px] lg:rounded-3xl lg:border lg:border-cart-line lg:bg-cart-bg-elev/30 lg:shadow-[0_40px_120px_-30px_rgba(0,0,0,0.85)]">
+    <div className="home-light home-wash bg-cart-bg text-cart-ink lg:grid lg:min-h-dvh lg:place-items-center lg:p-8">
+      <div className="relative z-10 flex min-h-dvh flex-col overflow-hidden bg-cart-bg text-cart-ink lg:min-h-[560px] lg:w-full lg:max-w-[540px] lg:rounded-3xl lg:border lg:border-cart-line lg:bg-cart-bg-elev/30 lg:shadow-[0_40px_120px_-30px_rgba(0,0,0,0.85)]">
         <div
           aria-hidden
           className="pointer-events-none absolute inset-x-0 top-0 h-[440px]"
@@ -73,7 +73,7 @@ export default function PromoAcceptedCelebratePage() {
             type="button"
             onClick={() => router.push("/promo" as never)}
             aria-label="Cerrar"
-            className="grid size-9 place-items-center rounded-full bg-cart-bg-elev text-cart-ink-2 transition hover:bg-cart-bg-elev-2 hover:text-white"
+            className="grid size-9 place-items-center rounded-full bg-cart-bg-elev text-cart-ink-2 transition hover:bg-cart-bg-elev-2 hover:text-cart-ink"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
               <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -103,7 +103,7 @@ export default function PromoAcceptedCelebratePage() {
           <h1 className="mt-2.5 text-[30px] font-bold leading-none tracking-[-0.03em]">¡Te aprobaron!</h1>
           {first ? (
             <p className="mt-3.5 max-w-[300px] text-[14px] leading-relaxed text-cart-ink-3">
-              Ya eres promotor oficial de <strong className="text-white">{first.eventTitle}</strong>.
+              Ya eres promotor oficial de <strong className="text-cart-ink">{first.eventTitle}</strong>.
             </p>
           ) : (
             <p className="mt-3.5 max-w-[300px] text-[14px] leading-relaxed text-cart-ink-3">
@@ -113,13 +113,13 @@ export default function PromoAcceptedCelebratePage() {
 
           {first && (
             <>
-              <div className="mt-6 rounded-2xl border border-cart-line bg-black/40 px-5 py-3.5 font-mono text-[13px] font-semibold">
+              <div className="mt-6 rounded-2xl border border-cart-line bg-cart-bg-elev-2 px-5 py-3.5 font-mono text-[13px] font-semibold">
                 {origin}/r/<span className="text-cart-accent">{first.code}</span>
               </div>
               <button
                 type="button"
                 onClick={() => void onCopy()}
-                className={`mt-3 text-[12px] font-semibold transition ${copied ? "text-emerald-400" : "text-cart-ink-3 hover:text-white"}`}
+                className={`mt-3 text-[12px] font-semibold transition ${copied ? "text-emerald-400" : "text-cart-ink-3 hover:text-cart-ink"}`}
               >
                 {copied ? "✓ Link copiado" : "Copiar link de venta"}
               </button>
@@ -143,8 +143,8 @@ export default function PromoAcceptedCelebratePage() {
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-dvh flex-col bg-cart-bg text-white">
-      <main className="mx-auto flex w-full max-w-[440px] flex-1 flex-col px-5">{children}</main>
+    <div className="home-light home-wash flex min-h-dvh flex-col bg-cart-bg text-cart-ink">
+      <main className="relative z-10 mx-auto flex w-full max-w-[440px] flex-1 flex-col px-5">{children}</main>
     </div>
   );
 }

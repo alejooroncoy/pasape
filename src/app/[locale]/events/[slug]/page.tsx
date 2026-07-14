@@ -118,24 +118,24 @@ export default async function EventDetailPage({
     : DEFAULT_LOCALE;
 
   const qc = makeQueryClient();
-  const [detail] = await Promise.all([
+  const [detail, meResult] = await Promise.all([
     serverApiGet<EventDetailResponse>(`/api/events/${slug}`),
-    qc.prefetchQuery({
-      // Array literal propio (no el `currentUserKey` importado del hook): al
-      // referenciar el mismo array module-level, el serializador RSC lo
-      // manda por referencia ("$ed") en vez de inline, y algo en esa vuelta
-      // llega al cliente como string → "queryKey needs to be an Array".
-      // `useCurrentUser` sigue usando la misma tupla ["identity","me"], así
-      // que el queryHash calza igual y la hidratación encuentra la entrada.
-      queryKey: ["identity", "me"],
-      queryFn: async (): Promise<MeResponse> => {
-        const result = await IdentityController.me();
-        return result.ok ? result.value : null;
-      },
-    }),
+    IdentityController.me(),
   ]);
 
+  // Sesión resuelta una sola vez: siembra el cache (para useCurrentUser +
+  // offline) Y se pasa como prop al header (primer render determinista, sin
+  // mismatch por el cache persistido async). Array literal en setQueryData (no
+  // el `currentUserKey` importado): referenciar el array module-level hace que
+  // el serializador RSC lo mande por referencia y llegue como string al cliente
+  // → "queryKey needs to be an Array". La tupla literal calza el queryHash.
+  const me: MeResponse = meResult.ok ? meResult.value : null;
+  qc.setQueryData(["identity", "me"], me);
   qc.setQueryData(["events", "detail", slug], detail);
+
+  const initialUser = me?.user
+    ? { fullName: me.user.fullName, avatarUrl: me.user.avatarUrl }
+    : null;
 
   const category = detail.event.category;
   const breadcrumbItems = [
@@ -156,7 +156,7 @@ export default async function EventDetailPage({
         ]}
       />
       <HydrationBoundary state={dehydrate(qc)}>
-        <EventDetailClient slug={slug} />
+        <EventDetailClient slug={slug} initialUser={initialUser} />
       </HydrationBoundary>
     </>
   );

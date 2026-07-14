@@ -73,10 +73,12 @@ export const updateEvent = async (
   eventId: string,
   orgId: string,
   input: UpdateEventInput,
+  // Estado pre-update, ya cargado por el guard del controller (una sola fila,
+  // getBySlug) — evitar volver a pedirlo aquí con listByOrganization(orgId),
+  // que trae TODOS los eventos de la org solo para encontrar este por id (el
+  // costo dominante de cualquier guardado, incluso de un cambio mínimo).
+  before: Event,
 ): Promise<Result<Event>> => {
-  // Capture pre-update state so we can compute a diff after the write, and to
-  // decide the publish gate below.
-  const before = (await repo.listByOrganization(orgId)).find((e) => e.id === eventId);
 
   // La revisión de Pasape aplica solo a la PRIMERA publicación: pedir status
   // "published" desde draft/pending_review (o por /publish) cae en
@@ -123,18 +125,19 @@ export const updateEvent = async (
   }
 
   // Why: idempotent — skip notification fanout when nothing buyer-facing changed.
-  if (before) {
-    const changes = diffRelevantFields(before, input);
-    if (changes.length > 0) {
-      await notifyBuyers(
-        eventId,
-        result.value.title,
-        changes,
-        input.status,
-        input.startsAt,
-        input.venue,
-      );
-    }
+  // Fire-and-forget, igual que notifyPendingReview arriba: es un fanout best-
+  // effort a compradores, no debe sumar su latencia (queries + insert masivo)
+  // a la respuesta que espera el organizador.
+  const changes = diffRelevantFields(before, input);
+  if (changes.length > 0) {
+    notifyBuyers(
+      eventId,
+      result.value.title,
+      changes,
+      input.status,
+      input.startsAt,
+      input.venue,
+    ).catch((notifyErr) => console.error("[updateEvent] notifyBuyers falló:", notifyErr));
   }
 
   return result;

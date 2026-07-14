@@ -27,7 +27,7 @@ export function TextInput({ className = "", readonly, ...rest }: InputProps) {
     <input
       {...rest}
       readOnly={readonly}
-      className={`w-full rounded-lg border border-cart-line bg-cart-bg-elev-2 px-3 py-2.5 text-[14px] text-white placeholder:text-cart-ink-4 outline-none transition-colors focus:border-cart-accent/50 focus:bg-cart-bg-elev ${
+      className={`w-full rounded-lg border border-cart-line bg-cart-bg-elev-2 px-3 py-2.5 text-[14px] text-cart-ink placeholder:text-cart-ink-4 outline-none transition-colors focus:border-cart-accent/50 focus:bg-cart-bg-elev ${
         readonly ? "cursor-not-allowed text-cart-ink-3" : ""
       } ${className}`}
     />
@@ -43,7 +43,7 @@ export function TextArea({ className = "", rows = 3, ...rest }: TextAreaProps) {
     <textarea
       {...props}
       rows={rows}
-      className={`w-full resize-none rounded-lg border border-cart-line bg-cart-bg-elev-2 px-3 py-2.5 text-[14px] text-white placeholder:text-cart-ink-4 outline-none transition-colors focus:border-cart-accent/50 focus:bg-cart-bg-elev ${className}`}
+      className={`w-full resize-none rounded-lg border border-cart-line bg-cart-bg-elev-2 px-3 py-2.5 text-[14px] text-cart-ink placeholder:text-cart-ink-4 outline-none transition-colors focus:border-cart-accent/50 focus:bg-cart-bg-elev ${className}`}
     />
   );
 }

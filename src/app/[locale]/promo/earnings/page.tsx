@@ -148,11 +148,11 @@ export default function PromoEarningsPage() {
                   <h3 className="text-[14px] font-semibold tracking-[-0.01em]">{m.label}</h3>
                   <div className="flex items-center gap-2">
                     {m.subtotal > 0 && m.pending && (
-                      <span className="rounded-full bg-amber-400/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-amber-300">
+                      <span className="rounded-full bg-amber-400/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-amber-700">
                         Por cobrar
                       </span>
                     )}
-                    <span className="font-mono text-[14px] font-semibold tabular-nums text-white">
+                    <span className="font-mono text-[14px] font-semibold tabular-nums text-cart-ink">
                       {formatSoles(m.subtotal)}
                     </span>
                   </div>
@@ -201,7 +201,7 @@ function EarningRow({ e }: { e: PromoterEventEarning }) {
       {noCash ? (
         <div className="flex flex-col items-end gap-1">
           {e.totalMilestones > 0 && (
-            <span className="text-[12.5px] font-semibold tabular-nums text-white">
+            <span className="text-[12.5px] font-semibold tabular-nums text-cart-ink">
               {e.unlockedMilestones}/{e.totalMilestones} hitos
             </span>
           )}
@@ -260,14 +260,14 @@ function PayoutBadge({ status }: { status: "pending" | "paid" | "void" | "none" 
   }
   if (status === "pending") {
     return (
-      <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-400/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-amber-300">
+      <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-400/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-amber-700">
         Pendiente
       </span>
     );
   }
   if (status === "void") {
     return (
-      <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-cart-ink-3">
+      <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-cart-bg-elev-2 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-cart-ink-3">
         Anulado
       </span>
     );

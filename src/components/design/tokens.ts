@@ -1,13 +1,20 @@
 // Design tokens — Pasape (extraídos de pasape/project/screens.jsx)
+//
+// Los NEUTROS apuntan a las variables `--color-cart-*` (mismo valor dark por
+// defecto que antes, pero se vuelven CLAROS dentro del scope `.home-light`). Así
+// los forms de pago (Yape/tarjeta, estilos inline) heredan el tema de la
+// superficie sin reescribir cada componente: oscuros en pantallas oscuras,
+// claros en el checkout claro. Los colores de MARCA quedan fijos (funcionan en
+// ambos temas).
 export const C = {
-  bg: "#0A0A0F",
-  bg2: "#12121A",
-  bg3: "#1A1A26",
-  line: "rgba(255,255,255,0.08)",
-  line2: "rgba(255,255,255,0.14)",
-  text: "#FFFFFF",
-  dim: "rgba(255,255,255,0.55)",
-  dimmer: "rgba(255,255,255,0.32)",
+  bg: "var(--color-cart-bg)",
+  bg2: "var(--color-cart-bg-elev)",
+  bg3: "var(--color-cart-bg-elev-2)",
+  line: "var(--color-cart-line)",
+  line2: "var(--color-cart-line-strong)",
+  text: "var(--color-cart-ink)",
+  dim: "var(--color-cart-ink-3)",
+  dimmer: "var(--color-cart-ink-4)",
   purple: "#7C3AED",
   purpleSoft: "rgba(124,58,237,0.18)",
   purpleEdge: "rgba(124,58,237,0.45)",

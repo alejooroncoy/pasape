@@ -38,7 +38,7 @@ const cardVariants = {
 
 function TicketSkeleton() {
   return (
-    <div className="min-h-dvh bg-cart-bg text-white">
+    <div className="cart-dark-scope min-h-dvh bg-cart-bg text-white">
       <header className="sticky top-0 z-30 border-b border-cart-line bg-cart-bg/85 backdrop-blur-md">
         <div className="mx-auto flex max-w-[640px] items-center justify-between px-5 py-3">
           <div className="h-5 w-16 animate-pulse rounded bg-white/[0.06]" />
@@ -271,14 +271,14 @@ function TicketDetailInner({ id }: { id: string }) {
 
   if (isLoading || noSession) {
     return (
-      <div className="grid min-h-dvh place-items-center bg-cart-bg text-cart-ink-3">
+      <div className="cart-dark-scope grid min-h-dvh place-items-center bg-cart-bg text-cart-ink-3">
         <span className="text-[13px]">Cargando…</span>
       </div>
     );
   }
   if (error || !data) {
     return (
-      <div className="grid min-h-dvh place-items-center bg-cart-bg px-6 text-center text-cart-ink-2">
+      <div className="cart-dark-scope grid min-h-dvh place-items-center bg-cart-bg px-6 text-center text-cart-ink-2">
         <div>
           <p className="text-[15px]">No pudimos cargar tu entrada.</p>
           <button
@@ -304,7 +304,7 @@ function TicketDetailInner({ id }: { id: string }) {
       : "/tickets";
 
   return (
-    <div className="min-h-dvh bg-cart-bg text-white">
+    <div className="cart-dark-scope min-h-dvh bg-cart-bg text-white">
       {/* Top bar */}
       <header className="sticky top-0 z-30 border-b border-cart-line bg-cart-bg/85 backdrop-blur-md">
         <div className="mx-auto flex max-w-[640px] items-center justify-between px-5 py-3.5">

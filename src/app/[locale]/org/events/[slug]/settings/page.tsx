@@ -25,7 +25,7 @@ export default function OrgEventConfigPage({ params }: { params: Params }) {
           <h1 className="font-sans text-[22px] font-semibold tracking-[-0.02em]">Ajustes</h1>
           <p className="mt-1 text-[13px] text-cart-ink-3">
             Cómo funciona el evento. Para editar nombre, fecha, lugar, portada o tipos de entrada usa{" "}
-            <span className="font-medium text-white">Editar evento</span>.
+            <span className="font-medium text-cart-ink">Editar evento</span>.
           </p>
         </header>
 
@@ -78,7 +78,7 @@ export default function OrgEventConfigPage({ params }: { params: Params }) {
               </div>
               {ev?.status === "closed" ? (
                 <div className="flex flex-col items-start gap-2 lg:items-end">
-                  <div className="inline-flex items-center gap-1.5 rounded-full bg-white/8 px-3 py-1 text-[12px] font-semibold text-cart-ink-2">
+                  <div className="inline-flex items-center gap-1.5 rounded-full bg-cart-line px-3 py-1 text-[12px] font-semibold text-cart-ink-2">
                     <span className="size-1.5 rounded-full bg-cart-ink-2" />
                     Cerrado
                   </div>
@@ -88,7 +88,7 @@ export default function OrgEventConfigPage({ params }: { params: Params }) {
                       if (confirm("¿Reabrir el evento? Volverá a estar publicado y se reanudarán las ventas."))
                         update.mutate({ status: "published" });
                     }}
-                    className="rounded-full border border-cart-line bg-cart-bg-elev-2 px-4 py-2 text-[12.5px] font-semibold text-cart-ink-2 transition hover:border-cart-line-strong hover:text-white"
+                    className="rounded-full border border-cart-line bg-cart-bg-elev-2 px-4 py-2 text-[12.5px] font-semibold text-cart-ink-2 transition hover:border-cart-line-strong hover:text-cart-ink"
                   >
                     Reabrir evento
                   </button>
@@ -97,7 +97,7 @@ export default function OrgEventConfigPage({ params }: { params: Params }) {
                 <button
                   type="button"
                   onClick={() => setConfirmClose(true)}
-                  className="self-start rounded-full border border-cart-line bg-cart-bg-elev-2 px-4 py-2 text-[12.5px] font-semibold text-cart-ink-2 transition hover:border-cart-line-strong hover:text-white lg:self-auto"
+                  className="self-start rounded-full border border-cart-line bg-cart-bg-elev-2 px-4 py-2 text-[12.5px] font-semibold text-cart-ink-2 transition hover:border-cart-line-strong hover:text-cart-ink lg:self-auto"
                 >
                   Cerrar evento
                 </button>
@@ -110,14 +110,14 @@ export default function OrgEventConfigPage({ params }: { params: Params }) {
         <div className="rounded-2xl border border-red-500/30 bg-red-500/[0.04] p-4 lg:p-5">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <div className="text-[14.5px] font-semibold text-red-300">Cancelar evento</div>
+              <div className="text-[14.5px] font-semibold text-red-600">Cancelar evento</div>
               <div className="mt-1 text-[12.5px] leading-relaxed text-cart-ink-3">
                 El evento no va a ocurrir. Notificamos a los compradores e iniciamos reembolsos.
                 Esta acción no se puede deshacer.
               </div>
             </div>
             {ev?.status === "cancelled" ? (
-              <div className="inline-flex items-center gap-1.5 rounded-full bg-red-500/15 px-3 py-1 text-[12px] font-semibold text-red-300">
+              <div className="inline-flex items-center gap-1.5 rounded-full bg-red-500/15 px-3 py-1 text-[12px] font-semibold text-red-600">
                 <span className="size-1.5 rounded-full bg-red-400" />
                 Cancelado
               </div>
@@ -125,7 +125,7 @@ export default function OrgEventConfigPage({ params }: { params: Params }) {
               <button
                 type="button"
                 onClick={() => setConfirmCancel(true)}
-                className="self-start rounded-full border border-red-500/40 bg-red-500/10 px-4 py-2 text-[12.5px] font-semibold text-red-300 transition hover:bg-red-500/20 lg:self-auto"
+                className="self-start rounded-full border border-red-500/40 bg-red-500/10 px-4 py-2 text-[12.5px] font-semibold text-red-600 transition hover:bg-red-500/20 lg:self-auto"
               >
                 Cancelar evento
               </button>
@@ -268,7 +268,7 @@ function EditNumberRow({
               onSave(null);
               close();
             }}
-            className="rounded-full bg-cart-bg-elev-2 px-3 py-2 text-[12.5px] font-semibold text-cart-ink-2 ring-1 ring-cart-line-strong transition hover:text-white"
+            className="rounded-full bg-cart-bg-elev-2 px-3 py-2 text-[12.5px] font-semibold text-cart-ink-2 ring-1 ring-cart-line-strong transition hover:text-cart-ink"
           >
             Sin límite
           </button>
@@ -290,7 +290,7 @@ function EditNumberRow({
           type="button"
           onClick={openEditor}
           disabled={saving}
-          className="inline-flex items-center gap-1.5 font-mono text-[13.5px] font-medium text-white transition hover:text-cart-accent disabled:opacity-70"
+          className="inline-flex items-center gap-1.5 font-mono text-[13.5px] font-medium text-cart-ink transition hover:text-cart-accent disabled:opacity-70"
         >
           {display}
           {saving ? (
@@ -331,7 +331,7 @@ function EditNumberRow({
               exit={{ opacity: 0 }}
               onClick={close}
               aria-hidden
-              className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm"
+              className="fixed inset-0 z-[80] app-scrim"
             />
             <motion.div
               role="dialog"
@@ -343,7 +343,7 @@ function EditNumberRow({
               className="fixed inset-x-0 bottom-0 z-[81] mx-auto w-full max-w-[480px] rounded-t-[28px] border-t border-cart-line bg-cart-bg-elev p-5 shadow-[0_-20px_60px_-10px_rgba(0,0,0,0.7)]"
               style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 22px)" }}
             >
-              <div className="mx-auto mb-3 h-1 w-9 rounded-full bg-white/15" />
+              <div className="mx-auto mb-3 h-1 w-9 rounded-full bg-cart-ink/15" />
               {body}
             </motion.div>
           </div>
@@ -392,7 +392,7 @@ function ToggleRow({
           "relative h-7 w-[52px] shrink-0 rounded-full transition-colors duration-200 disabled:opacity-50 " +
           (localOn
             ? "bg-cart-accent shadow-[0_0_12px_var(--color-cart-accent-glow)]"
-            : "bg-white/10")
+            : "bg-cart-line-strong")
         }
       >
         <span
@@ -425,7 +425,7 @@ function ConfirmSheet({
         exit={{ opacity: 0 }}
         onClick={onCancel}
         aria-hidden
-        className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm"
+        className="fixed inset-0 z-[80] app-scrim"
       />
       <motion.div
         key="sh"
@@ -438,7 +438,7 @@ function ConfirmSheet({
         className="fixed inset-x-0 bottom-0 z-[81] mx-auto w-full max-w-[480px] rounded-t-[28px] border-t border-red-500/30 bg-cart-bg-elev p-5 shadow-[0_-20px_60px_-10px_rgba(0,0,0,0.7)]"
         style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 22px)" }}
       >
-        <div className="mx-auto mb-3 h-1 w-9 rounded-full bg-white/15" />
+        <div className="mx-auto mb-3 h-1 w-9 rounded-full bg-cart-ink/15" />
         <div className="text-[20px] font-semibold tracking-[-0.02em]">¿Cancelar el evento?</div>
         <p className="mt-1.5 text-[13.5px] leading-relaxed text-cart-ink-3">
           Vamos a notificar a todos los compradores y empezar los reembolsos.
@@ -484,7 +484,7 @@ function ConfirmCloseSheet({
         exit={{ opacity: 0 }}
         onClick={onCancel}
         aria-hidden
-        className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm"
+        className="fixed inset-0 z-[80] app-scrim"
       />
       <motion.div
         key="close-sh"
@@ -497,7 +497,7 @@ function ConfirmCloseSheet({
         className="fixed inset-x-0 bottom-0 z-[81] mx-auto w-full max-w-[480px] rounded-t-[28px] border-t border-cart-line-strong bg-cart-bg-elev p-5 shadow-[0_-20px_60px_-10px_rgba(0,0,0,0.7)]"
         style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 22px)" }}
       >
-        <div className="mx-auto mb-3 h-1 w-9 rounded-full bg-white/15" />
+        <div className="mx-auto mb-3 h-1 w-9 rounded-full bg-cart-ink/15" />
         <div className="text-[20px] font-semibold tracking-[-0.02em]">¿Cerrar el evento?</div>
         <p className="mt-1.5 text-[13.5px] leading-relaxed text-cart-ink-3">
           Las ventas se detienen y el evento queda archivado. Los compradores conservan
@@ -514,7 +514,7 @@ function ConfirmCloseSheet({
           <button
             type="button"
             onClick={onConfirm}
-            className="flex h-12 flex-1 items-center justify-center rounded-2xl border border-cart-line-strong bg-cart-bg-elev-2 text-[14px] font-semibold text-white"
+            className="flex h-12 flex-1 items-center justify-center rounded-2xl border border-cart-line-strong bg-cart-bg-elev-2 text-[14px] font-semibold text-cart-ink"
           >
             Sí, cerrar
           </button>

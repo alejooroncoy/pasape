@@ -12,6 +12,19 @@ export const useBrowseEvents = (category?: EventCategory | null) =>
       api.get<Event[]>(category ? `/api/events?category=${category}` : "/api/events"),
   });
 
+// Búsqueda del header contra el backend (ilike por título/lugar con índices
+// trigram). El debounce vive en el componente; aquí solo se consulta cuando el
+// término ya estabilizó y tiene 2+ caracteres.
+export const useSearchEvents = (query: string) => {
+  const q = query.trim();
+  return useQuery({
+    queryKey: ["events", "search", q],
+    queryFn: () => api.get<Event[]>(`/api/events?q=${encodeURIComponent(q)}`),
+    enabled: q.length >= 2,
+    staleTime: 30_000,
+  });
+};
+
 // orgSlugOverride: cuando el server ya resolvió la marca activa (prefetch híbrido),
 // se pasa para arrancar sin esperar a useCurrentUser (evita el waterfall en cliente).
 export const useMyEvents = (orgSlugOverride?: string | null) => {

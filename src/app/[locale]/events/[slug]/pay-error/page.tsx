@@ -41,12 +41,15 @@ export default function BuyerPayErrorPage({ params, searchParams }: Props) {
   const reasonKey = normalizeCheckoutErrorCode(sp?.reason ?? "unknown");
   const info = payErrorInfo(reasonKey);
 
-  const retry = () => router.push(`/events/${slug}/buy` as never);
+  // Tras un pago fallido la orden ya no sirve: se rearma desde cero. El selector
+  // vive en el detalle del evento (no en /buy), así que "intentar de nuevo"
+  // regresa ahí a elegir las entradas otra vez.
+  const retry = () => router.push(`/events/${slug}` as never);
   const retryWithoutPromo = () => {
     try {
       window.localStorage.removeItem(`pasape:promo:${slug}`);
     } catch {}
-    router.push(`/events/${slug}/buy` as never);
+    router.push(`/events/${slug}` as never);
   };
   const goEvent = () => router.push(`/events/${slug}` as never);
 

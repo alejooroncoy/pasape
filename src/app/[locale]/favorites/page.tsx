@@ -34,16 +34,16 @@ export default function FavoritesPage() {
   }
 
   return (
-    <div className="cart-grain relative min-h-screen bg-cart-bg font-sans text-white">
+    <div className="cart-grain relative min-h-screen bg-cart-bg font-sans text-cart-ink">
       <div
         aria-hidden
         className="pointer-events-none absolute left-1/2 top-[-120px] z-0 h-[560px] w-[900px] -translate-x-1/2 blur-[90px]"
-        style={{ background: "radial-gradient(closest-side, rgba(184,124,255,0.18), transparent 70%)" }}
+        style={{ background: "radial-gradient(closest-side, rgba(124,58,237,0.12), transparent 70%)" }}
       />
       <div className="relative z-[1] mx-auto w-full max-w-[640px] px-4 pb-[96px] pt-3 sm:px-6">
         <header className="py-3">
-          <p className="text-[12px] font-medium text-white/50">Favoritos</p>
-          <h1 className="text-[26px] font-bold leading-tight tracking-[-0.02em]">
+          <p className="text-[12px] font-medium text-cart-ink-3">Favoritos</p>
+          <h1 className="text-[26px] font-bold leading-tight tracking-[-0.02em] text-cart-ink">
             {items.length} guardado{items.length === 1 ? "" : "s"}
           </h1>
         </header>
@@ -51,7 +51,7 @@ export default function FavoritesPage() {
         {saved.isLoading && (
           <div className="flex flex-col gap-2.5 pt-3">
             {[0, 1, 2].map((i) => (
-              <div key={i} className="h-[92px] animate-pulse rounded-2xl bg-white/[0.04]" />
+              <div key={i} className="h-[92px] animate-pulse rounded-2xl bg-cart-bg-elev" />
             ))}
           </div>
         )}
@@ -77,7 +77,7 @@ function SavedRow({ ev, onClick }: { ev: SavedEvent; onClick: () => void }) {
     <motion.div
       whileTap={{ scale: 0.99 }}
       className={
-        "relative flex w-full items-stretch overflow-hidden rounded-2xl border border-cart-line bg-cart-bg-elev text-left transition hover:border-white/20 " +
+        "relative flex w-full items-stretch overflow-hidden rounded-2xl border border-cart-line bg-cart-bg-elev text-left transition hover:border-cart-line-strong " +
         (closed ? "opacity-70" : "")
       }
     >
@@ -98,9 +98,9 @@ function SavedRow({ ev, onClick }: { ev: SavedEvent; onClick: () => void }) {
           <p className="mb-0.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-cart-accent">
             {formatDate(ev.startsAt, "America/Lima")}
           </p>
-          <p className="truncate pr-8 text-[15px] font-semibold leading-tight">{ev.title}</p>
-          {ev.venue && <p className="mt-0.5 truncate text-[12px] text-white/55">{ev.venue}</p>}
-          {closed && <p className="mt-1 text-[11px] text-white/40">Finalizado</p>}
+          <p className="truncate pr-8 text-[15px] font-semibold leading-tight text-cart-ink">{ev.title}</p>
+          {ev.venue && <p className="mt-0.5 truncate text-[12px] text-cart-ink-3">{ev.venue}</p>}
+          {closed && <p className="mt-1 text-[11px] text-cart-ink-4">Finalizado</p>}
         </div>
       </button>
 
@@ -110,7 +110,7 @@ function SavedRow({ ev, onClick }: { ev: SavedEvent; onClick: () => void }) {
         onClick={toggle}
         disabled={isPending}
         aria-label="Quitar de favoritos"
-        className="absolute right-2.5 top-2.5 grid size-8 place-items-center rounded-full bg-black/40 text-cart-accent backdrop-blur transition hover:bg-black/60 disabled:opacity-50"
+        className="absolute right-2.5 top-2.5 grid size-8 place-items-center rounded-full border border-cart-line bg-cart-bg-elev-2/90 text-cart-accent backdrop-blur transition hover:bg-cart-accent-soft disabled:opacity-50"
       >
         <svg width="16" height="16" viewBox="0 0 18 18" fill="currentColor" aria-hidden>
           <path d="M9 15.5s-6-4-6-8a3 3 0 0 1 6-1 3 3 0 0 1 6 1c0 4-6 8-6 8Z" />
@@ -127,7 +127,7 @@ function EmptyState() {
         className="mb-5 grid size-20 place-items-center rounded-3xl"
         style={{ background: "linear-gradient(150deg, rgba(124,58,237,0.35), rgba(124,58,237,0.08))" }}
       >
-        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" className="text-white">
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" className="text-cart-accent">
           <path
             d="M12 20s-7-4.5-7-9.5A4 4 0 0 1 12 7a4 4 0 0 1 7 3.5c0 5-7 9.5-7 9.5Z"
             stroke="currentColor"
@@ -136,8 +136,8 @@ function EmptyState() {
           />
         </svg>
       </div>
-      <h2 className="text-[19px] font-bold tracking-[-0.01em]">Aún no guardas eventos</h2>
-      <p className="mt-1.5 max-w-[280px] text-[13.5px] text-white/55">
+      <h2 className="text-[19px] font-bold tracking-[-0.01em] text-cart-ink">Aún no guardas eventos</h2>
+      <p className="mt-1.5 max-w-[280px] text-[13.5px] text-cart-ink-3">
         Toca el corazón en un evento para guardarlo aquí y no perdértelo.
       </p>
       <Link

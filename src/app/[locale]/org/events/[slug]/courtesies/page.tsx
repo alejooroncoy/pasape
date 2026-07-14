@@ -285,7 +285,7 @@ function CourtesyForm({ slug, ticketTypes }: { slug: string; ticketTypes: Ticket
                 type="button"
                 onClick={() => setQty(Math.max(1, effectiveQty - 1))}
                 disabled={effectiveQty <= 1}
-                className="grid size-8 place-items-center rounded-full text-cart-ink-2 transition hover:text-white disabled:opacity-30"
+                className="grid size-8 place-items-center rounded-full text-cart-ink-2 transition hover:text-cart-ink disabled:opacity-30"
                 aria-label="Menos"
               >
                 −
@@ -295,7 +295,7 @@ function CourtesyForm({ slug, ticketTypes }: { slug: string; ticketTypes: Ticket
                 type="button"
                 onClick={() => setQty(Math.min(maxQty, effectiveQty + 1))}
                 disabled={effectiveQty >= maxQty}
-                className="grid size-8 place-items-center rounded-full text-cart-ink-2 transition hover:text-white disabled:opacity-30"
+                className="grid size-8 place-items-center rounded-full text-cart-ink-2 transition hover:text-cart-ink disabled:opacity-30"
                 aria-label="Más"
               >
                 +
@@ -316,7 +316,7 @@ function CourtesyForm({ slug, ticketTypes }: { slug: string; ticketTypes: Ticket
             placeholder="Nombre y apellido"
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
-            className="w-full rounded-xl border border-cart-line bg-cart-bg-elev-2 px-3 py-2.5 text-[13.5px] text-white placeholder-cart-ink-4 outline-none transition focus:border-cart-accent"
+            className="w-full rounded-xl border border-cart-line bg-cart-bg-elev-2 px-3 py-2.5 text-[13.5px] text-cart-ink placeholder-cart-ink-4 outline-none transition focus:border-cart-accent"
           />
           <PhoneField value={phone} onChange={setPhone} />
           <input
@@ -324,7 +324,7 @@ function CourtesyForm({ slug, ticketTypes }: { slug: string; ticketTypes: Ticket
             placeholder="Correo (opcional si pones WhatsApp)"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-xl border border-cart-line bg-cart-bg-elev-2 px-3 py-2.5 text-[13.5px] text-white placeholder-cart-ink-4 outline-none transition focus:border-cart-accent"
+            className="w-full rounded-xl border border-cart-line bg-cart-bg-elev-2 px-3 py-2.5 text-[13.5px] text-cart-ink placeholder-cart-ink-4 outline-none transition focus:border-cart-accent"
           />
         </div>
         <p className="mt-2 text-[11.5px] text-cart-ink-4">

@@ -145,7 +145,7 @@ export default function PromoHomePage() {
                   "shrink-0 rounded-2xl px-3.5 py-2 text-left transition " +
                   (active
                     ? "bg-cart-accent text-white shadow-[0_8px_18px_-8px_var(--color-cart-accent-glow-strong)]"
-                    : "border border-cart-line bg-cart-bg-elev text-cart-ink-2 hover:border-cart-line-strong hover:text-white")
+                    : "border border-cart-line bg-cart-bg-elev text-cart-ink-2 hover:border-cart-line-strong hover:text-cart-ink")
                 }
               >
                 <div className="flex items-center gap-2">
@@ -183,7 +183,7 @@ export default function PromoHomePage() {
         <button
           type="button"
           onClick={() => setShowPast(true)}
-          className="mt-6 w-full rounded-2xl border border-dashed border-cart-line bg-transparent px-4 py-3 text-[12.5px] font-medium text-cart-ink-3 transition hover:border-cart-line-strong hover:text-white"
+          className="mt-6 w-full rounded-2xl border border-dashed border-cart-line bg-transparent px-4 py-3 text-[12.5px] font-medium text-cart-ink-3 transition hover:border-cart-line-strong hover:text-cart-ink"
         >
           Ver eventos pasados ({past.length})
         </button>
@@ -192,7 +192,7 @@ export default function PromoHomePage() {
         <button
           type="button"
           onClick={() => setShowPast(false)}
-          className="mt-6 w-full rounded-2xl border border-dashed border-cart-line bg-transparent px-4 py-3 text-[12.5px] font-medium text-cart-ink-3 transition hover:border-cart-line-strong hover:text-white"
+          className="mt-6 w-full rounded-2xl border border-dashed border-cart-line bg-transparent px-4 py-3 text-[12.5px] font-medium text-cart-ink-3 transition hover:border-cart-line-strong hover:text-cart-ink"
         >
           Ocultar pasados
         </button>
@@ -268,7 +268,7 @@ function HeroCard({ link }: { link: PromoterLink }) {
 
   return (
     <section
-      className="relative overflow-hidden rounded-3xl border border-cart-line-strong p-5 lg:p-6"
+      className="cart-dark-scope relative overflow-hidden rounded-3xl border border-cart-line-strong p-5 lg:p-6"
       style={{
         background:
           "linear-gradient(180deg, rgba(124,58,237,0.22), rgba(20,12,40,0.6))",
@@ -279,7 +279,7 @@ function HeroCard({ link }: { link: PromoterLink }) {
       <div className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-cart-ink-3">
         Vendiendo
       </div>
-      <h2 className="mt-1 font-sans text-[22px] font-semibold leading-tight tracking-[-0.02em] lg:text-[26px]">
+      <h2 className="mt-1 font-sans text-[22px] font-semibold leading-tight tracking-[-0.02em] text-cart-ink lg:text-[26px]">
         {link.eventTitle}
       </h2>
       <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[12.5px] text-cart-ink-2">
@@ -406,7 +406,7 @@ function PaySection({
             </svg>
           </span>
           <div>
-            <div className="text-[14px] font-semibold text-white">
+            <div className="text-[14px] font-semibold text-cart-ink">
               El organizador aún está configurando este evento
             </div>
             <p className="mt-0.5 text-[12.5px] leading-snug text-cart-ink-3">
@@ -444,7 +444,7 @@ function PaySection({
             {pct}%
           </div>
           <div className="text-[13px] leading-snug text-cart-ink-2">
-            de comisión por <b className="text-white">cada entrada</b> que vendas con tu link.
+            de comisión por <b className="text-cart-ink">cada entrada</b> que vendas con tu link.
           </div>
         </div>
       )}
@@ -541,7 +541,7 @@ function MilestoneCard({
         >
           {tag}
         </span>
-        {reached && <span className="text-[13px] font-semibold text-emerald-300">✓ Logrado</span>}
+        {reached && <span className="text-[13px] font-semibold text-emerald-600">✓ Logrado</span>}
       </div>
       <div className="mt-2 flex items-center gap-1.5 font-sans text-[17px] font-semibold tracking-[-0.01em]">
         {icon && <span aria-hidden>{icon}</span>}
@@ -552,7 +552,7 @@ function MilestoneCard({
       </div>
       {!reached && (
         <div className="mt-3">
-          <div className="h-1.5 overflow-hidden rounded-full bg-white/5">
+          <div className="h-1.5 overflow-hidden rounded-full bg-cart-line-strong">
             <div
               className="h-full rounded-full transition-[width] duration-500"
               style={{ width: `${pct}%`, background: accent }}

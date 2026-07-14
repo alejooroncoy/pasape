@@ -6,7 +6,6 @@ import { shortEventDate } from "@/lib/_shared/format";
 import { useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import { Link } from "@/i18n/navigation";
-import { OrgShell } from "@/app/[locale]/org/_shell/OrgShell";
 import { PhoneField } from "@/components/design/PhoneField";
 import { useOrgInvites } from "@/lib/identity/organizations/hooks/useOrgInvites";
 import { useCreateInvite } from "@/lib/identity/organizations/hooks/useCreateInvite";
@@ -47,9 +46,9 @@ function OrgTeamPageInner() {
   const promCount = promoters.data?.length ?? 0;
 
   return (
-    <OrgShell>
+    <>
       <div className="mb-5 sm:mb-6 lg:mb-8">
-        <h1 className="text-[34px] font-bold leading-[1.05] tracking-[-0.03em] text-white sm:text-[26px] sm:font-semibold sm:tracking-[-0.02em] lg:text-[30px]">
+        <h1 className="text-[34px] font-bold leading-[1.05] tracking-[-0.03em] text-cart-ink sm:text-[26px] sm:font-semibold sm:tracking-[-0.02em] lg:text-[30px]">
           Tu equipo
         </h1>
         <p className="mt-1.5 text-[15px] leading-snug text-cart-ink-3 sm:mt-1 sm:text-[13px]">
@@ -68,7 +67,7 @@ function OrgTeamPageInner() {
       </div>
 
       {tab === "coorg" ? <CoorgTab /> : <PromotersTab />}
-    </OrgShell>
+    </>
   );
 }
 
@@ -89,7 +88,7 @@ function TabButton({
       onClick={onClick}
       className={
         "relative inline-flex items-center gap-2 px-4 py-3 text-[13.5px] font-medium transition " +
-        (active ? "text-white" : "text-cart-ink-3 hover:text-white")
+        (active ? "text-cart-ink" : "text-cart-ink-3 hover:text-cart-ink")
       }
     >
       {children}
@@ -97,7 +96,7 @@ function TabButton({
         <span
           className={
             "rounded-full px-1.5 py-px text-[10.5px] font-semibold " +
-            (active ? "bg-cart-accent-soft text-cart-accent" : "bg-white/5 text-cart-ink-3")
+            (active ? "bg-cart-accent-soft text-cart-accent" : "bg-cart-bg-elev-2 text-cart-ink-3")
           }
         >
           {count}
@@ -173,8 +172,8 @@ function CoorgTab() {
               className={
                 "inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[12.5px] font-medium transition " +
                 (active
-                  ? "bg-cart-accent-soft text-white shadow-[0_0_0_1px_var(--color-cart-accent)_inset]"
-                  : "bg-cart-bg-elev text-cart-ink-2 hover:text-white")
+                  ? "bg-cart-accent-soft text-cart-ink shadow-[0_0_0_1px_var(--color-cart-accent)_inset]"
+                  : "bg-cart-bg-elev text-cart-ink-2 hover:text-cart-ink")
               }
             >
               {f.label}
@@ -501,7 +500,7 @@ function PromoterRow({
   return (
     <Link
       href={`/org/team/${promoter.id}` as never}
-      className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-3 px-4 py-3 transition hover:bg-white/[0.02] lg:px-5"
+      className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-3 px-4 py-3 transition hover:bg-cart-bg-elev-2 lg:px-5"
     >
       <div className="grid size-10 shrink-0 place-items-center rounded-full bg-cart-accent-soft text-[14px] font-semibold text-cart-accent">
         {(promoter.name[0] ?? "?").toUpperCase()}
@@ -531,7 +530,7 @@ function PromoterRow({
             e.stopPropagation();
             onEdit();
           }}
-          className="grid size-9 place-items-center rounded-full text-cart-ink-3 transition hover:bg-white/5 hover:text-white"
+          className="grid size-9 place-items-center rounded-full text-cart-ink-3 transition hover:bg-cart-bg-elev-2 hover:text-cart-ink"
           aria-label="Editar"
         >
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -545,7 +544,7 @@ function PromoterRow({
             e.stopPropagation();
             onRemove();
           }}
-          className="grid size-9 place-items-center rounded-full text-cart-ink-3 transition hover:bg-red-500/10 hover:text-red-300"
+          className="grid size-9 place-items-center rounded-full text-cart-ink-3 transition hover:bg-red-500/10 hover:text-red-600"
           aria-label="Quitar"
         >
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -637,7 +636,7 @@ function BrandSchemeCard() {
   return (
     <section className="rounded-2xl border border-cart-line bg-cart-bg-elev p-4 lg:p-5">
       <div className="mb-4">
-        <h2 className="text-[15px] font-semibold tracking-[-0.01em] text-white">
+        <h2 className="text-[15px] font-semibold tracking-[-0.01em] text-cart-ink">
           Reglas para todos tus promotores
         </h2>
         <p className="mt-1 text-[12.5px] leading-snug text-cart-ink-3">
@@ -777,7 +776,7 @@ function IconPicker({ value, onChange }: { value: string; onChange: (v: string) 
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="grid size-10 place-items-center rounded-xl bg-cart-bg-elev text-white"
+        className="grid size-10 place-items-center rounded-xl bg-cart-bg-elev text-cart-ink"
         aria-label="Elegir icono"
       >
         <RewardIcon name={value} size={20} />
@@ -793,8 +792,8 @@ function IconPicker({ value, onChange }: { value: string; onChange: (v: string) 
                 setOpen(false);
               }}
               className={
-                "grid size-9 place-items-center rounded-lg text-white transition hover:bg-white/10 " +
-                (icon === value ? "bg-white/10" : "")
+                "grid size-9 place-items-center rounded-lg text-cart-ink transition hover:bg-cart-bg-elev " +
+                (icon === value ? "bg-cart-bg-elev" : "")
               }
               aria-label={icon}
             >
@@ -812,7 +811,7 @@ function RemoveBtn({ onClick }: { onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      className="grid size-9 shrink-0 place-items-center rounded-full text-cart-ink-3 transition hover:bg-red-500/10 hover:text-red-300"
+      className="grid size-9 shrink-0 place-items-center rounded-full text-cart-ink-3 transition hover:bg-red-500/10 hover:text-red-600"
       aria-label="Quitar"
     >
       <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
@@ -827,7 +826,7 @@ function AddRowBtn({ label, onClick }: { label: string; onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      className="mt-2 inline-flex items-center gap-1 rounded-full bg-white/5 px-3 py-1.5 text-[12px] font-semibold text-cart-ink-2 transition hover:bg-white/10 hover:text-white"
+      className="mt-2 inline-flex items-center gap-1 rounded-full bg-cart-bg-elev-2 px-3 py-1.5 text-[12px] font-semibold text-cart-ink-2 transition hover:bg-cart-bg-elev hover:text-cart-ink"
     >
       <PlusIcon /> {label}
     </button>
@@ -851,7 +850,7 @@ function Section({
       <header className="flex items-center justify-between border-b border-cart-line px-4 py-3 lg:px-5">
         <h2 className="text-[14px] font-semibold tracking-[-0.01em]">{title}</h2>
         {typeof count === "number" && (
-          <span className="rounded-full bg-white/5 px-2 py-0.5 text-[10.5px] font-semibold text-cart-ink-3">
+          <span className="rounded-full bg-cart-bg-elev-2 px-2 py-0.5 text-[10.5px] font-semibold text-cart-ink-3">
             {count}
           </span>
         )}
@@ -894,7 +893,7 @@ function PersonRow({
         <div className="flex items-center gap-1.5">
           <span className="truncate text-[14px] font-semibold tracking-[-0.01em]">{name}</span>
           {grantedVia && grantedVia !== "organization" && (
-            <span className="rounded-full bg-white/5 px-1.5 py-px text-[9.5px] font-semibold tracking-[0.08em] text-cart-ink-3">
+            <span className="rounded-full bg-cart-bg-elev-2 px-1.5 py-px text-[9.5px] font-semibold tracking-[0.08em] text-cart-ink-3">
               {grantedVia === "portfolio" ? "PORTFOLIO" : "RAZÓN SOCIAL"}
             </span>
           )}
@@ -905,7 +904,7 @@ function PersonRow({
         className={
           "rounded-full px-2.5 py-1 text-[11.5px] font-semibold " +
           (pending
-            ? "bg-amber-400/15 text-amber-300"
+            ? "bg-amber-400/15 text-amber-700"
             : "bg-cart-accent-soft text-cart-accent")
         }
       >
@@ -947,7 +946,7 @@ function FieldInput({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         className={
-          "rounded-xl border border-cart-line bg-cart-bg-elev px-3 py-2.5 text-[14px] text-white outline-none transition focus:border-cart-line-strong placeholder:text-cart-ink-4 " +
+          "rounded-xl border border-cart-line bg-cart-bg-elev px-3 py-2.5 text-[14px] text-cart-ink outline-none transition focus:border-cart-line-strong placeholder:text-cart-ink-4 " +
           (mono ? "font-mono text-[13.5px]" : "")
         }
       />
@@ -972,7 +971,7 @@ function Pill({
         "rounded-xl px-3 py-2.5 text-[13px] font-semibold transition " +
         (active
           ? "bg-cart-accent text-white shadow-[0_8px_20px_-6px_var(--color-cart-accent-glow)]"
-          : "bg-cart-bg-elev text-cart-ink-2 hover:text-white")
+          : "bg-cart-bg-elev text-cart-ink-2 hover:text-cart-ink")
       }
     >
       {label}
@@ -1081,7 +1080,7 @@ function Sheet({
           exit={{ opacity: 0 }}
           onClick={onClose}
           aria-hidden
-          className="fixed inset-0 z-80 bg-black/60 backdrop-blur-sm"
+          className="fixed inset-0 z-80 app-scrim"
         />
         <motion.div
           key="sh-desktop"
@@ -1107,7 +1106,7 @@ function Sheet({
                 type="button"
                 onClick={onClose}
                 aria-label="Cerrar"
-                className="grid size-8 place-items-center rounded-full text-cart-ink-3 transition hover:bg-white/5 hover:text-white"
+                className="grid size-8 place-items-center rounded-full text-cart-ink-3 transition hover:bg-cart-bg-elev-2 hover:text-cart-ink"
               >
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                   <path
@@ -1136,7 +1135,7 @@ function Sheet({
         exit={{ opacity: 0 }}
         onClick={onClose}
         aria-hidden
-        className="fixed inset-0 z-80 bg-black/60 backdrop-blur-sm"
+        className="fixed inset-0 z-80 app-scrim"
       />
       <motion.div
         key="sh-mobile"
@@ -1158,7 +1157,7 @@ function Sheet({
         style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 22px)" }}
       >
         <div className="sticky top-0 z-10 -mx-px flex flex-col bg-cart-bg-elev/95 px-5 pt-3 backdrop-blur">
-          <div className="mx-auto mb-3 h-1 w-9 rounded-full bg-white/15" />
+          <div className="mx-auto mb-3 h-1 w-9 rounded-full bg-cart-line-strong" />
           <div className="mb-4 flex items-center justify-between">
             <h3 className="font-sans text-[20px] font-semibold tracking-[-0.02em]">{title}</h3>
             <button

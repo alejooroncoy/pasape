@@ -42,7 +42,7 @@ export function PromoterUserPill({ compact = false }: { compact?: boolean } = {}
     return (
       <Link
         href={"/org/login" as never}
-        className="flex items-center justify-center gap-2 rounded-2xl border border-cart-line bg-cart-bg-elev px-3 py-2.5 text-[13px] font-medium text-cart-ink-2 transition-colors hover:border-cart-accent hover:text-white"
+        className="flex items-center justify-center gap-2 rounded-2xl border border-cart-line bg-cart-bg-elev px-3 py-2.5 text-[13px] font-medium text-cart-ink-2 transition-colors hover:border-cart-accent hover:text-cart-ink"
       >
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
           <path
@@ -117,7 +117,7 @@ export function PromoterUserPill({ compact = false }: { compact?: boolean } = {}
             </span>
           )}
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-[13px] font-semibold text-white">
+            <span className="block truncate text-[13px] font-semibold text-cart-ink">
               {displayName}
             </span>
             <span className="block truncate text-[11px] text-cart-ink-3">
@@ -130,7 +130,7 @@ export function PromoterUserPill({ compact = false }: { compact?: boolean } = {}
             viewBox="0 0 12 12"
             fill="none"
             aria-hidden
-            className={`flex-shrink-0 text-cart-ink-3 transition-transform duration-150 group-hover:text-white ${
+            className={`flex-shrink-0 text-cart-ink-3 transition-transform duration-150 group-hover:text-cart-ink ${
               open ? "rotate-180" : ""
             }`}
           >
@@ -165,7 +165,7 @@ export function PromoterUserPill({ compact = false }: { compact?: boolean } = {}
               <div className="text-[11px] font-medium uppercase tracking-wider text-cart-ink-4">
                 Conectado como
               </div>
-              <div className="mt-1 truncate text-[13px] font-semibold text-white">
+              <div className="mt-1 truncate text-[13px] font-semibold text-cart-ink">
                 {displayName}
               </div>
               {user.email && (
@@ -244,8 +244,8 @@ function MenuItem({
 }) {
   const cls =
     tone === "danger"
-      ? "text-rose-300 hover:bg-rose-500/10 hover:text-rose-200"
-      : "text-cart-ink-2 hover:bg-cart-bg-elev hover:text-white";
+      ? "text-rose-600 hover:bg-rose-500/10 hover:text-rose-700"
+      : "text-cart-ink-2 hover:bg-cart-bg-elev hover:text-cart-ink";
   return (
     <button
       type="button"

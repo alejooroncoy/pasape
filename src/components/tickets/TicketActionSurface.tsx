@@ -71,7 +71,7 @@ export function TicketActionSurface({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 backdrop-blur-sm px-5"
+            className="fixed inset-0 z-[80] flex items-center justify-center app-scrim px-5"
           >
             <motion.div
               initial={{ opacity: 0, y: 8, scale: 0.98 }}
@@ -102,7 +102,7 @@ export function TicketActionSurface({
             exit={{ opacity: 0 }}
             onClick={onClose}
             aria-hidden
-            className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm"
+            className="fixed inset-0 z-[80] app-scrim"
           />
           <motion.div
             role="dialog"

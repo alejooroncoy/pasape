@@ -78,7 +78,7 @@ export function UserTabbar() {
                 transition={{ type: "spring", stiffness: 500, damping: 26 }}
                 className={
                   "relative grid size-[22px] place-items-center transition-colors " +
-                  (isOn ? "text-cart-accent" : "text-cart-ink-3 group-hover:text-white")
+                  (isOn ? "text-cart-accent" : "text-cart-ink-3 group-hover:text-cart-ink")
                 }
               >
                 <Icon />

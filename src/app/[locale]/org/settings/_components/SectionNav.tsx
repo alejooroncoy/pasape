@@ -66,7 +66,7 @@ export function SectionNav({ sections }: Props) {
                 key={s.id}
                 type="button"
                 onClick={() => onJump(s.id)}
-                className="relative rounded-lg px-3 py-2 text-left text-[13.5px] font-medium text-cart-ink-2 transition-colors hover:text-white"
+                className="relative rounded-lg px-3 py-2 text-left text-[13.5px] font-medium text-cart-ink-2 transition-colors hover:text-cart-ink"
               >
                 {isActive && (
                   <motion.span
@@ -75,7 +75,7 @@ export function SectionNav({ sections }: Props) {
                     transition={{ type: "spring", stiffness: 460, damping: 36 }}
                   />
                 )}
-                <span className={`relative ${isActive ? "text-white" : ""}`}>{s.label}</span>
+                <span className={`relative ${isActive ? "text-cart-ink" : ""}`}>{s.label}</span>
               </button>
             );
           })}
@@ -99,7 +99,7 @@ export function SectionNav({ sections }: Props) {
                 type="button"
                 onClick={() => onJump(s.id)}
                 className={`relative flex-shrink-0 rounded-full px-3.5 py-1.5 text-[12.5px] font-medium transition-colors ${
-                  isActive ? "text-white" : "text-cart-ink-3 hover:text-white"
+                  isActive ? "text-cart-ink" : "text-cart-ink-3 hover:text-cart-ink"
                 }`}
               >
                 {isActive && (

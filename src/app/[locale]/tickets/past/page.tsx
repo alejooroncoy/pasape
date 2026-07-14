@@ -47,7 +47,7 @@ export default function BuyerTicketsPastPage() {
   }, [tickets.data]);
 
   return (
-    <div className="cart-grain relative min-h-screen bg-cart-bg font-sans text-white">
+    <div className="cart-dark-scope cart-grain relative min-h-screen bg-cart-bg font-sans text-white">
       <div
         aria-hidden
         className="pointer-events-none absolute left-1/2 top-[-120px] z-0 h-[520px] w-[900px] -translate-x-1/2 blur-[90px]"
