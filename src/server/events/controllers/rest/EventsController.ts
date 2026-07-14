@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { headers } from "next/headers";
-import { unstable_cache } from "next/cache";
+import { unstable_cache, updateTag } from "next/cache";
 import { err, ok, type Result } from "@/server/_shared/result";
 import { getAuthContext, resolveActiveOrgSlug } from "@/server/_shared/AuthContext";
 import { supabaseEventRepository as repo } from "../../infrastructure/repositories/SupabaseEventRepository";
@@ -265,6 +265,9 @@ export const EventsController = {
     if (!guard.ok) return err(guard.error);
     const result = await repo.publish(guard.value.event.id, guard.value.event.organizationId);
     if (!result.ok) return result;
+    // Publicar cambia el listado público del home → invalidar su cache ISR
+    // al instante (antes solo se limpiaba al cumplirse los 60s de revalidate).
+    updateTag("events:browse");
     // Solo notificar si ESTA llamada causó la transición real (ver
     // SupabaseEventRepository.publish) — evita duplicar el correo interno de
     // revisión si dos requests concurrentes (doble clic, retry) llegan aquí.
@@ -293,13 +296,17 @@ export const EventsController = {
     if (!guard.ok) return err(guard.error);
     const parsed = updateSchema.safeParse(input);
     if (!parsed.success) return err(parsed.error.issues[0]?.message ?? "invalid_input");
-    return updateEvent(
+    const result = await updateEvent(
       { repo },
       guard.value.event.id,
       guard.value.event.organizationId,
       parsed.data,
       guard.value.event,
     );
+    // Editar / despublicar / cerrar / reabrir cambia lo que ve el home →
+    // invalidar el cache ISR del listado al instante.
+    if (result.ok) updateTag("events:browse");
+    return result;
   },
 
   async doorLink(slug: string): Promise<Result<DoorLink>> {
