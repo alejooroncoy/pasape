@@ -20,7 +20,7 @@
 
 import * as Dialog from "@radix-ui/react-dialog";
 import { AnimatePresence, motion, useDragControls } from "motion/react";
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 type Props = {
   open: boolean;
@@ -152,7 +152,11 @@ export function Sheet({
                           borderTopRightRadius: 26,
                         }
                   }
-                  exit={{ y: "100%" }}
+                  // Salida con tween corto y determinista: un spring deja la hoja
+                  // "colgando" (se desliza y recién desmonta cuando el resorte
+                  // asienta), así que al cerrar baja y desaparece limpio, en sync
+                  // con el fade del velo (0.2s). La entrada/gestos siguen con spring.
+                  exit={{ y: "100%", transition: { type: "tween", duration: 0.22, ease: [0.32, 0, 0.67, 0] } }}
                   transition={{ type: "spring", damping: 34, stiffness: 340, mass: 0.9 }}
                   drag={!isDesktop && !expanded ? "y" : false}
                   dragControls={dragControls}
@@ -169,13 +173,9 @@ export function Sheet({
                       onExpandComplete?.();
                     }
                   }}
-                  // El maxWidth SOLO aplica al modal de desktop (lg): en móvil la
-                  // hoja es un bottom-sheet a ancho completo (borde a borde), tanto
-                  // normal como al crecer a pantalla completa. `--sheet-mw` alimenta
-                  // el cap de desktop vía Tailwind arbitrario.
-                  style={{ "--sheet-mw": `${maxWidth}px` } as CSSProperties}
+                  style={{ maxWidth }}
                   className={
-                    "pointer-events-auto flex w-full flex-col border-cart-line bg-cart-bg-elev text-cart-ink lg:max-w-[var(--sheet-mw)] " +
+                    "pointer-events-auto flex w-full flex-col border-cart-line bg-cart-bg-elev text-cart-ink " +
                     (growFull
                       ? "max-h-none border-t "
                       : "max-h-[92vh] rounded-t-[26px] border-t shadow-[0_-16px_50px_-18px_rgba(20,10,60,0.28)] lg:rounded-[26px] lg:border lg:shadow-[0_28px_70px_-20px_rgba(20,10,60,0.4)] ") +
