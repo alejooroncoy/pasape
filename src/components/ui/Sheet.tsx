@@ -121,7 +121,10 @@ export function Sheet({
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                transition={{ duration: 0.28, ease: [0.4, 0, 0.2, 1] }}
+                // Mismo tiempo/easing que la hoja: velo y hoja salen en bloque
+                // (si el velo se va antes, la hoja queda deslizándose sola y se
+                // ve "entrecortado").
+                transition={{ duration: 0.3, ease: [0.42, 0, 0.58, 1] }}
                 className="home-light fixed inset-0 z-[90] app-scrim"
               />
             </Dialog.Overlay>
@@ -139,25 +142,34 @@ export function Sheet({
               <Dialog.Content asChild forceMount>
                 <motion.div
                   ref={contentRef}
-                  initial={{ y: "100%" }}
+                  // Móvil = bottom-sheet: entra/sale deslizando en Y. Desktop =
+                  // modal centrado: entra/sale con opacity + scale (fade), NO con
+                  // el slide vertical largo — ese viaje se veía entrecortado.
+                  initial={isDesktop ? { opacity: 0, scale: 0.97 } : { y: "100%" }}
                   animate={
                     growFull
                       ? { y: 0, height: grownH ?? undefined, borderTopLeftRadius: 0, borderTopRightRadius: 0 }
-                      : {
-                          y: 0,
-                          // Si veníamos de expandida, animamos el alto de vuelta a
-                          // "auto" (encoge suave); si no, no controlamos el alto.
-                          height: grownH === "auto" ? "auto" : undefined,
-                          borderTopLeftRadius: 26,
-                          borderTopRightRadius: 26,
-                        }
+                      : isDesktop
+                        ? { opacity: 1, scale: 1, borderTopLeftRadius: 26, borderTopRightRadius: 26 }
+                        : {
+                            y: 0,
+                            // Si veníamos de expandida, animamos el alto de vuelta a
+                            // "auto" (encoge suave); si no, no controlamos el alto.
+                            height: grownH === "auto" ? "auto" : undefined,
+                            borderTopLeftRadius: 26,
+                            borderTopRightRadius: 26,
+                          }
                   }
-                  // Salida con tween determinista (no spring, que deja la hoja
-                  // "colgando" y desmonta de golpe). Easing que desacelera al final
-                  // (curva estándar) → baja suave y se asienta, en sync con el fade
-                  // del velo. La entrada y los gestos siguen con spring.
-                  exit={{ y: "100%", transition: { type: "tween", duration: 0.32, ease: [0.4, 0, 0.2, 1] } }}
-                  transition={{ type: "spring", damping: 34, stiffness: 340, mass: 0.9 }}
+                  exit={
+                    isDesktop
+                      ? { opacity: 0, scale: 0.97, transition: { duration: 0.18, ease: [0.4, 0, 1, 1] } }
+                      : { y: "100%", transition: { type: "tween", duration: 0.3, ease: [0.42, 0, 0.58, 1] } }
+                  }
+                  transition={
+                    isDesktop
+                      ? { duration: 0.22, ease: [0.16, 1, 0.3, 1] }
+                      : { type: "spring", damping: 34, stiffness: 340, mass: 0.9 }
+                  }
                   drag={!isDesktop && !expanded ? "y" : false}
                   dragControls={dragControls}
                   dragListener={false}
@@ -173,7 +185,9 @@ export function Sheet({
                       onExpandComplete?.();
                     }
                   }}
-                  style={{ maxWidth }}
+                  // will-change: la hoja va a su propia capa GPU, así el slide/fade
+                  // no repinta el contenido (evita el stutter/"entrecortado").
+                  style={{ maxWidth, willChange: "transform, opacity" }}
                   className={
                     "pointer-events-auto flex w-full flex-col border-cart-line bg-cart-bg-elev text-cart-ink " +
                     (growFull
