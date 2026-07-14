@@ -2,7 +2,6 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { OrgShell } from "@/app/[locale]/org/_shell/OrgShell";
 import { Link, useRouter } from "@/i18n/navigation";
 import { getEventBackTarget, type EventBackTarget } from "@/lib/_shared/eventBackTarget";
 import { useEvent } from "@/lib/events/hooks/useEvents";
@@ -10,6 +9,15 @@ import { eventStatusLabel } from "@/lib/events/eventStatusDisplay";
 import type { EventStatus } from "@/server/events/domain/Event";
 import { ShareEventDialog } from "@/components/ui/ShareEventDialog";
 import { EventComposer } from "@/app/[locale]/org/events/_components/EventComposer";
+import { usePanelPromotersVisible } from "@/lib/events/hooks/usePanelPromotersVisible";
+import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
+import {
+  getComposerModePreference,
+  setComposerModePreference,
+  type ComposerMode,
+} from "@/lib/events/composerModePreference";
+import { QuickEditForm } from "./QuickEditForm";
+import type { Promo, TicketType } from "@/server/events/domain/Event";
 
 export type EventTab = "panel" | "team" | "promoters" | "courtesies" | "settings";
 
@@ -99,9 +107,23 @@ export function EventShell({
   const event = useEvent(slug);
   const ev = event.data?.event;
   const ticketTypes = event.data?.ticketTypes ?? [];
+  const promos = event.data?.promos ?? [];
   const router = useRouter();
+  const { visible: promotersVisible } = usePanelPromotersVisible();
+  const visibleTabs = TABS.filter((t) => t.key !== "promoters" || promotersVisible);
   const [shareOpen, setShareOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+
+  // El edit rápido solo aplica a eventos con un único tipo de entrada general
+  // (lo que produce quick-create) — un box o varios tipos de entrada no caben
+  // en ese formulario reducido, así que ahí siempre se fuerza el completo.
+  const { data: me } = useCurrentUser();
+  const organizerType = me?.user?.organizerType ?? null;
+  const canQuickEdit = ticketTypes.length === 1 && ticketTypes[0].kind === "general";
+  const [editMode, setEditMode] = useState<ComposerMode>("full");
+  useEffect(() => {
+    setEditMode(canQuickEdit ? getComposerModePreference(organizerType) : "full");
+  }, [canQuickEdit, organizerType]);
   // Origen real (home vs eventos). Default en SSR; se ajusta al montar.
   const [back, setBack] = useState<EventBackTarget>(
     backOverride ?? { href: "/org/events", label: "Eventos" },
@@ -126,7 +148,7 @@ export function EventShell({
   const isOver = status === "closed" || status === "cancelled";
 
   return (
-    <OrgShell>
+    <>
       <div className={`mx-auto w-full max-w-[1180px] ${hideTabs ? "pb-12" : "pb-32 lg:pb-12"}`}>
         {/* ============ Top: breadcrumb + acciones (desktop) ============ */}
         <div className="mb-4 flex items-center justify-between lg:mb-6">
@@ -134,7 +156,7 @@ export function EventShell({
             <button
               type="button"
               onClick={() => router.push(back.href as never)}
-              className="hidden items-center gap-1.5 rounded-full px-2 py-1 text-cart-ink-3 transition hover:bg-white/5 hover:text-white lg:inline-flex"
+              className="hidden items-center gap-1.5 rounded-full px-2 py-1 text-cart-ink-3 transition hover:bg-cart-line-2 hover:text-cart-ink lg:inline-flex"
             >
               <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
                 <path d="M10 3L5 7l5 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
@@ -146,7 +168,7 @@ export function EventShell({
               type="button"
               onClick={() => router.push(back.href as never)}
               aria-label="Atrás"
-              className="grid size-9 place-items-center rounded-full border border-cart-line bg-cart-bg-elev text-cart-ink-2 transition hover:border-cart-line-strong hover:text-white lg:hidden"
+              className="grid size-9 place-items-center rounded-full border border-cart-line bg-cart-bg-elev text-cart-ink-2 transition hover:border-cart-line-strong hover:text-cart-ink lg:hidden"
             >
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                 <path d="M10 3L5 7l5 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
@@ -161,7 +183,7 @@ export function EventShell({
               type="button"
               onClick={() => setEditOpen(true)}
               aria-label="Editar evento"
-              className="grid size-9 place-items-center rounded-full border border-cart-line bg-cart-bg-elev text-cart-ink-2 transition hover:border-cart-line-strong hover:text-white lg:hidden"
+              className="grid size-9 place-items-center rounded-full border border-cart-line bg-cart-bg-elev text-cart-ink-2 transition hover:border-cart-line-strong hover:text-cart-ink lg:hidden"
             >
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                 <path
@@ -198,7 +220,7 @@ export function EventShell({
                 <button
                   type="button"
                   onClick={() => setEditOpen(true)}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-cart-line bg-cart-bg-elev px-3.5 py-1.5 text-[12.5px] font-medium text-cart-ink-2 transition hover:border-cart-line-strong hover:text-white"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-cart-line bg-cart-bg-elev px-3.5 py-1.5 text-[12.5px] font-medium text-cart-ink-2 transition hover:border-cart-line-strong hover:text-cart-ink"
                 >
                   <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
                     <path
@@ -216,7 +238,7 @@ export function EventShell({
                   type="button"
                   data-tour="download"
                   onClick={() => { window.location.href = `/api/events/${slug}/export`; }}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-cart-line bg-cart-bg-elev px-3.5 py-1.5 text-[12.5px] font-medium text-cart-ink-2 transition hover:border-cart-line-strong hover:text-white"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-cart-line bg-cart-bg-elev px-3.5 py-1.5 text-[12.5px] font-medium text-cart-ink-2 transition hover:border-cart-line-strong hover:text-cart-ink"
                 >
                   <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
                     <path d="M7 2v8m0 0l-3-3m3 3l3-3M2 12h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
@@ -252,7 +274,7 @@ export function EventShell({
         {/* ============ Sub-nav (desktop horizontal) ============ */}
         {!hideTabs && (
           <nav className="mb-7 hidden gap-1 border-b border-cart-line lg:flex">
-            {TABS.filter((t) => !isOver || t.key !== "settings").map((t) => {
+            {visibleTabs.filter((t) => !isOver || t.key !== "settings").map((t) => {
               const on = t.key === active;
               return (
                 <Link
@@ -260,13 +282,17 @@ export function EventShell({
                   href={t.href(slug) as never}
                   className={
                     "relative inline-flex items-center gap-2 px-4 py-3 text-[13.5px] font-medium transition " +
-                    (on ? "text-white" : "text-cart-ink-3 hover:text-white")
+                    (on ? "text-cart-ink" : "text-cart-ink-3 hover:text-cart-ink")
                   }
                 >
                   <span className={on ? "text-cart-accent" : "text-cart-ink-3"}>{t.icon}</span>
                   {t.label}
                   {on && (
-                    <span className="absolute inset-x-3 -bottom-px h-[2px] rounded-full bg-cart-accent shadow-[0_0_10px_var(--color-cart-accent-glow)]" />
+                    <motion.span
+                      layoutId="event-tab-underline"
+                      className="absolute inset-x-3 -bottom-px h-[2px] rounded-full bg-cart-accent shadow-[0_0_10px_var(--color-cart-accent-glow)]"
+                      transition={{ type: "spring", stiffness: 460, damping: 36 }}
+                    />
                   )}
                 </Link>
               );
@@ -285,17 +311,24 @@ export function EventShell({
           style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 6px)" }}
         >
           <div className="mx-auto flex max-w-[640px] items-stretch justify-around px-3 pt-2">
-            {TABS.filter((t) => !isOver || t.key !== "settings").map((t) => {
+            {visibleTabs.filter((t) => !isOver || t.key !== "settings").map((t) => {
               const on = t.key === active;
               return (
                 <Link
                   key={t.key}
                   href={t.href(slug) as never}
                   className={
-                    "flex flex-1 flex-col items-center gap-1 rounded-xl px-2 py-1.5 transition " +
+                    "relative flex flex-1 flex-col items-center gap-1 rounded-xl px-2 py-1.5 transition " +
                     (on ? "text-cart-accent" : "text-cart-ink-3")
                   }
                 >
+                  {on && (
+                    <motion.span
+                      layoutId="event-tab-pill"
+                      className="absolute inset-1 -z-10 rounded-lg bg-cart-accent-soft"
+                      transition={{ type: "spring", stiffness: 460, damping: 36 }}
+                    />
+                  )}
                   <span>{t.icon}</span>
                   <span className="text-[10.5px] font-semibold tracking-[0.02em]">{t.label}</span>
                 </Link>
@@ -343,9 +376,16 @@ export function EventShell({
           slug={slug}
           event={ev}
           ticketTypes={ticketTypes}
+          promos={promos}
+          canQuickEdit={canQuickEdit}
+          mode={editMode}
+          onSwitchMode={(next) => {
+            setComposerModePreference(next);
+            setEditMode(next);
+          }}
         />
       )}
-    </OrgShell>
+    </>
   );
 }
 
@@ -355,12 +395,20 @@ function EditEventSheet({
   slug,
   event,
   ticketTypes,
+  promos,
+  canQuickEdit,
+  mode,
+  onSwitchMode,
 }: {
   open: boolean;
   onClose: () => void;
   slug: string;
   event: NonNullable<ReturnType<typeof useEvent>["data"]>["event"];
   ticketTypes: NonNullable<ReturnType<typeof useEvent>["data"]>["ticketTypes"];
+  promos: Promo[];
+  canQuickEdit: boolean;
+  mode: ComposerMode;
+  onSwitchMode: (next: ComposerMode) => void;
 }) {
   const [isDesktop, setIsDesktop] = useState(() =>
     typeof window !== "undefined" &&
@@ -426,17 +474,26 @@ function EditEventSheet({
             <div className="sticky top-0 z-10 flex items-center justify-between border-b border-cart-line bg-cart-bg/95 px-5 py-4 backdrop-blur">
               <div className="flex items-center gap-3">
                 {!isDesktop && (
-                  <div className="absolute left-1/2 top-2 h-1 w-9 -translate-x-1/2 rounded-full bg-white/15" />
+                  <div className="absolute left-1/2 top-2 h-1 w-9 -translate-x-1/2 rounded-full bg-cart-ink/15" />
                 )}
                 <h3 className="font-sans text-[18px] font-semibold tracking-[-0.01em]">
                   Editar evento
                 </h3>
+                {canQuickEdit && mode === "full" && (
+                  <button
+                    type="button"
+                    onClick={() => onSwitchMode("simple")}
+                    className="text-[11.5px] font-medium text-cart-ink-3 underline decoration-cart-ink-4 underline-offset-2 transition hover:text-cart-ink-2"
+                  >
+                    Versión rápida
+                  </button>
+                )}
               </div>
               <button
                 type="button"
                 onClick={onClose}
                 aria-label="Cerrar"
-                className="grid size-9 place-items-center rounded-full border border-cart-line bg-cart-bg-elev text-cart-ink-2 transition hover:border-cart-line-strong hover:text-white"
+                className="grid size-9 place-items-center rounded-full border border-cart-line bg-cart-bg-elev text-cart-ink-2 transition hover:border-cart-line-strong hover:text-cart-ink"
               >
                 <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
                   <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
@@ -444,11 +501,22 @@ function EditEventSheet({
               </button>
             </div>
             <div className="px-4 py-5 lg:px-6">
-              <EventComposer
-                mode="edit"
-                initial={{ slug, event, ticketTypes }}
-                onClose={onClose}
-              />
+              {canQuickEdit && mode === "simple" ? (
+                <QuickEditForm
+                  slug={slug}
+                  event={event}
+                  ticketType={ticketTypes[0] as TicketType & { kind: "general" }}
+                  promos={promos}
+                  onClose={onClose}
+                  onSwitchToFull={() => onSwitchMode("full")}
+                />
+              ) : (
+                <EventComposer
+                  mode="edit"
+                  initial={{ slug, event, ticketTypes }}
+                  onClose={onClose}
+                />
+              )}
             </div>
           </motion.aside>
         </>
@@ -493,13 +561,13 @@ function StatusPill({
     live && status === "published"
       ? { dot: "#22D17F", label: "EN VIVO", tint: "rgba(34,209,127,0.15)", text: "#22D17F" }
       : finished && status === "published"
-        ? { dot: "rgba(255,255,255,0.4)", label: "Finalizado", tint: "rgba(255,255,255,0.04)", text: "rgba(255,255,255,0.6)" }
+        ? { dot: "var(--color-cart-ink-3)", label: "Finalizado", tint: "var(--color-cart-line-2)", text: "var(--color-cart-ink-3)" }
         : status === "published"
           ? { dot: "#22D17F", label: eventStatusLabel(status), tint: "rgba(34,209,127,0.12)", text: "#22D17F" }
         : status === "draft"
-          ? { dot: "rgba(255,255,255,0.5)", label: eventStatusLabel(status), tint: "rgba(255,255,255,0.06)", text: "rgba(255,255,255,0.75)" }
+          ? { dot: "var(--color-cart-ink-3)", label: eventStatusLabel(status), tint: "var(--color-cart-line)", text: "var(--color-cart-ink-2)" }
           : status === "closed"
-            ? { dot: "rgba(255,255,255,0.4)", label: eventStatusLabel(status), tint: "rgba(255,255,255,0.04)", text: "rgba(255,255,255,0.6)" }
+            ? { dot: "var(--color-cart-ink-3)", label: eventStatusLabel(status), tint: "var(--color-cart-line-2)", text: "var(--color-cart-ink-3)" }
             : status === "pending_review"
               ? { dot: "#F5A623", label: eventStatusLabel(status), tint: "rgba(245,166,35,0.12)", text: "#F5A623" }
               : status === "cancelled"
@@ -508,7 +576,7 @@ function StatusPill({
                 // (drift de datos, o un status nuevo sin actualizar este
                 // componente) se pinta neutro con su label real — nunca cae
                 // en rojo "Cancelado" por accidente.
-                : { dot: "rgba(255,255,255,0.4)", label: eventStatusLabel(status), tint: "rgba(255,255,255,0.04)", text: "rgba(255,255,255,0.6)" };
+                : { dot: "var(--color-cart-ink-3)", label: eventStatusLabel(status), tint: "var(--color-cart-line-2)", text: "var(--color-cart-ink-3)" };
   return (
     <span
       className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-[0.12em]"

@@ -34,7 +34,7 @@ export function SettingsCard({ id, title, description, children, action, danger 
         <div>
           <h2
             className={`text-[16px] font-semibold tracking-[-0.01em] ${
-              danger ? "text-rose-300" : "text-white"
+              danger ? "text-rose-600" : "text-cart-ink"
             }`}
           >
             {title}
@@ -76,7 +76,7 @@ export function SettingsRow({
       {(label || description) && (
         <div className="min-w-0 flex-1">
           {label ? (
-            <div className="text-[14px] font-medium text-white">{label}</div>
+            <div className="text-[14px] font-medium text-cart-ink">{label}</div>
           ) : null}
           {description ? (
             <div className="mt-1 max-w-prose text-[12.5px] leading-snug text-cart-ink-3">

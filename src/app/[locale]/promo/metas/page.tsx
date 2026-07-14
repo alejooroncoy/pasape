@@ -82,7 +82,7 @@ export default function PromoGoalsPage() {
             {byAttendance ? (
               <>
                 Ya entraron{" "}
-                <strong className="text-white">
+                <strong className="text-cart-ink">
                   {progress} {progress === 1 ? "persona" : "personas"} de las tuyas
                 </strong>{" "}
                 <span className="text-cart-ink-4">(cuentan las que asisten, no las ventas)</span>
@@ -90,7 +90,7 @@ export default function PromoGoalsPage() {
             ) : (
               <>
                 Vendiste{" "}
-                <strong className="text-white">
+                <strong className="text-cart-ink">
                   {progress} {progress === 1 ? "entrada" : "entradas"}
                 </strong>
               </>
@@ -107,7 +107,7 @@ export default function PromoGoalsPage() {
                 <path d="M6 3h8v2.5a4 4 0 01-8 0V3zM10 9.5V13m-2.5 4h5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </span>
-            <span className="text-[13px] font-semibold tabular-nums text-white">
+            <span className="text-[13px] font-semibold tabular-nums text-cart-ink">
               {unlockedCount}/{milestones.length}
             </span>
             <span className="text-[12px] text-cart-ink-3">conseguidos</span>
@@ -128,7 +128,7 @@ export default function PromoGoalsPage() {
                 className={
                   "rounded-xl border px-3.5 py-2 text-left transition " +
                   (on
-                    ? "border-cart-accent/50 bg-cart-accent-soft text-white"
+                    ? "border-cart-accent/50 bg-cart-accent-soft text-cart-ink"
                     : "border-cart-line bg-cart-bg-elev text-cart-ink-2 hover:border-cart-line-strong")
                 }
               >
@@ -155,7 +155,7 @@ export default function PromoGoalsPage() {
         <div className="rounded-2xl border border-cart-line bg-cart-bg-elev px-5 py-10 text-center">
           {home.data?.schemeConfigured === false ? (
             <>
-              <p className="text-[14px] font-medium text-white">
+              <p className="text-[14px] font-medium text-cart-ink">
                 El organizador aún está configurando este evento
               </p>
               <p className="mt-1 text-[12.5px] text-cart-ink-3">
@@ -164,7 +164,7 @@ export default function PromoGoalsPage() {
             </>
           ) : (
             <>
-              <p className="text-[14px] font-medium text-white">Este evento no tiene metas</p>
+              <p className="text-[14px] font-medium text-cart-ink">Este evento no tiene metas</p>
               <p className="mt-1 text-[12.5px] text-cart-ink-3">
                 El organizador puede configurar bonos y premios por cantidad de entradas vendidas o
                 de asistentes que entran.

@@ -102,7 +102,7 @@ export function DoorsSection({ slug }: { slug: string }) {
         {/* Aviso de entradas sueltas (solo con varias puertas) */}
         {orphans.length > 0 && (
           <div className="border-b border-cart-line px-4 py-3 lg:px-5">
-            <div className="rounded-xl border border-yellow-400/30 bg-yellow-400/10 px-3 py-2 text-[12px] text-yellow-200">
+            <div className="rounded-xl border border-yellow-400/30 bg-yellow-400/10 px-3 py-2 text-[12px] text-yellow-700">
               Estas entradas no están en ninguna puerta y no se podrán validar:{" "}
               <span className="font-semibold">{orphans.map((t) => t.name).join(", ")}</span>
             </div>
@@ -116,7 +116,7 @@ export function DoorsSection({ slug }: { slug: string }) {
               <div
                 className={
                   "grid size-9 place-items-center rounded-lg " +
-                  (single ? "bg-cart-accent-soft text-cart-accent" : "bg-white/5 text-cart-ink-3")
+                  (single ? "bg-cart-accent-soft text-cart-accent" : "bg-cart-line-2 text-cart-ink-3")
                 }
               >
                 <DoorIcon />
@@ -136,7 +136,7 @@ export function DoorsSection({ slug }: { slug: string }) {
                   type="button"
                   onClick={() => removeZone(z.id)}
                   disabled={remove.isPending}
-                  className="text-[12.5px] font-medium text-cart-ink-3 hover:text-white"
+                  className="text-[12.5px] font-medium text-cart-ink-3 hover:text-cart-ink"
                 >
                   Quitar
                 </button>
@@ -144,7 +144,7 @@ export function DoorsSection({ slug }: { slug: string }) {
                 <button
                   type="button"
                   onClick={() => setDraft({ id: z.id, name: z.name, ticketTypeIds: z.ticketTypeIds })}
-                  className="text-[12.5px] font-medium text-cart-ink-3 hover:text-white"
+                  className="text-[12.5px] font-medium text-cart-ink-3 hover:text-cart-ink"
                 >
                   Editar
                 </button>
@@ -155,7 +155,7 @@ export function DoorsSection({ slug }: { slug: string }) {
 
         {/* Editor inline (crear / editar) */}
         {draft ? (
-          <div className="border-b border-cart-line bg-white/[0.02] px-4 py-4 lg:px-5">
+          <div className="border-b border-cart-line bg-cart-line-2 px-4 py-4 lg:px-5">
             {replacingId && (
               <div className="mb-3 rounded-xl border border-cart-accent/30 bg-cart-accent-soft px-3 py-2 text-[12px] text-cart-accent">
                 Crea la puerta que reemplaza a la actual. Al guardarla, la anterior se quita sola.
@@ -188,7 +188,7 @@ export function DoorsSection({ slug }: { slug: string }) {
                         "rounded-full border px-3 py-1.5 text-[12.5px] font-medium transition " +
                         (on
                           ? "border-cart-accent bg-cart-accent-soft text-cart-accent"
-                          : "border-cart-line text-cart-ink-3 hover:text-white")
+                          : "border-cart-line text-cart-ink-3 hover:text-cart-ink")
                       }
                     >
                       {on ? "✓ " : ""}
@@ -200,7 +200,7 @@ export function DoorsSection({ slug }: { slug: string }) {
             )}
 
             {(create.isError || update.isError) && (
-              <div className="mt-2.5 text-[12.5px] text-red-300">
+              <div className="mt-2.5 text-[12.5px] text-red-600">
                 No se pudo guardar. ¿El nombre ya existe?
               </div>
             )}
@@ -217,7 +217,7 @@ export function DoorsSection({ slug }: { slug: string }) {
               <button
                 type="button"
                 onClick={close}
-                className="rounded-xl px-3 py-2 text-[13.5px] font-medium text-cart-ink-3 hover:text-white"
+                className="rounded-xl px-3 py-2 text-[13.5px] font-medium text-cart-ink-3 hover:text-cart-ink"
               >
                 Cancelar
               </button>
@@ -229,7 +229,7 @@ export function DoorsSection({ slug }: { slug: string }) {
                       remove.mutate(draft.id!, { onSuccess: close });
                     }
                   }}
-                  className="ml-auto text-[12.5px] font-medium text-red-300 hover:text-red-200"
+                  className="ml-auto text-[12.5px] font-medium text-red-600 hover:text-red-700"
                 >
                   Eliminar
                 </button>

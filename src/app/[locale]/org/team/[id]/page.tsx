@@ -3,7 +3,6 @@
 import { use, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Link, useRouter } from "@/i18n/navigation";
-import { OrgShell } from "@/app/[locale]/org/_shell/OrgShell";
 import { PhoneField } from "@/components/design/PhoneField";
 import {
   useOrgPromoterDetail,
@@ -26,15 +25,14 @@ export default function OrgPromoterDetailPage({ params }: { params: Params }) {
   const byEvent = detail.data?.byEvent ?? [];
 
   return (
-    <OrgShell>
-      <div className="mx-auto w-full max-w-[1180px] pb-24 lg:pb-12">
+    <div className="mx-auto w-full max-w-[1180px] pb-24 lg:pb-12">
         {/* Breadcrumb */}
         <div className="mb-4 flex items-center justify-between lg:mb-6">
           <div className="flex items-center gap-2 text-[12.5px]">
             <button
               type="button"
               onClick={() => router.push("/org/team" as never)}
-              className="hidden items-center gap-1.5 rounded-full px-2 py-1 text-cart-ink-3 transition hover:bg-white/5 hover:text-white lg:inline-flex"
+              className="hidden items-center gap-1.5 rounded-full px-2 py-1 text-cart-ink-3 transition hover:bg-cart-bg-elev-2 hover:text-cart-ink lg:inline-flex"
             >
               <ChevronLeft /> Equipo
             </button>
@@ -43,7 +41,7 @@ export default function OrgPromoterDetailPage({ params }: { params: Params }) {
               type="button"
               onClick={() => router.push("/org/team" as never)}
               aria-label="Atrás"
-              className="grid size-9 place-items-center rounded-full border border-cart-line bg-cart-bg-elev text-cart-ink-2 transition hover:border-cart-line-strong hover:text-white lg:hidden"
+              className="grid size-9 place-items-center rounded-full border border-cart-line bg-cart-bg-elev text-cart-ink-2 transition hover:border-cart-line-strong hover:text-cart-ink lg:hidden"
             >
               <ChevronLeft />
             </button>
@@ -86,7 +84,7 @@ export default function OrgPromoterDetailPage({ params }: { params: Params }) {
             <button
               type="button"
               onClick={() => setEditing(true)}
-              className="hidden rounded-full border border-cart-line bg-cart-bg-elev px-3.5 py-1.5 text-[12.5px] font-medium text-cart-ink-2 transition hover:border-cart-line-strong hover:text-white lg:inline-flex"
+              className="hidden rounded-full border border-cart-line bg-cart-bg-elev px-3.5 py-1.5 text-[12.5px] font-medium text-cart-ink-2 transition hover:border-cart-line-strong hover:text-cart-ink lg:inline-flex"
             >
               Editar
             </button>
@@ -167,7 +165,6 @@ export default function OrgPromoterDetailPage({ params }: { params: Params }) {
           )}
         </AnimatePresence>
       </div>
-    </OrgShell>
   );
 }
 
@@ -186,7 +183,7 @@ function KpiCard({
   tone?: "accent" | "green" | "neutral";
 }) {
   const dot =
-    tone === "accent" ? "var(--color-cart-accent)" : tone === "green" ? "#22D17F" : "rgba(255,255,255,0.5)";
+    tone === "accent" ? "var(--color-cart-accent)" : tone === "green" ? "#22D17F" : "var(--color-cart-ink-3)";
   return (
     <div className="rounded-2xl border border-cart-line bg-cart-bg-elev p-4 lg:p-5">
       <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-cart-ink-3">
@@ -231,17 +228,17 @@ function EventRow({
   return (
     <Link
       href={href as never}
-      className="grid grid-cols-1 gap-2 px-4 py-3 transition hover:bg-white/[0.02] lg:grid-cols-[1fr_auto_auto] lg:items-center lg:gap-4 lg:px-5"
+      className="grid grid-cols-1 gap-2 px-4 py-3 transition hover:bg-cart-bg-elev-2 lg:grid-cols-[1fr_auto_auto] lg:items-center lg:gap-4 lg:px-5"
     >
       <div className="min-w-0">
         <div className="flex items-center gap-2">
           <span className="truncate text-[14px] font-semibold tracking-[-0.01em]">{title}</span>
-          <span className="rounded-full bg-white/5 px-1.5 py-px text-[9.5px] font-semibold tracking-[0.08em] text-cart-ink-3">
+          <span className="rounded-full bg-cart-bg-elev-2 px-1.5 py-px text-[9.5px] font-semibold tracking-[0.08em] text-cart-ink-3">
             {date}
           </span>
         </div>
         <div className="mt-2 flex items-center gap-2">
-          <div className="h-1 flex-1 overflow-hidden rounded-full bg-white/5">
+          <div className="h-1 flex-1 overflow-hidden rounded-full bg-cart-line-strong">
             <div
               className="h-full rounded-full"
               style={{
@@ -334,7 +331,7 @@ function PromoterEditForm({
               "rounded-xl px-3 py-2 text-[13.5px] font-semibold transition " +
               (pct == null
                 ? "bg-cart-accent text-white shadow-[0_8px_20px_-6px_var(--color-cart-accent-glow)]"
-                : "bg-cart-bg-elev text-cart-ink-2 hover:text-white")
+                : "bg-cart-bg-elev text-cart-ink-2 hover:text-cart-ink")
             }
           >
             Igual que la marca
@@ -348,7 +345,7 @@ function PromoterEditForm({
                 "flex-1 rounded-xl px-3 py-2 text-[13.5px] font-semibold transition " +
                 (pct === p
                   ? "bg-cart-accent text-white shadow-[0_8px_20px_-6px_var(--color-cart-accent-glow)]"
-                  : "bg-cart-bg-elev text-cart-ink-2 hover:text-white")
+                  : "bg-cart-bg-elev text-cart-ink-2 hover:text-cart-ink")
               }
             >
               {p}%
@@ -402,7 +399,7 @@ function Field({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className={
-          "rounded-xl border border-cart-line bg-cart-bg-elev px-3 py-2.5 text-[14px] text-white outline-none transition focus:border-cart-line-strong " +
+          "rounded-xl border border-cart-line bg-cart-bg-elev px-3 py-2.5 text-[14px] text-cart-ink outline-none transition focus:border-cart-line-strong " +
           (mono ? "font-mono text-[13.5px]" : "")
         }
       />
@@ -453,7 +450,7 @@ function Sheet({
         style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 22px)" }}
       >
         <div className="sticky top-0 z-10 -mx-px flex flex-col bg-cart-bg-elev/95 px-5 pt-3 backdrop-blur">
-          <div className="mx-auto mb-3 h-1 w-9 rounded-full bg-white/15" />
+          <div className="mx-auto mb-3 h-1 w-9 rounded-full bg-cart-line-strong" />
           <div className="mb-4 flex items-center justify-between">
             <h3 className="font-sans text-[20px] font-semibold tracking-[-0.02em]">{title}</h3>
             <button

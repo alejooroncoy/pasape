@@ -293,7 +293,13 @@ export const EventsController = {
     if (!guard.ok) return err(guard.error);
     const parsed = updateSchema.safeParse(input);
     if (!parsed.success) return err(parsed.error.issues[0]?.message ?? "invalid_input");
-    return updateEvent({ repo }, guard.value.event.id, guard.value.event.organizationId, parsed.data);
+    return updateEvent(
+      { repo },
+      guard.value.event.id,
+      guard.value.event.organizationId,
+      parsed.data,
+      guard.value.event,
+    );
   },
 
   async doorLink(slug: string): Promise<Result<DoorLink>> {

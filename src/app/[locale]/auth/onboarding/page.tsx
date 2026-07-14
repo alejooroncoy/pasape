@@ -24,6 +24,7 @@ import {
   type OrganizerCopy,
   type OrganizerType,
 } from "@/lib/identity/organizerType";
+import { computeOnboardingSteps, type OnboardingStepKey } from "@/lib/identity/onboardingSteps";
 import { clientEvents } from "@/lib/analytics/clientEvents";
 
 // ============================================================
@@ -43,7 +44,8 @@ import { clientEvents } from "@/lib/analytics/clientEvents";
 //  Si el perfil ya tiene organizer_type, saltamos el paso de tipo.
 // ============================================================
 
-type StepKey = "type" | "identity" | "contact" | "entity" | "brand";
+type StepKey = OnboardingStepKey;
+
 type Vals = {
   fullName: string;
   dni: string;
@@ -133,21 +135,31 @@ function OnboardingInner() {
 
   const isOrganizerIntent = params.get("intent") === "organizer";
   const organizerType = me?.user?.organizerType ?? null;
-  const copy: OrganizerCopy = useMemo(() => copyFor(organizerType), [organizerType]);
+  // onPickType guarda en DB de forma optimista (fire-and-forget) — el cache de
+  // useCurrentUser puede tardar en reflejar el nuevo organizerType. Este state
+  // local captura la elección al instante para que `steps` reaccione ya mismo,
+  // sin esperar el refetch.
+  const [pickedType, setPickedType] = useState<OrganizerType | null>(null);
+  const effectiveOrganizerType = pickedType ?? organizerType;
+  const copy: OrganizerCopy = useMemo(() => copyFor(effectiveOrganizerType), [effectiveOrganizerType]);
 
-  // Steps son fijos por intent — NO los filtramos al guardar organizer_type,
-  // porque eso impediría que el usuario volviera atrás a cambiarlo.
-  const steps: StepKey[] = useMemo(() => {
-    if (!isOrganizerIntent) return ["identity", "contact"];
-    return ["type", "identity", "contact", "entity", "brand"];
-  }, [isOrganizerIntent]);
+  // Steps por intent. Para "independent_host" (artista/banda independiente)
+  // saltamos "entity"/"brand" — son pasos pensados para productoras (razón
+  // social, marca comercial) y no aplican a un artista publicando su propio
+  // show. `CompleteOnboarding.ts` ya usa el fallback fullName → brandName sin
+  // necesidad de que esos campos existan. Recomputa si el usuario vuelve a
+  // "type" y cambia de elección — no pierde progreso, solo ajusta el recorrido.
+  const steps: StepKey[] = useMemo(
+    () => computeOnboardingSteps(isOrganizerIntent, effectiveOrganizerType),
+    [isOrganizerIntent, effectiveOrganizerType],
+  );
 
   // Step actual viene del URL (?step=...). Default en primer load:
   //  · Sin ?step= y sin organizer_type guardado → empezamos en el primer step
   //  · Sin ?step= pero con organizer_type ya elegido → saltamos a identity
   //  · Con ?step= → respetamos lo que diga el URL (permite volver a "type")
   const stepFromUrl = params.get("step") as StepKey | null;
-  const defaultStep: StepKey = organizerType && isOrganizerIntent ? "identity" : steps[0];
+  const defaultStep: StepKey = effectiveOrganizerType && isOrganizerIntent ? "identity" : steps[0];
   const stepIndex = Math.max(
     0,
     steps.indexOf(stepFromUrl ?? defaultStep),
@@ -214,7 +226,10 @@ function OnboardingInner() {
   const hasGoogle = !!me?.user?.email;
 
   const onPickType = async (type: OrganizerType) => {
-    // Optimistic: guardar en DB y avanzar de inmediato.
+    // Optimistic: guardar en DB y avanzar de inmediato. pickedType local evita
+    // esperar el refetch de useCurrentUser para que `steps` ya sepa saltar
+    // entity/brand si el tipo elegido es independent_host.
+    setPickedType(type);
     void updateProfile.mutateAsync({ organizerType: type }).catch(() => {});
     setStep("identity");
   };
@@ -302,13 +317,17 @@ function OnboardingInner() {
                 isOrganizerIntent={isOrganizerIntent}
                 onChange={(p) => setVals(p)}
                 onAdvance={() => {
-                  if (isOrganizerIntent) setStep("entity");
-                  else void submit();
+                  if (isOrganizerIntent && effectiveOrganizerType !== "independent_host") {
+                    setStep("entity");
+                  } else {
+                    void submit();
+                  }
                 }}
-                isFinal={!isOrganizerIntent}
+                isFinal={!isOrganizerIntent || effectiveOrganizerType === "independent_host"}
                 submitting={onboarding.isPending}
                 error={
-                  !isOrganizerIntent && onboarding.error
+                  (!isOrganizerIntent || effectiveOrganizerType === "independent_host") &&
+                  onboarding.error
                     ? (onboarding.error as Error).message
                     : null
                 }

@@ -15,7 +15,7 @@ export function OrgLoginClient() {
   const { signIn, pending, error } = useGoogleSignIn({ redirectTo: next });
 
   return (
-    <main className="relative grid min-h-dvh place-items-center overflow-hidden bg-cart-bg px-6 py-12 text-white">
+    <main className="home-light relative grid min-h-dvh place-items-center overflow-hidden bg-cart-bg px-6 py-12 text-cart-ink">
       {/* Decoración: glow púrpura arriba, inspirado en Resend */}
       <div
         aria-hidden
@@ -55,7 +55,7 @@ export function OrgLoginClient() {
           </div>
         </div>
 
-        <h1 className="font-sans text-[28px] font-semibold leading-[1.1] tracking-[-0.03em] text-white sm:text-[32px]">
+        <h1 className="font-sans text-[28px] font-semibold leading-[1.1] tracking-[-0.03em] text-cart-ink sm:text-[32px]">
           Entra al panel
         </h1>
         <p className="mx-auto mt-2 max-w-[34ch] text-[13.5px] leading-snug text-cart-ink-3">
@@ -72,7 +72,7 @@ export function OrgLoginClient() {
         </motion.div>
 
         {error && (
-          <div className="mt-3 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-[12.5px] text-rose-200">
+          <div className="mt-3 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-[12.5px] text-rose-600">
             {error}
           </div>
         )}
@@ -81,7 +81,7 @@ export function OrgLoginClient() {
 
         <div className="mt-10 flex items-center justify-center gap-2 text-[11.5px] text-cart-ink-4">
           <span>¿Vienes a comprar entradas?</span>
-          <Link href="/login" className="font-medium text-cart-ink-2 hover:text-white">
+          <Link href="/login" className="font-medium text-cart-ink-2 hover:text-cart-ink">
             Entrar como usuario
           </Link>
         </div>

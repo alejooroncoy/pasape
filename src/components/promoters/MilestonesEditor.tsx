@@ -155,7 +155,7 @@ function InlineComposer({
 
   return (
     <div className="rounded-2xl border border-cart-line-strong bg-cart-bg-elev-2 p-4">
-      <div className="mb-3 text-[13px] font-semibold text-white">
+      <div className="mb-3 text-[13px] font-semibold text-cart-ink">
         {kind === "cash" ? "Nuevo hito en efectivo" : "Nuevo premio en especie"}
       </div>
       <div className="flex flex-col gap-3">
@@ -175,7 +175,7 @@ function InlineComposer({
         <button
           type="button"
           onClick={onCancel}
-          className="flex h-11 flex-1 items-center justify-center rounded-full bg-cart-bg-elev px-4 text-[13.5px] font-semibold text-cart-ink-2 ring-1 ring-cart-line-strong transition hover:text-white"
+          className="flex h-11 flex-1 items-center justify-center rounded-full bg-cart-bg-elev px-4 text-[13.5px] font-semibold text-cart-ink-2 ring-1 ring-cart-line-strong transition hover:text-cart-ink"
         >
           Cancelar
         </button>
@@ -212,7 +212,7 @@ function BasisToggle({ basis, onChange }: { basis: MilestoneBasis; onChange: (b:
             onClick={() => onChange(v)}
             className={
               "rounded-lg px-3 py-1 text-[12.5px] font-semibold transition " +
-              (basis === v ? "bg-cart-accent text-white" : "text-cart-ink-3 hover:text-white")
+              (basis === v ? "bg-cart-accent text-white" : "text-cart-ink-3 hover:text-cart-ink")
             }
           >
             {lbl}
@@ -351,7 +351,7 @@ function TierRow({
   const { m, i } = tier;
   const isCash = kind === "cash";
   return (
-    <div className={TIER_GRID + " px-4 py-3 transition hover:bg-white/[0.02] lg:px-5"}>
+    <div className={TIER_GRID + " px-4 py-3 transition hover:bg-cart-line-2 lg:px-5"}>
       <div className="whitespace-nowrap font-mono text-[14px] font-semibold">
         {m.threshold}
         <span className="ml-1 text-[10px] font-medium text-cart-ink-4">{basisNoun(basis)}</span>
@@ -361,7 +361,7 @@ function TierRow({
       </div>
       <div className="text-right">
         {isCash ? (
-          <span className="whitespace-nowrap font-mono text-[14px] font-semibold text-white">
+          <span className="whitespace-nowrap font-mono text-[14px] font-semibold text-cart-ink">
             {formatSoles(m.amountCents)}
           </span>
         ) : (
@@ -414,7 +414,7 @@ function PerkSection({
         <button
           type="button"
           onClick={onAdd}
-          className="inline-flex items-center gap-1.5 self-start rounded-full border border-cart-line bg-cart-bg-elev-2 px-3.5 py-1.5 text-[12.5px] font-semibold text-white transition hover:border-white/30"
+          className="inline-flex items-center gap-1.5 self-start rounded-full border border-cart-line bg-cart-bg-elev-2 px-3.5 py-1.5 text-[12.5px] font-semibold text-cart-ink transition hover:border-cart-line-strong"
         >
           + Agregar premio
         </button>
@@ -496,7 +496,7 @@ function ComposerSheet({
             type="button"
             onClick={onClose}
             aria-label="Cerrar"
-            className="grid size-9 place-items-center rounded-full border border-cart-line bg-cart-bg-elev-2 text-cart-ink-3 transition hover:border-cart-line-strong hover:text-white"
+            className="grid size-9 place-items-center rounded-full border border-cart-line bg-cart-bg-elev-2 text-cart-ink-3 transition hover:border-cart-line-strong hover:text-cart-ink"
           >
             <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
               <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
@@ -542,7 +542,7 @@ function DeleteBtn({ onClick, disabled }: { onClick: () => void; disabled: boole
       onClick={onClick}
       disabled={disabled}
       aria-label="Eliminar"
-      className="grid size-8 place-items-center rounded-full text-cart-ink-3 transition hover:bg-white/5 hover:text-red-300 disabled:opacity-50"
+      className="grid size-8 place-items-center rounded-full text-cart-ink-3 transition hover:bg-cart-line-2 hover:text-red-600 disabled:opacity-50"
     >
       <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
         <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
@@ -585,7 +585,7 @@ function NumField({
           min={1}
           value={value}
           onChange={(e) => onChange(Math.max(0, Number(e.target.value) || 0))}
-          className="w-full bg-transparent font-mono text-[18px] font-semibold text-white outline-none"
+          className="w-full bg-transparent font-mono text-[18px] font-semibold text-cart-ink outline-none"
         />
         {suffix && <span className="text-[12px] text-cart-ink-4">{suffix}</span>}
       </div>

@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { createSupabaseBrowserClient } from "@/server/_shared/supabase/client";
-import { OrgShell } from "../_shell/OrgShell";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { useMyOrgs } from "@/lib/identity/organizations/hooks/useMyOrgs";
 import { useUpdateOrganization } from "@/lib/identity/hooks/useUpdateOrganization";
@@ -105,9 +104,9 @@ export default function OrgSettingsPage() {
   const noOrg = orgs.isFetched && !activeOrg;
   if (loadingOrg || noOrg) {
     return (
-      <OrgShell>
+      <>
         <div className="mb-8 sm:mb-10">
-          <h1 className="font-sans text-[clamp(34px,7.2vw,42px)] font-bold leading-[1.05] tracking-[-0.035em] text-white">
+          <h1 className="font-sans text-[clamp(34px,7.2vw,42px)] font-bold leading-[1.05] tracking-[-0.035em] text-cart-ink">
             Ajustes
           </h1>
         </div>
@@ -122,14 +121,14 @@ export default function OrgSettingsPage() {
             ))}
           </div>
         )}
-      </OrgShell>
+      </>
     );
   }
 
   return (
-    <OrgShell>
+    <>
       <div className="mb-8 sm:mb-10">
-        <h1 className="font-sans text-[clamp(34px,7.2vw,42px)] font-bold leading-[1.05] tracking-[-0.035em] text-white">
+        <h1 className="font-sans text-[clamp(34px,7.2vw,42px)] font-bold leading-[1.05] tracking-[-0.035em] text-cart-ink">
           Ajustes
         </h1>
         <p className="mt-2 max-w-prose text-[13.5px] leading-snug text-cart-ink-3 sm:text-[14px]">
@@ -175,7 +174,7 @@ export default function OrgSettingsPage() {
                   type="button"
                   onClick={() => fileRef.current?.click()}
                   disabled={logoUploading}
-                  className="rounded-full border border-cart-line bg-cart-bg px-3.5 py-1.5 text-[12.5px] font-medium text-cart-ink-2 transition hover:border-cart-line-strong hover:text-white disabled:opacity-60"
+                  className="rounded-full border border-cart-line bg-cart-bg px-3.5 py-1.5 text-[12.5px] font-medium text-cart-ink-2 transition hover:border-cart-line-strong hover:text-cart-ink disabled:opacity-60"
                 >
                   {logoUploading ? "Subiendo…" : "Cambiar"}
                 </button>
@@ -186,12 +185,12 @@ export default function OrgSettingsPage() {
                       setLogoPreview(null);
                       setLogoError(null);
                     }}
-                    className="rounded-full px-2.5 py-1.5 text-[12.5px] font-medium text-cart-ink-3 transition hover:text-red-300"
+                    className="rounded-full px-2.5 py-1.5 text-[12.5px] font-medium text-cart-ink-3 transition hover:text-red-600"
                   >
                     Quitar
                   </button>
                 )}
-                {logoError && <span className="text-[11.5px] text-red-300">{logoError}</span>}
+                {logoError && <span className="text-[11.5px] text-red-600">{logoError}</span>}
                 <input
                   ref={fileRef}
                   type="file"
@@ -318,7 +317,7 @@ export default function OrgSettingsPage() {
             danger
           >
             <SettingsRow
-              label={<span className="text-rose-200">Eliminar marca</span>}
+              label={<span className="text-rose-600">Eliminar marca</span>}
               description="Esta acción no se puede deshacer. Borra todos los eventos y datos de esta marca."
             >
               <div className="flex sm:justify-end">
@@ -326,7 +325,7 @@ export default function OrgSettingsPage() {
                   type="button"
                   disabled
                   title="Próximamente — escríbenos para eliminar tu marca"
-                  className="cursor-not-allowed rounded-full border border-rose-500/30 bg-rose-500/5 px-4 py-1.5 text-[12.5px] font-semibold text-rose-200/60"
+                  className="cursor-not-allowed rounded-full border border-rose-500/30 bg-rose-500/5 px-4 py-1.5 text-[12.5px] font-semibold text-rose-600/60"
                 >
                   Próximamente
                 </button>
@@ -360,7 +359,7 @@ export default function OrgSettingsPage() {
             <div className="mx-auto flex w-full max-w-[760px] items-center justify-between gap-3 px-5 py-3.5 lg:px-8">
               <span className="text-[13px] text-cart-ink-3">
                 {save.isError ? (
-                  <span className="text-rose-300">
+                  <span className="text-rose-600">
                     No se pudo guardar. Revisa el slug (puede estar tomado).
                   </span>
                 ) : (
@@ -379,7 +378,7 @@ export default function OrgSettingsPage() {
           </motion.div>
         )}
       </AnimatePresence>
-    </OrgShell>
+    </>
   );
 }
 
@@ -493,7 +492,7 @@ function BankAccountSheet({
             type="button"
             onClick={onClose}
             aria-label="Cerrar"
-            className="grid size-8 place-items-center rounded-full text-cart-ink-3 hover:bg-white/5 hover:text-white"
+            className="grid size-8 place-items-center rounded-full text-cart-ink-3 hover:bg-cart-bg-elev-2 hover:text-cart-ink"
           >
             <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
               <path d="M3 3l7 7M10 3l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
@@ -511,7 +510,7 @@ function BankAccountSheet({
             <select
               value={bankName}
               onChange={(e) => setBankName(e.target.value)}
-              className="w-full rounded-xl border border-cart-line bg-cart-bg px-3 py-2.5 text-[14px] text-white outline-none focus:border-cart-line-strong"
+              className="w-full rounded-xl border border-cart-line bg-cart-bg px-3 py-2.5 text-[14px] text-cart-ink outline-none focus:border-cart-line-strong"
             >
               <option value="">Selecciona un banco…</option>
               {PE_BANKS.map((b) => (
@@ -527,7 +526,7 @@ function BankAccountSheet({
               onChange={(e) => setAccountNumber(e.target.value)}
               placeholder="194-1234567-0-12"
               inputMode="numeric"
-              className="w-full rounded-xl border border-cart-line bg-cart-bg px-3 py-2.5 font-mono text-[14px] text-white outline-none focus:border-cart-line-strong"
+              className="w-full rounded-xl border border-cart-line bg-cart-bg px-3 py-2.5 font-mono text-[14px] text-cart-ink outline-none focus:border-cart-line-strong"
             />
             <p className="mt-1.5 text-[11.5px] text-cart-ink-3">
               Tal cual aparece en tu cartola del banco.
@@ -544,7 +543,7 @@ function BankAccountSheet({
               onChange={(e) => setCci(e.target.value.replace(/\D/g, "").slice(0, 20))}
               placeholder="00219412345678901234"
               inputMode="numeric"
-              className="w-full rounded-xl border border-cart-line bg-cart-bg px-3 py-2.5 font-mono text-[14px] text-white outline-none focus:border-cart-line-strong"
+              className="w-full rounded-xl border border-cart-line bg-cart-bg px-3 py-2.5 font-mono text-[14px] text-cart-ink outline-none focus:border-cart-line-strong"
             />
             <p className="mt-1.5 text-[11.5px] text-cart-ink-3">
               Código de Cuenta Interbancario para transferencias entre bancos.
@@ -552,7 +551,7 @@ function BankAccountSheet({
           </div>
 
           {error && (
-            <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-[12.5px] text-rose-200">
+            <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-[12.5px] text-rose-600">
               {error}
             </div>
           )}

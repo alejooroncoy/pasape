@@ -7,7 +7,6 @@ import { useLegalEntities } from "@/lib/identity/organizations/hooks/useLegalEnt
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useRouter } from "@/i18n/navigation";
-import { OrgShell } from "@/app/[locale]/org/_shell/OrgShell";
 
 // Quita sufijos legales comunes en Perú/LATAM para sugerir el nombre de marca
 // a partir del nombre legal. Ej: "Tardeo S.A.C." → "Tardeo".
@@ -22,11 +21,9 @@ const stripLegalSuffix = (name: string): string =>
 // el usuario aún no tiene marcas).
 export function NewOrgClient(_: { isFirstTime: boolean }) {
   return (
-    <OrgShell>
-      <div className="pt-2">
-        <InlineNewBrand />
-      </div>
-    </OrgShell>
+    <div className="pt-2">
+      <InlineNewBrand />
+    </div>
   );
 }
 
@@ -139,7 +136,7 @@ function InlineNewBrand() {
   return (
     <div className="mx-auto w-full max-w-[480px]">
       <div className="mb-6">
-        <h1 className="font-sans text-[26px] font-semibold tracking-[-0.02em] text-white">
+        <h1 className="font-sans text-[26px] font-semibold tracking-[-0.02em] text-cart-ink">
           {forceNewEntity ? "Nueva productora" : "Nueva marca"}
         </h1>
         <p className="mt-1 text-[13.5px] text-cart-ink-3">
@@ -188,7 +185,7 @@ function InlineNewBrand() {
                       {active && <span className="size-2 rounded-full bg-black" />}
                     </span>
                     <span className="flex min-w-0 flex-1 flex-col">
-                      <span className="truncate text-[14px] font-semibold text-white">
+                      <span className="truncate text-[14px] font-semibold text-cart-ink">
                         {e.name}
                       </span>
                       {e.taxId && (
@@ -249,7 +246,7 @@ function InlineNewBrand() {
         </section>
 
         {errorMessage && (
-          <p className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-[12.5px] text-rose-200">
+          <p className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-[12.5px] text-rose-600">
             {errorMessage}
           </p>
         )}
@@ -258,7 +255,7 @@ function InlineNewBrand() {
           <button
             type="button"
             onClick={() => router.replace("/org")}
-            className="rounded-full border border-cart-line bg-transparent px-4 py-2 text-[13px] font-medium text-cart-ink-2 transition hover:border-cart-line-strong hover:text-white"
+            className="rounded-full border border-cart-line bg-transparent px-4 py-2 text-[13px] font-medium text-cart-ink-2 transition hover:border-cart-line-strong hover:text-cart-ink"
           >
             Cancelar
           </button>
