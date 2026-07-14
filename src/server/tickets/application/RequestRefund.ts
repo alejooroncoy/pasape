@@ -27,6 +27,11 @@ export const requestRefund = async (
   const result = await repo.requestRefund(input);
   if (!result.ok) return result;
 
+  // Ya había una solicitud pendiente para este pago (orden multi-entrada o
+  // doble-tap): el repo no insertó fila nueva, así que tampoco reenviamos el
+  // correo — el equipo ya lo recibió. La UI muestra un toast "ya solicitaste".
+  if (result.value.alreadyRequested) return result;
+
   // Best-effort: el correo nunca bloquea la confirmación al comprador — si
   // Resend falla, la solicitud ya quedó guardada en `refunds` y se puede
   // encontrar ahí igual (mismo criterio que notifyPendingReview).

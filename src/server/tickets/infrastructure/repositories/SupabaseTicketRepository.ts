@@ -1385,17 +1385,22 @@ export const supabaseTicketRepository: TicketRepository = {
     const db = supabaseAdmin();
     const { data: tk } = await db
       .from("tickets")
-      .select("id, current_holder, order:orders!inner(id, event_id, buyer_id, event:events!inner(title))")
+      .select("id, status, current_holder, order:orders!inner(id, event_id, buyer_id, event:events!inner(title))")
       .eq("id", input.ticketId)
       .maybeSingle();
     if (!tk) return err("ticket_not_found");
     type Joined = {
       id: string;
+      status: string;
       current_holder: string;
       order: { id: string; event_id: string; buyer_id: string; event: { title: string } };
     };
     const ticket = tk as unknown as Joined;
     if (ticket.current_holder !== input.profileId) return err("not_owner");
+    // Defensa en profundidad (además del gate de la UI): una entrada ya usada,
+    // anulada o reembolsada no admite una nueva solicitud. Un POST directo al
+    // endpoint no debe poder pedir reembolso de algo ya consumido.
+    if (ticket.status !== "active") return err("ticket_not_refundable");
 
     // Solo órdenes con un pago real (no cortesía/gratis) califican — sin
     // payment_id no hay nada que reembolsar.
@@ -1409,6 +1414,34 @@ export const supabaseTicketRepository: TicketRepository = {
       .maybeSingle<{ id: string; amount_cents: number; currency: string }>();
     if (!payment) return err("no_payment_found");
 
+    const { data: buyer } = await db
+      .from("profiles")
+      .select("full_name, email")
+      .eq("id", ticket.order.buyer_id)
+      .maybeSingle<{ full_name: string | null; email: string | null }>();
+
+    const summary = {
+      orderId: ticket.order.id,
+      eventTitle: ticket.order.event.title,
+      amountCents: payment.amount_cents,
+      currency: payment.currency,
+      buyerName: buyer?.full_name ?? null,
+      buyerEmail: buyer?.email ?? null,
+    };
+
+    // Idempotencia: una orden con N entradas comparte UN pago. Sin esto, el fan
+    // podría pedir reembolso desde cada entrada (o por doble-tap) e inundar
+    // team@pasape.lat con filas/correos duplicados para el mismo pago. Si ya hay
+    // una solicitud pendiente, no insertamos otra ni reenviamos correo.
+    const { data: existing } = await db
+      .from("refunds")
+      .select("id")
+      .eq("payment_id", payment.id)
+      .eq("status", "requested")
+      .limit(1)
+      .maybeSingle<{ id: string }>();
+    if (existing) return ok({ ...summary, alreadyRequested: true });
+
     const { error: insErr } = await db.from("refunds").insert({
       payment_id: payment.id,
       amount_cents: payment.amount_cents,
@@ -1417,20 +1450,7 @@ export const supabaseTicketRepository: TicketRepository = {
     });
     if (insErr) return err(insErr.message);
 
-    const { data: buyer } = await db
-      .from("profiles")
-      .select("full_name, email")
-      .eq("id", ticket.order.buyer_id)
-      .maybeSingle<{ full_name: string | null; email: string | null }>();
-
-    return ok({
-      orderId: ticket.order.id,
-      eventTitle: ticket.order.event.title,
-      amountCents: payment.amount_cents,
-      currency: payment.currency,
-      buyerName: buyer?.full_name ?? null,
-      buyerEmail: buyer?.email ?? null,
-    });
+    return ok({ ...summary, alreadyRequested: false });
   },
 };
 

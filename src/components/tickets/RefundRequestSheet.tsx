@@ -1,9 +1,19 @@
 "use client";
 
 import { useState, type RefObject } from "react";
-import { AnimatePresence, motion } from "motion/react";
+import { motion } from "motion/react";
+import { toast } from "sonner";
 import { useRequestRefund } from "@/lib/tickets/hooks/useTickets";
 import { TicketActionSurface } from "./TicketActionSurface";
+
+// Copy de los códigos de error del backend (ver TicketRepository.requestRefund).
+// La UI lee la info del backend y la muestra como toast, no un error genérico.
+const REFUND_ERROR_COPY: Record<string, string> = {
+  ticket_not_refundable: "Esta entrada ya no admite reembolso.",
+  no_payment_found: "No encontramos un pago para reembolsar en esta entrada.",
+  not_owner: "Esta entrada no es tuya.",
+  ticket_not_found: "No encontramos la entrada.",
+};
 
 export function RefundRequestSheet({
   open,
@@ -90,10 +100,31 @@ export function RefundRequestSheet({
             whileTap={{ scale: 0.97 }}
             onClick={async () => {
               try {
-                await request.mutateAsync({ ticketId, reason: reason.trim() });
+                const outcome = await request.mutateAsync({ ticketId, reason: reason.trim() });
+                // El backend detectó una solicitud pendiente para este pago
+                // (orden multi-entrada o doble-tap): no duplicó nada. Se lo
+                // decimos con un toast y cerramos, sin el flujo de éxito.
+                if (outcome.alreadyRequested) {
+                  toast("Ya tienes una solicitud en revisión", {
+                    id: "refund-dup",
+                    description: "El equipo ya la recibió y te va a escribir.",
+                  });
+                  close();
+                  return;
+                }
                 setSent(true);
-              } catch {
-                /* error abajo */
+              } catch (e) {
+                // Leemos el código del backend (api.post lanza Error(payload.error))
+                // y lo mostramos como toast con copy claro.
+                const code = e instanceof Error ? e.message : "";
+                toast.error(REFUND_ERROR_COPY[code] ?? "No pudimos enviar tu solicitud. Intenta de nuevo.", {
+                  id: "refund-error",
+                });
+                // Una entrada que ya no admite reembolso no se arregla
+                // reintentando: cerramos para no dejar al fan atascado.
+                if (code === "ticket_not_refundable" || code === "not_owner" || code === "ticket_not_found") {
+                  close();
+                }
               }
             }}
             disabled={!online || request.isPending || !reasonValid}
@@ -109,18 +140,6 @@ export function RefundRequestSheet({
             )}
             {request.isPending ? "Enviando…" : "Enviar solicitud"}
           </motion.button>
-          <AnimatePresence>
-            {request.error && (
-              <motion.p
-                initial={{ opacity: 0, y: -4 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                className="mt-3 text-center text-[12px] text-rose-300"
-              >
-                No pudimos enviar tu solicitud. Intenta de nuevo o escríbenos directo.
-              </motion.p>
-            )}
-          </AnimatePresence>
         </>
       )}
     </TicketActionSurface>

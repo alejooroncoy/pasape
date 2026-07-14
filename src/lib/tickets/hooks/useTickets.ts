@@ -205,6 +205,9 @@ export type RefundRequestOutcome = {
   eventTitle: string;
   amountCents: number;
   currency: string;
+  /** true si ya existía una solicitud pendiente para ese pago (orden
+      multi-entrada / doble-tap): la UI muestra un toast en vez del éxito. */
+  alreadyRequested: boolean;
 };
 
 // Flujo no escalable a propósito: solo registra la solicitud y avisa por
