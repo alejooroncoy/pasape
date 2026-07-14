@@ -153,7 +153,35 @@ export interface TicketRepository {
     ticketId: string,
     viewerId: string,
   ): Promise<Result<{ ids: string[]; currentIndex: number; eventTicketCount: number }>>;
+  /** Registra una solicitud de reembolso (tabla `refunds`, status "requested").
+      No procesa el reembolso — eso lo hace el equipo a mano tras el correo de
+      aviso. Solo el dueño actual del ticket puede solicitarlo, la entrada debe
+      seguir "active" (una ya usada/anulada no aplica), y su orden debe tener un
+      pago (`payments`) — pedidos gratis/cortesía no aplican.
+      Idempotente: si ya hay una solicitud pendiente para ese pago, devuelve el
+      resumen con `alreadyRequested: true` en vez de duplicar fila + correo.
+      Errores posibles: `ticket_not_found`, `not_owner`, `ticket_not_refundable`,
+      `no_payment_found`. */
+  requestRefund(input: {
+    ticketId: string;
+    profileId: string;
+    reason: string;
+  }): Promise<Result<RefundRequestSummary>>;
 }
+
+/** Datos para el correo de aviso a team@pasape.lat tras una solicitud. */
+export type RefundRequestSummary = {
+  orderId: string;
+  eventTitle: string;
+  amountCents: number;
+  currency: string;
+  buyerName: string | null;
+  buyerEmail: string | null;
+  /** true si ya existía una solicitud pendiente para ese pago — el caso de uso
+      omite el correo y la UI muestra un toast "ya solicitaste" en vez del flujo
+      de éxito normal. */
+  alreadyRequested: boolean;
+};
 
 export type MarkUsedResult = {
   ticket: Ticket;

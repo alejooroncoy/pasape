@@ -1380,6 +1380,89 @@ export const supabaseTicketRepository: TicketRepository = {
     }
     return markByQrCode(db, row.qr_code, scanner, opts.usedAt, ticketId);
   },
+
+  async requestRefund(input) {
+    const db = supabaseAdmin();
+    const { data: tk } = await db
+      .from("tickets")
+      .select("id, status, current_holder, order:orders!inner(id, event_id, buyer_id, event:events!inner(title))")
+      .eq("id", input.ticketId)
+      .maybeSingle();
+    if (!tk) return err("ticket_not_found");
+    type Joined = {
+      id: string;
+      status: string;
+      current_holder: string;
+      order: { id: string; event_id: string; buyer_id: string; event: { title: string } };
+    };
+    const ticket = tk as unknown as Joined;
+    if (ticket.current_holder !== input.profileId) return err("not_owner");
+    // Defensa en profundidad (además del gate de la UI): una entrada ya usada,
+    // anulada o reembolsada no admite una nueva solicitud. Un POST directo al
+    // endpoint no debe poder pedir reembolso de algo ya consumido.
+    if (ticket.status !== "active") return err("ticket_not_refundable");
+
+    // Solo órdenes con un pago real (no cortesía/gratis) califican — sin
+    // payment_id no hay nada que reembolsar.
+    const { data: payment } = await db
+      .from("payments")
+      .select("id, amount_cents, currency")
+      .eq("order_id", ticket.order.id)
+      .eq("status", "paid")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle<{ id: string; amount_cents: number; currency: string }>();
+    if (!payment) return err("no_payment_found");
+
+    const { data: buyer } = await db
+      .from("profiles")
+      .select("full_name, email")
+      .eq("id", ticket.order.buyer_id)
+      .maybeSingle<{ full_name: string | null; email: string | null }>();
+
+    const summary = {
+      orderId: ticket.order.id,
+      eventTitle: ticket.order.event.title,
+      amountCents: payment.amount_cents,
+      currency: payment.currency,
+      buyerName: buyer?.full_name ?? null,
+      buyerEmail: buyer?.email ?? null,
+    };
+
+    // Idempotencia: una orden con N entradas comparte UN pago. Sin esto, el fan
+    // podría pedir reembolso desde cada entrada (o por doble-tap) e inundar
+    // team@pasape.lat con filas/correos duplicados para el mismo pago. Si ya hay
+    // una solicitud pendiente, no insertamos otra ni reenviamos correo.
+    const { data: existing } = await db
+      .from("refunds")
+      .select("id")
+      .eq("payment_id", payment.id)
+      .eq("status", "requested")
+      .limit(1)
+      .maybeSingle<{ id: string }>();
+    if (existing) return ok({ ...summary, alreadyRequested: true });
+
+    const { error: insErr } = await db.from("refunds").insert({
+      payment_id: payment.id,
+      amount_cents: payment.amount_cents,
+      reason: input.reason,
+      status: "requested",
+    });
+    if (insErr) {
+      // Carrera perdida contra otra solicitud simultánea del mismo pago: el
+      // índice único parcial `refunds_one_pending_per_payment` la rechaza
+      // (23505 = unique_violation). Cierra el hueco que el pre-chequeo de
+      // arriba deja abierto para dos requests exactamente concurrentes. Es
+      // idempotente: ya hay una pendiente, así que lo tratamos como
+      // alreadyRequested (sin fila nueva, sin correo) igual que el pre-chequeo.
+      if ((insErr as { code?: string }).code === "23505") {
+        return ok({ ...summary, alreadyRequested: true });
+      }
+      return err(insErr.message);
+    }
+
+    return ok({ ...summary, alreadyRequested: false });
+  },
 };
 
 // ¿La entrada del QR está permitida en la puerta `zoneId`?

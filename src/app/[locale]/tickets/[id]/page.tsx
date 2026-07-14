@@ -11,6 +11,7 @@ import { useRouter } from "@/i18n/navigation";
 import { QrSquare } from "@/components/design";
 import { HolderEditSheet } from "@/components/tickets/HolderEditSheet";
 import { TransferTicketSheet } from "@/components/tickets/TransferTicketSheet";
+import { RefundRequestSheet } from "@/components/tickets/RefundRequestSheet";
 import { useTicket, useCancelTransfer, useMyTickets, useCarouselScope, ticketDetailKey } from "@/lib/tickets/hooks/useTickets";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { useOnline } from "@/lib/_shared/useOnline";
@@ -86,8 +87,10 @@ function TicketDetailInner({ id }: { id: string }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [refundOpen, setRefundOpen] = useState(false);
   const holderBtnRef = useRef<HTMLButtonElement>(null);
   const transferBtnRef = useRef<HTMLButtonElement>(null);
+  const refundBtnRef = useRef<HTMLButtonElement>(null);
   // QR firmado (ECDSA): clave no-extraíble en el device + cert del evento.
   // Genera el QR rotativo 100% offline tras la primera carga. Si el ticket está
   // used/void, null evita carga.
@@ -670,6 +673,25 @@ function TicketDetailInner({ id }: { id: string }) {
             </div>
           </div>
         )}
+
+        {/* Reembolso: acción discreta al pie — no compite con Enviar/Cambiar
+            datos. Solo en entradas activas y ya pagadas (una orden en revisión
+            aún no tiene pago que reembolsar). El backend igual valida dueño +
+            pago; acá solo abrimos la solicitud (revisión manual del equipo). */}
+        {data.status === "active" && !data.pendingTransferTo && data.orderStatus !== "pending" && (
+          <div className="mt-6 text-center">
+            <button
+              ref={refundBtnRef}
+              type="button"
+              onClick={() => setRefundOpen(true)}
+              disabled={!online}
+              title={online ? undefined : "Necesitas conexión para esto"}
+              className="text-[12.5px] font-medium text-cart-ink-3 underline decoration-cart-line-strong underline-offset-4 transition hover:text-cart-ink-2 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              ¿Un problema con esta entrada? Solicitar reembolso
+            </button>
+          </div>
+        )}
       </main>
 
       {/* Nudge fijo del box (mobile y desktop): barrita atenuada/glassy que recuerda
@@ -727,6 +749,14 @@ function TicketDetailInner({ id }: { id: string }) {
         anchorRef={holderBtnRef}
         variant="yours"
         onClose={() => setEditOpen(false)}
+      />
+
+      <RefundRequestSheet
+        open={refundOpen}
+        ticketId={data.id}
+        online={online}
+        anchorRef={refundBtnRef}
+        onClose={() => setRefundOpen(false)}
       />
     </div>
   );
