@@ -676,6 +676,16 @@ function WalletPageInner() {
     [activeEventId, upcomingGroups, pastGroups],
   );
 
+  // Higiene de estado: si el evento activo desaparece de la wallet mientras
+  // estás en "select" (caso raro: el receptor reclama y el grupo se vacía),
+  // volvemos a la lista para no dejar `view`/`activeEventId` apuntando a la nada.
+  useEffect(() => {
+    if (view === "select" && !activeGroup) {
+      setView("list");
+      setActiveEventId(null);
+    }
+  }, [view, activeGroup]);
+
   // Deep-link "Ver todas" desde el QR: /tickets?event=<id> abre directo la lista
   // de entradas de ese evento (vista "select").
   const searchParams = useSearchParams();
