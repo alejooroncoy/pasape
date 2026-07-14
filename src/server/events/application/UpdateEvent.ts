@@ -91,10 +91,26 @@ export const updateEvent = async (
   //
   // Excepción: organizaciones con `organizations.trusted = true` se saltan la
   // revisión y publican directo — ver 20260707100000_organizations_trusted.sql.
+  //
+  // `before` es el snapshot que trajo el guard del controller, ANTES de
+  // safeParse/validación — hay una ventana entre esa lectura y este punto
+  // donde otro request pudo cambiar `status` (doble clic en "Publicar", o un
+  // guardado concurrente). Releer el status puntual acá evita que dos
+  // requests concurrentes evalúen ambos `entersFirstPublish = true` sobre un
+  // estado ya viejo.
+  const wantsPublish = input.status === "published";
+  let currentStatus = before?.status;
+  if (wantsPublish) {
+    const db = supabaseAdmin();
+    const { data: current } = await db
+      .from("events")
+      .select("status")
+      .eq("id", eventId)
+      .maybeSingle<{ status: Event["status"] }>();
+    if (current) currentStatus = current.status;
+  }
   const entersFirstPublish =
-    input.status === "published" &&
-    before?.status !== "closed" &&
-    before?.status !== "published";
+    wantsPublish && currentStatus !== "closed" && currentStatus !== "published";
   let orgTrusted = false;
   if (entersFirstPublish) {
     const db = supabaseAdmin();

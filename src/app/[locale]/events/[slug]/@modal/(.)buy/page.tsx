@@ -30,13 +30,20 @@ export default function InterceptedBuyPay({ params }: Props) {
 
   return (
     <PayDrawer title="Pago" onClosed={() => router.back()}>
-      {() => (
-        <CheckoutPaySurface
-          slug={slug}
-          orderId={order}
-          orderToken={search.get("k")}
-        />
-      )}
+      {({ arrived }) =>
+        arrived ? (
+          <CheckoutPaySurface
+            slug={slug}
+            orderId={order}
+            orderToken={search.get("k")}
+          />
+        ) : (
+          <div className="flex flex-col items-center justify-center py-14 text-center">
+            <div className="size-11 rounded-full border-[3px] border-cart-line-strong border-t-cart-accent animate-[spin_0.8s_linear_infinite]" />
+            <p className="mt-4 text-[13.5px] text-cart-ink-2">Preparando el pago…</p>
+          </div>
+        )
+      }
     </PayDrawer>
   );
 }

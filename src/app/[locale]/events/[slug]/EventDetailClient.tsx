@@ -333,7 +333,6 @@ export function EventDetailClient({
                       onGroupQtyChange={(key, qty) =>
                         setGroupQty((prev) => ({ ...prev, [key]: qty }))
                       }
-                      onPickGroup={() => {}}
                       palette={palette}
                     />
                   </>
@@ -391,7 +390,6 @@ export function EventDetailClient({
                             onGroupQtyChange={(key, qty) =>
                               setGroupQty((prev) => ({ ...prev, [key]: qty }))
                             }
-                            onPickGroup={() => {}}
                             palette={palette}
                           />
                         </>
@@ -700,6 +698,15 @@ function FollowButton({ org }: { org: ShowcaseOrg }) {
   const loggedIn = !!me.data?.user;
   const { isFollowing, toggle, isPending } = useFollow(org.id);
   const [signInOpen, setSignInOpen] = useState(false);
+  // Si abrió el SignInDrawer para completar "Seguir", tras loguearse toggle()
+  // se dispara solo — sin esto el usuario tendría que tocar el botón otra vez.
+  const pendingFollowRef = useRef(false);
+  useEffect(() => {
+    if (loggedIn && pendingFollowRef.current) {
+      pendingFollowRef.current = false;
+      if (!isFollowing) toggle();
+    }
+  }, [loggedIn, isFollowing, toggle]);
 
   return (
     <>
@@ -707,6 +714,7 @@ function FollowButton({ org }: { org: ShowcaseOrg }) {
         type="button"
         onClick={() => {
           if (!loggedIn) {
+            pendingFollowRef.current = true;
             setSignInOpen(true);
             return;
           }
@@ -866,14 +874,12 @@ function GroupCardList({
   compact,
   groupQty,
   onGroupQtyChange,
-  onPickGroup,
   palette,
 }: {
   groups: TicketGroup[];
   compact?: boolean;
   groupQty?: Record<string, number>;
   onGroupQtyChange?: (key: string, qty: number) => void;
-  onPickGroup: (group: TicketGroup) => void;
   palette: Palette | null;
 }) {
   return (
@@ -891,7 +897,6 @@ function GroupCardList({
             qty={groupQty?.[key] ?? 0}
             maxQty={maxQty}
             onQtyChange={onGroupQtyChange ? (q) => onGroupQtyChange(key, q) : undefined}
-            onClick={() => onPickGroup(group)}
             palette={palette}
           />
         );
@@ -900,6 +905,9 @@ function GroupCardList({
   );
 }
 
+// Solo entradas individuales llegan acá (los grupos de box se filtran antes y
+// se renderizan vía BoxSection, con su propio picker A/B/C) — la card nunca
+// es clickeable, siempre stepper +/-.
 function GroupCard({
   group,
   summary,
@@ -907,7 +915,6 @@ function GroupCard({
   qty,
   maxQty,
   onQtyChange,
-  onClick,
   palette,
 }: {
   group: TicketGroup;
@@ -916,7 +923,6 @@ function GroupCard({
   qty: number;
   maxQty: number;
   onQtyChange?: (qty: number) => void;
-  onClick: () => void;
   palette: Palette | null;
 }) {
   // Título de la card: el NOMBRE de la entrada (una card por tipo). Los boxes
@@ -953,18 +959,8 @@ function GroupCard({
   const stepperTextColor = readableTextColor(cardAccent);
   const badgeColor = ensureContrast("#059669", cardBg, "#047857", 4.5);
 
-  // "Un solo mecanismo": la CARD solo es clickeable para boxes — necesitan el
-  // picker para elegir A/B/C. Las entradas individuales se agregan con el
-  // stepper y punto; tocar la card no navega, así no compiten dos caminos de
-  // compra (el único camino a pagar es el botón "Comprar" del pie/lateral).
-  const cardActs = summary.isAllBoxes && !summary.isAllSoldOut;
-
   return (
     <div
-      role={cardActs ? "button" : undefined}
-      tabIndex={cardActs ? 0 : undefined}
-      onClick={cardActs ? onClick : undefined}
-      onKeyDown={cardActs ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } } : undefined}
       aria-disabled={summary.isAllSoldOut}
       className={
         "group flex w-full items-stretch rounded-2xl border bg-cart-bg-elev text-left transition " +
@@ -972,7 +968,7 @@ function GroupCard({
           ? "border-cart-line opacity-55 cursor-not-allowed"
           : qty > 0
             ? "shadow-[0_0_16px_-6px_var(--color-cart-accent-glow)]"
-            : "border-cart-line" + (cardActs ? " cursor-pointer hover:border-cart-line-strong hover:bg-cart-bg-elev/80" : "")) +
+            : "border-cart-line") +
         (compact ? " px-3.5 py-3" : " px-4 py-4")
       }
       style={{
@@ -1042,10 +1038,9 @@ function GroupCard({
             )}
           </span>
         </div>
-        {/* Contador +/- solo para entradas individuales. Un box NO se cuenta:
-            se reserva por identidad (A/B/C) en el picker, no con un stepper —
-            un "box × 2" no dice CUÁLES dos. Los grupos de box caen al "Ver ›"
-            que abre el picker (onClick del card). */}
+        {/* Contador +/- solo para entradas individuales — GroupCard nunca
+            recibe grupos de box (se filtran antes y van a BoxSection con su
+            propio picker A/B/C), pero el guard queda por si eso cambia. */}
         {!summary.isAllSoldOut && onQtyChange && !summary.isAllBoxes ? (
           <div className="mt-2 flex items-center gap-1.5">
             {qty > 0 ? (
