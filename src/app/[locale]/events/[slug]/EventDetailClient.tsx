@@ -756,7 +756,18 @@ function FollowButton({ org }: { org: ShowcaseOrg }) {
       </button>
       <SignInDrawer
         open={signInOpen}
-        onClose={() => setSignInOpen(false)}
+        onClose={() => {
+          setSignInOpen(false);
+          // Canceló sin loguearse: limpia el flag para que no quede huérfano
+          // y dispare un "Seguir" no solicitado si más tarde se loguea desde
+          // otro flujo en la misma pestaña. Si SÍ se logueó, el efecto de
+          // arriba ya consumió y borró el flag antes de que esto corra.
+          if (!loggedIn) {
+            try {
+              sessionStorage.removeItem(pendingFollowKey(org.id));
+            } catch {}
+          }
+        }}
         redirectTo={pathname}
       />
     </>
