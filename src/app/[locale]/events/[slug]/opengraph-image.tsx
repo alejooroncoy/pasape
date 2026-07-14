@@ -10,6 +10,21 @@ export const alt = "Pasape evento";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
+// Paleta clara (home-light), coherente con el OG del home y la app. El flyer del
+// evento manda (es un card protagonista + textura tenue de fondo), pero el marco
+// va claro con sombra suave de marca. El scrim de fondo es PLANO (no gradiente)
+// y casi opaco: deja pasar un tinte de los colores del flyer sin comprometer la
+// legibilidad del texto oscuro. Ver defaultOgImage.tsx.
+const BG = "#fbfaff";
+const INK = "#1c1030";
+const INK_MUTED = "#6b6480";
+const ACCENT = "#7c3aed";
+const SUBTLE = "#f3f1fb";
+const CARD = "#ffffff";
+const CARD_BORDER = "rgba(28,16,48,0.08)";
+const CARD_SHADOW =
+  "0 30px 80px rgba(124,58,237,0.18), 0 10px 26px rgba(79,109,245,0.12)";
+
 export default async function EventOgImage({
   params,
 }: {
@@ -39,35 +54,25 @@ export default async function EventOgImage({
           height: "100%",
           display: "flex",
           position: "relative",
-          background: "#08070f",
+          background: BG,
           overflow: "hidden",
-          color: "#fff",
+          color: INK,
           fontFamily: "Pasape Sans",
         }}
       >
-        {coverUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={coverUrl}
-            alt=""
-            style={{
-              position: "absolute",
-              inset: 0,
-              width: "100%",
-              height: "100%",
-              objectFit: "cover",
-              filter: "blur(28px) saturate(1.2)",
-              transform: "scale(1.1)",
-            }}
-          />
-        ) : null}
-
+        {/* Fondo claro limpio con glows suaves de marca (morado + azul, baja
+            opacidad). NO usamos el flyer difuminado full-bleed: un flyer oscuro
+            ensuciaba el fondo con un manchón gris. El flyer protagoniza en la
+            card de la derecha, siempre nítido, y el texto oscuro queda legible
+            sobre cualquier evento. */}
         <div
           style={{
             position: "absolute",
             inset: 0,
             background:
-              "linear-gradient(112deg, rgba(8,7,15,0.95) 0%, rgba(10,8,20,0.82) 42%, rgba(78,33,150,0.52) 100%)",
+              "radial-gradient(ellipse 52% 46% at 22% 24%, rgba(124,58,237,0.12), transparent 60%), radial-gradient(ellipse 46% 42% at 82% 82%, rgba(79,109,245,0.10), transparent 62%), " +
+              BG,
+            display: "flex",
           }}
         />
 
@@ -98,11 +103,12 @@ export default async function EventOgImage({
                 gap: 12,
                 padding: "10px 18px",
                 borderRadius: 999,
-                border: "1px solid rgba(255,255,255,0.20)",
-                background: "rgba(16,14,28,0.50)",
+                border: `1px solid ${CARD_BORDER}`,
+                background: CARD,
+                boxShadow: "0 8px 24px rgba(124,58,237,0.12)",
                 fontSize: 24,
                 fontWeight: 700,
-                color: "#F3ECFF",
+                color: INK,
               }}
             >
               {logoSrc ? (
@@ -114,8 +120,7 @@ export default async function EventOgImage({
                     width: 10,
                     height: 10,
                     borderRadius: 10,
-                    background: "#B87CFF",
-                    boxShadow: "0 0 20px rgba(184,124,255,0.8)",
+                    background: ACCENT,
                     display: "flex",
                   }}
                 />
@@ -131,6 +136,7 @@ export default async function EventOgImage({
                   fontWeight: 800,
                   letterSpacing: -2.6,
                   maxWidth: 610,
+                  color: INK,
                 }}
               >
                 {title}
@@ -141,8 +147,8 @@ export default async function EventOgImage({
                   style={{
                     fontSize: 26,
                     fontWeight: 700,
-                    color: "#0D0B17",
-                    background: "#B87CFF",
+                    color: "#ffffff",
+                    background: ACCENT,
                     borderRadius: 999,
                     padding: "8px 16px",
                   }}
@@ -158,13 +164,12 @@ export default async function EventOgImage({
                   marginTop: 8,
                   padding: "14px 26px",
                   borderRadius: 999,
-                  border: "1px solid rgba(255,255,255,0.26)",
-                  background:
-                    "linear-gradient(120deg, rgba(255,255,255,0.14), rgba(255,255,255,0.05))",
+                  background: ACCENT,
                   color: "#FFFFFF",
                   fontSize: 29,
                   fontWeight: 700,
                   letterSpacing: 0.2,
+                  boxShadow: "0 14px 34px rgba(124,58,237,0.30)",
                 }}
               >
                 Compra tu entrada
@@ -186,9 +191,9 @@ export default async function EventOgImage({
                 width: 420,
                 height: 520,
                 borderRadius: 44,
-                background: "#0D0B17",
-                boxShadow:
-                  "0 0 0 1px rgba(255,255,255,0.14), 0 34px 90px rgba(0,0,0,0.48)",
+                background: CARD,
+                border: `1px solid ${CARD_BORDER}`,
+                boxShadow: CARD_SHADOW,
                 overflow: "hidden",
                 display: "flex",
                 flexDirection: "column",
@@ -218,8 +223,7 @@ export default async function EventOgImage({
                     left: 0,
                     width: 420,
                     height: 360,
-                    background:
-                      "linear-gradient(150deg,#0f0020 0%,#3b0764 40%,#7c3aed 100%)",
+                    background: SUBTLE,
                     display: "flex",
                   }}
                 />
@@ -228,21 +232,20 @@ export default async function EventOgImage({
               <div
                 style={{
                   position: "relative",
-                  marginTop: 352,
+                  marginTop: 360,
                   flex: 1,
                   display: "flex",
                   flexDirection: "column",
                   gap: 8,
                   padding: "20px 24px",
-                  background:
-                    "linear-gradient(180deg, rgba(13,11,23,0.72), rgba(13,11,23,0.96))",
+                  background: CARD,
                 }}
               >
                 <span
                   style={{
-                    color: "#BFB4D8",
+                    color: ACCENT,
                     fontSize: 16,
-                    fontWeight: 600,
+                    fontWeight: 700,
                     letterSpacing: 0.5,
                   }}
                 >
@@ -250,7 +253,7 @@ export default async function EventOgImage({
                 </span>
                 <span
                   style={{
-                    color: "#FFFFFF",
+                    color: INK,
                     fontSize: 32,
                     lineHeight: 1.05,
                     fontWeight: 700,
@@ -272,8 +275,10 @@ async function loadLogo(): Promise<string | null> {
   try {
     const { readFile } = await import("node:fs/promises");
     const { join } = await import("node:path");
+    // Perrito oscuro cuadrado: se lee sobre el marco claro (el logo-icon-min era
+    // solo la orejita lavanda, invisible en claro).
     const buf = await readFile(
-      join(process.cwd(), "public/icons/logo-icon-min-512.png"),
+      join(process.cwd(), "public/icons/logo-dark-square-512.png"),
     );
     return `data:image/png;base64,${buf.toString("base64")}`;
   } catch {
