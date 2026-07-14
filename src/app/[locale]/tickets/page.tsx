@@ -629,7 +629,11 @@ function WalletPageInner() {
 
   // "list" → lista de eventos · "select" → entradas de un evento
   const [view, setView] = useState<"list" | "select">("list");
-  const [activeGroup, setActiveGroup] = useState<EventGroup | null>(null);
+  // Guardamos el ID del evento activo, NO el grupo: el reparto es inline (queda
+  // en la vista "select") y al asignar/enviar la wallet se refetchea; derivar el
+  // grupo de los datos vivos hace que las filas reflejen el cambio (un snapshot
+  // del grupo quedaría congelado y la fila seguiría diciendo "Sin asignar").
+  const [activeEventId, setActiveEventId] = useState<string | null>(null);
 
   // Reparto inline (rápido, sin salir de la lista):
   // - chooserTicket → sheet "¿para quién es?" (entrada sin asignar)
@@ -660,6 +664,18 @@ function WalletPageInner() {
   const upcomingGroups = useMemo(() => groupByEvent(upcoming), [upcoming]);
   const pastGroups = useMemo(() => groupByEvent(past), [past]);
 
+  // Grupo activo DERIVADO de los datos vivos (no un snapshot) — se re-sincroniza
+  // solo cuando la wallet refetchea tras un reparto inline.
+  const activeGroup = useMemo(
+    () =>
+      activeEventId == null
+        ? null
+        : upcomingGroups.find((g) => g.event.id === activeEventId) ??
+          pastGroups.find((g) => g.event.id === activeEventId) ??
+          null,
+    [activeEventId, upcomingGroups, pastGroups],
+  );
+
   // Deep-link "Ver todas" desde el QR: /tickets?event=<id> abre directo la lista
   // de entradas de ese evento (vista "select").
   const searchParams = useSearchParams();
@@ -673,7 +689,7 @@ function WalletPageInner() {
     if (!group) return;
     autoOpened.current = true;
     setTab(past.some((t) => t.event.id === eventParam) && !upcoming.some((t) => t.event.id === eventParam) ? "past" : "next");
-    setActiveGroup(group);
+    setActiveEventId(eventParam);
     setView("select");
   }, [eventParam, all.length, upcoming, past]);
 
@@ -712,14 +728,14 @@ function WalletPageInner() {
       router.push(`/tickets/${group.tickets[0].id}` as never);
       return;
     }
-    setActiveGroup(group);
+    setActiveEventId(group.event.id);
     setView("select");
     syncEventParam(group.event.id);
   };
 
   const handleBack = () => {
     setView("list");
-    setActiveGroup(null);
+    setActiveEventId(null);
     syncEventParam(null);
   };
 
@@ -767,7 +783,7 @@ function WalletPageInner() {
         )}
 
         <AnimatePresence mode="wait">
-          {view === "list" ? (
+          {view === "list" || !activeGroup ? (
             <motion.div key="list" initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }} transition={{ duration: 0.18 }}>
               {/* Header */}
               <header className="py-3">

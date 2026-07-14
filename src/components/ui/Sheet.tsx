@@ -69,7 +69,12 @@ export function Sheet({
   // El crecimiento a pantalla completa es un patrón MÓVIL. En desktop (≥lg) la
   // hoja expandida se queda como MODAL centrado normal (sin height:100dvh, con
   // esquinas redondeadas) — más simple y natural en pantalla grande.
-  const [isDesktop, setIsDesktop] = useState(false);
+  // Init lazy con el valor real: el primer render ya sabe si es desktop, así una
+  // hoja que monta abierta (deep-link) entra con el fade/scale correcto y no con
+  // el slide móvil de un frame. En SSR no hay window (la hoja monta cerrada).
+  const [isDesktop, setIsDesktop] = useState(
+    () => typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches,
+  );
   useEffect(() => {
     const mq = window.matchMedia("(min-width: 1024px)");
     const on = () => setIsDesktop(mq.matches);
