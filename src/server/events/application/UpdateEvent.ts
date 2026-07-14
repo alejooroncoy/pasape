@@ -95,18 +95,23 @@ export const updateEvent = async (
   // `before` es el snapshot que trajo el guard del controller, ANTES de
   // safeParse/validación — hay una ventana entre esa lectura y este punto
   // donde otro request pudo cambiar `status` (doble clic en "Publicar", o un
-  // guardado concurrente). Releer el status puntual acá evita que dos
-  // requests concurrentes evalúen ambos `entersFirstPublish = true` sobre un
-  // estado ya viejo.
+  // guardado concurrente). Releer el status puntual acá ACORTA esa ventana
+  // (no la cierra del todo: dos requests casi simultáneos podrían leer el
+  // mismo status viejo antes de que cualquiera llegue a `repo.update`) — un
+  // cierre real necesitaría un UPDATE condicional (compare-and-swap) sobre
+  // `status`, fuera de alcance de este fix puntual.
   const wantsPublish = input.status === "published";
   let currentStatus = before?.status;
   if (wantsPublish) {
     const db = supabaseAdmin();
-    const { data: current } = await db
+    const { data: current, error: statusErr } = await db
       .from("events")
       .select("status")
       .eq("id", eventId)
       .maybeSingle<{ status: Event["status"] }>();
+    if (statusErr) {
+      console.error("[updateEvent] releer status falló, usando snapshot del guard:", statusErr);
+    }
     if (current) currentStatus = current.status;
   }
   const entersFirstPublish =

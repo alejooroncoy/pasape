@@ -44,6 +44,7 @@ describe("isPanelFeatureUnlocked / unlockPanelFeature", () => {
 
   afterEach(() => {
     delete (globalThis as { window?: unknown }).window;
+    delete (globalThis as { CustomEvent?: unknown }).CustomEvent;
   });
 
   it("sin desbloquear, isPanelFeatureUnlocked es false", () => {

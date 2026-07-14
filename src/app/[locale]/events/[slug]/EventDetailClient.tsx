@@ -33,7 +33,7 @@ import type { TicketType } from "@/server/events/domain/Event";
 import { VenueLayoutModal } from "@/components/ui/VenueLayoutModal";
 import { Sheet } from "@/components/ui/Sheet";
 import { PresaleCountdown } from "@/components/ui/PresaleCountdown";
-import { activePricing } from "@/lib/events/pricing";
+import { activePricing, applyPromos } from "@/lib/events/pricing";
 import { optimizeImageUrl } from "@/lib/images/optimizeUrl";
 import {
   eventAvailability,
@@ -103,6 +103,7 @@ export function EventDetailClient({
     () => (data ? groupForDetail(data.ticketTypes) : []),
     [data],
   );
+  const promos = data?.promos;
 
   const availability = useMemo(
     () => (data ? eventAvailability(data.ticketTypes) : { freeBoxes: 0, freeSeats: 0, total: 0 }),
@@ -161,16 +162,23 @@ export function EventDetailClient({
   }, [entradaUnits, selectedBoxes.length]);
 
   const liveTotalCents = useMemo(() => {
-    const entradas = entradaGroups.reduce((sum, group) => {
-      const qty = groupQty[detailGroupKey(group)] ?? 0;
-      const price = summarizeGroup(group).minPriceCents ?? 0;
-      return sum + qty * price;
-    }, 0);
+    // Cada entradaGroup es de un solo ticket type (detailGroupKey solo agrupa
+    // boxes) — aplicar promos 2x1/3x2 acá evita un falso "drift" contra el
+    // quote del server, que SÍ las aplica (CheckoutSheet compara este total
+    // contra `q.totalCents`).
+    const lineItems = entradaGroups
+      .map((group) => {
+        const qty = groupQty[detailGroupKey(group)] ?? 0;
+        const single = group.items[0];
+        return qty > 0 && single ? { ticketTypeId: single.id, qty, unitPriceCents: single.buyerPriceCents } : null;
+      })
+      .filter((li): li is { ticketTypeId: string; qty: number; unitPriceCents: number } => li != null);
+    const entradas = applyPromos(lineItems, promos ?? []).totalCents;
     // El precio del box es el que ya viene calculado por el backend
     // (buyerPriceCents) — display, no recálculo. El total real lo pisa el quote.
     const boxes = selectedBoxes.reduce((s, b) => s + (b.buyerPriceCents ?? 0), 0);
     return entradas + boxes;
-  }, [entradaGroups, groupQty, selectedBoxes]);
+  }, [entradaGroups, groupQty, selectedBoxes, promos]);
 
   // Precio "desde" del evento (display): el menor precio entre todas las zonas
   // disponibles. Solo para el gancho de la barra cuando el usuario aún no
@@ -692,6 +700,8 @@ function VerifiedSeal() {
 // desktop) sin salir de la página; al loguear vuelve acá (redirectTo). Antes
 // navegaba a la vitrina de la org, un desvío confuso: clicabas "Seguir" y
 // aterrizabas en otra página sin haber seguido nada.
+const pendingFollowKey = (orgId: string) => `pasape:pending_follow:${orgId}`;
+
 function FollowButton({ org }: { org: ShowcaseOrg }) {
   const pathname = usePathname();
   const me = useCurrentUser();
@@ -700,13 +710,24 @@ function FollowButton({ org }: { org: ShowcaseOrg }) {
   const [signInOpen, setSignInOpen] = useState(false);
   // Si abrió el SignInDrawer para completar "Seguir", tras loguearse toggle()
   // se dispara solo — sin esto el usuario tendría que tocar el botón otra vez.
-  const pendingFollowRef = useRef(false);
+  // El login de Google es hard-navigation (OAuth → /auth/callback), que
+  // remonta la página entera: un useRef en memoria no sobrevive ese viaje.
+  // Por eso la intención se persiste en sessionStorage (mismo patrón que
+  // setOauthReturn/PostLoginRedirect), no en un ref.
   useEffect(() => {
-    if (loggedIn && pendingFollowRef.current) {
-      pendingFollowRef.current = false;
-      if (!isFollowing) toggle();
+    if (!loggedIn) return;
+    let pending = false;
+    try {
+      pending = sessionStorage.getItem(pendingFollowKey(org.id)) === "1";
+    } catch {
+      /* sessionStorage inaccesible — sin auto-toggle, no rompe nada más */
     }
-  }, [loggedIn, isFollowing, toggle]);
+    if (!pending) return;
+    try {
+      sessionStorage.removeItem(pendingFollowKey(org.id));
+    } catch {}
+    if (!isFollowing) toggle();
+  }, [loggedIn, isFollowing, toggle, org.id]);
 
   return (
     <>
@@ -714,7 +735,9 @@ function FollowButton({ org }: { org: ShowcaseOrg }) {
         type="button"
         onClick={() => {
           if (!loggedIn) {
-            pendingFollowRef.current = true;
+            try {
+              sessionStorage.setItem(pendingFollowKey(org.id), "1");
+            } catch {}
             setSignInOpen(true);
             return;
           }
