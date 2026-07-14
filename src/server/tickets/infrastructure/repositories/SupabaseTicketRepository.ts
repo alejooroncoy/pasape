@@ -1448,7 +1448,18 @@ export const supabaseTicketRepository: TicketRepository = {
       reason: input.reason,
       status: "requested",
     });
-    if (insErr) return err(insErr.message);
+    if (insErr) {
+      // Carrera perdida contra otra solicitud simultánea del mismo pago: el
+      // índice único parcial `refunds_one_pending_per_payment` la rechaza
+      // (23505 = unique_violation). Cierra el hueco que el pre-chequeo de
+      // arriba deja abierto para dos requests exactamente concurrentes. Es
+      // idempotente: ya hay una pendiente, así que lo tratamos como
+      // alreadyRequested (sin fila nueva, sin correo) igual que el pre-chequeo.
+      if ((insErr as { code?: string }).code === "23505") {
+        return ok({ ...summary, alreadyRequested: true });
+      }
+      return err(insErr.message);
+    }
 
     return ok({ ...summary, alreadyRequested: false });
   },
