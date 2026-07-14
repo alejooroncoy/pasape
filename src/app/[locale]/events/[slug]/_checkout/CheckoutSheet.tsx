@@ -131,7 +131,18 @@ export function CheckoutSheet({
     submittingRef.current = false;
     quote.mutate(
       { eventId, items: items.map((i) => ({ ticketTypeId: i.ticketTypeId, qty: i.qty })) },
-      { onSuccess: setQuoted, onError: () => setQuoted(null) },
+      {
+        onSuccess: (q) => {
+          setQuoted(q);
+          if (q.totalCents !== fallbackTotalCents) {
+            console.warn("[checkout] drift suma local vs total del server", {
+              localTotal: fallbackTotalCents,
+              serverTotal: q.totalCents,
+            });
+          }
+        },
+        onError: () => setQuoted(null),
+      },
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);

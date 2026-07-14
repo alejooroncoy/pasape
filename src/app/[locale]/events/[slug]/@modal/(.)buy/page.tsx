@@ -11,6 +11,7 @@
 
 import { use } from "react";
 import { useSearchParams } from "next/navigation";
+import { AnimatePresence, motion } from "motion/react";
 import { useRouter } from "@/i18n/navigation";
 import { PayDrawer } from "../../_checkout/PayDrawer";
 import { CheckoutPaySurface } from "../../_checkout/CheckoutPaySurface";
@@ -30,12 +31,36 @@ export default function InterceptedBuyPay({ params }: Props) {
 
   return (
     <PayDrawer title="Pago" onClosed={() => router.back()}>
-      {() => (
-        <CheckoutPaySurface
-          slug={slug}
-          orderId={order}
-          orderToken={search.get("k")}
-        />
+      {({ arrived }) => (
+        <AnimatePresence mode="wait" initial={false}>
+          {arrived ? (
+            <motion.div
+              key="surface"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <CheckoutPaySurface
+                slug={slug}
+                orderId={order}
+                orderToken={search.get("k")}
+              />
+            </motion.div>
+          ) : (
+            <motion.div
+              key="preparing"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="flex flex-col items-center justify-center py-14 text-center"
+            >
+              <div className="size-11 rounded-full border-[3px] border-cart-line-strong border-t-cart-accent animate-[spin_0.8s_linear_infinite]" />
+              <p className="mt-4 text-[13.5px] text-cart-ink-2">Preparando el pago…</p>
+            </motion.div>
+          )}
+        </AnimatePresence>
       )}
     </PayDrawer>
   );

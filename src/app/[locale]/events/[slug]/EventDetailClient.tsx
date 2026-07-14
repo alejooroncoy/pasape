@@ -33,7 +33,7 @@ import type { TicketType } from "@/server/events/domain/Event";
 import { VenueLayoutModal } from "@/components/ui/VenueLayoutModal";
 import { Sheet } from "@/components/ui/Sheet";
 import { PresaleCountdown } from "@/components/ui/PresaleCountdown";
-import { activePricing } from "@/lib/events/pricing";
+import { activePricing, applyPromos } from "@/lib/events/pricing";
 import { optimizeImageUrl } from "@/lib/images/optimizeUrl";
 import {
   eventAvailability,
@@ -103,6 +103,7 @@ export function EventDetailClient({
     () => (data ? groupForDetail(data.ticketTypes) : []),
     [data],
   );
+  const promos = data?.promos;
 
   const availability = useMemo(
     () => (data ? eventAvailability(data.ticketTypes) : { freeBoxes: 0, freeSeats: 0, total: 0 }),
@@ -161,16 +162,23 @@ export function EventDetailClient({
   }, [entradaUnits, selectedBoxes.length]);
 
   const liveTotalCents = useMemo(() => {
-    const entradas = entradaGroups.reduce((sum, group) => {
-      const qty = groupQty[detailGroupKey(group)] ?? 0;
-      const price = summarizeGroup(group).minPriceCents ?? 0;
-      return sum + qty * price;
-    }, 0);
+    // Cada entradaGroup es de un solo ticket type (detailGroupKey solo agrupa
+    // boxes) — aplicar promos 2x1/3x2 acá evita un falso "drift" contra el
+    // quote del server, que SÍ las aplica (CheckoutSheet compara este total
+    // contra `q.totalCents`).
+    const lineItems = entradaGroups
+      .map((group) => {
+        const qty = groupQty[detailGroupKey(group)] ?? 0;
+        const single = group.items[0];
+        return qty > 0 && single ? { ticketTypeId: single.id, qty, unitPriceCents: single.buyerPriceCents } : null;
+      })
+      .filter((li): li is { ticketTypeId: string; qty: number; unitPriceCents: number } => li != null);
+    const entradas = applyPromos(lineItems, promos ?? []).totalCents;
     // El precio del box es el que ya viene calculado por el backend
     // (buyerPriceCents) — display, no recálculo. El total real lo pisa el quote.
     const boxes = selectedBoxes.reduce((s, b) => s + (b.buyerPriceCents ?? 0), 0);
     return entradas + boxes;
-  }, [entradaGroups, groupQty, selectedBoxes]);
+  }, [entradaGroups, groupQty, selectedBoxes, promos]);
 
   // Precio "desde" del evento (display): el menor precio entre todas las zonas
   // disponibles. Solo para el gancho de la barra cuando el usuario aún no
@@ -333,7 +341,6 @@ export function EventDetailClient({
                       onGroupQtyChange={(key, qty) =>
                         setGroupQty((prev) => ({ ...prev, [key]: qty }))
                       }
-                      onPickGroup={() => {}}
                       palette={palette}
                     />
                   </>
@@ -391,7 +398,6 @@ export function EventDetailClient({
                             onGroupQtyChange={(key, qty) =>
                               setGroupQty((prev) => ({ ...prev, [key]: qty }))
                             }
-                            onPickGroup={() => {}}
                             palette={palette}
                           />
                         </>
@@ -694,12 +700,34 @@ function VerifiedSeal() {
 // desktop) sin salir de la página; al loguear vuelve acá (redirectTo). Antes
 // navegaba a la vitrina de la org, un desvío confuso: clicabas "Seguir" y
 // aterrizabas en otra página sin haber seguido nada.
+const pendingFollowKey = (orgId: string) => `pasape:pending_follow:${orgId}`;
+
 function FollowButton({ org }: { org: ShowcaseOrg }) {
   const pathname = usePathname();
   const me = useCurrentUser();
   const loggedIn = !!me.data?.user;
   const { isFollowing, toggle, isPending } = useFollow(org.id);
   const [signInOpen, setSignInOpen] = useState(false);
+  // Si abrió el SignInDrawer para completar "Seguir", tras loguearse toggle()
+  // se dispara solo — sin esto el usuario tendría que tocar el botón otra vez.
+  // El login de Google es hard-navigation (OAuth → /auth/callback), que
+  // remonta la página entera: un useRef en memoria no sobrevive ese viaje.
+  // Por eso la intención se persiste en sessionStorage (mismo patrón que
+  // setOauthReturn/PostLoginRedirect), no en un ref.
+  useEffect(() => {
+    if (!loggedIn) return;
+    let pending = false;
+    try {
+      pending = sessionStorage.getItem(pendingFollowKey(org.id)) === "1";
+    } catch {
+      /* sessionStorage inaccesible — sin auto-toggle, no rompe nada más */
+    }
+    if (!pending) return;
+    try {
+      sessionStorage.removeItem(pendingFollowKey(org.id));
+    } catch {}
+    if (!isFollowing) toggle();
+  }, [loggedIn, isFollowing, toggle, org.id]);
 
   return (
     <>
@@ -707,6 +735,9 @@ function FollowButton({ org }: { org: ShowcaseOrg }) {
         type="button"
         onClick={() => {
           if (!loggedIn) {
+            try {
+              sessionStorage.setItem(pendingFollowKey(org.id), "1");
+            } catch {}
             setSignInOpen(true);
             return;
           }
@@ -725,7 +756,18 @@ function FollowButton({ org }: { org: ShowcaseOrg }) {
       </button>
       <SignInDrawer
         open={signInOpen}
-        onClose={() => setSignInOpen(false)}
+        onClose={() => {
+          setSignInOpen(false);
+          // Canceló sin loguearse: limpia el flag para que no quede huérfano
+          // y dispare un "Seguir" no solicitado si más tarde se loguea desde
+          // otro flujo en la misma pestaña. Si SÍ se logueó, el efecto de
+          // arriba ya consumió y borró el flag antes de que esto corra.
+          if (!loggedIn) {
+            try {
+              sessionStorage.removeItem(pendingFollowKey(org.id));
+            } catch {}
+          }
+        }}
         redirectTo={pathname}
       />
     </>
@@ -866,14 +908,12 @@ function GroupCardList({
   compact,
   groupQty,
   onGroupQtyChange,
-  onPickGroup,
   palette,
 }: {
   groups: TicketGroup[];
   compact?: boolean;
   groupQty?: Record<string, number>;
   onGroupQtyChange?: (key: string, qty: number) => void;
-  onPickGroup: (group: TicketGroup) => void;
   palette: Palette | null;
 }) {
   return (
@@ -891,7 +931,6 @@ function GroupCardList({
             qty={groupQty?.[key] ?? 0}
             maxQty={maxQty}
             onQtyChange={onGroupQtyChange ? (q) => onGroupQtyChange(key, q) : undefined}
-            onClick={() => onPickGroup(group)}
             palette={palette}
           />
         );
@@ -900,6 +939,9 @@ function GroupCardList({
   );
 }
 
+// Solo entradas individuales llegan acá (los grupos de box se filtran antes y
+// se renderizan vía BoxSection, con su propio picker A/B/C) — la card nunca
+// es clickeable, siempre stepper +/-.
 function GroupCard({
   group,
   summary,
@@ -907,7 +949,6 @@ function GroupCard({
   qty,
   maxQty,
   onQtyChange,
-  onClick,
   palette,
 }: {
   group: TicketGroup;
@@ -916,7 +957,6 @@ function GroupCard({
   qty: number;
   maxQty: number;
   onQtyChange?: (qty: number) => void;
-  onClick: () => void;
   palette: Palette | null;
 }) {
   // Título de la card: el NOMBRE de la entrada (una card por tipo). Los boxes
@@ -953,18 +993,8 @@ function GroupCard({
   const stepperTextColor = readableTextColor(cardAccent);
   const badgeColor = ensureContrast("#059669", cardBg, "#047857", 4.5);
 
-  // "Un solo mecanismo": la CARD solo es clickeable para boxes — necesitan el
-  // picker para elegir A/B/C. Las entradas individuales se agregan con el
-  // stepper y punto; tocar la card no navega, así no compiten dos caminos de
-  // compra (el único camino a pagar es el botón "Comprar" del pie/lateral).
-  const cardActs = summary.isAllBoxes && !summary.isAllSoldOut;
-
   return (
     <div
-      role={cardActs ? "button" : undefined}
-      tabIndex={cardActs ? 0 : undefined}
-      onClick={cardActs ? onClick : undefined}
-      onKeyDown={cardActs ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } } : undefined}
       aria-disabled={summary.isAllSoldOut}
       className={
         "group flex w-full items-stretch rounded-2xl border bg-cart-bg-elev text-left transition " +
@@ -972,7 +1002,7 @@ function GroupCard({
           ? "border-cart-line opacity-55 cursor-not-allowed"
           : qty > 0
             ? "shadow-[0_0_16px_-6px_var(--color-cart-accent-glow)]"
-            : "border-cart-line" + (cardActs ? " cursor-pointer hover:border-cart-line-strong hover:bg-cart-bg-elev/80" : "")) +
+            : "border-cart-line") +
         (compact ? " px-3.5 py-3" : " px-4 py-4")
       }
       style={{
@@ -1042,10 +1072,9 @@ function GroupCard({
             )}
           </span>
         </div>
-        {/* Contador +/- solo para entradas individuales. Un box NO se cuenta:
-            se reserva por identidad (A/B/C) en el picker, no con un stepper —
-            un "box × 2" no dice CUÁLES dos. Los grupos de box caen al "Ver ›"
-            que abre el picker (onClick del card). */}
+        {/* Contador +/- solo para entradas individuales — GroupCard nunca
+            recibe grupos de box (se filtran antes y van a BoxSection con su
+            propio picker A/B/C), pero el guard queda por si eso cambia. */}
         {!summary.isAllSoldOut && onQtyChange && !summary.isAllBoxes ? (
           <div className="mt-2 flex items-center gap-1.5">
             {qty > 0 ? (
