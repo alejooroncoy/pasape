@@ -11,7 +11,6 @@ import { useRouter } from "@/i18n/navigation";
 import { QrSquare } from "@/components/design";
 import { HolderEditSheet } from "@/components/tickets/HolderEditSheet";
 import { TransferTicketSheet } from "@/components/tickets/TransferTicketSheet";
-import { RefundRequestSheet } from "@/components/tickets/RefundRequestSheet";
 import { useTicket, useCancelTransfer, useMyTickets, useCarouselScope, ticketDetailKey } from "@/lib/tickets/hooks/useTickets";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { useOnline } from "@/lib/_shared/useOnline";
@@ -87,10 +86,8 @@ function TicketDetailInner({ id }: { id: string }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
-  const [refundOpen, setRefundOpen] = useState(false);
   const holderBtnRef = useRef<HTMLButtonElement>(null);
   const transferBtnRef = useRef<HTMLButtonElement>(null);
-  const refundBtnRef = useRef<HTMLButtonElement>(null);
   // QR firmado (ECDSA): clave no-extraíble en el device + cert del evento.
   // Genera el QR rotativo 100% offline tras la primera carga. Si el ticket está
   // used/void, null evita carga.
@@ -515,17 +512,6 @@ function TicketDetailInner({ id }: { id: string }) {
                 </button>
               </div>
             )}
-            {data.status === "active" && !data.pendingTransferTo && (
-              <button
-                ref={refundBtnRef}
-                type="button"
-                onClick={() => setRefundOpen(true)}
-                disabled={!online}
-                className="mt-2.5 w-full text-center text-[12px] font-medium text-cart-ink-3 underline decoration-cart-ink-4 underline-offset-2 transition hover:text-cart-ink-2 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                Solicitar reembolso
-              </button>
-            )}
           </div>
         </motion.div>
         </AnimatePresence>
@@ -741,14 +727,6 @@ function TicketDetailInner({ id }: { id: string }) {
         anchorRef={holderBtnRef}
         variant="yours"
         onClose={() => setEditOpen(false)}
-      />
-
-      <RefundRequestSheet
-        open={refundOpen}
-        ticketId={data.id}
-        online={online}
-        anchorRef={refundBtnRef}
-        onClose={() => setRefundOpen(false)}
       />
     </div>
   );
