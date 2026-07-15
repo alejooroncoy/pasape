@@ -10,6 +10,7 @@ import { useMyTickets } from "@/lib/tickets/hooks/useTickets";
 import { usePrefetchWallet } from "@/lib/tickets/prefetchWallet";
 import { useSessionReady } from "@/lib/identity/hooks/useSessionReady";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
+import { useMarkTicketNotificationsRead } from "@/lib/identity/hooks/useNotifications";
 import { useBoxForTicket } from "@/lib/boxes/hooks/useBoxes";
 import { LoginGate } from "@/components/ui/LoginGate";
 import { Sheet } from "@/components/ui/Sheet";
@@ -626,6 +627,24 @@ function WalletPageInner() {
   usePrefetchWallet(tickets.data);
   const online = useOnline();
   const router = useRouter();
+
+  // Apaga el dot de "Mis entradas" en el nav al entrar acá — una sola vez por
+  // sesión de la página, y solo con red (offline no confirmamos nada al
+  // server). El POST reintenta solo (retry:2, ver useMarkTicketNotificationsRead)
+  // para absorber fallas transitorias (ej. cold-start 502 de deploy); si aun así
+  // falla, se loguea en vez de fallar en silencio — no reintentamos desde acá
+  // para no convertir una falla persistente en un loop de requests.
+  const markTicketsRead = useMarkTicketNotificationsRead();
+  const markedRead = useRef(false);
+  useEffect(() => {
+    if (markedRead.current || !sessionReady || !loggedIn || !online) return;
+    markedRead.current = true;
+    markTicketsRead.mutate(undefined, {
+      onError: (error) => {
+        console.error("[tickets] no se pudo marcar notificaciones como leídas", error);
+      },
+    });
+  }, [sessionReady, loggedIn, online, markTicketsRead]);
   const [tab, setTab] = useState<"next" | "past">("next");
 
   // "list" → lista de eventos · "select" → entradas de un evento

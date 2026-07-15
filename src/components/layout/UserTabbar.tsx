@@ -9,6 +9,7 @@ import {
   TicketIcon,
   UserIcon,
 } from "@/app/[locale]/_home/icons";
+import { useHasNewTickets } from "@/lib/identity/hooks/useNotifications";
 
 // Nav inferior persistente para el comprador en móvil/tablet (oculto en ≥lg,
 // donde manda el rail lateral). Navega por ruta y resalta el tab activo.
@@ -24,12 +25,11 @@ type Tab = {
   label: string;
   href: string;
   Icon: (p: SVGProps<SVGSVGElement>) => ReactElement;
-  dot?: boolean;
 };
 
 const TABS: Tab[] = [
   { id: "home", label: "Inicio", href: "/", Icon: HomeIcon },
-  { id: "tickets", label: "Mis entradas", href: "/tickets", Icon: TicketIcon, dot: true },
+  { id: "tickets", label: "Mis entradas", href: "/tickets", Icon: TicketIcon },
   { id: "favs", label: "Favoritos", href: "/favorites", Icon: HeartIcon },
   { id: "me", label: "Cuenta", href: "/profile", Icon: UserIcon },
 ];
@@ -45,14 +45,16 @@ function activeId(pathname: string): string {
 export function UserTabbar() {
   const pathname = usePathname();
   const active = activeId(pathname);
+  const hasNewTickets = useHasNewTickets();
   return (
     <nav
       aria-label="Navegación principal"
       className="fixed inset-x-0 bottom-0 z-[70] block border-t border-cart-line bg-cart-bg/90 px-1 pb-[calc(env(safe-area-inset-bottom,0px)+6px)] pt-1.5 backdrop-blur-xl backdrop-saturate-150 lg:hidden"
     >
       <div className="mx-auto grid max-w-[540px] grid-cols-4">
-        {TABS.map(({ id, label, href, Icon, dot }) => {
+        {TABS.map(({ id, label, href, Icon }) => {
           const isOn = active === id;
+          const dot = id === "tickets" && hasNewTickets;
           return (
             <Link
               key={id}
