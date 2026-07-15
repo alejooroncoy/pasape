@@ -71,15 +71,19 @@ export function InstallNudge({ className = "" }: { className?: string }) {
       {/* Acción principal a la derecha: en una mano, el pulgar recorre el borde
           derecho/inferior de la pantalla — es la zona que le sale natural,
           la izquierda le exige estirarse. "Ahora no" queda a propósito del
-          otro lado: sigue accesible, pero no compite por el mismo gesto. */}
-      <div className="mt-3 flex items-center justify-between gap-3">
-        <button
-          type="button"
-          onClick={dismiss}
-          className="shrink-0 rounded-full px-2 py-2.5 text-[12px] font-medium text-cart-ink-4 transition hover:text-cart-ink-2"
-        >
-          Ahora no
-        </button>
+          otro lado: sigue accesible, pero no compite por el mismo gesto.
+          Con el diálogo nativo ya consumido, "Entendido" YA es un dismiss —
+          un segundo botón "Ahora no" al lado sería la misma acción dos veces. */}
+      <div className={"mt-3 flex items-center gap-3 " + (androidPromptConsumed ? "justify-end" : "justify-between")}>
+        {!androidPromptConsumed && (
+          <button
+            type="button"
+            onClick={dismiss}
+            className="shrink-0 rounded-full px-2 py-2.5 text-[12px] font-medium text-cart-ink-4 transition hover:text-cart-ink-2"
+          >
+            Ahora no
+          </button>
+        )}
         <button
           type="button"
           onClick={onPrimaryAction}
