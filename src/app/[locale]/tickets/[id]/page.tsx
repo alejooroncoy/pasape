@@ -328,8 +328,10 @@ function TicketDetailInner({ id }: { id: string }) {
 
       <main className="mx-auto w-full max-w-[640px] px-5 pb-16 pt-6 lg:max-w-[440px]">
         {/* Si esta página no quedó guardada como app, el QR no va a cargar sin
-            señal en la puerta — ver AGENTS.md / memoria wallet-offline-asistente. */}
-        <InstallNudge className="mb-4" />
+            señal en la puerta — ver AGENTS.md / memoria wallet-offline-asistente.
+            Solo aplica a entradas activas: no tiene sentido pedir instalar la
+            app para "entrar a la puerta" con una entrada ya usada/anulada. */}
+        {data.status === "active" && <InstallNudge className="mb-4" />}
 
         {/* QR card — swipe horizontal para saltar a otra entrada del mismo evento.
             overflow-x-clip evita scroll lateral durante el slide. */}

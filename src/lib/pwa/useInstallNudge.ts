@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { getDeferredPrompt, getInstalled, setDeferredPrompt, subscribe } from "./installPromptStore";
+import { getDeferredPrompt, getInstalled, setDeferredPrompt, setInstalled, subscribe } from "./installPromptStore";
 
 export type InstallPlatform = "ios" | "android" | null;
 
@@ -59,6 +59,10 @@ export function useInstallNudge() {
     deferred.prompt();
     const { outcome } = await deferred.userChoice;
     setDeferredPrompt(null);
+    // No esperamos al evento `appinstalled` (puede tardar) para no dejar un
+    // hueco donde el CTA cae a "Ver cómo" — con "accepted" el usuario ya tomó
+    // la decisión; si el evento del navegador llega después, es un no-op.
+    if (outcome === "accepted") setInstalled(true);
     return outcome;
   };
 
