@@ -16,7 +16,7 @@ export function LibroReclamacionesFooterLink({ className, variant = "dark" }: Pr
       : "text-cart-ink-3 group-hover:text-cart-ink";
 
   return (
-    <Link href="/complaints" className={cn("group inline-block", className)}>
+    <Link href="/reclamos" className={cn("group inline-block", className)}>
       <span className={cn("block text-[13.5px] transition-colors", textCls)}>
         Libro de reclamaciones
       </span>

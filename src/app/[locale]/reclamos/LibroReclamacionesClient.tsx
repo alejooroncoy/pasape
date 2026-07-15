@@ -23,9 +23,9 @@ import {
 type Constancia = { codigo: string; fecha: string; tipo: TipoReclamacion; email: string };
 
 const inputCls =
-  "h-12 w-full rounded-2xl border border-cart-line bg-cart-bg-elev px-4 text-base text-white placeholder:text-cart-ink-4 outline-none transition-colors focus:border-(--color-accent)";
+  "h-12 w-full rounded-2xl border border-cart-line bg-cart-bg-elev px-4 text-base text-cart-ink placeholder:text-cart-ink-4 outline-none transition-colors focus:border-(--color-accent)";
 const areaCls =
-  "min-h-28 w-full rounded-2xl border border-cart-line bg-cart-bg-elev p-4 text-base text-white placeholder:text-cart-ink-4 outline-none transition-colors focus:border-(--color-accent) resize-y";
+  "min-h-28 w-full rounded-2xl border border-cart-line bg-cart-bg-elev p-4 text-base text-cart-ink placeholder:text-cart-ink-4 outline-none transition-colors focus:border-(--color-accent) resize-y";
 
 export function LibroReclamacionesClient({ user }: { user: NavUser | null }) {
   const [tipo, setTipo] = useState<TipoReclamacion>("reclamo");
@@ -99,7 +99,7 @@ export function LibroReclamacionesClient({ user }: { user: NavUser | null }) {
 
   const breadcrumbs = [
     { name: "Inicio", path: "/" },
-    { name: "Libro de Reclamaciones", path: "/complaints" },
+    { name: "Libro de Reclamaciones", path: "/reclamos" },
   ];
 
   return (
@@ -107,7 +107,7 @@ export function LibroReclamacionesClient({ user }: { user: NavUser | null }) {
       <Breadcrumbs items={breadcrumbs} />
 
       <header className="mt-6 flex items-center gap-4">
-          <div className="shrink-0 overflow-hidden rounded-2xl bg-white p-2">
+          <div className="shrink-0 overflow-hidden rounded-2xl border border-cart-line bg-white p-2">
             <Image
               src="/libro-de-reclamaciones.png"
               alt="Libro de Reclamaciones"
@@ -238,7 +238,7 @@ export function LibroReclamacionesClient({ user }: { user: NavUser | null }) {
                       className={cn(
                         "h-12 flex-1 rounded-2xl border text-sm font-medium transition-colors",
                         tipoBien === t
-                          ? "border-(--color-accent) bg-(--color-accent-soft) text-white"
+                          ? "border-(--color-accent) bg-(--color-accent-soft) text-cart-ink"
                           : "border-cart-line bg-cart-bg-elev text-cart-ink-2 hover:border-cart-line-strong",
                       )}
                     >
@@ -277,7 +277,7 @@ export function LibroReclamacionesClient({ user }: { user: NavUser | null }) {
           </label>
 
           {error && (
-            <p className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+            <p className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-700">
               {error}
             </p>
           )}
@@ -320,7 +320,7 @@ function ConstanciaView({ constancia }: { constancia: Constancia }) {
           <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-cart-ink-4">
             Código de constancia
           </div>
-          <div className="mt-1.5 text-3xl font-semibold tracking-[0.02em] text-white">{codigo}</div>
+          <div className="mt-1.5 text-3xl font-semibold tracking-[0.02em] text-cart-ink">{codigo}</div>
           <div className="mt-3 border-t border-cart-line pt-3 text-[13px] text-cart-ink-3">{fecha}</div>
         </div>
 
@@ -346,7 +346,7 @@ function ConstanciaView({ constancia }: { constancia: Constancia }) {
 
         <Link
           href="/"
-          className="mt-7 inline-flex h-12 items-center justify-center rounded-full border border-cart-line px-6 text-sm font-medium text-white transition-colors hover:bg-white/5"
+          className="mt-7 inline-flex h-12 items-center justify-center rounded-full border border-cart-line px-6 text-sm font-medium text-cart-ink transition-colors hover:bg-cart-bg-elev"
         >
           Volver al inicio
         </Link>
@@ -441,7 +441,7 @@ function TimelineStep({
         {!last && <span className="my-1 w-0.5 flex-1 rounded-full bg-cart-line" />}
       </div>
       <div className={cn("pb-5", last && "pb-0")}>
-        <div className={cn("text-sm font-semibold", done || current ? "text-white" : "text-cart-ink-3")}>
+        <div className={cn("text-sm font-semibold", done || current ? "text-cart-ink" : "text-cart-ink-3")}>
           {title}
         </div>
         <div className="mt-0.5 text-[13px] leading-snug text-cart-ink-3">{detail}</div>

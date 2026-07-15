@@ -17,6 +17,9 @@ const nextConfig: NextConfig = {
       { source: "/eventos/:path*", destination: "/es/eventos/:path*", permanent: true },
       { source: "/ayuda", destination: "/es/ayuda", permanent: true },
       { source: "/evento/:slug", destination: "/es/events/:slug", permanent: true },
+      { source: "/complaints", destination: "/es/reclamos", permanent: true },
+      { source: "/es/complaints", destination: "/es/reclamos", permanent: true },
+      { source: "/en/complaints", destination: "/en/reclamos", permanent: true },
     ];
   },
   async headers() {

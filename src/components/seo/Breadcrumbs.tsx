@@ -19,7 +19,7 @@ export function Breadcrumbs({ items }: Props) {
                 </span>
               )}
               {isLast ? (
-                <span aria-current="page" className="text-white">
+                <span aria-current="page" className="text-cart-ink">
                   {item.name}
                 </span>
               ) : (
@@ -27,7 +27,7 @@ export function Breadcrumbs({ items }: Props) {
                   // Rutas SEO dinámicas no están en el tipo del router de next-intl.
                   // eslint-disable-next-line @typescript-eslint/no-explicit-any
                   href={item.path as any}
-                  className="transition-colors hover:text-white"
+                  className="transition-colors hover:text-cart-ink"
                 >
                   {item.name}
                 </Link>

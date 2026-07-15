@@ -75,11 +75,29 @@ export const AYUDA_PAGE = {
     "Preguntas frecuentes sobre compra de entradas, QR, reembolsos y organización de eventos en Pasape.",
 } as const;
 
+export const PRIVACIDAD_PAGE = {
+  path: "/privacidad",
+  title: "Política de Privacidad",
+  h1: "Política de Privacidad",
+  description:
+    "Cómo Pasape recopila, usa y protege tus datos personales al comprar entradas u organizar eventos.",
+} as const;
+
+export const TERMINOS_PAGE = {
+  path: "/terminos",
+  title: "Términos y Condiciones",
+  h1: "Términos y Condiciones",
+  description:
+    "Condiciones de uso de Pasape para compradores, asistentes y organizadores de eventos.",
+} as const;
+
 export const SITEMAP_STATIC_PATHS = [
   "/",
   "/eventos/lima",
   ...EVENTOS_LANDINGS.map((p) => `/eventos/${p.slug}`),
   "/organizadores",
   "/ayuda",
-  "/complaints",
+  "/reclamos",
+  "/privacidad",
+  "/terminos",
 ] as const;
