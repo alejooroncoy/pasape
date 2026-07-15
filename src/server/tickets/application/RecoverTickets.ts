@@ -114,13 +114,12 @@ export const verifyTicketRecovery = async (
     .eq("status", "active");
 
   const holderIds = [...new Set((ticketRows ?? []).map((t) => (t as { current_holder: string }).current_holder))];
-  const allTickets: WalletTicket[] = [];
-  for (const holderId of holderIds) {
-    const mine = await supabaseTicketRepository.listMine(holderId);
-    allTickets.push(...mine.filter((t) => t.status === "active" && orderIds.includes(t.orderId)));
-  }
+  // Una sola query para todos los titulares (en vez de listMine() por cada
+  // uno) — una orden grupal reparte tickets a varios current_holder distintos.
+  const allTickets = await supabaseTicketRepository.listManyByHolders(holderIds);
+  const filteredTickets = allTickets.filter((t) => t.status === "active" && orderIds.includes(t.orderId));
 
-  const uniqueTickets = [...new Map(allTickets.map((t) => [t.id, t])).values()];
+  const uniqueTickets = [...new Map(filteredTickets.map((t) => [t.id, t])).values()];
   const recoveredOrderIds = [...new Set(uniqueTickets.map((t) => t.orderId))];
   const orderLinks: RecoveredOrderLink[] = recoveredOrderIds.map((orderId) => ({
     orderId,

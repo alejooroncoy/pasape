@@ -641,7 +641,7 @@ function OrganizerChip({ org, palette }: { org: ShowcaseOrg; palette: Palette | 
         <div className="size-10 shrink-0 overflow-hidden rounded-lg bg-cart-bg-elev-2">
           {org.logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={org.logoUrl} alt={org.name} className="size-full object-cover" />
+            <img src={optimizeImageUrl(org.logoUrl, "card") ?? org.logoUrl} alt={org.name} className="size-full object-cover" />
           ) : (
             <div
               className="grid size-full place-items-center text-[16px] font-bold"
@@ -793,7 +793,7 @@ function MoreFromOrg({ org, events }: { org: ShowcaseOrg; events: ShowcaseEvent[
             <div className="aspect-[4/3] w-full overflow-hidden bg-cart-bg-elev-2">
               {e.coverUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={e.coverUrl} alt={e.title} className="size-full object-cover" />
+                <img src={optimizeImageUrl(e.coverUrl, "card") ?? e.coverUrl} alt={e.title} className="size-full object-cover" />
               ) : (
                 <div
                   className="size-full"
@@ -2135,7 +2135,7 @@ function SidebarMoreFromOrg({ org, events }: { org: ShowcaseOrg; events: Showcas
             >
               {e.coverUrl && (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={e.coverUrl} alt={e.title} className="size-full object-cover" />
+                <img src={optimizeImageUrl(e.coverUrl, "card") ?? e.coverUrl} alt={e.title} className="size-full object-cover" />
               )}
             </div>
             <div className="min-w-0 flex-1">

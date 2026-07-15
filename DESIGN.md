@@ -20,7 +20,11 @@ Como son las mismas variables (no un namespace paralelo), un componente escrito 
 
 **Regla práctica:** nunca se inventa un color nuevo para "la versión clara" de algo. Se usa el token `cart-*` que ya existe; si no alcanza, se agrega una variante del token en el bloque `.home-light` de `globals.css`, no un valor suelto en el componente.
 
-## Color (tokens reales, `src/app/globals.css`)
+## Color — Paleta Azul + Morado + Blanco
+
+La identidad actual de Pasape se construye sobre **tres colores puros**: azul (#4f6df5), morado (#7c3aed), y blanco/blancquito. Sin gradientes radiales, sin rellenos coloridos. El morado y azul son **acentos**, nunca fondos. Blanco es la base limpia.
+
+### Tokens reales (`src/app/globals.css`)
 
 ```css
 /* Default — oscuro (@theme, sin scope) */
@@ -32,7 +36,8 @@ Como son las mismas variables (no un namespace paralelo), un componente escrito 
 --color-cart-ink-4: #5e5e70;
 --color-cart-line: rgba(255,255,255,.08);
 --color-cart-line-strong: rgba(255,255,255,.14);
---color-cart-accent: #b87cff;
+--color-cart-accent: #7c3aed;      /* morado */
+--color-cart-accent-2: #4f6df5;    /* azul */
 
 /* .home-light — reescribe lo anterior dentro del scope */
 --color-cart-bg: #fbfaff;
@@ -44,9 +49,14 @@ Como son las mismas variables (no un namespace paralelo), un componente escrito 
 --color-cart-ink-4: #6a6488;    /* ~5:1 — hints/placeholder */
 --color-cart-line: rgba(28,20,60,.12);
 --color-cart-line-strong: rgba(28,20,60,.2);
---color-cart-accent: #7c3aed;
---color-cart-accent-2: #4f6df5;  /* azul secundario, no solo morado */
+--color-cart-accent: #7c3aed;      /* morado */
+--color-cart-accent-2: #4f6df5;    /* azul */
 ```
+
+**Uso:**
+- `cart-accent` (morado #7c3aed) — CTA primario, iconos clave, pills activas, énfasis.
+- `cart-accent-2` (azul #4f6df5) — detalles secundarios, líneas decorativas, contrastes menores.
+- Blanco (#ffffff, #fbfaff) — fondos y texto base. Nunca color secundario por saturación.
 
 Colores de categoría (icono-tile, fondo al 15% de opacidad) — vigentes en ambos scopes: Conciertos violeta `#8b5cf6`, Fiestas rosa `#ec4899`, Festivales naranja `#fb923c`, Comedia amarillo `#facc15`, Cultura cyan `#22d3ee`, Deportes lima `#a3e635`.
 
@@ -101,6 +111,23 @@ El giro a `.home-light` es progresivo, no un rediseño de un solo commit. Estado
 - Transiciones 140-160ms en hover (borde a `cart-line-strong`, fondo a `cart-bg-elev`, translateY -2px en cards).
 - Nada de animaciones de entrada llamativas. La quietud es parte de la elegancia. Respetar `prefers-reduced-motion`.
 - `.home-wash` (drift ambiental sutil, no blob duro) reemplaza cualquier glow radial fingiendo foto — inspirado en Partiful, muy bajo contraste, movimiento lento.
+
+## Logo Badge
+
+Ubicado en `public/icons/logo-badge.svg` y generados en múltiples resoluciones (48, 72, 96, 144, 180, 192, 256, 384, 512, 1024px).
+
+**Diseño:**
+- Monograma "P" geométrico con morado (#7c3aed) + azul (#4f6df5) + blanco (#fbfaff).
+- Sin gradientes radiales, sin blobs, sin gloss fingido.
+- Hairline frontera (`.12` en claro, `.08` en oscuro) sobre fondo casi-blanco (#fbfaff) en claro, casi-negro (#0a0a0f) en oscuro.
+- Respeta `prefers-color-scheme` automáticamente — no hay versión "tema claro" y "tema oscuro" separadas, sino un diseño que se adapta.
+- Escala perfectamente desde favicon 16px hasta app icon 512px sin perder nitidez.
+
+**Filosofía:**
+- Morado y azul como acentos puros, nunca rellenan fondo.
+- Blanco es la estructura (barra vertical del monograma).
+- Energía (línea azul diagonal) evoca movimiento nocturno.
+- El conjunto dice "noche peruana, sin estafas" sin necesidad de mascota, gradientes ni elementos genéricos.
 
 ## Referencias
 

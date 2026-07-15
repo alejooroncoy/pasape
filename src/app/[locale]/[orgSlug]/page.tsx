@@ -6,6 +6,7 @@ import { BackButton } from "./_components/BackButton";
 import { supabaseOrganizationRepository } from "@/server/identity/organizations/infrastructure/repositories/SupabaseOrganizationRepository";
 import { supabaseEventRepository } from "@/server/events/infrastructure/repositories/SupabaseEventRepository";
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
+import { optimizeImageUrl } from "@/lib/images/optimizeUrl";
 import type { Event } from "@/server/events/domain/Event";
 import type { Organization } from "@/server/identity/organizations/domain/Organization";
 
@@ -15,6 +16,11 @@ const RESERVED = new Set([
   "org", "events", "auth", "login", "apply", "invites", "profile",
   "promo", "scan", "box", "tickets", "e", "t", "_home", "_next", "api", "r",
 ]);
+
+// Página pública sin personalización server-side (FollowButton resuelve la
+// sesión en el cliente), así que es segura de cachear: evita pegarle a
+// Supabase (org + eventos + precios mínimos) en cada visita a la vitrina.
+export const revalidate = 60;
 
 type Props = {
   params: Promise<{ locale: string; orgSlug: string }>;
@@ -220,7 +226,7 @@ function BrandLogo({
     >
       {logoUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={logoUrl} alt={name} className="size-full object-cover" />
+        <img src={optimizeImageUrl(logoUrl, "card") ?? logoUrl} alt={name} className="size-full object-cover" />
       ) : (
         <div
           className="grid size-full place-items-center font-sans font-semibold text-white"
@@ -310,7 +316,7 @@ function EventCardMobile({
       >
         {ev.coverUrl && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={ev.coverUrl} alt="" className="size-full object-cover" />
+          <img src={optimizeImageUrl(ev.coverUrl, "card") ?? ev.coverUrl} alt="" className="size-full object-cover" />
         )}
       </div>
       <div className="min-w-0 flex-1">
@@ -358,7 +364,7 @@ function EventCardWeb({
       >
         {ev.coverUrl && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={ev.coverUrl} alt="" className="absolute inset-0 size-full object-cover" />
+          <img src={optimizeImageUrl(ev.coverUrl, "card") ?? ev.coverUrl} alt="" className="absolute inset-0 size-full object-cover" />
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
         {featured && (
