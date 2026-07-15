@@ -43,7 +43,7 @@ export const OtpRow = ({ value, onChange }: Props) => {
               width: 46,
               height: 58,
               borderRadius: 14,
-              background: filled ? "rgba(124,58,237,0.14)" : "rgba(255,255,255,0.04)",
+              background: filled ? "rgba(124,58,237,0.14)" : C.line,
               boxShadow: isFocus
                 ? `0 0 0 1.5px ${C.purple} inset, 0 0 18px -6px rgba(124,58,237,0.5)`
                 : filled
@@ -52,7 +52,7 @@ export const OtpRow = ({ value, onChange }: Props) => {
               fontFamily: FONT_MONO,
               fontWeight: 700,
               fontSize: 24,
-              color: "#fff",
+              color: C.text,
               textAlign: "center",
               border: 0,
               outline: "none",

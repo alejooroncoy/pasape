@@ -14,7 +14,7 @@ export const StepDots = ({ step, of }: Props) => (
             width: active ? 20 : 6,
             height: 4,
             borderRadius: 999,
-            background: active || past ? C.purple : "rgba(255,255,255,0.14)",
+            background: active || past ? C.purple : C.line2,
             boxShadow: active ? "0 0 10px rgba(124,58,237,0.7)" : "none",
             transition: "width .2s",
           }}
