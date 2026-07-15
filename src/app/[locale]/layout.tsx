@@ -7,6 +7,7 @@ import { Toaster } from "sonner";
 import { routing } from "@/i18n/routing";
 import { QueryProvider } from "@/lib/_shared/query-client";
 import { ServiceWorkerRegister } from "@/components/pwa/ServiceWorkerRegister";
+import { InstallPromptListener } from "@/components/pwa/InstallPromptListener";
 import { PostLoginRedirect } from "@/components/auth/PostLoginRedirect";
 import { PostHogIdentify } from "@/components/analytics/PostHogIdentify";
 import { PageViewTracker } from "@/components/analytics/PageViewTracker";
@@ -36,6 +37,7 @@ export default async function LocaleLayout({ children, params }: Props) {
         </Suspense>
       </QueryProvider>
       <ServiceWorkerRegister />
+      <InstallPromptListener />
       {/* Estilo alineado al sistema cart-*: tarjeta elevada sobria, sin los
           colores saturados del default de sonner. */}
       <Toaster
