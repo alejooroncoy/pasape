@@ -34,8 +34,12 @@ export function SignInDrawer({ open, onClose, redirectTo }: Props) {
       title={TITLE}
       description={SUBTITLE}
     >
+      {/* Sin animación de entrada en título/subtítulo/footer: si el documento se
+          monta oculto (backgrounding típico al abrir el link desde otra app en
+          celular), framer-motion pausa su RAF y el texto queda congelado en
+          opacity:0 para siempre — mismo bug que el CTA de abajo. */}
       <motion.div
-        initial={{ opacity: 0, y: 8 }}
+        initial={false}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.08, duration: 0.25 }}
         className="mb-1.5 font-sans text-[24px] font-bold leading-tight tracking-[-0.03em] text-cart-ink"
@@ -43,17 +47,13 @@ export function SignInDrawer({ open, onClose, redirectTo }: Props) {
         {TITLE}
       </motion.div>
       <motion.div
-        initial={{ opacity: 0, y: 8 }}
+        initial={false}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.14, duration: 0.25 }}
         className="mb-5 text-[13px] leading-[1.5] text-cart-ink-3"
       >
         {SUBTITLE}
       </motion.div>
-      {/* Sin animación de entrada: es el CTA crítico del drawer (sin él nadie
-          puede entrar). Si el documento se monta oculto (backgrounding típico al
-          abrir el link desde otra app en celular), framer-motion pausa su RAF y
-          el botón queda invisible en opacity:0 para siempre. */}
       <GoogleBtn
         onClick={() => {
           clientEvents.signInStarted({ provider: "google" });
@@ -67,7 +67,7 @@ export function SignInDrawer({ open, onClose, redirectTo }: Props) {
         </div>
       )}
       <motion.div
-        initial={{ opacity: 0 }}
+        initial={false}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.28, duration: 0.25 }}
         className="mt-3.5 pb-6 text-center text-[11px] text-cart-ink-4"

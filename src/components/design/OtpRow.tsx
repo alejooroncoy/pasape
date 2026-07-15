@@ -43,7 +43,7 @@ export const OtpRow = ({ value, onChange }: Props) => {
               width: 46,
               height: 58,
               borderRadius: 14,
-              background: filled ? "rgba(124,58,237,0.14)" : C.line,
+              background: filled ? "rgba(124,58,237,0.14)" : "var(--color-cart-line-2)",
               boxShadow: isFocus
                 ? `0 0 0 1.5px ${C.purple} inset, 0 0 18px -6px rgba(124,58,237,0.5)`
                 : filled

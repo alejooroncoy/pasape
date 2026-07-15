@@ -242,7 +242,7 @@ function ListContents({
                         {isActive && (
                           <span
                             aria-label={t("active")}
-                            className={`grid flex-shrink-0 place-items-center rounded-full bg-cart-accent text-black ${
+                            className={`grid flex-shrink-0 place-items-center rounded-full bg-cart-accent text-cart-bg ${
                               isSheet ? "size-6" : "size-5"
                             }`}
                           >
@@ -279,8 +279,8 @@ function ListContents({
               aria-hidden
               className={
                 isSheet
-                  ? "grid size-9 flex-shrink-0 place-items-center rounded-full bg-cart-accent text-black"
-                  : "grid size-5 flex-shrink-0 place-items-center rounded-md bg-cart-accent text-black"
+                  ? "grid size-9 flex-shrink-0 place-items-center rounded-full bg-cart-accent text-cart-bg"
+                  : "grid size-5 flex-shrink-0 place-items-center rounded-md bg-cart-accent text-cart-bg"
               }
             >
               <PlusIcon />

@@ -111,10 +111,10 @@ function SuccessContent() {
           type="button"
           onClick={() => router.push("/org")}
           aria-label="Cerrar"
-          className="grid size-9 place-items-center rounded-full border border-cart-line bg-cart-bg-elev/70 backdrop-blur transition hover:border-cart-line-strong hover:bg-cart-bg-elev lg:size-10"
+          className="grid size-9 place-items-center rounded-full border border-cart-line bg-cart-bg-elev/70 text-cart-ink-2 backdrop-blur transition hover:border-cart-line-strong hover:bg-cart-bg-elev hover:text-cart-ink lg:size-10"
         >
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-            <path d="M3 3l8 8M11 3l-8 8" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" />
+            <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
           </svg>
         </button>
       </div>
