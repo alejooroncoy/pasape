@@ -18,14 +18,14 @@ export default function BuyerSoldOutPage({ params }: Props) {
     .slice(0, 3);
 
   return (
-    <div className="min-h-dvh bg-cart-bg text-white">
+    <div className="home-light min-h-dvh bg-cart-bg text-cart-ink">
       <header className="sticky top-0 z-30 border-b border-cart-line bg-cart-bg/85 backdrop-blur-md">
         <div className="mx-auto flex max-w-[640px] items-center justify-between px-5 py-3.5">
           <button
             type="button"
             onClick={() => router.back()}
             aria-label="Volver"
-            className="grid size-9 place-items-center rounded-full bg-cart-bg-elev text-cart-ink-2 transition hover:bg-cart-bg-elev-2 hover:text-white"
+            className="grid size-9 place-items-center rounded-full bg-cart-bg-elev text-cart-ink-2 transition hover:bg-cart-bg-elev-2 hover:text-cart-ink"
           >
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
               <path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
@@ -46,12 +46,12 @@ export default function BuyerSoldOutPage({ params }: Props) {
           Se acabaron las entradas
         </h1>
         <p className="mt-3 text-[15px] leading-[1.55] text-cart-ink-2">
-          <strong className="text-white">{data?.event.title ?? "Este evento"}</strong> está lleno. Si alguien transfiere su entrada te avisamos.
+          <strong className="text-cart-ink">{data?.event.title ?? "Este evento"}</strong> está lleno. Si alguien transfiere su entrada te avisamos.
         </p>
 
         <button
           type="button"
-          className="mt-6 w-full rounded-full border border-cart-line bg-cart-bg-elev py-3 text-[14px] font-semibold text-white transition hover:border-cart-accent"
+          className="mt-6 w-full rounded-full border border-cart-line bg-cart-bg-elev py-3 text-[14px] font-semibold text-cart-ink transition hover:border-cart-accent"
         >
           Avísame si hay cupos
         </button>

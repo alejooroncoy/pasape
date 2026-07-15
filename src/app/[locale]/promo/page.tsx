@@ -305,7 +305,7 @@ function HeroCard({ link }: { link: PromoterLink }) {
         <button
           type="button"
           onClick={onCopy}
-          className="flex h-12 items-center justify-center gap-2 rounded-full border border-white/15 bg-white/5 text-[13.5px] font-semibold text-white transition hover:bg-white/10"
+          className="flex h-12 items-center justify-center gap-2 rounded-full border border-cart-line bg-cart-bg-elev-2 text-[13.5px] font-semibold text-cart-ink transition hover:bg-cart-line-strong"
         >
           {copied ? "✓ Copiado" : "Copiar link"}
         </button>

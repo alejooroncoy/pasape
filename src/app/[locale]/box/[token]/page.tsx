@@ -150,7 +150,7 @@ export default function FriendJoinBoxPage({ params }: Props) {
             </div>
           ))}
         </div>
-        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.8)", flex: 1 }}>
+        <div style={{ fontSize: 12, color: C.dim, flex: 1 }}>
           <strong>{b.members.map((m) => m.name.split(" ")[0]).slice(0, 3).join(", ")}</strong> ya están.
           {remaining > 0 && (
             <>
@@ -230,7 +230,7 @@ export default function FriendJoinBoxPage({ params }: Props) {
           background: C.greenSoft,
           boxShadow: "0 0 0 1px rgba(34,209,127,0.3) inset",
           fontSize: 12,
-          color: "rgba(255,255,255,0.9)",
+          color: C.text,
           lineHeight: 1.4,
         }}
       >
@@ -305,7 +305,7 @@ function friendlyJoinError(code: string): string {
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, color: "#fff", display: "flex", flexDirection: "column" }}>
+    <div className="home-light" style={{ minHeight: "100vh", background: C.bg, color: C.text, display: "flex", flexDirection: "column" }}>
       <BrandHeader />
       <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>{children}</div>
     </div>

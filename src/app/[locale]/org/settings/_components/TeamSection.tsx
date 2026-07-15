@@ -50,7 +50,7 @@ export function TeamSection({ currentProfileId }: Props) {
           <button
             type="button"
             onClick={() => setOpen(true)}
-            className="rounded-full bg-cart-accent px-3.5 py-1.5 text-[12.5px] font-semibold text-black transition hover:brightness-110"
+            className="rounded-full bg-cart-accent px-3.5 py-1.5 text-[12.5px] font-semibold text-cart-bg transition hover:brightness-110"
           >
             + Invitar a alguien
           </button>

@@ -109,7 +109,7 @@ export default function AcceptInvitePage({ params }: Props) {
   }, [isAuthed, isPending]);
 
   return (
-    <div className="min-h-svh bg-cart-bg text-white">
+    <div className="home-light min-h-svh bg-cart-bg text-cart-ink">
       <div className="mx-auto flex min-h-svh w-full max-w-md flex-col items-center justify-center px-5 py-10">
         <motion.div
           initial={{ opacity: 0, y: 16 }}
@@ -134,12 +134,12 @@ export default function AcceptInvitePage({ params }: Props) {
                 <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-cart-ink-3">
                   Te invitaron a
                 </div>
-                <h1 className="mt-1 font-sans text-[28px] font-bold tracking-[-0.025em] text-white">
+                <h1 className="mt-1 font-sans text-[28px] font-bold tracking-[-0.025em] text-cart-ink">
                   {preview.data.scopeLabel}
                 </h1>
                 <p className="mt-2 max-w-xs text-[14px] leading-snug text-cart-ink-2">
                   {preview.data.invitedBy.fullName ?? "Tu invitador"} quiere que te sumes como{" "}
-                  <span className="font-medium text-white">
+                  <span className="font-medium text-cart-ink">
                     {ROLE_LABEL[preview.data.role] ?? preview.data.role}
                   </span>
                   .
@@ -149,7 +149,7 @@ export default function AcceptInvitePage({ params }: Props) {
                 {preview.data.inviteEmail ? (
                   <p className="mt-4 text-center text-[12.5px] leading-snug text-cart-ink-3">
                     Entrá con Google como{" "}
-                    <span className="font-medium text-white">{preview.data.inviteEmail}</span>
+                    <span className="font-medium text-cart-ink">{preview.data.inviteEmail}</span>
                   </p>
                 ) : null}
 
@@ -176,7 +176,7 @@ export default function AcceptInvitePage({ params }: Props) {
                         type="button"
                         onClick={signIn}
                         disabled={signingIn}
-                        className="w-full rounded-full bg-cart-accent px-4 py-3 text-[14px] font-semibold text-black transition hover:brightness-110 disabled:opacity-60"
+                        className="w-full rounded-full bg-cart-accent px-4 py-3 text-[14px] font-semibold text-cart-bg transition hover:brightness-110 disabled:opacity-60"
                       >
                         {signingIn ? "Iniciando…" : "Aceptar con Google"}
                       </button>
@@ -193,7 +193,7 @@ export default function AcceptInvitePage({ params }: Props) {
                             );
                         }}
                         disabled={accept.isPending}
-                        className="w-full rounded-full bg-cart-accent px-4 py-3 text-[14px] font-semibold text-black transition hover:brightness-110 disabled:opacity-60"
+                        className="w-full rounded-full bg-cart-accent px-4 py-3 text-[14px] font-semibold text-cart-bg transition hover:brightness-110 disabled:opacity-60"
                       >
                         {accept.isPending ? "Uniéndote…" : "Aceptar invitación"}
                       </button>
@@ -233,7 +233,7 @@ export default function AcceptInvitePage({ params }: Props) {
 function NotFoundState() {
   return (
     <div className="py-6 text-center">
-      <h2 className="text-[17px] font-semibold text-white">Invitación no encontrada</h2>
+      <h2 className="text-[17px] font-semibold text-cart-ink">Invitación no encontrada</h2>
       <p className="mt-2 text-[13.5px] text-cart-ink-3">
         El link no es válido o fue eliminado. Pide a quien te invitó que genere uno nuevo.
       </p>
@@ -248,7 +248,7 @@ function ExpiredState({ status }: { status: string }) {
   };
   return (
     <div className="mt-6 rounded-2xl border border-cart-line bg-cart-bg-elev-2 p-4 text-center">
-      <h2 className="text-[15px] font-semibold text-white">{copy.title}</h2>
+      <h2 className="text-[15px] font-semibold text-cart-ink">{copy.title}</h2>
       <p className="mt-1.5 text-[13px] leading-snug text-cart-ink-3">{copy.body}</p>
     </div>
   );

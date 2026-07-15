@@ -158,7 +158,7 @@ export default function OrderPage(props: Props) {
   const isAlreadyClaimed = claimErrorCode === "order_already_claimed";
 
   return (
-    <main className="relative grid min-h-dvh place-items-center overflow-hidden bg-cart-bg px-6 py-12 text-white">
+    <main className="home-light relative grid min-h-dvh place-items-center overflow-hidden bg-cart-bg px-6 py-12 text-cart-ink">
       <div
         aria-hidden
         className="pointer-events-none absolute -top-40 left-1/2 size-[640px] -translate-x-1/2 rounded-full"
@@ -170,7 +170,7 @@ export default function OrderPage(props: Props) {
       />
 
       <motion.div
-        initial={{ opacity: 0, y: 12 }}
+        initial={false}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
         className="relative z-10 w-full max-w-[400px] text-center"
@@ -254,7 +254,7 @@ export default function OrderPage(props: Props) {
                 setPhoneSkipped(true);
                 goToWallet();
               }}
-              className="mt-3 text-[13px] font-medium text-cart-ink-3 transition hover:text-white"
+              className="mt-3 text-[13px] font-medium text-cart-ink-3 transition hover:text-cart-ink"
             >
               Ahora no
             </button>

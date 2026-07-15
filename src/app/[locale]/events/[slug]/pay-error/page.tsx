@@ -72,13 +72,13 @@ export default function BuyerPayErrorPage({ params, searchParams }: Props) {
     reasonKey !== "in_review";
 
   return (
-    <div className="min-h-dvh bg-cart-bg text-white">
+    <div className="home-light min-h-dvh bg-cart-bg text-cart-ink">
       <header className="sticky top-0 z-30 border-b border-cart-line bg-cart-bg/85 backdrop-blur-md">
         <div className="mx-auto flex max-w-[640px] items-center justify-between px-5 py-3.5">
           <button
             type="button"
             onClick={goEvent}
-            className="text-[13px] font-medium text-cart-ink-3 transition hover:text-white"
+            className="text-[13px] font-medium text-cart-ink-3 transition hover:text-cart-ink"
           >
             ← Volver
           </button>
@@ -109,7 +109,7 @@ export default function BuyerPayErrorPage({ params, searchParams }: Props) {
               <div className="flex items-center gap-2">
                 <span className="size-2 animate-pulse rounded-full bg-amber-400" />
                 <span className="text-[13px] text-amber-100">
-                  Quedan <strong className="text-white">{availability.totalRemaining} entradas</strong> ahora mismo.
+                  Quedan <strong className="text-cart-ink">{availability.totalRemaining} entradas</strong> ahora mismo.
                 </span>
               </div>
               <span className="text-[11px] text-amber-200/70">
@@ -136,7 +136,7 @@ export default function BuyerPayErrorPage({ params, searchParams }: Props) {
               <button
                 type="button"
                 onClick={() => router.push("/recover-tickets" as never)}
-                className="w-full rounded-full border border-cart-line bg-cart-bg-elev py-3 text-[14px] font-semibold text-cart-ink-2 transition hover:border-cart-line-strong hover:text-white lg:bg-cart-bg-elev-2"
+                className="w-full rounded-full border border-cart-line bg-cart-bg-elev py-3 text-[14px] font-semibold text-cart-ink-2 transition hover:border-cart-line-strong hover:text-cart-ink lg:bg-cart-bg-elev-2"
               >
                 Recuperar mis entradas
               </button>
@@ -144,7 +144,7 @@ export default function BuyerPayErrorPage({ params, searchParams }: Props) {
               <button
                 type="button"
                 onClick={goEvent}
-                className="w-full rounded-full border border-cart-line bg-cart-bg-elev py-3 text-[14.5px] font-semibold text-cart-ink-2 transition hover:border-cart-line-strong hover:text-white lg:bg-cart-bg-elev-2"
+                className="w-full rounded-full border border-cart-line bg-cart-bg-elev py-3 text-[14.5px] font-semibold text-cart-ink-2 transition hover:border-cart-line-strong hover:text-cart-ink lg:bg-cart-bg-elev-2"
               >
                 Volver al evento
               </button>

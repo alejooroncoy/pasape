@@ -50,19 +50,17 @@ export function SignInDrawer({ open, onClose, redirectTo }: Props) {
       >
         {SUBTITLE}
       </motion.div>
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2, duration: 0.3 }}
-      >
-        <GoogleBtn
-          onClick={() => {
-            clientEvents.signInStarted({ provider: "google" });
-            void signIn();
-          }}
-          disabled={pending}
-        />
-      </motion.div>
+      {/* Sin animación de entrada: es el CTA crítico del drawer (sin él nadie
+          puede entrar). Si el documento se monta oculto (backgrounding típico al
+          abrir el link desde otra app en celular), framer-motion pausa su RAF y
+          el botón queda invisible en opacity:0 para siempre. */}
+      <GoogleBtn
+        onClick={() => {
+          clientEvents.signInStarted({ provider: "google" });
+          void signIn();
+        }}
+        disabled={pending}
+      />
       {error && (
         <div className="mt-3 text-center text-xs text-cart-ink-3" role="status">
           {error}
