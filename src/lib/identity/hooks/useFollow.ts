@@ -6,7 +6,7 @@ import { useFollowing, followingKey } from "./useFollowing";
 
 /**
  * Estado y toggle de "seguir" una organización. Deriva `following` de la lista
- * que ya carga useFollowing (para invitados la query falla → following=false).
+ * que ya carga useFollowing (para invitados la query está deshabilitada → following=false).
  */
 export const useFollow = (organizationId: string) => {
   const qc = useQueryClient();
