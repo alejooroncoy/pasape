@@ -11,8 +11,15 @@ import { useInstallNudge } from "@/lib/pwa/useInstallNudge";
 // próxima apertura. Instalar en pantalla de inicio es la única vía confiable.
 // Ver AGENTS.md / memoria "wallet-offline-asistente" para el porqué completo.
 export function InstallNudge({ className = "" }: { className?: string }) {
-  const { show, platform, canPromptNative, androidLikelyInWebview, promptInstall, dismiss } =
-    useInstallNudge();
+  const {
+    show,
+    platform,
+    canPromptNative,
+    androidLikelyInWebview,
+    androidPromptConsumed,
+    promptInstall,
+    dismiss,
+  } = useInstallNudge();
   const [expanded, setExpanded] = useState(false);
   const [installing, setInstalling] = useState(false);
 
@@ -21,9 +28,12 @@ export function InstallNudge({ className = "" }: { className?: string }) {
   const onPrimaryAction = async () => {
     if (platform === "android" && canPromptNative) {
       setInstalling(true);
-      const outcome = await promptInstall();
+      await promptInstall();
       setInstalling(false);
-      if (outcome === "dismissed") return; // deja el aviso: puede intentarlo de nuevo
+      return; // aceptado o rechazado: el diálogo nativo ya se usó, no hay más que hacer acá
+    }
+    if (androidPromptConsumed) {
+      dismiss(); // ya vio el diálogo nativo de Chrome — no hay nada más que ofrecer
       return;
     }
     setExpanded((v) => !v);
@@ -34,9 +44,11 @@ export function InstallNudge({ className = "" }: { className?: string }) {
       ? installing
         ? "Instalando…"
         : "Instalar app"
-      : expanded
-        ? "Ocultar"
-        : "Ver cómo";
+      : androidPromptConsumed
+        ? "Entendido"
+        : expanded
+          ? "Ocultar"
+          : "Ver cómo";
 
   return (
     <div
@@ -117,6 +129,15 @@ export function InstallNudge({ className = "" }: { className?: string }) {
           de arriba no instaló nada directamente. */}
       {platform === "android" && androidLikelyInWebview && !expanded && (
         <p className="mt-2 text-[11px] text-cart-ink-4">Esto se abrió dentro de WhatsApp — toca «Ver cómo».</p>
+      )}
+      {/* Ya vio y usó el diálogo nativo de Chrome (lo aceptó o lo cerró): no
+          hay una segunda oportunidad automática esta sesión — solo indicamos
+          cómo instalarla a mano después, sin instrucciones de "salir a Chrome"
+          que no aplican (ya está ahí). */}
+      {androidPromptConsumed && (
+        <p className="mt-2 text-[11px] text-cart-ink-4">
+          Puedes instalarla luego desde el menú ⋮ de Chrome → «Instalar app».
+        </p>
       )}
     </div>
   );

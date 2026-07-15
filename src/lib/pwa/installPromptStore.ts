@@ -9,12 +9,17 @@ type BeforeInstallPromptEvent = Event & {
 
 let deferred: BeforeInstallPromptEvent | null = null;
 let installed = false;
+// Una vez que Chrome real disparó el evento, se queda en true aunque `deferred`
+// se limpie después de usarlo (aceptado o rechazado) — `deferred` es de un solo
+// uso, pero "esto es Chrome real, no un WebView" sigue siendo cierto.
+let everCaptured = false;
 const listeners = new Set<() => void>();
 
 const emit = () => listeners.forEach((l) => l());
 
 export function setDeferredPrompt(e: BeforeInstallPromptEvent | null) {
   deferred = e;
+  if (e) everCaptured = true;
   emit();
 }
 
@@ -29,6 +34,10 @@ export function getDeferredPrompt() {
 
 export function getInstalled() {
   return installed;
+}
+
+export function getEverCaptured() {
+  return everCaptured;
 }
 
 export function subscribe(listener: () => void) {

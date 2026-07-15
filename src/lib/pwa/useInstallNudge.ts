@@ -1,7 +1,14 @@
 "use client";
 
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { getDeferredPrompt, getInstalled, setDeferredPrompt, setInstalled, subscribe } from "./installPromptStore";
+import {
+  getDeferredPrompt,
+  getEverCaptured,
+  getInstalled,
+  setDeferredPrompt,
+  setInstalled,
+  subscribe,
+} from "./installPromptStore";
 
 export type InstallPlatform = "ios" | "android" | null;
 
@@ -29,6 +36,7 @@ function detectPlatform(): InstallPlatform {
 export function useInstallNudge() {
   const deferred = useSyncExternalStore(subscribe, getDeferredPrompt, () => null);
   const installed = useSyncExternalStore(subscribe, getInstalled, () => false);
+  const everCaptured = useSyncExternalStore(subscribe, getEverCaptured, () => false);
 
   const [platform, setPlatform] = useState<InstallPlatform>(null);
   const [standalone, setStandalone] = useState(true); // default cauto: no parpadea el aviso
@@ -67,12 +75,24 @@ export function useInstallNudge() {
   };
 
   const canPromptNative = !!deferred;
-  // Solo afirmamos "está en un WebView de terceros" en Android una vez pasado
-  // el margen de gracia y sin prompt nativo — antes de eso, simplemente no lo
-  // sabemos todavía (Chrome real también tarda en decidir si ofrece instalar).
-  const androidLikelyInWebview = platform === "android" && !canPromptNative && androidGraceElapsed;
+  // Solo afirmamos "está en un WebView de terceros" en Android si NUNCA llegó
+  // el evento nativo — usar `!canPromptNative` acá confundía a alguien que ya
+  // vio el diálogo de Chrome y lo aceptó/rechazó (deferred se limpia tras
+  // usarse una vez) con alguien que sigue atrapado en el WebView de WhatsApp.
+  const androidLikelyInWebview = platform === "android" && !everCaptured && androidGraceElapsed;
+  // Ya vimos el prompt nativo pero se usó (aceptado o rechazado): no hay nada
+  // más que ofrecer por código — solo indicar que puede instalarla luego a mano.
+  const androidPromptConsumed = platform === "android" && everCaptured && !canPromptNative && !installed;
 
   const show = !!platform && !standalone && !installed && !dismissed;
 
-  return { show, platform, canPromptNative, androidLikelyInWebview, promptInstall, dismiss };
+  return {
+    show,
+    platform,
+    canPromptNative,
+    androidLikelyInWebview,
+    androidPromptConsumed,
+    promptInstall,
+    dismiss,
+  };
 }
