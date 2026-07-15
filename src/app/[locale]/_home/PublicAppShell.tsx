@@ -27,7 +27,7 @@ export function PublicAppShell({
   const [category, setCategory] = useState<EventCategory | null>(null);
 
   return (
-    <div className="cart-grain relative min-h-screen overflow-hidden bg-cart-bg text-white font-sans">
+    <div className="home-light cart-grain relative min-h-screen overflow-hidden bg-cart-bg text-cart-ink font-sans">
       <AmbientGlow />
       <div className="relative z-[1]">
         <Nav

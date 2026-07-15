@@ -65,7 +65,7 @@ function staticPagesBlock(): string {
 - [Inicio](${absoluteUrl(localePath("es", "/"))}): Explorar eventos próximos en Lima y Perú
 - [Eventos](${absoluteUrl(localePath("es", "/events"))}): Catálogo de eventos con entradas a la venta
 - [Organizadores](${absoluteUrl(localePath("es", "/organizadores"))}): Plataforma para productoras — venta de entradas, boxes, preventas y promotores
-- [Libro de reclamaciones](${absoluteUrl(localePath("es", "/complaints"))}): Canal legal de quejas (Ley 29571, Perú)`;
+- [Libro de reclamaciones](${absoluteUrl(localePath("es", "/reclamos"))}): Canal legal de quejas (Ley 29571, Perú)`;
 }
 
 function aiMetaBlock(): string {

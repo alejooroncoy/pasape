@@ -13,14 +13,14 @@ export function Footer() {
       <div className="mx-auto max-w-[1320px] px-[clamp(20px,4vw,56px)] py-9">
         <div className="grid grid-cols-[1.3fr_repeat(3,minmax(0,1fr))_auto] gap-8 max-[1100px]:grid-cols-2 max-[560px]:grid-cols-1">
           <div>
-            <Link href="/" className="inline-flex items-center gap-2.5 text-[21px] font-bold tracking-[-0.01em] text-cart-ink">
+            <Link href="/" className="inline-flex items-center gap-2.5 text-[21px] font-semibold tracking-[-0.01em] text-cart-ink">
               <span className="grid size-[38px] place-items-center">
                 <Logo className="size-full" />
               </span>
               Pasape
             </Link>
             <p className="mt-3.5 max-w-[30ch] text-[13.5px] leading-[1.55] text-cart-ink-2">
-              Tu pase a los eventos que valen la pena en Lima.
+              Tu pase a los eventos que valen la pena en Perú.
             </p>
             <a
               href={WA_HREF}
