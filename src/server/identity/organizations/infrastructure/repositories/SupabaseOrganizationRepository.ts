@@ -133,30 +133,33 @@ export const supabaseOrganizationRepository: OrganizationRepository = {
     }
 
     // Resuelve orgs alcanzadas: directas + por legal_entity + por portfolio (vía legal_entities.created_by).
+    // Las 3 ramas son independientes entre sí (ninguna depende del resultado de
+    // otra) — en paralelo para no pagar 3 roundtrips secuenciales a Supabase en
+    // una resolución que corre en cada carga del panel de organizador.
     const orgsById = new Map<string, Row>();
 
-    if (orgIds.size > 0) {
-      const { data } = await db.from("organizations").select("*").in("id", Array.from(orgIds));
-      for (const r of (data ?? []) as Row[]) orgsById.set(r.id, r);
-    }
-    if (legalEntityIds.size > 0) {
-      const { data } = await db
-        .from("organizations")
-        .select("*")
-        .in("legal_entity_id", Array.from(legalEntityIds));
-      for (const r of (data ?? []) as Row[]) orgsById.set(r.id, r);
-    }
-    if (portfolioOwnerIds.size > 0) {
-      const { data: les } = await db
-        .from("legal_entities")
-        .select("id")
-        .in("created_by", Array.from(portfolioOwnerIds));
-      const leIds = (les ?? []).map((r: { id: string }) => r.id);
-      if (leIds.length > 0) {
-        const { data } = await db.from("organizations").select("*").in("legal_entity_id", leIds);
-        for (const r of (data ?? []) as Row[]) orgsById.set(r.id, r);
-      }
-    }
+    const [directOrgs, orgsByLegalEntity, orgsByPortfolio] = await Promise.all([
+      orgIds.size > 0
+        ? db.from("organizations").select("*").in("id", Array.from(orgIds))
+        : { data: [] as Row[] },
+      legalEntityIds.size > 0
+        ? db.from("organizations").select("*").in("legal_entity_id", Array.from(legalEntityIds))
+        : { data: [] as Row[] },
+      portfolioOwnerIds.size > 0
+        ? (async () => {
+            const { data: les } = await db
+              .from("legal_entities")
+              .select("id")
+              .in("created_by", Array.from(portfolioOwnerIds));
+            const leIds = (les ?? []).map((r: { id: string }) => r.id);
+            if (leIds.length === 0) return { data: [] as Row[] };
+            return db.from("organizations").select("*").in("legal_entity_id", leIds);
+          })()
+        : { data: [] as Row[] },
+    ]);
+    for (const r of (directOrgs.data ?? []) as Row[]) orgsById.set(r.id, r);
+    for (const r of (orgsByLegalEntity.data ?? []) as Row[]) orgsById.set(r.id, r);
+    for (const r of (orgsByPortfolio.data ?? []) as Row[]) orgsById.set(r.id, r);
 
     // Para asignar el rol efectivo, necesitamos saber qué scopes alcanzan cada org.
     const leOwners = new Map<string, string>(); // legal_entity_id → created_by
