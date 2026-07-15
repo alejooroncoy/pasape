@@ -85,7 +85,12 @@ export function FollowButton({
       </button>
       <SignInDrawer
         open={signInOpen}
-        onClose={() => setSignInOpen(false)}
+        onClose={() => {
+          // Si cancela sin loguearse, el intent de seguir no debe sobrevivir
+          // — si no, un login posterior no relacionado dispararía el follow.
+          wantsFollowRef.current = false;
+          setSignInOpen(false);
+        }}
         redirectTo={`/${orgSlug}`}
       />
     </>
