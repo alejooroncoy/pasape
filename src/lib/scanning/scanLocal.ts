@@ -89,13 +89,18 @@ async function admitResolved(
 
   // Dos puertas 100% offline pueden admitir el mismo QR; al sync el server marca
   // dup_offline y el panel del org alerta. Modelo operativo — ver CAPACITOR.md.
-  if (cached) await markUsedLocalById(ticketId);
+  // Encolar ANTES de marcar usado: si enqueuePendingScan fallara primero, no
+  // queremos un ticket marcado "used" local que nunca se sincronizó al server
+  // (el asistente entraría sin quedar registrado). Al revés es más seguro: si
+  // falla el marcado local después de encolar, el próximo refreshScanCache lo
+  // corrige solo con el estado real del server.
   await enqueuePendingScan({
     ticketId,
     token,
     kind,
     scannedAt: new Date().toISOString(),
   });
+  if (cached) await markUsedLocalById(ticketId);
   // Aforo del box desde el cache (tras marcar usado, para que el conteo incluya
   // este ingreso). null si no es box.
   const box = cached?.boxLabel ? await getBoxFill(ticketId) : null;

@@ -333,7 +333,12 @@ export function ScanScreen({ eventSlug }: { eventSlug: string }) {
         scannedAt:   null,
       });
       if (online) void syncPending(eventSlug); // empuja la cola sin bloquear
-    } catch {
+    } catch (e) {
+      // Log real del error: sin esto, cualquier excepción (bug de IndexedDB, cache
+      // corrupto, etc.) se disfraza de "QR no reconocido" y es indiagnosticable
+      // en producción (ver bug de markUsedLocalById que este log destapó).
+      // eslint-disable-next-line no-console
+      console.error("[scan] runScan threw:", (e as Error)?.name, (e as Error)?.message);
       showResult({ kind: "invalid", holderName: null, typeName: "QR no reconocido", dniLast4: null, boxLabel: null, boxHostName: null, boxFilled: null, boxCapacity: null, scannedAt: null });
     }
   }, [scan, online, showResult, eventSlug]);
@@ -371,7 +376,14 @@ export function ScanScreen({ eventSlug }: { eventSlug: string }) {
           }
           await runScan(codes[0].rawValue);
         }
-      } catch {}
+      } catch (e) {
+        // runScan ya atrapa sus propios errores; si esto dispara es el detector
+        // mismo (frame corrupto, bug del BarcodeDetector nativo) — sin log el
+        // portero se queda mirando el reticle sin ningún feedback, ni siquiera
+        // "QR inválido".
+        // eslint-disable-next-line no-console
+        console.error("[scan] detect loop threw:", (e as Error)?.name, (e as Error)?.message);
+      }
     }
     rafRef.current = requestAnimationFrame(() => void scanLoop(detector));
   }, [runScan]);
@@ -440,7 +452,9 @@ export function ScanScreen({ eventSlug }: { eventSlug: string }) {
         scannedAt:   null,
       });
       if (online) void syncPending(eventSlug);
-    } catch {
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error("[scan] runAdmit threw:", (e as Error)?.name, (e as Error)?.message);
       showResult({ kind: "invalid", holderName: null, typeName: "No se pudo admitir", dniLast4: null, boxLabel: null, boxHostName: null, boxFilled: null, boxCapacity: null, scannedAt: null });
     }
   }, [online, showResult, eventSlug]);
