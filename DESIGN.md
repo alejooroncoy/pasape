@@ -114,15 +114,22 @@ El giro a `.home-light` es progresivo, no un rediseño de un solo commit. Estado
 
 ## Logo Badge
 
-Ubicado en `public/icons/logo-badge.svg` y generado en múltiples resoluciones (48, 72, 96, 144, 180, 192, 256, 384, 512, 1024px). Es el app icon / favicon — vive fuera del sistema `.home-light`, así que usa colores hardcodeados (no tokens `cart-*`), a propósito: debe verse igual sin importar el tema del sistema o la superficie donde se use.
+Dos variantes del mismo símbolo (mascota asomándose por un contorno de puerta/ticket), cada una resuelta para el fondo que la rodea — nunca colores hardcodeados por capricho, sino porque estos íconos viven fuera del sistema `.home-light` (deben verse igual sin importar el tema del sistema o la superficie donde se use).
 
-**Diseño:**
-- Rounded-square (app-icon style) con gradiente morado→azul de fondo (`#A78BFA` → `#7C3AED` → `#4F6DF5`, vertical) — la paleta dual reemplaza el degradado mono-morado anterior.
-- Mascota (perrito) asomándose por un contorno de puerta/ticket, trazo blanco fino — la silueta de marca, sin cambios.
+**`public/icons/logo-badge.svg`** — favicon / app icon (fondo oscuro implícito).
+Generado en 48, 72, 96, 144, 180, 192, 256, 384, 512, 1024px.
+- Rounded-square con gradiente morado→azul de fondo (`#A78BFA` → `#7C3AED` → `#4F6DF5`, vertical).
+- Mascota en trazo blanco fino.
 - Gloss radial sutil arriba (profundidad, no imitando foto) + ring blanco translúcido en el borde.
 
+**`public/icons/logo-badge-light.svg`** — variante clara, para contextos donde el fondo alrededor del ícono ya es blanco (selector de cuenta de Google, cualquier superficie donde un cuadrado con gradiente oscuro compite mal). Aprobada jul 2026 tras comparar 3 variantes.
+- Fondo blancquito (`#fbfaff`) con hairline sutil (`rgba(28,20,60,.14)`) — no gradiente, no borde negro grueso (evaluado y descartado por "gritón").
+- Mascota en trazo oscuro (`#141026`).
+- **"Chispazos"**: puntos y destellos (rombos) de morado/azul dispersos de forma asimétrica alrededor de la mascota — reemplazan cualquier relleno o degradado. Es lo que evita el look "app-icon-gradiente-IA": color como acento disperso, no como superficie.
+- **Mismo lenguaje en el ícono de la PWA** (`src/lib/seo/pwaIcon.tsx`, generado con `next/og` en `/pwa-icon/[size]`): mismas coordenadas de chispazos escaladas al tamaño pedido, mismo fondo/hairline. Badge de login y PWA se ven como un solo sistema, no dos íconos distintos.
+
 **Filosofía:**
-- El gradiente cubre azul + morado + blanco (trazo) — la paleta completa de Pasape en un solo símbolo compacto.
+- El morado y azul son acentos puros — nunca rellenan fondo — excepto en la variante oscura, donde el gradiente es la excepción intencional (app-icon clásico, pop contra fondos oscuros).
 - Reservado para contextos square (favicon, app icon, avatar) — no es el logo de texto/wordmark de la marca.
 
 ## Referencias
