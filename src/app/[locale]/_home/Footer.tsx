@@ -57,6 +57,8 @@ export function Footer() {
               ["Centro de ayuda", "/ayuda"],
               ["Preguntas frecuentes", "/ayuda#faq-heading"],
               ["Soy organizador", "/organizadores"],
+              ["Términos y condiciones", "/terminos"],
+              ["Política de privacidad", "/privacidad"],
             ]}
           />
           <div>

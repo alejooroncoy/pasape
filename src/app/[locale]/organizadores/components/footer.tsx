@@ -31,6 +31,8 @@ export function SiteFooter() {
             links={[
               ["Centro de ayuda", "/ayuda"],
               ["Preguntas frecuentes", "/ayuda#faq-heading"],
+              ["Términos y condiciones", "/terminos"],
+              ["Política de privacidad", "/privacidad"],
             ]}
           />
           <div>
