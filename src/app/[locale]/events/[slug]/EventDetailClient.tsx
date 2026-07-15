@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { CheckoutSheet } from "./_checkout/CheckoutSheet";
-import { Link, useRouter, usePathname } from "@/i18n/navigation";
+import { Link, useRouter } from "@/i18n/navigation";
 import { clientEvents } from "@/lib/analytics/clientEvents";
 import { api } from "@/lib/_shared/api-client";
 import { eventDatePillParts, eventDateTime } from "@/lib/_shared/format";
@@ -15,7 +15,7 @@ import { SignInDrawer } from "@/app/[locale]/_home/SignInDrawer";
 import { useEvent } from "@/lib/events/hooks/useEvents";
 import { useSaveEvent } from "@/lib/identity/hooks/useSaveEvent";
 import { useFollow } from "@/lib/identity/hooks/useFollow";
-import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
+import { useAuthGatedAction } from "@/lib/identity/hooks/useAuthGatedAction";
 import { usePromoterDisplayName } from "@/lib/promoters/hooks/usePromoter";
 import { useEventShowcase } from "@/lib/events/hooks/useEventShowcase";
 import { useEventPartners } from "@/lib/events/hooks/useEventPartners";
@@ -695,54 +695,22 @@ function VerifiedSeal() {
   );
 }
 
-// Botón "Seguir" real (useFollow). Invitado → login-gate en el sitio y vuelve al
-// evento. Invitado → abre el SignInDrawer (bottom-sheet en móvil, modal en
-// desktop) sin salir de la página; al loguear vuelve acá (redirectTo). Antes
+// Botón "Seguir" real (useFollow). Invitado → abre el SignInDrawer
+// (bottom-sheet en móvil, modal en desktop) sin salir de la página; al
+// loguear vuelve acá (redirectTo) y el "Seguir" se dispara solo. Antes
 // navegaba a la vitrina de la org, un desvío confuso: clicabas "Seguir" y
 // aterrizabas en otra página sin haber seguido nada.
-const pendingFollowKey = (orgId: string) => `pasape:pending_follow:${orgId}`;
-
 function FollowButton({ org }: { org: ShowcaseOrg }) {
-  const pathname = usePathname();
-  const me = useCurrentUser();
-  const loggedIn = !!me.data?.user;
   const { isFollowing, toggle, isPending } = useFollow(org.id);
-  const [signInOpen, setSignInOpen] = useState(false);
-  // Si abrió el SignInDrawer para completar "Seguir", tras loguearse toggle()
-  // se dispara solo — sin esto el usuario tendría que tocar el botón otra vez.
-  // El login de Google es hard-navigation (OAuth → /auth/callback), que
-  // remonta la página entera: un useRef en memoria no sobrevive ese viaje.
-  // Por eso la intención se persiste en sessionStorage (mismo patrón que
-  // setOauthReturn/PostLoginRedirect), no en un ref.
-  useEffect(() => {
-    if (!loggedIn) return;
-    let pending = false;
-    try {
-      pending = sessionStorage.getItem(pendingFollowKey(org.id)) === "1";
-    } catch {
-      /* sessionStorage inaccesible — sin auto-toggle, no rompe nada más */
-    }
-    if (!pending) return;
-    try {
-      sessionStorage.removeItem(pendingFollowKey(org.id));
-    } catch {}
+  const gate = useAuthGatedAction("follow", org.id, toggle, () => {
     if (!isFollowing) toggle();
-  }, [loggedIn, isFollowing, toggle, org.id]);
+  });
 
   return (
     <>
       <button
         type="button"
-        onClick={() => {
-          if (!loggedIn) {
-            try {
-              sessionStorage.setItem(pendingFollowKey(org.id), "1");
-            } catch {}
-            setSignInOpen(true);
-            return;
-          }
-          toggle();
-        }}
+        onClick={() => gate.run()}
         disabled={isPending}
         aria-pressed={isFollowing}
         className={
@@ -755,20 +723,9 @@ function FollowButton({ org }: { org: ShowcaseOrg }) {
         {isFollowing ? "Siguiendo" : "Seguir"}
       </button>
       <SignInDrawer
-        open={signInOpen}
-        onClose={() => {
-          setSignInOpen(false);
-          // Canceló sin loguearse: limpia el flag para que no quede huérfano
-          // y dispare un "Seguir" no solicitado si más tarde se loguea desde
-          // otro flujo en la misma pestaña. Si SÍ se logueó, el efecto de
-          // arriba ya consumió y borró el flag antes de que esto corra.
-          if (!loggedIn) {
-            try {
-              sessionStorage.removeItem(pendingFollowKey(org.id));
-            } catch {}
-          }
-        }}
-        redirectTo={pathname}
+        open={gate.signInOpen}
+        onClose={gate.closeDrawer}
+        redirectTo={gate.redirectTo}
       />
     </>
   );
@@ -1778,37 +1735,50 @@ function BackButton() {
   );
 }
 
+// Invitado → abre el SignInDrawer sin salir de la página; al loguear, el
+// evento se guarda solo (mismo patrón que "Seguir" en FollowButton).
 function SaveEventButton({ eventId }: { eventId: string }) {
   const { isSaved, toggle, isPending } = useSaveEvent(eventId);
   const handleToggle = () => {
     clientEvents.eventSaved({ event_id: eventId, saved: !isSaved });
     toggle();
   };
+  const gate = useAuthGatedAction("save", eventId, handleToggle, () => {
+    if (!isSaved) handleToggle();
+  });
+
   return (
-    <button
-      type="button"
-      onClick={handleToggle}
-      disabled={isPending}
-      aria-label={isSaved ? "Quitar de favoritos" : "Guardar en favoritos"}
-      aria-pressed={isSaved}
-      className={HERO_BTN + " active:scale-90 disabled:opacity-60"}
-    >
-      <svg
-        width="17"
-        height="17"
-        viewBox="0 0 18 18"
-        fill={isSaved ? "var(--color-cart-accent)" : "none"}
-        className={isSaved ? "text-cart-accent" : "text-cart-ink"}
-        aria-hidden
+    <>
+      <button
+        type="button"
+        onClick={() => gate.run()}
+        disabled={isPending}
+        aria-label={isSaved ? "Quitar de favoritos" : "Guardar en favoritos"}
+        aria-pressed={isSaved}
+        className={HERO_BTN + " active:scale-90 disabled:opacity-60"}
       >
-        <path
-          d="M9 15.5s-6-4-6-8a3 3 0 0 1 6-1 3 3 0 0 1 6 1c0 4-6 8-6 8Z"
-          stroke="currentColor"
-          strokeWidth="1.6"
-          strokeLinejoin="round"
-        />
-      </svg>
-    </button>
+        <svg
+          width="17"
+          height="17"
+          viewBox="0 0 18 18"
+          fill={isSaved ? "var(--color-cart-accent)" : "none"}
+          className={isSaved ? "text-cart-accent" : "text-cart-ink"}
+          aria-hidden
+        >
+          <path
+            d="M9 15.5s-6-4-6-8a3 3 0 0 1 6-1 3 3 0 0 1 6 1c0 4-6 8-6 8Z"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
+      <SignInDrawer
+        open={gate.signInOpen}
+        onClose={gate.closeDrawer}
+        redirectTo={gate.redirectTo}
+      />
+    </>
   );
 }
 
