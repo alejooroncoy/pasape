@@ -2,11 +2,12 @@ import { notFound } from "next/navigation";
 import { Money } from "@/lib/_shared/money";
 import { Link } from "@/i18n/navigation";
 import { FollowButton } from "./_components/FollowButton";
-import { BackButton } from "./_components/BackButton";
+import { ScrollToTop } from "./_components/ScrollToTop";
 import { supabaseOrganizationRepository } from "@/server/identity/organizations/infrastructure/repositories/SupabaseOrganizationRepository";
 import { supabaseEventRepository } from "@/server/events/infrastructure/repositories/SupabaseEventRepository";
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
 import { optimizeImageUrl } from "@/lib/images/optimizeUrl";
+import { Footer } from "@/app/[locale]/_home/Footer";
 import type { Event } from "@/server/events/domain/Event";
 import type { Organization } from "@/server/identity/organizations/domain/Organization";
 
@@ -34,8 +35,11 @@ export default async function BrandPublicPage({ params }: Props) {
   if (!org) notFound();
 
   const { upcoming, minPrices } = await loadUpcomingEvents(orgSlug);
+  const followerCount = await fetchFollowerCount(org.id);
 
-  return <BrandPageView org={org} events={upcoming} minPrices={minPrices} />;
+  return (
+    <BrandPageView org={org} events={upcoming} minPrices={minPrices} followerCount={followerCount} />
+  );
 }
 
 // Helper fuera del render del Server Component: aquí Date.now() es válido
@@ -44,6 +48,15 @@ async function loadUpcomingEvents(orgSlug: string) {
   const upcoming = await supabaseEventRepository.listPublishedByOrgSlug(orgSlug);
   const minPrices = await fetchMinPricesByEvent(upcoming.map((e) => e.id));
   return { upcoming, minPrices };
+}
+
+async function fetchFollowerCount(orgId: string): Promise<number> {
+  const db = supabaseAdmin();
+  const { count } = await db
+    .from("follows")
+    .select("follower_id", { count: "exact", head: true })
+    .eq("organization_id", orgId);
+  return count ?? 0;
 }
 
 async function fetchMinPricesByEvent(eventIds: string[]): Promise<Record<string, number>> {
@@ -69,33 +82,75 @@ function BrandPageView({
   org,
   events,
   minPrices,
+  followerCount,
 }: {
   org: Organization;
   events: Event[];
   minPrices: Record<string, number>;
+  followerCount: number;
 }) {
   const brand = org.brandColor ?? "#B87CFF";
   const handle = `@${org.slug}`;
 
   return (
-    <div className="relative min-h-[100dvh] bg-cart-bg text-white">
-      {/* Hero cover */}
-      <Cover brand={brand} />
+    <>
+      <ScrollToTop />
 
-      {/* Volver: va SOBRE el cover (arriba), no sobre el logo */}
-      <BackButton />
+      {/* Panel de marca + eventos: en desktop el CONTENIDO (agenda de eventos)
+          va a la izquierda y el panel de MARCA/ACCIÓN (identidad + Seguir) va
+          fijo a la derecha — mismo orden que la página de evento (flyer a la
+          izquierda, panel de compra sticky a la derecha): lo que la gente
+          vino a ver pesa más que la ficha de quién lo organiza. En mobile se
+          apila con la marca primero (orientación tipo perfil), eventos abajo. */}
+      <div className="relative mx-auto w-full max-w-[1120px] px-5 pb-24 pt-6 lg:flex lg:items-start lg:gap-10 lg:px-10 lg:pt-10">
+        <InfoPanel
+          org={org}
+          brand={brand}
+          handle={handle}
+          count={events.length}
+          followerCount={followerCount}
+          className="lg:order-2"
+        />
 
-      {/* Mobile: iOS-style stacked */}
-      <div className="relative mx-auto w-full max-w-[480px] px-5 pb-20 lg:hidden">
-        <div className="-mt-12 flex items-end gap-4">
-          <BrandLogo name={org.name} color={brand} logoUrl={org.logoUrl} size={88} />
-          <FollowButton orgId={org.id} orgSlug={org.slug} />
+        <div className="mt-6 min-w-0 flex-1 lg:order-1 lg:mt-0">
+          <SectionTitle count={events.length} />
+          <EventsList events={events} brand={brand} minPrices={minPrices} />
         </div>
+      </div>
 
-        <h1 className="mt-4 text-[28px] font-semibold leading-[1.05] tracking-[-0.02em]">
+      <Footer />
+    </>
+  );
+}
+
+function InfoPanel({
+  org,
+  brand,
+  handle,
+  count,
+  followerCount,
+  className,
+}: {
+  org: Organization;
+  brand: string;
+  handle: string;
+  count: number;
+  followerCount: number;
+  className?: string;
+}) {
+  return (
+    <aside
+      className={
+        "shrink-0 overflow-hidden rounded-3xl border border-cart-line bg-gradient-to-br from-cart-bg-purple to-cart-bg lg:sticky lg:top-6 lg:w-[300px] " +
+        (className ?? "")
+      }
+    >
+      <div className="p-6">
+        <BrandBadge name={org.name} color={brand} logoUrl={org.logoUrl} size={54} />
+        <h1 className="mt-4 text-[23px] font-semibold leading-[1.1] tracking-[-0.02em] text-cart-ink text-balance">
           {org.name}
         </h1>
-        <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[13px] text-cart-ink-3">
+        <div className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[12px] text-cart-ink-3">
           <span className="font-mono">{handle}</span>
           {org.instagram && (
             <>
@@ -103,89 +158,33 @@ function BrandPageView({
               <InstagramLink handle={org.instagram} />
             </>
           )}
+        </div>
+        <div className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[12px] text-cart-ink-3">
+          {followerCount === 0 ? (
+            <span>Sé el primer seguidor</span>
+          ) : (
+            <span>
+              <b className="font-semibold text-cart-ink">{followerCount}</b>{" "}
+              {followerCount === 1 ? "seguidor" : "seguidores"}
+            </span>
+          )}
           <span>·</span>
-          <span>{events.length} próximos</span>
+          <span>
+            {count} {count === 1 ? "próximo" : "próximos"}
+          </span>
         </div>
 
         {org.description && (
-          <p className="mt-3 text-[14px] leading-relaxed text-cart-ink-2">
+          <p className="mt-3 text-[13px] leading-relaxed text-cart-ink-3">
             {org.description}
           </p>
         )}
 
-        <SectionTitle count={events.length} />
-
-        <EventsList events={events} brand={brand} minPrices={minPrices} />
-      </div>
-
-      {/* Desktop: wider hero + grid */}
-      <div className="relative mx-auto hidden w-full max-w-[1120px] px-10 pb-24 lg:block">
-        <div className="-mt-16 flex items-end justify-between gap-6">
-          <div className="flex items-end gap-6">
-            <BrandLogo name={org.name} color={brand} logoUrl={org.logoUrl} size={132} />
-            <div className="pb-2">
-              <h1 className="text-[44px] font-semibold leading-[1] tracking-[-0.03em]">
-                {org.name}
-              </h1>
-              <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[14px] text-cart-ink-3">
-                <span className="font-mono">{handle}</span>
-                {org.instagram && (
-                  <>
-                    <span>·</span>
-                    <InstagramLink handle={org.instagram} />
-                  </>
-                )}
-                <span>·</span>
-                <span>{events.length} próximos</span>
-              </div>
-              {org.description && (
-                <p className="mt-3 max-w-[520px] text-[14.5px] leading-relaxed text-cart-ink-2">
-                  {org.description}
-                </p>
-              )}
-            </div>
-          </div>
-          <FollowButton orgId={org.id} orgSlug={org.slug} size="lg" />
+        <div className="mt-5">
+          <FollowButton orgId={org.id} orgSlug={org.slug} />
         </div>
-
-        <SectionTitle count={events.length} variant="desktop" />
-
-        <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {events.map((ev, i) => (
-            <EventCardWeb
-              key={ev.id}
-              ev={ev}
-              brand={brand}
-              featured={i === 0}
-              minCents={minPrices[ev.id]}
-            />
-          ))}
-        </div>
-
-        {events.length === 0 && <EmptyState />}
       </div>
-    </div>
-  );
-}
-
-function Cover({ brand }: { brand: string }) {
-  return (
-    <div className="relative h-[200px] w-full overflow-hidden lg:h-[280px]">
-      <div
-        className="absolute inset-0"
-        style={{
-          background: `linear-gradient(135deg, ${brand} 0%, #6D2BE0 50%, #1A0A2E 100%)`,
-        }}
-      />
-      <div
-        className="absolute inset-0"
-        style={{
-          background:
-            "radial-gradient(60% 60% at 30% 30%, rgba(255,255,255,0.18), transparent 60%), radial-gradient(40% 50% at 80% 80%, rgba(0,0,0,0.4), transparent 60%)",
-        }}
-      />
-      <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-b from-transparent to-cart-bg" />
-    </div>
+    </aside>
   );
 }
 
@@ -195,7 +194,7 @@ function InstagramLink({ handle }: { handle: string }) {
       href={`https://instagram.com/${handle}`}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex items-center gap-1 text-cart-ink-2 transition hover:text-white"
+      className="inline-flex items-center gap-1 text-cart-ink-2 transition hover:text-cart-ink"
     >
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden>
         <rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" strokeWidth="1.8" />
@@ -207,7 +206,7 @@ function InstagramLink({ handle }: { handle: string }) {
   );
 }
 
-function BrandLogo({
+function BrandBadge({
   name,
   color,
   logoUrl,
@@ -221,7 +220,7 @@ function BrandLogo({
   const initial = (name || "?")[0].toUpperCase();
   return (
     <div
-      className="relative shrink-0 overflow-hidden rounded-2xl border-4 border-cart-bg bg-cart-bg-elev"
+      className="relative shrink-0 overflow-hidden rounded-xl shadow-[0_4px_16px_-6px_rgba(20,16,38,0.3)]"
       style={{ width: size, height: size }}
     >
       {logoUrl ? (
@@ -243,16 +242,16 @@ function BrandLogo({
 }
 
 
-function SectionTitle({ count, variant }: { count: number; variant?: "desktop" }) {
+function SectionTitle({ count }: { count: number }) {
   return (
-    <div className={"flex items-baseline justify-between " + (variant === "desktop" ? "mt-12" : "mt-8")}>
+    <div className="flex items-baseline justify-between">
       <div>
         <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-cart-ink-3">
           {count === 0 ? "SIN EVENTOS POR AHORA" : `${count} EVENTOS PRÓXIMOS`}
         </div>
-        {variant === "desktop" && count > 0 && (
-          <h2 className="mt-2 text-[24px] font-semibold tracking-[-0.02em]">
-            Próximas noches
+        {count > 0 && (
+          <h2 className="mt-2 text-[22px] font-semibold tracking-[-0.02em] text-cart-ink">
+            Próximos eventos
           </h2>
         )}
       </div>
@@ -276,7 +275,7 @@ function EventsList({
   return (
     <div className="mt-4 flex flex-col gap-3">
       {events.map((ev, i) => (
-        <EventCardMobile
+        <EventCard
           key={ev.id}
           ev={ev}
           brand={brand}
@@ -288,7 +287,7 @@ function EventsList({
   );
 }
 
-function EventCardMobile({
+function EventCard({
   ev,
   brand,
   featured,
@@ -336,73 +335,23 @@ function EventCardMobile({
   );
 }
 
-function EventCardWeb({
-  ev,
-  brand,
-  featured,
-  minCents,
-}: {
-  ev: Event;
-  brand: string;
-  featured: boolean;
-  minCents: number | undefined;
-}) {
-  const date = formatEventDate(ev.startsAt);
-  return (
-    <Link
-      href={`/events/${ev.slug}` as never}
-      className={
-        "group relative flex flex-col overflow-hidden rounded-3xl bg-cart-bg-elev transition hover:-translate-y-[2px] " +
-        (featured
-          ? "border border-cart-accent/60 shadow-[0_24px_64px_-24px_var(--color-cart-accent-glow)]"
-          : "border border-cart-line hover:border-cart-line-strong")
-      }
-    >
-      <div
-        className="relative aspect-[16/10] w-full overflow-hidden"
-        style={!ev.coverUrl ? { background: `linear-gradient(135deg, ${brand}, #FF4D5E)` } : undefined}
-      >
-        {ev.coverUrl && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={optimizeImageUrl(ev.coverUrl, "card") ?? ev.coverUrl} alt="" className="absolute inset-0 size-full object-cover" />
-        )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
-        {featured && (
-          <span className="absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-full bg-black/50 px-2.5 py-1 text-[10px] font-semibold tracking-[0.14em] text-white backdrop-blur">
-            <span className="size-1.5 rounded-full bg-cart-accent shadow-[0_0_6px_var(--color-cart-accent-glow-strong)]" />
-            DESTACADO
-          </span>
-        )}
-      </div>
-      <div className="flex flex-col gap-1 p-4">
-        <div className="text-[11.5px] font-semibold uppercase tracking-[0.14em] text-cart-accent">
-          {date}
-        </div>
-        <div className="text-[18px] font-semibold tracking-[-0.015em]">{ev.title}</div>
-        {ev.venue && (
-          <div className="truncate text-[12.5px] text-cart-ink-3">{ev.venue}</div>
-        )}
-        <div className="mt-2 flex items-end justify-between">
-          <div>
-            <div className="text-[10px] uppercase tracking-[0.14em] text-cart-ink-4">DESDE</div>
-            <div className="font-mono text-[16px] font-semibold">{formatCents(minCents)}</div>
-          </div>
-          <span className="text-[12.5px] font-medium text-cart-ink-2 transition group-hover:text-white">
-            Ver entradas →
-          </span>
-        </div>
-      </div>
-    </Link>
-  );
-}
-
 function EmptyState() {
   return (
-    <div className="mt-6 flex flex-col items-center gap-2 rounded-3xl border border-dashed border-cart-line bg-cart-bg-elev/40 px-6 py-12 text-center">
-      <div className="text-[40px]">🌒</div>
-      <div className="mt-1 text-[15px] font-semibold">Sin noches por ahora</div>
-      <div className="max-w-[280px] text-[13px] text-cart-ink-3">
-        Cuando publiquen un evento, aparecerá aquí. Pulsa Seguir para enterarte.
+    <div className="mt-6 flex flex-col items-center gap-3 rounded-3xl border border-dashed border-cart-line bg-cart-bg-elev/40 px-6 py-12 text-center">
+      <div className="grid size-14 place-items-center rounded-full bg-cart-accent-soft text-cart-accent">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden>
+          <path
+            d="M12 3a5 5 0 0 0-5 5v2.6c0 .53-.2 1.04-.56 1.43L5 13.5c-.9.98-.2 2.5 1.13 2.5h11.74c1.33 0 2.03-1.52 1.13-2.5l-1.44-1.47a2.06 2.06 0 0 1-.56-1.43V8a5 5 0 0 0-5-5Z"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinejoin="round"
+          />
+          <path d="M9.5 18.5a2.5 2.5 0 0 0 5 0" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        </svg>
+      </div>
+      <div className="text-[15px] font-semibold text-cart-ink">Aún no hay eventos anunciados</div>
+      <div className="max-w-[280px] text-[13px] leading-relaxed text-cart-ink-3">
+        Sigue esta marca y te avisamos apenas anuncien el próximo — directo a tu cuenta, sin tener que volver a buscar.
       </div>
     </div>
   );
@@ -427,6 +376,7 @@ function formatEventDate(iso: string): string {
 
 function formatCents(cents: number | undefined): string {
   if (cents == null) return "—";
+  if (cents === 0) return "Gratis";
   const soles = Money.toSoles(cents);
   const rounded = Number.isInteger(soles) ? soles.toFixed(0) : soles.toFixed(2);
   return `S/ ${rounded}`;

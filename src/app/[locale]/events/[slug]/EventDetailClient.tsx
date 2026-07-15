@@ -1560,6 +1560,7 @@ function FlyerCard({
   // no queremos el ícono de imagen rota del navegador ocupando el marco —
   // se trata igual que "sin flyer": cae al gradiente de marca.
   const [imgFailed, setImgFailed] = useState(false);
+  const [imgLoaded, setImgLoaded] = useState(false);
   const hasCover = Boolean(event.coverUrl) && !imgFailed;
   const immersive = variant === "immersive";
   const dt = eventDatePillParts(event.startsAt, event.timezone);
@@ -1601,33 +1602,44 @@ function FlyerCard({
 
       <div className={"relative w-full " + (hasCover ? "" : "aspect-[16/10]")}>
         {hasCover && (
-          // La imagen SIEMPRE se ve completa (object-contain), limitada por el
-          // ancho del panel y por una altura máxima. El panel se ajusta a ella y
-          // el blur-fill rellena cualquier hueco (afiches verticales). Nunca se
-          // recorta, ni en móvil ni en desktop. Si falla la carga, `onError`
-          // desmonta el <img> y cae al gradiente de marca (evita el ícono roto).
-          // `width`/`height` son solo una proporción de referencia (4:5, la
-          // típica de un flyer vertical) — el navegador la usa para reservar
-          // el espacio MIENTRAS carga (evita el salto/recuadro chico) y, una
-          // vez la imagen real carga, su proporción real manda igual (esto no
-          // cambia el resultado final con h-auto/w-auto, solo el estado previo).
-          // Nítida → preset propio "event-hero" (más ancho que el "hero-lcp"
-          // del carrusel del home: este flyer se ve mucho más grande, sobre
-          // todo en desktop, y con "hero-lcp" se vería pixelado).
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={optimizeImageUrl(event.coverUrl, "event-hero") ?? event.coverUrl ?? undefined}
-            alt={event.title}
-            width={864}
-            height={1080}
-            onError={() => setImgFailed(true)}
-            className="relative z-[1] mx-auto block h-auto w-auto max-w-[calc(100%-2.5rem)] rounded-[20px] max-h-[52vh] my-5 lg:my-7 lg:max-w-[calc(100%-3.5rem)] object-contain"
-            style={{
-              filter: immersive
-                ? "drop-shadow(0 18px 44px rgba(0,0,0,0.5))"
-                : "drop-shadow(0 8px 22px rgba(40,20,90,0.18))",
-            }}
-          />
+          // Contenedor con la MISMA proporción de referencia que la imagen
+          // (4:5, la típica de un flyer vertical) + el mismo max-w/max-h que
+          // antes vivían en el <img>: reserva exactamente el espacio final
+          // desde el primer render, así el skeleton de abajo ocupa el mismo
+          // rectángulo que la imagen real y no hay salto/rebote al cargar —
+          // solo un fundido de opacidad cuando `onLoad` dispara.
+          <div
+            className="relative z-[1] mx-auto max-w-[calc(100%-2.5rem)] max-h-[52vh] my-5 lg:my-7 lg:max-w-[calc(100%-3.5rem)]"
+            style={{ aspectRatio: "864 / 1080" }}
+          >
+            {!imgLoaded && (
+              <div
+                aria-hidden
+                className="absolute inset-0 animate-pulse rounded-[20px] bg-cart-bg-elev-2"
+              />
+            )}
+            {/* Nítida → preset propio "event-hero" (más ancho que el "hero-lcp"
+                del carrusel del home: este flyer se ve mucho más grande, sobre
+                todo en desktop, y con "hero-lcp" se vería pixelado). Si falla
+                la carga, `onError` desmonta el <img> y cae al gradiente de
+                marca (evita el ícono roto). */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={optimizeImageUrl(event.coverUrl, "event-hero") ?? event.coverUrl ?? undefined}
+              alt={event.title}
+              onLoad={() => setImgLoaded(true)}
+              onError={() => setImgFailed(true)}
+              className={
+                "size-full rounded-[20px] object-contain transition-opacity duration-300 " +
+                (imgLoaded ? "opacity-100" : "opacity-0")
+              }
+              style={{
+                filter: immersive
+                  ? "drop-shadow(0 18px 44px rgba(0,0,0,0.5))"
+                  : "drop-shadow(0 8px 22px rgba(40,20,90,0.18))",
+              }}
+            />
+          </div>
         )}
 
         <div className="absolute inset-x-0 top-0 z-10 flex items-start justify-between p-4 sm:p-5">

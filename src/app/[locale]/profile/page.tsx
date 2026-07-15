@@ -129,7 +129,7 @@ export default function BuyerProfilePage() {
               label="Tu marca"
               sub={`@${data.activeOrgSlug}`}
               last
-              onClick={() => router.push(`/org/${data.activeOrgSlug}` as never)}
+              onClick={() => router.push("/org" as never)}
             />
           )}
         </Card>
