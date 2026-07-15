@@ -628,14 +628,28 @@ function WalletPageInner() {
   const online = useOnline();
   const router = useRouter();
 
-  // Apaga el dot de "Mis entradas" en el nav al entrar acá — una sola vez por
-  // sesión de la página, y solo con red (offline no confirmamos nada al server).
+  // Apaga el dot de "Mis entradas" en el nav al entrar acá — solo con red
+  // (offline no confirmamos nada al server). `markedRead` se pone en true
+  // recién en onSuccess (no antes de llamar mutate): si el POST falla incluso
+  // tras los reintentos, el próximo cambio de conectividad reintenta en vez
+  // de dejar el dot pegado por un fallo silencioso.
   const markTicketsRead = useMarkTicketNotificationsRead();
   const markedRead = useRef(false);
+  const markingRead = useRef(false);
   useEffect(() => {
-    if (markedRead.current || !sessionReady || !loggedIn || !online) return;
-    markedRead.current = true;
-    markTicketsRead.mutate();
+    if (markedRead.current || markingRead.current || !sessionReady || !loggedIn || !online) return;
+    markingRead.current = true;
+    markTicketsRead.mutate(undefined, {
+      onSuccess: () => {
+        markedRead.current = true;
+      },
+      onError: (error) => {
+        console.error("[tickets] no se pudo marcar notificaciones como leídas", error);
+      },
+      onSettled: () => {
+        markingRead.current = false;
+      },
+    });
   }, [sessionReady, loggedIn, online, markTicketsRead]);
   const [tab, setTab] = useState<"next" | "past">("next");
 

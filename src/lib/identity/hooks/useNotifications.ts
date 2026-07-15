@@ -44,6 +44,7 @@ export const useMarkTicketNotificationsRead = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => api.post<{ marked: true }>("/api/identity/notifications/mark-read"),
+    retry: 2,
     onSuccess: () => {
       qc.setQueryData(unreadTicketNotificationsKey, { count: 0 });
       qc.invalidateQueries({ queryKey: notificationsKey });
