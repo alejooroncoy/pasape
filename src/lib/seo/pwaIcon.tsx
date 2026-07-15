@@ -48,7 +48,7 @@ export async function createPwaIcon(size: number, opts?: { maskable?: boolean })
   const scale = size / 512;
   // Safe-zone: la maskable la recorta el SO a círculo/squircle, así que el
   // perrito y los chispazos se achican para quedar dentro del área segura.
-  const dogSize = size * (maskable ? 0.5 : 0.62);
+  const dogSize = size * (maskable ? 0.64 : 0.82);
   const radius = size * 0.22;
 
   return new ImageResponse(
