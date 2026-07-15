@@ -110,6 +110,100 @@ const toTicket = (r: TicketRow): Ticket => ({
   boxHostTicketId: r.box_host_ticket_id,
 });
 
+type TicketRowJoined = TicketRow & {
+  order: { status: OrderStatus; mp_status: string | null };
+  ticket_type: {
+    id: string;
+    name: string;
+    kind: string;
+    event_id: string;
+    event: {
+      id: string;
+      slug: string;
+      title: string;
+      starts_at: string;
+      venue: string | null;
+      timezone: string;
+      status: EventStatus;
+      cover_url: string | null;
+      category: EventCategory | null;
+    };
+  };
+};
+
+// Post-procesa filas crudas de `tickets` (ya traídas por listMine/listManyByHolders)
+// a WalletTicket: colapsa boxes, adjunta transferencias pendientes y filtra por
+// estado de orden. Compartido para que listar N titulares en una sola query
+// (listManyByHolders) reproduzca exactamente el mismo resultado que llamar
+// listMine() una vez por titular, sin N roundtrips a Supabase.
+const finishTicketListing = async (
+  db: ReturnType<typeof supabaseAdmin>,
+  rawRows: TicketRow[],
+): Promise<WalletTicket[]> => {
+  if (rawRows.length === 0) return [];
+  // Un box es UNA entrada en el wallet. El host, además de su propio ticket,
+  // sostiene los QR de acompañantes sin celular (current_holder = host,
+  // box_host_ticket_id → su ticket host). Esos no son entradas aparte: se
+  // gestionan dentro del panel del box. Los ocultamos de la lista cuando el
+  // host también posee el ticket host referenciado. El miembro que se unió por
+  // link no posee al host, así que su box sí aparece (es su entrada).
+  // El colapso es POR TITULAR: agrupamos antes de filtrar para no confundir el
+  // ticket-host de un titular con el de otro cuando rawRows trae varios (batch).
+  const rowsByHolder = new Map<string, TicketRow[]>();
+  for (const r of rawRows) {
+    const list = rowsByHolder.get(r.current_holder);
+    if (list) list.push(r);
+    else rowsByHolder.set(r.current_holder, [r]);
+  }
+  const rows: TicketRow[] = [];
+  for (const holderRows of rowsByHolder.values()) {
+    const ownedIds = new Set(holderRows.map((r) => r.id));
+    rows.push(...holderRows.filter((r) => !(r.box_host_ticket_id && ownedIds.has(r.box_host_ticket_id))));
+  }
+  // Transferencias pendientes de estos tickets: el emisor las ve como
+  // "enviada · esperando reclamo" mientras el receptor no abre su link.
+  const ids = rows.map((r) => r.id);
+  const { data: pend } = ids.length
+    ? await db
+        .from("ticket_transfers")
+        .select("ticket_id, to_contact")
+        .eq("status", "pending")
+        .in("ticket_id", ids)
+    : { data: [] as { ticket_id: string; to_contact: string | null }[] };
+  const pendMap = new Map(
+    (pend ?? []).map((p) => [p.ticket_id, p.to_contact]),
+  );
+  return (rows as unknown as TicketRowJoined[])
+    // Pagadas + en revisión (pending con pago vivo). Descarta reservas
+    // abandonadas (pending sin in_process).
+    .filter(
+      (row) =>
+        row.order.status === "paid" ||
+        (row.order.status === "pending" && row.order.mp_status === "in_process"),
+    )
+    .map((row) => ({
+      ...toTicket(row),
+      event: {
+        id: row.ticket_type.event.id,
+        slug: row.ticket_type.event.slug,
+        title: row.ticket_type.event.title,
+        startsAt: row.ticket_type.event.starts_at,
+        venue: row.ticket_type.event.venue,
+        timezone: row.ticket_type.event.timezone,
+        status: row.ticket_type.event.status,
+        coverUrl: row.ticket_type.event.cover_url,
+        category: row.ticket_type.event.category,
+      },
+      ticketType: {
+        id: row.ticket_type.id,
+        name: row.ticket_type.name,
+        kind: row.ticket_type.kind,
+      },
+      orderStatus: row.order.status,
+      pendingTransferTo: pendMap.get(row.id) ?? null,
+    }));
+};
+
 type TransferableEvent = {
   starts_at: string;
   ends_at: string | null;
@@ -759,80 +853,26 @@ export const supabaseTicketRepository: TicketRepository = {
       .eq("current_holder", buyerId)
       .in("status", ["active", "used"])
       .order("created_at", { ascending: false });
-    if (!data) return [];
-    // Un box es UNA entrada en el wallet. El host, además de su propio ticket,
-    // sostiene los QR de acompañantes sin celular (current_holder = host,
-    // box_host_ticket_id → su ticket host). Esos no son entradas aparte: se
-    // gestionan dentro del panel del box. Los ocultamos de la lista cuando el
-    // host también posee el ticket host referenciado. El miembro que se unió por
-    // link no posee al host, así que su box sí aparece (es su entrada).
-    const rawRows = data as unknown as TicketRow[];
-    const ownedIds = new Set(rawRows.map((r) => r.id));
-    const rows = rawRows.filter(
-      (r) => !(r.box_host_ticket_id && ownedIds.has(r.box_host_ticket_id)),
-    );
-    // Transferencias pendientes de estos tickets: el emisor las ve como
-    // "enviada · esperando reclamo" mientras el receptor no abre su link.
-    const ids = rows.map((r) => r.id);
-    const { data: pend } = ids.length
-      ? await db
-          .from("ticket_transfers")
-          .select("ticket_id, to_contact")
-          .eq("status", "pending")
-          .in("ticket_id", ids)
-      : { data: [] as { ticket_id: string; to_contact: string | null }[] };
-    const pendMap = new Map(
-      (pend ?? []).map((p) => [p.ticket_id, p.to_contact]),
-    );
-    type Joined = TicketRow & {
-      order: { status: OrderStatus; mp_status: string | null };
-      ticket_type: {
-        id: string;
-        name: string;
-        kind: string;
-        event_id: string;
-        event: {
-          id: string;
-          slug: string;
-          title: string;
-          starts_at: string;
-          venue: string | null;
-          timezone: string;
-          status: EventStatus;
-          cover_url: string | null;
-          category: EventCategory | null;
-        };
-      };
-    };
-    return (rows as unknown as Joined[])
-      // Pagadas + en revisión (pending con pago vivo). Descarta reservas
-      // abandonadas (pending sin in_process).
-      .filter(
-        (row) =>
-          row.order.status === "paid" ||
-          (row.order.status === "pending" && row.order.mp_status === "in_process"),
+    return finishTicketListing(db, (data as unknown as TicketRow[] | null) ?? []);
+  },
+
+  // Mismo resultado que llamar listMine() por cada titular, en una sola query
+  // — usado por la recuperación de entradas, donde una orden grupal reparte
+  // tickets a varios `current_holder` distintos. El colapso de box (host vs
+  // miembro) sigue siendo POR TITULAR (ver finishTicketListing): agrupar acá
+  // no cambia esa semántica, solo evita 1 roundtrip a Supabase por titular.
+  async listManyByHolders(holderIds: string[]): Promise<WalletTicket[]> {
+    if (holderIds.length === 0) return [];
+    const db = supabaseAdmin();
+    const { data } = await db
+      .from("tickets")
+      .select(
+        "*, order:orders!inner(status,mp_status), ticket_type:ticket_types!inner(id,name,kind,event_id,event:events!inner(id,slug,title,starts_at,venue,timezone,status,cover_url,category))",
       )
-      .map((row) => ({
-        ...toTicket(row),
-        event: {
-          id: row.ticket_type.event.id,
-          slug: row.ticket_type.event.slug,
-          title: row.ticket_type.event.title,
-          startsAt: row.ticket_type.event.starts_at,
-          venue: row.ticket_type.event.venue,
-          timezone: row.ticket_type.event.timezone,
-          status: row.ticket_type.event.status,
-          coverUrl: row.ticket_type.event.cover_url,
-          category: row.ticket_type.event.category,
-        },
-        ticketType: {
-          id: row.ticket_type.id,
-          name: row.ticket_type.name,
-          kind: row.ticket_type.kind,
-        },
-        orderStatus: row.order.status,
-        pendingTransferTo: pendMap.get(row.id) ?? null,
-      }));
+      .in("current_holder", holderIds)
+      .in("status", ["active", "used"])
+      .order("created_at", { ascending: false });
+    return finishTicketListing(db, (data as unknown as TicketRow[] | null) ?? []);
   },
 
   async getById(ticketId, buyerId) {

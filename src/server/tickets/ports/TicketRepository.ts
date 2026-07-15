@@ -77,6 +77,10 @@ export interface TicketRepository {
       fee). Read-only: no reserva stock ni crea orden. */
   quote(input: QuoteInput): Promise<Result<OrderQuote>>;
   listMine(buyerId: string): Promise<WalletTicket[]>;
+  /** Equivalente a llamar listMine() por cada titular en `holderIds`, en una
+      sola query — para recuperación de entradas de una orden grupal (varios
+      current_holder). */
+  listManyByHolders(holderIds: string[]): Promise<WalletTicket[]>;
   getById(ticketId: string, buyerId: string): Promise<WalletTicket | null>;
   /** Asigna/edita el titular de una entrada propia (reparto post-compra). Solo
       el dueño actual y solo si está active. dni = DNI completo (se cifra y se
