@@ -5,7 +5,12 @@ import { ACTIVE_ORG_COOKIE, getAuthContext, resolveActiveOrgSlug } from "@/serve
 import { getCurrentUser } from "../../application/GetCurrentUser";
 import { completeOnboarding } from "../../application/CompleteOnboarding";
 import { updateProfile } from "../../application/UpdateProfile";
-import { listNotifications, type Notification } from "../../application/ListNotifications";
+import {
+  listNotifications,
+  countUnreadNotifications,
+  markNotificationsRead,
+  type Notification,
+} from "../../application/ListNotifications";
 import { listFollows, type FollowedOrg } from "../../application/ListFollows";
 import { followOrg, unfollowOrg } from "../../application/ToggleFollow";
 import { listSavedEvents, type SavedEvent } from "@/server/events/application/ListSavedEvents";
@@ -111,6 +116,21 @@ export const IdentityController = {
     const auth = await getAuthContext();
     if (!auth.ok) return err(auth.error);
     return listNotifications(auth.value.profileId);
+  },
+
+  // Dot del tab "Mis entradas": conteo de notificaciones ticket_ready sin leer.
+  async unreadTicketNotifications(): Promise<Result<{ count: number }>> {
+    const auth = await getAuthContext();
+    if (!auth.ok) return err(auth.error);
+    const result = await countUnreadNotifications(auth.value.profileId, "ticket_ready");
+    if (!result.ok) return err(result.error);
+    return ok({ count: result.value });
+  },
+
+  async markTicketNotificationsRead(): Promise<Result<{ marked: true }>> {
+    const auth = await getAuthContext();
+    if (!auth.ok) return err(auth.error);
+    return markNotificationsRead(auth.value.profileId, "ticket_ready");
   },
 
   async listFollows(): Promise<Result<FollowedOrg[]>> {

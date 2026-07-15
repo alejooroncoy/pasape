@@ -10,6 +10,7 @@ import { useMyTickets } from "@/lib/tickets/hooks/useTickets";
 import { usePrefetchWallet } from "@/lib/tickets/prefetchWallet";
 import { useSessionReady } from "@/lib/identity/hooks/useSessionReady";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
+import { useMarkTicketNotificationsRead } from "@/lib/identity/hooks/useNotifications";
 import { useBoxForTicket } from "@/lib/boxes/hooks/useBoxes";
 import { LoginGate } from "@/components/ui/LoginGate";
 import { Sheet } from "@/components/ui/Sheet";
@@ -626,6 +627,16 @@ function WalletPageInner() {
   usePrefetchWallet(tickets.data);
   const online = useOnline();
   const router = useRouter();
+
+  // Apaga el dot de "Mis entradas" en el nav al entrar acá — una sola vez por
+  // sesión de la página, y solo con red (offline no confirmamos nada al server).
+  const markTicketsRead = useMarkTicketNotificationsRead();
+  const markedRead = useRef(false);
+  useEffect(() => {
+    if (markedRead.current || !sessionReady || !loggedIn || !online) return;
+    markedRead.current = true;
+    markTicketsRead.mutate();
+  }, [sessionReady, loggedIn, online, markTicketsRead]);
   const [tab, setTab] = useState<"next" | "past">("next");
 
   // "list" → lista de eventos · "select" → entradas de un evento

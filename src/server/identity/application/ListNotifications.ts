@@ -28,3 +28,33 @@ export const listNotifications = async (profileId: string): Promise<Result<Notif
     })),
   );
 };
+
+export const countUnreadNotifications = async (
+  profileId: string,
+  kind: string,
+): Promise<Result<number>> => {
+  const db = supabaseAdmin();
+  const { count, error } = await db
+    .from("notifications")
+    .select("id", { count: "exact", head: true })
+    .eq("profile_id", profileId)
+    .eq("kind", kind)
+    .is("read_at", null);
+  if (error) return err(error.message);
+  return ok(count ?? 0);
+};
+
+export const markNotificationsRead = async (
+  profileId: string,
+  kind: string,
+): Promise<Result<{ marked: true }>> => {
+  const db = supabaseAdmin();
+  const { error } = await db
+    .from("notifications")
+    .update({ read_at: new Date().toISOString() })
+    .eq("profile_id", profileId)
+    .eq("kind", kind)
+    .is("read_at", null);
+  if (error) return err(error.message);
+  return ok({ marked: true });
+};
