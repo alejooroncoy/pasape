@@ -149,8 +149,8 @@ export function InstallNudge({ className = "" }: { className?: string }) {
 
 function Step({ icon, children }: { icon: ReactNode; children: ReactNode }) {
   return (
-    <div className="flex items-start gap-2.5">
-      <span className="mt-0.5 grid size-6 shrink-0 place-items-center rounded-full bg-cart-bg-elev-2 text-cart-ink-3">
+    <div className="flex items-center gap-2.5">
+      <span className="grid size-6 shrink-0 place-items-center rounded-full bg-cart-bg-elev-2 text-cart-ink-3">
         {icon}
       </span>
       <p className="text-[12px] leading-snug text-cart-ink-2">
