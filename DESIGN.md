@@ -114,20 +114,17 @@ El giro a `.home-light` es progresivo, no un rediseño de un solo commit. Estado
 
 ## Logo Badge
 
-Ubicado en `public/icons/logo-badge.svg` y generados en múltiples resoluciones (48, 72, 96, 144, 180, 192, 256, 384, 512, 1024px).
+**`public/icons/logo-badge-light.svg`** — el símbolo de marca (mascota asomándose por un contorno de puerta/ticket) resuelto para fondos claros: selector de cuenta de Google (subido manualmente en Cloud Console → OAuth consent screen → Branding, no se sirve desde el repo) y cualquier superficie donde un cuadrado con gradiente oscuro competiría mal. Aprobada jul 2026 tras comparar 3 variantes (gradiente oscuro descartado por no leer bien sobre blanco; borde negro grueso descartado por "gritón").
+- Fondo blancquito (`#fbfaff`) con hairline sutil (`rgba(28,20,60,.14)`) — sin gradiente.
+- Mascota en trazo oscuro (`#141026`).
+- **"Chispazos"**: puntos y destellos (rombos) de morado/azul dispersos de forma asimétrica alrededor de la mascota — reemplazan cualquier relleno o degradado. Es lo que evita el look "app-icon-gradiente-IA": color como acento disperso, no como superficie.
+- **Mismo lenguaje en el ícono de la PWA** (`src/lib/seo/pwaIcon.tsx`, generado con `next/og` en `/pwa-icon/[size]`): mismas coordenadas de chispazos escaladas al tamaño pedido, mismo fondo/hairline. Badge y PWA se ven como un solo sistema.
 
-**Diseño:**
-- Monograma "P" geométrico con morado (#7c3aed) + azul (#4f6df5) + blanco (#fbfaff).
-- Sin gradientes radiales, sin blobs, sin gloss fingido.
-- Hairline frontera (`.12` en claro, `.08` en oscuro) sobre fondo casi-blanco (#fbfaff) en claro, casi-negro (#0a0a0f) en oscuro.
-- Respeta `prefers-color-scheme` automáticamente — no hay versión "tema claro" y "tema oscuro" separadas, sino un diseño que se adapta.
-- Escala perfectamente desde favicon 16px hasta app icon 512px sin perder nitidez.
+El favicon (`src/app/icon.svg`) y el apple-touch-icon (`/pwa-icon/180.png`) son los únicos íconos servidos desde el código — no hay un "app icon" cuadrado con gradiente oscuro en el repo; esa variante se probó y se descartó.
 
 **Filosofía:**
-- Morado y azul como acentos puros, nunca rellenan fondo.
-- Blanco es la estructura (barra vertical del monograma).
-- Energía (línea azul diagonal) evoca movimiento nocturno.
-- El conjunto dice "noche peruana, sin estafas" sin necesidad de mascota, gradientes ni elementos genéricos.
+- Morado y azul son acentos puros — nunca rellenan fondo.
+- Reservado para contextos square (favicon, app icon, avatar) — no es el logo de texto/wordmark de la marca.
 
 ## Referencias
 
