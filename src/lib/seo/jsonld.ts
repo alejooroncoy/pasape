@@ -134,7 +134,7 @@ export function eventJsonLd(
 }
 
 export function itemListJsonLd(
-  events: Event[],
+  events: Array<Pick<Event, "slug" | "title">>,
   listName: string,
   locale = "es",
 ): Record<string, unknown> {

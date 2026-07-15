@@ -1,6 +1,5 @@
-import { listPublishedEvents } from "@/server/events/application/ListPublishedEvents";
 import { supabaseEventRepository as repo } from "@/server/events/infrastructure/repositories/SupabaseEventRepository";
-import type { Event } from "@/server/events/domain/Event";
+import type { EventSeoEntry } from "@/server/events/domain/Event";
 import {
   DEFAULT_DESCRIPTION,
   SITE_NAME,
@@ -9,7 +8,7 @@ import {
   localePath,
 } from "./site";
 
-function formatEventDate(event: Event): string {
+function formatEventDate(event: EventSeoEntry): string {
   try {
     return new Intl.DateTimeFormat("es-PE", {
       timeZone: event.timezone,
@@ -35,7 +34,7 @@ function truncate(text: string | null | undefined, max: number): string {
   return `${clean.slice(0, max - 1).trimEnd()}…`;
 }
 
-function eventLine(event: Event, extended: boolean): string {
+function eventLine(event: EventSeoEntry, extended: boolean): string {
   const url = absoluteUrl(localePath("es", `/events/${event.slug}`));
   const date = formatEventDate(event);
   const venue = event.venue?.trim() || "Lima";
@@ -56,8 +55,8 @@ function eventLine(event: Event, extended: boolean): string {
   return `- [${event.title}](${url}): ${venue} · ${date} · ${status}${category}${descBlock}`;
 }
 
-async function loadEvents(): Promise<Event[]> {
-  return listPublishedEvents({ repo }, { limit: 200 });
+async function loadEvents(): Promise<EventSeoEntry[]> {
+  return repo.listPublishedForSeo(200);
 }
 
 function staticPagesBlock(): string {

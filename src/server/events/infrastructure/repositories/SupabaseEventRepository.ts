@@ -14,7 +14,7 @@ import type {
   UpdateEventInput,
   UpdateTicketTypeInput,
 } from "@/server/events/ports/EventRepository";
-import type { Event, EventCategory, FeeMode, Promo, PresaleTier, TicketType } from "@/server/events/domain/Event";
+import type { Event, EventCard, EventCategory, EventSeoEntry, FeeMode, Promo, PresaleTier, TicketType } from "@/server/events/domain/Event";
 import { buyerUnitPriceCents } from "@/lib/tickets/serviceFee";
 import {
   computePromoterPayout,
@@ -165,6 +165,57 @@ const toEvent = (r: EventRow): Event => ({
   createdAt: r.created_at,
 });
 
+/**
+ * Un solo mapa campo-de-dominio → columna-DB por cada shape reducido
+ * (EventCard, EventSeoEntry). El string de `select()` y el mapper row→dominio
+ * se derivan LOS DOS de este mapa: agregar/quitar un campo es una sola
+ * edición, no dos listas hardcodeadas que hay que acordarse de mantener
+ * sincronizadas a mano (antes: EVENT_CARD_COLUMNS + el cuerpo de toEventCard
+ * podían divergir sin que tsc lo marcara). El `satisfies Record<keyof Shape,
+ * keyof EventRow>` fuerza en compile-time que el mapa cubra exactamente las
+ * keys del tipo de dominio y que cada valor sea una columna real de EventRow.
+ */
+function projectedEventMapper<M extends Record<string, keyof EventRow>>(fieldMap: M) {
+  const columns = Object.values(fieldMap).join(", ");
+  const toDomain = (row: Pick<EventRow, M[keyof M]>): { [K in keyof M]: EventRow[M[K]] } => {
+    const out = {} as { [K in keyof M]: EventRow[M[K]] };
+    for (const key of Object.keys(fieldMap) as Array<keyof M>) {
+      out[key] = row[fieldMap[key]];
+    }
+    return out;
+  };
+  return { columns, toDomain };
+}
+
+const EVENT_CARD_FIELD_MAP = {
+  id: "id",
+  slug: "slug",
+  title: "title",
+  coverUrl: "cover_url",
+  venue: "venue",
+  startsAt: "starts_at",
+  timezone: "timezone",
+  category: "category",
+} as const satisfies Record<keyof EventCard, keyof EventRow>;
+
+type EventCardRow = Pick<EventRow, (typeof EVENT_CARD_FIELD_MAP)[keyof typeof EVENT_CARD_FIELD_MAP]>;
+const { columns: EVENT_CARD_COLUMNS, toDomain: toEventCard } = projectedEventMapper(EVENT_CARD_FIELD_MAP);
+
+const EVENT_SEO_FIELD_MAP = {
+  slug: "slug",
+  title: "title",
+  description: "description",
+  venue: "venue",
+  startsAt: "starts_at",
+  timezone: "timezone",
+  status: "status",
+  category: "category",
+  createdAt: "created_at",
+} as const satisfies Record<keyof EventSeoEntry, keyof EventRow>;
+
+type EventSeoRow = Pick<EventRow, (typeof EVENT_SEO_FIELD_MAP)[keyof typeof EVENT_SEO_FIELD_MAP]>;
+const { columns: EVENT_SEO_COLUMNS, toDomain: toEventSeoEntry } = projectedEventMapper(EVENT_SEO_FIELD_MAP);
+
 const COUNTDOWN_WINDOW_MS = 6 * 3600_000;
 
 const computeShowCountdown = (
@@ -253,15 +304,25 @@ const slugify = (s: string): string =>
     .replace(/(^-|-$)+/g, "")
     .slice(0, 60) || `evt-${Math.random().toString(36).slice(2, 8)}`;
 
+/** Base compartida por listPublished/listPublishedForSeo — mismo filtro/orden,
+ *  solo cambian las columnas seleccionadas y (en listPublished) los filtros
+ *  extra. Evita que el criterio de "publicado" quede hardcodeado dos veces. */
+const publishedEventsQuery = (db: ReturnType<typeof supabaseAdmin>, columns: string, limit: number) =>
+  db
+    .from("events")
+    .select(columns)
+    .eq("status", "published")
+    .order("starts_at", { ascending: true })
+    .limit(limit);
+
 export const supabaseEventRepository: EventRepository = {
   async listPublished(limit, cursor, category, search) {
     const db = supabaseAdmin();
-    let q = db
-      .from("events")
-      .select("*")
-      .eq("status", "published")
-      .order("starts_at", { ascending: true })
-      .limit(limit);
+    // Select mínimo: este método solo alimenta listados públicos (home,
+    // /eventos/[categoria], búsqueda del header) — FeaturedBanner/EventCard
+    // no pintan description/palette*/venueLat-Lng/capacity/etc. El detalle
+    // del evento (con esos campos) va por getBySlug, no por acá.
+    let q = publishedEventsQuery(db, EVENT_CARD_COLUMNS, limit);
     if (cursor) q = q.gt("starts_at", cursor);
     if (category) q = q.eq("category", category);
     if (search) {
@@ -271,7 +332,13 @@ export const supabaseEventRepository: EventRepository = {
       if (term) q = q.or(`title.ilike.%${term}%,venue.ilike.%${term}%`);
     }
     const { data } = await q;
-    return (data as EventRow[] | null)?.map(toEvent) ?? [];
+    return (data as EventCardRow[] | null)?.map(toEventCard) ?? [];
+  },
+
+  async listPublishedForSeo(limit) {
+    const db = supabaseAdmin();
+    const { data } = await publishedEventsQuery(db, EVENT_SEO_COLUMNS, limit);
+    return (data as EventSeoRow[] | null)?.map(toEventSeoEntry) ?? [];
   },
 
   async listByOrganization(orgId) {

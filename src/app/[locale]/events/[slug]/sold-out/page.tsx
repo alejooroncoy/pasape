@@ -13,9 +13,9 @@ export default function BuyerSoldOutPage({ params }: Props) {
   const browse = useBrowseEvents();
   const router = useRouter();
 
-  const suggestions = (browse.data ?? [])
-    .filter((e) => e.slug !== slug && e.status === "published")
-    .slice(0, 3);
+  // browse ya solo trae eventos "published" (filtrado en el repo) — no hace
+  // falta re-chequear status acá (ver AGENTS.md: frontend no decide status).
+  const suggestions = (browse.data ?? []).filter((e) => e.slug !== slug).slice(0, 3);
 
   return (
     <div className="home-light min-h-dvh bg-cart-bg text-cart-ink">

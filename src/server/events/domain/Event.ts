@@ -91,6 +91,37 @@ export type Event = {
   listStats?: { sold: number; capacity: number; revenueCents: number };
 };
 
+/**
+ * Shape mínimo para listados públicos (home, categorías, búsqueda): lo único
+ * que pintan FeaturedBanner/EventCard. No trae description, palette*,
+ * venueLat/Lng, capacity/transferPolicy/feeMode ni otros campos que solo usa
+ * la página de detalle (`getBySlug`) — evita `select("*")` en el hot path del
+ * home. Si una card nueva necesita un campo más, agrégalo aquí explícitamente.
+ */
+export type EventCard = Pick<
+  Event,
+  "id" | "slug" | "title" | "coverUrl" | "venue" | "startsAt" | "timezone" | "category"
+>;
+
+/**
+ * Shape para generadores SEO server-only (sitemap.ts, llms.txt) — no es
+ * hot-path de usuario, corre en build/crawl, así que puede llevar algunos
+ * campos más que `EventCard` (description, status, createdAt) sin volver a
+ * `select("*")` completo (sigue sin palette, venueLat/Lng, capacity, etc.).
+ */
+export type EventSeoEntry = Pick<
+  Event,
+  | "slug"
+  | "title"
+  | "description"
+  | "venue"
+  | "startsAt"
+  | "timezone"
+  | "status"
+  | "category"
+  | "createdAt"
+>;
+
 // El kind solo codifica COMPORTAMIENTO, no la etiqueta comercial:
 // - "general": entrada individual (1 persona, 1 QR). El NOMBRE carga la
 //   distinción comercial ("VIP", "General", "After") — por eso "vip" se retiró.

@@ -2,24 +2,26 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/_shared/api-client";
-import type { Event, EventCategory, Promo, TicketType } from "@/server/events/domain/Event";
+import type { Event, EventCard, EventCategory, Promo, TicketType } from "@/server/events/domain/Event";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 
+// Listado público (home, carrusel, grid, categorías): payload liviano —
+// `EventCard`, no el `Event` completo (ver EventsController.listPublic).
 export const useBrowseEvents = (category?: EventCategory | null) =>
   useQuery({
     queryKey: ["events", "browse", category ?? null],
     queryFn: () =>
-      api.get<Event[]>(category ? `/api/events?category=${category}` : "/api/events"),
+      api.get<EventCard[]>(category ? `/api/events?category=${category}` : "/api/events"),
   });
 
 // Búsqueda del header contra el backend (ilike por título/lugar con índices
 // trigram). El debounce vive en el componente; aquí solo se consulta cuando el
-// término ya estabilizó y tiene 2+ caracteres.
+// término ya estabilizó y tiene 2+ caracteres. Mismo payload liviano que browse.
 export const useSearchEvents = (query: string) => {
   const q = query.trim();
   return useQuery({
     queryKey: ["events", "search", q],
-    queryFn: () => api.get<Event[]>(`/api/events?q=${encodeURIComponent(q)}`),
+    queryFn: () => api.get<EventCard[]>(`/api/events?q=${encodeURIComponent(q)}`),
     enabled: q.length >= 2,
     staleTime: 30_000,
   });
