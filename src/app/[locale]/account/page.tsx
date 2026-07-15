@@ -105,7 +105,7 @@ export default function AccountPage() {
   return (
     <OrgShell>
       <div className="mb-8 sm:mb-10">
-        <h1 className="font-sans text-[clamp(34px,7.2vw,42px)] font-bold leading-[1.05] tracking-[-0.035em] text-white">
+        <h1 className="font-sans text-[clamp(34px,7.2vw,42px)] font-bold leading-[1.05] tracking-[-0.035em] text-cart-ink">
           Tu cuenta
         </h1>
         <p className="mt-2 max-w-prose text-[13.5px] leading-snug text-cart-ink-3 sm:text-[14px]">
@@ -144,7 +144,7 @@ export default function AccountPage() {
                     type="button"
                     onClick={() => fileRef.current?.click()}
                     disabled={avatarUploading}
-                    className="rounded-full border border-cart-line bg-cart-bg px-3.5 py-1.5 text-[12.5px] font-semibold text-white transition hover:border-cart-line-strong disabled:opacity-60"
+                    className="rounded-full border border-cart-line bg-cart-bg px-3.5 py-1.5 text-[12.5px] font-semibold text-cart-ink transition hover:border-cart-line-strong disabled:opacity-60"
                   >
                     {avatarUploading ? "Subiendo…" : "Cambiar"}
                   </button>
@@ -152,7 +152,7 @@ export default function AccountPage() {
                     <button
                       type="button"
                       onClick={onAvatarRemove}
-                      className="rounded-full px-2.5 py-1.5 text-[12.5px] font-medium text-cart-ink-3 transition hover:text-white"
+                      className="rounded-full px-2.5 py-1.5 text-[12.5px] font-medium text-cart-ink-3 transition hover:text-cart-ink"
                     >
                       Quitar
                     </button>
@@ -232,7 +232,7 @@ export default function AccountPage() {
                   type="button"
                   onClick={handleSignOut}
                   disabled={signingOut}
-                  className="rounded-full border border-cart-line bg-cart-bg px-4 py-1.5 text-[12.5px] font-semibold text-white transition hover:border-cart-line-strong disabled:opacity-60"
+                  className="rounded-full border border-cart-line bg-cart-bg px-4 py-1.5 text-[12.5px] font-semibold text-cart-ink transition hover:border-cart-line-strong disabled:opacity-60"
                 >
                   {signingOut ? "Cerrando…" : "Cerrar sesión"}
                 </button>

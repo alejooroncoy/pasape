@@ -34,8 +34,12 @@ export function SignInDrawer({ open, onClose, redirectTo }: Props) {
       title={TITLE}
       description={SUBTITLE}
     >
+      {/* Sin animación de entrada en título/subtítulo/footer: si el documento se
+          monta oculto (backgrounding típico al abrir el link desde otra app en
+          celular), framer-motion pausa su RAF y el texto queda congelado en
+          opacity:0 para siempre — mismo bug que el CTA de abajo. */}
       <motion.div
-        initial={{ opacity: 0, y: 8 }}
+        initial={false}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.08, duration: 0.25 }}
         className="mb-1.5 font-sans text-[24px] font-bold leading-tight tracking-[-0.03em] text-cart-ink"
@@ -43,33 +47,27 @@ export function SignInDrawer({ open, onClose, redirectTo }: Props) {
         {TITLE}
       </motion.div>
       <motion.div
-        initial={{ opacity: 0, y: 8 }}
+        initial={false}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.14, duration: 0.25 }}
         className="mb-5 text-[13px] leading-[1.5] text-cart-ink-3"
       >
         {SUBTITLE}
       </motion.div>
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2, duration: 0.3 }}
-      >
-        <GoogleBtn
-          onClick={() => {
-            clientEvents.signInStarted({ provider: "google" });
-            void signIn();
-          }}
-          disabled={pending}
-        />
-      </motion.div>
+      <GoogleBtn
+        onClick={() => {
+          clientEvents.signInStarted({ provider: "google" });
+          void signIn();
+        }}
+        disabled={pending}
+      />
       {error && (
         <div className="mt-3 text-center text-xs text-cart-ink-3" role="status">
           {error}
         </div>
       )}
       <motion.div
-        initial={{ opacity: 0 }}
+        initial={false}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.28, duration: 0.25 }}
         className="mt-3.5 pb-6 text-center text-[11px] text-cart-ink-4"

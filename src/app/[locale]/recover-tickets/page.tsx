@@ -95,7 +95,7 @@ export default function TicketRecoverPage() {
   };
 
   return (
-    <main className="relative min-h-dvh overflow-hidden bg-cart-bg text-white lg:grid lg:grid-cols-2">
+    <main className="home-light relative min-h-dvh overflow-hidden bg-cart-bg text-cart-ink lg:grid lg:grid-cols-2">
       {/* Panel de marca — solo desktop. En mobile este flujo ya vive centrado
           y compacto (abajo); acá le damos al recover el mismo peso visual
           que el resto del checkout en pantallas grandes, en vez de dejarlo
@@ -134,7 +134,7 @@ export default function TicketRecoverPage() {
         </div>
 
         <div className="relative z-10 max-w-[360px]">
-          <h2 className="text-balance font-sans text-[34px] font-semibold leading-[1.08] tracking-[-0.03em] text-white">
+          <h2 className="text-balance font-sans text-[34px] font-semibold leading-[1.08] tracking-[-0.03em] text-cart-ink">
             Tu entrada, siempre recuperable.
           </h2>
           <ul className="mt-7 flex flex-col gap-4">
@@ -192,7 +192,7 @@ export default function TicketRecoverPage() {
             type="button"
             aria-label="Volver"
             onClick={() => (step === 1 ? setStep(0) : router.back())}
-            className="grid size-9 shrink-0 place-items-center rounded-full bg-cart-bg-elev text-cart-ink-2 transition hover:bg-cart-bg-elev-2 hover:text-white"
+            className="grid size-9 shrink-0 place-items-center rounded-full bg-cart-bg-elev text-cart-ink-2 transition hover:bg-cart-bg-elev-2 hover:text-cart-ink"
           >
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
               <path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
@@ -215,7 +215,7 @@ export default function TicketRecoverPage() {
               <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-cart-accent">
                 Recuperar entradas
               </div>
-              <h1 className="mt-2 text-balance font-sans text-[28px] font-semibold leading-[1.1] tracking-[-0.03em] text-white sm:text-[32px]">
+              <h1 className="mt-2 text-balance font-sans text-[28px] font-semibold leading-[1.1] tracking-[-0.03em] text-cart-ink sm:text-[32px]">
                 ¿Perdiste tu QR?
               </h1>
               <p className="mx-auto mt-2.5 max-w-[32ch] text-[13.5px] leading-snug text-cart-ink-3">
@@ -231,7 +231,7 @@ export default function TicketRecoverPage() {
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
                   placeholder="juan@gmail.com"
-                  className="w-full rounded-2xl border border-cart-line bg-cart-bg-elev px-4 py-3.5 text-[15px] font-medium text-white placeholder:text-cart-ink-4 outline-none transition focus:border-cart-accent focus:ring-4 focus:ring-cart-accent-soft"
+                  className="w-full rounded-2xl border border-cart-line bg-cart-bg-elev px-4 py-3.5 text-[15px] font-medium text-cart-ink placeholder:text-cart-ink-4 outline-none transition focus:border-cart-accent focus:ring-4 focus:ring-cart-accent-soft"
                 />
               </div>
 
@@ -258,7 +258,7 @@ export default function TicketRecoverPage() {
               <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-cart-accent">
                 Paso 2 de 2
               </div>
-              <h1 className="mt-2 text-balance font-sans text-[28px] font-semibold leading-[1.1] tracking-[-0.03em] text-white sm:text-[32px]">
+              <h1 className="mt-2 text-balance font-sans text-[28px] font-semibold leading-[1.1] tracking-[-0.03em] text-cart-ink sm:text-[32px]">
                 Código de recuperación
               </h1>
               <p className="mx-auto mt-2.5 max-w-[32ch] text-[13.5px] leading-snug text-cart-ink-3">
@@ -267,7 +267,7 @@ export default function TicketRecoverPage() {
                 <button
                   type="button"
                   onClick={() => setStep(0)}
-                  className="font-semibold text-cart-accent underline underline-offset-2 hover:text-white"
+                  className="font-semibold text-cart-accent underline underline-offset-2 hover:text-cart-ink"
                 >
                   Editar
                 </button>

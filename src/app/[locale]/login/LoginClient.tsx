@@ -37,7 +37,7 @@ export function LoginClient() {
       />
 
       <motion.div
-        initial={{ opacity: 0, y: 12 }}
+        initial={false}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
         className="relative z-10 w-full max-w-[400px] text-center"
@@ -62,14 +62,14 @@ export function LoginClient() {
           Inicia sesión para comprar entradas, ver tus QR y seguir a tus productoras.
         </p>
 
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.14, duration: 0.3 }}
-          className="mt-8"
-        >
+        {/* Sin animación de entrada: es el CTA crítico de la página (sin él nadie
+            puede entrar). Si el documento se monta oculto (backgrounding típico al
+            abrir el link desde otra app en celular), framer-motion pausa su RAF y
+            el botón queda invisible en opacity:0 para siempre — visto reportado
+            por un usuario real. */}
+        <div className="mt-8">
           <GoogleBtn onClick={() => void signIn()} disabled={pending} />
-        </motion.div>
+        </div>
 
         {error && (
           <div className="mt-3 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-[12.5px] text-rose-200">

@@ -93,7 +93,7 @@ export default function PromoAppliedWaitingPage({ params }: Props) {
             }}
           >
             {isClosedOut ? (
-              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" className="text-black/80">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" className="text-white">
                 <path d="M7 7l10 10M17 7L7 17" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
               </svg>
             ) : (

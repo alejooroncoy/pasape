@@ -26,7 +26,7 @@ export default function BoxShareRedirectPage({ params }: Props) {
   }, [waUrl]);
 
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, color: "#fff", display: "flex", flexDirection: "column" }}>
+    <div className="home-light" style={{ minHeight: "100vh", background: C.bg, color: C.text, display: "flex", flexDirection: "column" }}>
       <header className="sticky top-0 z-30 border-b border-cart-line bg-cart-bg/85 backdrop-blur-md">
         <div className="mx-auto flex max-w-[1040px] items-center justify-between px-5 py-3.5">
           <span className="inline-flex items-center gap-2 text-[16px] font-semibold tracking-[-0.01em]">

@@ -78,7 +78,7 @@ function SuccessContent() {
   };
 
   return (
-    <div className="relative min-h-[100dvh] overflow-hidden bg-cart-bg text-white">
+    <div className="home-light relative min-h-[100dvh] overflow-hidden bg-cart-bg text-cart-ink">
       {/* Halo de fondo */}
       <div
         aria-hidden
@@ -111,10 +111,10 @@ function SuccessContent() {
           type="button"
           onClick={() => router.push("/org")}
           aria-label="Cerrar"
-          className="grid size-9 place-items-center rounded-full border border-cart-line bg-cart-bg-elev/70 backdrop-blur transition hover:border-cart-line-strong hover:bg-cart-bg-elev lg:size-10"
+          className="grid size-9 place-items-center rounded-full border border-cart-line bg-cart-bg-elev/70 text-cart-ink-2 backdrop-blur transition hover:border-cart-line-strong hover:bg-cart-bg-elev hover:text-cart-ink lg:size-10"
         >
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-            <path d="M3 3l8 8M11 3l-8 8" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" />
+            <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
           </svg>
         </button>
       </div>
@@ -158,7 +158,7 @@ function SuccessContent() {
             <button
               type="button"
               onClick={() => router.push("/org")}
-              className="flex h-[52px] items-center justify-center rounded-2xl border border-cart-line bg-cart-bg-elev/80 text-[14.5px] font-medium text-cart-ink-2 backdrop-blur transition hover:border-cart-line-strong hover:text-white"
+              className="flex h-[52px] items-center justify-center rounded-2xl border border-cart-line bg-cart-bg-elev/80 text-[14.5px] font-medium text-cart-ink-2 backdrop-blur transition hover:border-cart-line-strong hover:text-cart-ink"
             >
               Seguir editando
             </button>
@@ -194,7 +194,7 @@ function SuccessContent() {
                   <button
                     type="button"
                     onClick={() => router.push("/org")}
-                    className="flex h-[56px] items-center gap-2 rounded-full border border-cart-line bg-cart-bg-elev/70 px-7 text-[14.5px] font-medium text-cart-ink-2 backdrop-blur transition hover:border-cart-line-strong hover:text-white"
+                    className="flex h-[56px] items-center gap-2 rounded-full border border-cart-line bg-cart-bg-elev/70 px-7 text-[14.5px] font-medium text-cart-ink-2 backdrop-blur transition hover:border-cart-line-strong hover:text-cart-ink"
                   >
                     Seguir editando
                     <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -402,8 +402,8 @@ function ShareCard({
           <div
             className={
               isDesktop
-                ? "truncate font-mono text-[15px] font-semibold text-white"
-                : "truncate font-mono text-[13.5px] font-semibold text-white"
+                ? "truncate font-mono text-[15px] font-semibold text-cart-ink"
+                : "truncate font-mono text-[13.5px] font-semibold text-cart-ink"
             }
           >
             {shareLabel}
@@ -414,7 +414,7 @@ function ShareCard({
             "grid size-10 flex-shrink-0 place-items-center rounded-xl border transition " +
             (copied
               ? "border-[#22D17F]/40 bg-[#22D17F]/15 text-[#22D17F]"
-              : "border-cart-line bg-cart-bg-elev text-cart-ink-2 group-hover:border-cart-line-strong group-hover:text-white")
+              : "border-cart-line bg-cart-bg-elev text-cart-ink-2 group-hover:border-cart-line-strong group-hover:text-cart-ink")
           }
         >
           {copied ? (
@@ -466,7 +466,7 @@ function Stat({
         <span className={`size-1.5 rounded-full ${dot}`} />
         {label}
       </div>
-      <div className="mt-1 text-[14px] font-semibold text-white">{value}</div>
+      <div className="mt-1 text-[14px] font-semibold text-cart-ink">{value}</div>
     </div>
   );
 }

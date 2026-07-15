@@ -64,7 +64,7 @@ export default function ClaimPage(props: Props) {
   };
 
   return (
-    <main className="relative grid min-h-dvh place-items-center overflow-hidden bg-cart-bg px-6 py-12 text-white">
+    <main className="home-light relative grid min-h-dvh place-items-center overflow-hidden bg-cart-bg px-6 py-12 text-cart-ink">
       <div
         aria-hidden
         className="pointer-events-none absolute -top-40 left-1/2 size-[640px] -translate-x-1/2 rounded-full"
@@ -76,7 +76,7 @@ export default function ClaimPage(props: Props) {
       />
 
       <motion.div
-        initial={{ opacity: 0, y: 12 }}
+        initial={false}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
         className="relative z-10 w-full max-w-[400px] text-center"
@@ -160,7 +160,7 @@ export default function ClaimPage(props: Props) {
                   value={name}
                   onChange={(e) => setName(sanitizePersonNameLive(e.target.value))}
                   placeholder="Tu nombre y apellido"
-                  className="w-full rounded-xl border border-white/10 bg-cart-bg-elev px-3.5 py-3 text-[14.5px] text-white placeholder:text-cart-ink-3 focus:border-cart-accent focus:outline-none"
+                  className="w-full rounded-xl border border-cart-line bg-cart-bg-elev px-3.5 py-3 text-[14.5px] text-cart-ink placeholder:text-cart-ink-3 focus:border-cart-accent focus:outline-none"
                 />
                 {touched && !nameValid && (
                   <p className="mt-1 text-[11px] text-red-400">Ingresa tu nombre completo.</p>
@@ -187,7 +187,7 @@ export default function ClaimPage(props: Props) {
                   value={dni}
                   onChange={(e) => setDni(sanitizeDocument(e.target.value, isForeigner))}
                   placeholder={isForeigner ? "AB123456" : "8 dígitos"}
-                  className="w-full rounded-xl border border-white/10 bg-cart-bg-elev px-3.5 py-3 text-[14.5px] tracking-[0.08em] text-white placeholder:text-cart-ink-3 placeholder:tracking-normal focus:border-cart-accent focus:outline-none"
+                  className="w-full rounded-xl border border-cart-line bg-cart-bg-elev px-3.5 py-3 text-[14.5px] tracking-[0.08em] text-cart-ink placeholder:text-cart-ink-3 placeholder:tracking-normal focus:border-cart-accent focus:outline-none"
                 />
                 {touched && !dniValid && (
                   <p className="mt-1 text-[11px] text-red-400">

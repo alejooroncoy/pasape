@@ -37,7 +37,7 @@ export function OrgLoginClient() {
       />
 
       <motion.div
-        initial={{ opacity: 0, y: 12 }}
+        initial={false}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
         className="relative z-10 w-full max-w-[400px] text-center"
@@ -62,14 +62,10 @@ export function OrgLoginClient() {
           Inicia sesión para gestionar tus marcas, eventos y ventas.
         </p>
 
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.14, duration: 0.3 }}
-          className="mt-8"
-        >
+        {/* Sin animación: CTA crítico, ver nota en LoginClient.tsx. */}
+        <div className="mt-8">
           <GoogleBtn onClick={() => void signIn()} disabled={pending} />
-        </motion.div>
+        </div>
 
         {error && (
           <div className="mt-3 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-[12.5px] text-rose-600">

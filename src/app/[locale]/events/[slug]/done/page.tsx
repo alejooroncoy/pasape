@@ -148,7 +148,7 @@ function SuccessIcon({ large = false }: { large?: boolean }) {
 
 function DonePageShell({ children }: { children: ReactNode }) {
   return (
-    <div className="flex min-h-dvh flex-col bg-cart-bg text-white">
+    <div className="home-light flex min-h-dvh flex-col bg-cart-bg text-cart-ink">
       <UserHeader />
       <main className="flex flex-1 flex-col items-center justify-center px-5 py-6">
         <div className="w-full max-w-[400px]">{children}</div>
@@ -256,7 +256,7 @@ function DoneContent({
       <button
         type="button"
         onClick={onGoWallet}
-        className="w-full py-2.5 text-[14px] font-semibold text-white transition hover:text-white/85 active:scale-[0.99]"
+        className="w-full py-2.5 text-[14px] font-semibold text-cart-ink transition hover:text-cart-ink/85 active:scale-[0.99]"
       >
         Ir a mis entradas
       </button>
@@ -347,7 +347,7 @@ function TicketRowIcon({ ready }: { ready?: boolean }) {
       layout
       className={
         "grid size-8 shrink-0 place-items-center rounded-full " +
-        (ready ? "bg-cart-accent text-cart-bg" : "bg-white/8 text-cart-ink-2")
+        (ready ? "bg-cart-accent text-cart-bg" : "bg-cart-bg-elev-2 text-cart-ink-2")
       }
     >
       {ready ? (
@@ -438,7 +438,7 @@ function GiftTicketRow({
             ref={datosRef}
             type="button"
             onClick={() => onPonerDatos(datosRef)}
-            className="min-w-0 flex-1 rounded-full bg-white/10 px-2.5 py-2 text-[12px] font-semibold text-white transition hover:bg-white/15 active:scale-95"
+            className="min-w-0 flex-1 rounded-full bg-cart-bg-elev-2 px-2.5 py-2 text-[12px] font-semibold text-cart-ink transition hover:bg-cart-line-strong active:scale-95"
           >
             Poner datos
           </button>

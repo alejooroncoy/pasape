@@ -98,12 +98,12 @@ export default function FriendJoinBoxPage({ params }: Props) {
     <div style={{ position: "relative", borderRadius: 24, overflow: "hidden", aspectRatio: "4/5", boxShadow: `0 0 0 1px ${C.line} inset` }}>
       <div style={{ position: "absolute", inset: 0, background: "linear-gradient(140deg, #4B1F9A 0%, #7C3AED 40%, #FF4D5E 90%)" }} />
       <div style={{ position: "absolute", inset: 0, backgroundImage: "radial-gradient(60% 50% at 20% 30%, rgba(255,255,255,0.25), transparent 60%), radial-gradient(60% 50% at 80% 80%, rgba(0,0,0,0.5), transparent 60%)" }} />
-      <div style={{ position: "absolute", top: 16, right: 16, padding: "6px 12px", borderRadius: 999, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(8px)", fontSize: 12, letterSpacing: "0.1em", fontWeight: 700 }}>
+      <div style={{ position: "absolute", top: 16, right: 16, padding: "6px 12px", borderRadius: 999, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(8px)", fontSize: 12, letterSpacing: "0.1em", fontWeight: 700, color: "rgba(255,255,255,0.85)" }}>
         {b.boxNumber ?? "BOX"} · {filled}/{b.capacity}
       </div>
       <div style={{ position: "absolute", left: 18, right: 18, bottom: 18 }}>
         <div style={{ fontSize: 11, letterSpacing: "0.14em", color: C.yellow, fontWeight: 700 }}>★ TE INVITARON</div>
-        <div style={{ fontFamily: FONT_DISPLAY, fontSize: 24, fontWeight: 700, letterSpacing: "-0.03em", lineHeight: 1.05, marginTop: 6 }}>
+        <div style={{ fontFamily: FONT_DISPLAY, fontSize: 24, fontWeight: 700, letterSpacing: "-0.03em", lineHeight: 1.05, marginTop: 6, color: "rgba(255,255,255,0.94)" }}>
           {b.ownerName} te suma a su BOX en{" "}
           <span style={{ textShadow: "0 2px 12px rgba(0,0,0,0.4)" }}>{b.event.title}</span>
         </div>
@@ -150,7 +150,7 @@ export default function FriendJoinBoxPage({ params }: Props) {
             </div>
           ))}
         </div>
-        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.8)", flex: 1 }}>
+        <div style={{ fontSize: 12, color: C.dim, flex: 1 }}>
           <strong>{b.members.map((m) => m.name.split(" ")[0]).slice(0, 3).join(", ")}</strong> ya están.
           {remaining > 0 && (
             <>
@@ -230,7 +230,7 @@ export default function FriendJoinBoxPage({ params }: Props) {
           background: C.greenSoft,
           boxShadow: "0 0 0 1px rgba(34,209,127,0.3) inset",
           fontSize: 12,
-          color: "rgba(255,255,255,0.9)",
+          color: C.text,
           lineHeight: 1.4,
         }}
       >
@@ -305,7 +305,7 @@ function friendlyJoinError(code: string): string {
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, color: "#fff", display: "flex", flexDirection: "column" }}>
+    <div className="home-light" style={{ minHeight: "100vh", background: C.bg, color: C.text, display: "flex", flexDirection: "column" }}>
       <BrandHeader />
       <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>{children}</div>
     </div>
