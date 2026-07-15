@@ -1,6 +1,6 @@
 "use client";
 
-import { ButtonHTMLAttributes, useEffect, useMemo, useRef, useState } from "react";
+import { ButtonHTMLAttributes, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
@@ -1562,6 +1562,12 @@ function FlyerCard({
   const [imgFailed, setImgFailed] = useState(false);
   const [imgLoaded, setImgLoaded] = useState(false);
   const hasCover = Boolean(event.coverUrl) && !imgFailed;
+  // El navegador no re-dispara `onLoad` en un <img> que se monta ya
+  // completo (imagen servida desde cache HTTP/memoria) — sin este chequeo
+  // en el ref el flyer queda atascado en opacity-0 detrás del skeleton.
+  const imgRef = useCallback((node: HTMLImageElement | null) => {
+    if (node?.complete) setImgLoaded(true);
+  }, []);
   const immersive = variant === "immersive";
   const dt = eventDatePillParts(event.startsAt, event.timezone);
 
@@ -1625,6 +1631,7 @@ function FlyerCard({
                 marca (evita el ícono roto). */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
+              ref={imgRef}
               src={optimizeImageUrl(event.coverUrl, "event-hero") ?? event.coverUrl ?? undefined}
               alt={event.title}
               onLoad={() => setImgLoaded(true)}
