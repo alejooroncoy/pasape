@@ -865,21 +865,29 @@ export const supabaseTicketRepository: TicketRepository = {
   // tickets a varios `current_holder` distintos. El colapso de box (host vs
   // miembro) sigue siendo POR TITULAR (ver finishTicketListing): agrupar acá
   // no cambia esa semántica, solo evita 1 roundtrip a Supabase por titular.
-  // Nota: comparte el límite de 1000 filas de Supabase entre TODOS los
-  // titulares del batch (antes cada listMine() tenía su propio límite). Solo
-  // se llama con los titulares de una orden de recuperación por email — un
-  // volumen chico en la práctica — pero si algún día se usa con listas
-  // grandes de titulares, hace falta paginar.
+  // Pagina en bloques de PAGE_SIZE: a diferencia de listMine (1 titular, muy
+  // improbable que supere el límite por request de Supabase), acá el batch
+  // comparte un solo límite entre TODOS los titulares — sin paginar, una
+  // orden grupal con muchos titulares podría truncar el resultado en
+  // silencio y perder tickets legítimos de recuperación.
   async listManyByHolders(holderIds: string[]): Promise<WalletTicket[]> {
     if (holderIds.length === 0) return [];
     const db = supabaseAdmin();
-    const { data } = await db
-      .from("tickets")
-      .select(WALLET_TICKET_SELECT)
-      .in("current_holder", holderIds)
-      .in("status", ["active", "used"])
-      .order("created_at", { ascending: false });
-    return finishTicketListing(db, (data as unknown as TicketRow[] | null) ?? []);
+    const PAGE_SIZE = 1000;
+    const rawRows: TicketRow[] = [];
+    for (let from = 0; ; from += PAGE_SIZE) {
+      const { data } = await db
+        .from("tickets")
+        .select(WALLET_TICKET_SELECT)
+        .in("current_holder", holderIds)
+        .in("status", ["active", "used"])
+        .order("created_at", { ascending: false })
+        .range(from, from + PAGE_SIZE - 1);
+      const page = (data as unknown as TicketRow[] | null) ?? [];
+      rawRows.push(...page);
+      if (page.length < PAGE_SIZE) break;
+    }
+    return finishTicketListing(db, rawRows);
   },
 
   async getById(ticketId, buyerId) {
