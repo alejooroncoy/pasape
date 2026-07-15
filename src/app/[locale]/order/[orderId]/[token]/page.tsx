@@ -11,6 +11,7 @@ import { PhoneField } from "@/components/design/PhoneField";
 import { GoogleBtn } from "@/components/design";
 import { setOauthReturn } from "@/components/auth/PostLoginRedirect";
 import { Logo } from "@/components/brand/Logo";
+import { InstallNudge } from "@/components/pwa/InstallNudge";
 import { getCachedClaim, saveClaim } from "@/lib/tickets/claimedOrderStore";
 
 // El token va en la RUTA (no en query): así sobrevive intacto al ida-y-vuelta del
@@ -209,6 +210,10 @@ export default function OrderPage(props: Props) {
             <p className="mx-auto mt-2 max-w-[34ch] text-[12.5px] leading-snug text-cart-ink-3/80">
               Quedan en tu cuenta con tu propio QR, siempre a la mano.
             </p>
+            {/* Si llegaste desde el link de WhatsApp, el navegador in-app de
+                WhatsApp puede impedir el login con Google o no conservar la
+                sesión offline. Mostrarlo ANTES del botón de Google, no después. */}
+            <InstallNudge className="mt-6 text-left" />
             <div className="mt-7">
               <GoogleBtn
                 onClick={() => {

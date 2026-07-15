@@ -9,6 +9,7 @@ import { Plus, Link2, Smartphone, Copy, Check, X, MessageCircle, ChevronRight } 
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "@/i18n/navigation";
 import { QrSquare } from "@/components/design";
+import { InstallNudge } from "@/components/pwa/InstallNudge";
 import { HolderEditSheet } from "@/components/tickets/HolderEditSheet";
 import { TransferTicketSheet } from "@/components/tickets/TransferTicketSheet";
 import { RefundRequestSheet } from "@/components/tickets/RefundRequestSheet";
@@ -326,6 +327,12 @@ function TicketDetailInner({ id }: { id: string }) {
       </header>
 
       <main className="mx-auto w-full max-w-[640px] px-5 pb-16 pt-6 lg:max-w-[440px]">
+        {/* Si esta página no quedó guardada como app, el QR no va a cargar sin
+            señal en la puerta — ver AGENTS.md / memoria wallet-offline-asistente.
+            Solo aplica a entradas activas: no tiene sentido pedir instalar la
+            app para "entrar a la puerta" con una entrada ya usada/anulada. */}
+        {data.status === "active" && <InstallNudge className="mb-4" />}
+
         {/* QR card — swipe horizontal para saltar a otra entrada del mismo evento.
             overflow-x-clip evita scroll lateral durante el slide. */}
         <div className="relative overflow-x-clip">
