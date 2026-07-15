@@ -211,7 +211,7 @@ function EventMiniRow({ group, past, onClick }: { group: EventGroup; past: boole
       <div className="relative size-[58px] shrink-0 overflow-hidden rounded-[13px]">
         {cover ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={cover} alt="" className={"size-full object-cover " + (past ? "grayscale" : "")} />
+          <img src={optimizeImageUrl(cover, "card") ?? cover} alt="" className={"size-full object-cover " + (past ? "grayscale" : "")} />
         ) : (
           <div className="size-full" style={{ background: tickets[0] ? fallbackGradient(tickets[0]) : "rgba(124,58,237,0.3)" }} />
         )}
@@ -468,7 +468,7 @@ function TicketSelectScreen({
       <div className="mb-1 flex items-center gap-3 border-b border-cart-line pb-4">
         {cover ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={cover} alt="" className={"size-[54px] shrink-0 rounded-[14px] object-cover shadow-[0_4px_12px_-3px_rgba(40,20,90,0.3)] " + (past ? "grayscale" : "")} />
+          <img src={optimizeImageUrl(cover, "card") ?? cover} alt="" className={"size-[54px] shrink-0 rounded-[14px] object-cover shadow-[0_4px_12px_-3px_rgba(40,20,90,0.3)] " + (past ? "grayscale" : "")} />
         ) : (
           <div
             className="grid size-[54px] shrink-0 place-items-center rounded-[14px] text-[20px] font-black text-white"

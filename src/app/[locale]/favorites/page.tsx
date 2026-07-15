@@ -8,6 +8,7 @@ import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { LoginGate } from "@/components/ui/LoginGate";
 import { formatDate } from "@/lib/_shared/format";
 import { isEventOver } from "@/lib/events/eventStatusDisplay";
+import { optimizeImageUrl } from "@/lib/images/optimizeUrl";
 import { CATEGORY_BY_ID } from "../_home/categories";
 import type { SavedEvent } from "@/server/events/application/ListSavedEvents";
 
@@ -86,7 +87,7 @@ function SavedRow({ ev, onClick }: { ev: SavedEvent; onClick: () => void }) {
         <div className="relative w-[88px] shrink-0 sm:w-[104px]">
           {ev.coverUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={ev.coverUrl} alt="" className={"absolute inset-0 size-full object-cover " + (closed ? "grayscale" : "")} />
+            <img src={optimizeImageUrl(ev.coverUrl, "card") ?? ev.coverUrl} alt="" className={"absolute inset-0 size-full object-cover " + (closed ? "grayscale" : "")} />
           ) : (
             <div className="absolute inset-0 grid place-items-center text-[20px] font-bold text-white/90" style={{ background: fallbackGradient(ev) }}>
               {ev.title.charAt(0).toUpperCase()}
