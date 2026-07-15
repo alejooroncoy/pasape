@@ -114,20 +114,16 @@ El giro a `.home-light` es progresivo, no un rediseño de un solo commit. Estado
 
 ## Logo Badge
 
-Ubicado en `public/icons/logo-badge.svg` y generados en múltiples resoluciones (48, 72, 96, 144, 180, 192, 256, 384, 512, 1024px).
+Ubicado en `public/icons/logo-badge.svg` y generado en múltiples resoluciones (48, 72, 96, 144, 180, 192, 256, 384, 512, 1024px). Es el app icon / favicon — vive fuera del sistema `.home-light`, así que usa colores hardcodeados (no tokens `cart-*`), a propósito: debe verse igual sin importar el tema del sistema o la superficie donde se use.
 
 **Diseño:**
-- Monograma "P" geométrico con morado (#7c3aed) + azul (#4f6df5) + blanco (#fbfaff).
-- Sin gradientes radiales, sin blobs, sin gloss fingido.
-- Hairline frontera (`.12` en claro, `.08` en oscuro) sobre fondo casi-blanco (#fbfaff) en claro, casi-negro (#0a0a0f) en oscuro.
-- Respeta `prefers-color-scheme` automáticamente — no hay versión "tema claro" y "tema oscuro" separadas, sino un diseño que se adapta.
-- Escala perfectamente desde favicon 16px hasta app icon 512px sin perder nitidez.
+- Rounded-square (app-icon style) con gradiente morado→azul de fondo (`#A78BFA` → `#7C3AED` → `#4F6DF5`, vertical) — la paleta dual reemplaza el degradado mono-morado anterior.
+- Mascota (perrito) asomándose por un contorno de puerta/ticket, trazo blanco fino — la silueta de marca, sin cambios.
+- Gloss radial sutil arriba (profundidad, no imitando foto) + ring blanco translúcido en el borde.
 
 **Filosofía:**
-- Morado y azul como acentos puros, nunca rellenan fondo.
-- Blanco es la estructura (barra vertical del monograma).
-- Energía (línea azul diagonal) evoca movimiento nocturno.
-- El conjunto dice "noche peruana, sin estafas" sin necesidad de mascota, gradientes ni elementos genéricos.
+- El gradiente cubre azul + morado + blanco (trazo) — la paleta completa de Pasape en un solo símbolo compacto.
+- Reservado para contextos square (favicon, app icon, avatar) — no es el logo de texto/wordmark de la marca.
 
 ## Referencias
 
