@@ -1,4 +1,4 @@
-import type { Event, EventCategory, EventStatus, FeeMode, Promo, PromoKind, PresaleTier, TicketType } from "../domain/Event";
+import type { Event, EventCard, EventCategory, EventSeoEntry, EventStatus, FeeMode, Promo, PromoKind, PresaleTier, TicketType } from "../domain/Event";
 import type { Result } from "@/server/_shared/result";
 import type { CommissionConfig } from "@/server/promoters/domain/OrgPromoter";
 import type { MilestoneProgress } from "@/server/promoters/application/CommissionResolver";
@@ -310,6 +310,7 @@ export type EventExportData = {
 };
 
 export interface EventRepository {
+  /** Listado público (home, categorías, búsqueda) — select mínimo, ver `EventCard`. */
   listPublished(
     limit: number,
     cursor: string | null,
@@ -317,7 +318,9 @@ export interface EventRepository {
     /** Búsqueda por título/lugar (ilike). El caller sanitiza longitud; el repo
      *  escapa los caracteres especiales del filtro. */
     search?: string | null,
-  ): Promise<Event[]>;
+  ): Promise<EventCard[]>;
+  /** Solo para sitemap.ts / llms.txt (server-only, no hot-path) — ver `EventSeoEntry`. */
+  listPublishedForSeo(limit: number): Promise<EventSeoEntry[]>;
   listByOrganization(orgId: string): Promise<Event[]>;
   /** Solo eventos publicados de una org, ordenados por startsAt asc. */
   listPublishedByOrgSlug(orgSlug: string): Promise<Event[]>;

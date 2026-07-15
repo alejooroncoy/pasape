@@ -5,7 +5,7 @@ import { useBrowseEvents } from "@/lib/events/hooks/useEvents";
 import { optimizeImageUrl } from "@/lib/images/optimizeUrl";
 import { useSaveEvent } from "@/lib/identity/hooks/useSaveEvent";
 import { shortEventDate as shortDay } from "@/lib/_shared/format";
-import type { Event, EventCategory } from "@/server/events/domain/Event";
+import type { EventCard as EventCardType, EventCategory } from "@/server/events/domain/Event";
 import { CATEGORIES } from "./categories";
 
 // Corazón para guardar el evento — botón fantasma en el pie de la card (como
@@ -60,7 +60,7 @@ function CardSkeleton() {
 // Anatomía de card de ticketera al detalle (Joinnus): flyer limpio arriba,
 // y debajo chips de fecha y ciudad con icono, título, lugar, y el corazón
 // como botón fantasma en el pie — nada flotando sobre el flyer.
-function EventCard({ event }: { event: Event }) {
+function EventCard({ event }: { event: EventCardType }) {
   return (
     <div className="group relative">
       <SaveHeart eventId={event.id} />

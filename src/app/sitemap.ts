@@ -1,6 +1,5 @@
 import type { MetadataRoute } from "next";
 import { SITEMAP_STATIC_PATHS } from "@/lib/seo/pages";
-import { listPublishedEvents } from "@/server/events/application/ListPublishedEvents";
 import { supabaseEventRepository as repo } from "@/server/events/infrastructure/repositories/SupabaseEventRepository";
 import { SITE_URL, SUPPORTED_LOCALES, localePath } from "@/lib/seo/site";
 
@@ -19,7 +18,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }
   }
 
-  const events = await listPublishedEvents({ repo }, { limit: 500 });
+  const events = await repo.listPublishedForSeo(500);
   for (const ev of events) {
     for (const locale of SUPPORTED_LOCALES) {
       pages.push({

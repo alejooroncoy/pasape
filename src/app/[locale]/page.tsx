@@ -38,8 +38,11 @@ export default async function HomePage({ params }: Props) {
     qc.setQueryData(["events", "browse", null], eventsResult.value);
   }
 
+  // Mismo preset que usa FeaturedBanner.tsx para pintar esta misma imagen — si
+  // no coinciden, la URL del preload no matchea la del <img> real y el navegador
+  // descarga la imagen dos veces (una por preset) en vez de reusar el preload.
   const lcpCover = eventsResult.ok
-    ? optimizeImageUrl(eventsResult.value[0]?.coverUrl, "card")
+    ? optimizeImageUrl(eventsResult.value[0]?.coverUrl, "hero-lcp")
     : null;
 
   return (

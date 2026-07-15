@@ -57,7 +57,7 @@ import {
 } from "@/server/tickets/application/Courtesies";
 import { supabaseTicketRepository as ticketRepo } from "@/server/tickets/infrastructure/repositories/SupabaseTicketRepository";
 import type { CourtesySummary } from "@/server/tickets/ports/TicketRepository";
-import type { Event, EventCategory, Promo, TicketType } from "../../domain/Event";
+import type { Event, EventCard, EventCategory, Promo, TicketType } from "../../domain/Event";
 import type { EventStats, ScanFeedItem } from "../../ports/EventRepository";
 
 const sanitizeHost = (raw: string): string => {
@@ -169,7 +169,7 @@ const listPublicCached = unstable_cache(
 export const EventsController = {
   async listPublic(
     opts: { limit?: number; cursor?: string | null; category?: EventCategory | null; search?: string | null } = {},
-  ): Promise<Result<Event[]>> {
+  ): Promise<Result<EventCard[]>> {
     // Las búsquedas no pasan por el Data Cache: cada término distinto sería una
     // key nueva (cache inútil) y la query ya está cubierta por índices trigram.
     if (opts.search) {

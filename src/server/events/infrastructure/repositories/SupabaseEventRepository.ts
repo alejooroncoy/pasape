@@ -14,7 +14,7 @@ import type {
   UpdateEventInput,
   UpdateTicketTypeInput,
 } from "@/server/events/ports/EventRepository";
-import type { Event, EventCategory, FeeMode, Promo, PresaleTier, TicketType } from "@/server/events/domain/Event";
+import type { Event, EventCard, EventCategory, EventSeoEntry, FeeMode, Promo, PresaleTier, TicketType } from "@/server/events/domain/Event";
 import { buyerUnitPriceCents } from "@/lib/tickets/serviceFee";
 import {
   computePromoterPayout,
@@ -165,6 +165,43 @@ const toEvent = (r: EventRow): Event => ({
   createdAt: r.created_at,
 });
 
+type EventCardRow = Pick<
+  EventRow,
+  "id" | "slug" | "title" | "cover_url" | "venue" | "starts_at" | "timezone" | "category"
+>;
+
+const EVENT_CARD_COLUMNS = "id, slug, title, cover_url, venue, starts_at, timezone, category";
+
+const toEventCard = (r: EventCardRow): EventCard => ({
+  id: r.id,
+  slug: r.slug,
+  title: r.title,
+  coverUrl: r.cover_url,
+  venue: r.venue,
+  startsAt: r.starts_at,
+  timezone: r.timezone,
+  category: r.category,
+});
+
+type EventSeoRow = Pick<
+  EventRow,
+  "slug" | "title" | "description" | "venue" | "starts_at" | "timezone" | "status" | "category" | "created_at"
+>;
+
+const EVENT_SEO_COLUMNS = "slug, title, description, venue, starts_at, timezone, status, category, created_at";
+
+const toEventSeoEntry = (r: EventSeoRow): EventSeoEntry => ({
+  slug: r.slug,
+  title: r.title,
+  description: r.description,
+  venue: r.venue,
+  startsAt: r.starts_at,
+  timezone: r.timezone,
+  status: r.status,
+  category: r.category,
+  createdAt: r.created_at,
+});
+
 const COUNTDOWN_WINDOW_MS = 6 * 3600_000;
 
 const computeShowCountdown = (
@@ -256,9 +293,13 @@ const slugify = (s: string): string =>
 export const supabaseEventRepository: EventRepository = {
   async listPublished(limit, cursor, category, search) {
     const db = supabaseAdmin();
+    // Select mínimo: este método solo alimenta listados públicos (home,
+    // /eventos/[categoria], búsqueda del header) — FeaturedBanner/EventCard
+    // no pintan description/palette*/venueLat-Lng/capacity/etc. El detalle
+    // del evento (con esos campos) va por getBySlug, no por acá.
     let q = db
       .from("events")
-      .select("*")
+      .select(EVENT_CARD_COLUMNS)
       .eq("status", "published")
       .order("starts_at", { ascending: true })
       .limit(limit);
@@ -271,7 +312,18 @@ export const supabaseEventRepository: EventRepository = {
       if (term) q = q.or(`title.ilike.%${term}%,venue.ilike.%${term}%`);
     }
     const { data } = await q;
-    return (data as EventRow[] | null)?.map(toEvent) ?? [];
+    return (data as EventCardRow[] | null)?.map(toEventCard) ?? [];
+  },
+
+  async listPublishedForSeo(limit) {
+    const db = supabaseAdmin();
+    const { data } = await db
+      .from("events")
+      .select(EVENT_SEO_COLUMNS)
+      .eq("status", "published")
+      .order("starts_at", { ascending: true })
+      .limit(limit);
+    return (data as EventSeoRow[] | null)?.map(toEventSeoEntry) ?? [];
   },
 
   async listByOrganization(orgId) {
