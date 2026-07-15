@@ -395,7 +395,9 @@ function Inner() {
     let cancel = false;
     const refresh = async () => { if (!cancel) setPendingCount(await countPending()); };
     void refresh();
-    const id = setInterval(refresh, 3000);
+    // Local (IndexedDB, sin red) — 5s en vez de 3s: menos wakeups de CPU en
+    // celulares de gama baja del portero, sin percepción de lag en el badge.
+    const id = setInterval(refresh, 5000);
     return () => { cancel = true; clearInterval(id); };
   }, []);
 
