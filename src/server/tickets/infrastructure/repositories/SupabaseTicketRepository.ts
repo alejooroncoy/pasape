@@ -131,6 +131,11 @@ type TicketRowJoined = TicketRow & {
   };
 };
 
+// Select compartido por listMine/listManyByHolders — mismo join, evita que
+// diverjan silenciosamente si cambia una columna/relación.
+const WALLET_TICKET_SELECT =
+  "*, order:orders!inner(status,mp_status), ticket_type:ticket_types!inner(id,name,kind,event_id,event:events!inner(id,slug,title,starts_at,venue,timezone,status,cover_url,category))";
+
 // Post-procesa filas crudas de `tickets` (ya traídas por listMine/listManyByHolders)
 // a WalletTicket: colapsa boxes, adjunta transferencias pendientes y filtra por
 // estado de orden. Compartido para que listar N titulares en una sola query
@@ -843,13 +848,12 @@ export const supabaseTicketRepository: TicketRepository = {
     // 'pending_payment'). Mostramos lo pagado + las órdenes con pago vivo en
     // revisión de MP (mp_status='in_process') como "Pago en revisión" — así el
     // comprador ve su entrada mientras MP decide, sin QR hasta que se confirme.
-    // Una reserva abandonada (pending sin pago) NO aparece. El filtro fino va en
-    // JS abajo. Las órdenes gratis (total 0) nacen `paid`, así que sí aparecen.
+    // Una reserva abandonada (pending sin pago) NO aparece. El filtro fino vive
+    // en finishTicketListing (compartido con listManyByHolders). Las órdenes
+    // gratis (total 0) nacen `paid`, así que sí aparecen.
     const { data } = await db
       .from("tickets")
-      .select(
-        "*, order:orders!inner(status,mp_status), ticket_type:ticket_types!inner(id,name,kind,event_id,event:events!inner(id,slug,title,starts_at,venue,timezone,status,cover_url,category))",
-      )
+      .select(WALLET_TICKET_SELECT)
       .eq("current_holder", buyerId)
       .in("status", ["active", "used"])
       .order("created_at", { ascending: false });
@@ -861,14 +865,17 @@ export const supabaseTicketRepository: TicketRepository = {
   // tickets a varios `current_holder` distintos. El colapso de box (host vs
   // miembro) sigue siendo POR TITULAR (ver finishTicketListing): agrupar acá
   // no cambia esa semántica, solo evita 1 roundtrip a Supabase por titular.
+  // Nota: comparte el límite de 1000 filas de Supabase entre TODOS los
+  // titulares del batch (antes cada listMine() tenía su propio límite). Solo
+  // se llama con los titulares de una orden de recuperación por email — un
+  // volumen chico en la práctica — pero si algún día se usa con listas
+  // grandes de titulares, hace falta paginar.
   async listManyByHolders(holderIds: string[]): Promise<WalletTicket[]> {
     if (holderIds.length === 0) return [];
     const db = supabaseAdmin();
     const { data } = await db
       .from("tickets")
-      .select(
-        "*, order:orders!inner(status,mp_status), ticket_type:ticket_types!inner(id,name,kind,event_id,event:events!inner(id,slug,title,starts_at,venue,timezone,status,cover_url,category))",
-      )
+      .select(WALLET_TICKET_SELECT)
       .in("current_holder", holderIds)
       .in("status", ["active", "used"])
       .order("created_at", { ascending: false });
