@@ -197,6 +197,46 @@ function TicketHeroCard({ group, onOpen }: { group: EventGroup; onOpen: () => vo
   );
 }
 
+// ── Skeleton del hero (misma silueta que TicketHeroCard, sin datos) ──────────
+function TicketHeroCardSkeleton() {
+  return (
+    <div className="relative w-full overflow-hidden rounded-[24px] border border-cart-line bg-cart-bg-elev shadow-[0_1px_2px_rgba(20,10,60,0.05),0_18px_44px_-24px_rgba(20,10,60,0.35)]">
+      {/* Póster */}
+      <div className="flex justify-center py-6">
+        <div className="h-[260px] w-[200px] max-w-[calc(100%-3rem)] animate-pulse rounded-[18px] bg-cart-bg-elev-2" />
+      </div>
+
+      {/* Talón: misma perforación que el real, título + fecha + "tienes" en gris */}
+      <div className="relative">
+        <span className="absolute left-0 top-0 z-[2] size-4 -translate-x-1/2 -translate-y-1/2 rounded-full bg-cart-bg" />
+        <span className="absolute right-0 top-0 z-[2] size-4 -translate-y-1/2 translate-x-1/2 rounded-full bg-cart-bg" />
+        <span className="absolute inset-x-4 top-0 -translate-y-1/2 border-t-2 border-dashed border-cart-line-strong" />
+        <div className="px-5 py-4">
+          <div className="h-5 w-3/4 animate-pulse rounded bg-cart-bg-elev-2" />
+          <div className="mt-3 flex items-center gap-4">
+            <div className="space-y-1.5 text-center">
+              <div className="mx-auto h-6 w-7 animate-pulse rounded bg-cart-bg-elev-2" />
+              <div className="mx-auto h-2.5 w-6 animate-pulse rounded bg-cart-bg-elev-2" />
+            </div>
+            <div className="h-9 w-px bg-cart-line-strong" />
+            <div className="min-w-0 flex-1 space-y-1.5">
+              <div className="h-3.5 w-28 animate-pulse rounded bg-cart-bg-elev-2" />
+              <div className="h-3 w-20 animate-pulse rounded bg-cart-bg-elev-2" />
+            </div>
+          </div>
+          <div className="mt-3 h-3.5 w-32 animate-pulse rounded bg-cart-bg-elev-2" />
+        </div>
+      </div>
+
+      {/* Pie */}
+      <div className="flex w-full items-center justify-between border-t border-cart-line bg-cart-bg-elev px-5 py-3.5">
+        <div className="h-4 w-28 animate-pulse rounded bg-cart-bg-elev-2" />
+        <div className="h-4 w-4 animate-pulse rounded bg-cart-bg-elev-2" />
+      </div>
+    </div>
+  );
+}
+
 // ── Nivel 1: fila compacta de otro evento ────────────────────────────────────
 function EventMiniRow({ group, past, onClick }: { group: EventGroup; past: boolean; onClick: () => void }) {
   const { event, tickets } = group;
@@ -592,7 +632,7 @@ function WalletSkeleton() {
         </div>
         <div className="mt-2 h-10 animate-pulse rounded-2xl bg-cart-bg-elev" />
         <div className="flex flex-col gap-3 pt-5">
-          <div className="h-[360px] animate-pulse rounded-[24px] bg-cart-bg-elev" />
+          <TicketHeroCardSkeleton />
           {[0, 1].map((i) => (
             <div key={i} className="h-[80px] animate-pulse rounded-[18px] bg-cart-bg-elev" />
           ))}
@@ -832,7 +872,7 @@ function WalletPageInner() {
               {/* Skeletons */}
               {tickets.isLoading && (
                 <div className="flex flex-col gap-3 pt-5">
-                  <div className="h-[360px] animate-pulse rounded-[24px] bg-cart-bg-elev" />
+                  <TicketHeroCardSkeleton />
                   {[0, 1].map((i) => (
                     <div key={i} className="h-[80px] animate-pulse rounded-[18px] bg-cart-bg-elev" />
                   ))}
