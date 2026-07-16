@@ -31,30 +31,36 @@ export function TicketActionSurface({
     return (
       <Popover.Root open={open} onOpenChange={(next) => !next && onClose()}>
         <Popover.Anchor virtualRef={anchorRef as RefObject<Element>} />
+        {/* Popover.Portal usa Slot (asChild) internamente y exige exactamente
+            un hijo — pasarle el scrim y el Content como hermanos disparaba
+            "React.Children.only" en cada apertura. Un solo <div> envolvente
+            los agrupa en un único elemento. */}
         <AnimatePresence>
           {open && (
             <Popover.Portal forceMount>
-              <div className="fixed inset-0 z-[70]" onClick={onClose} aria-hidden />
-              <Popover.Content
-                side={side}
-                align={align}
-                sideOffset={8}
-                collisionPadding={16}
-                onOpenAutoFocus={(e) => e.preventDefault()}
-              >
-                <motion.div
-                  initial={{ opacity: 0, y: -6, scale: 0.98 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: -6, scale: 0.98 }}
-                  transition={{ duration: 0.15 }}
-                  className={
-                    "z-[71] rounded-2xl border border-cart-line bg-cart-bg-elev p-5 shadow-[0_20px_60px_-10px_rgba(0,0,0,0.7)] " +
-                    panelClassName
-                  }
+              <div>
+                <div className="fixed inset-0 z-[70]" onClick={onClose} aria-hidden />
+                <Popover.Content
+                  side={side}
+                  align={align}
+                  sideOffset={8}
+                  collisionPadding={16}
+                  onOpenAutoFocus={(e) => e.preventDefault()}
                 >
-                  {children}
-                </motion.div>
-              </Popover.Content>
+                  <motion.div
+                    initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                    transition={{ duration: 0.15 }}
+                    className={
+                      "z-[71] rounded-2xl border border-cart-line bg-cart-bg-elev p-5 shadow-[0_20px_60px_-10px_rgba(0,0,0,0.7)] " +
+                      panelClassName
+                    }
+                  >
+                    {children}
+                  </motion.div>
+                </Popover.Content>
+              </div>
             </Popover.Portal>
           )}
         </AnimatePresence>
