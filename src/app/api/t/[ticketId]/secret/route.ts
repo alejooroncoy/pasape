@@ -4,6 +4,7 @@ import type { JWK } from "jose";
 import * as Sentry from "@sentry/nextjs";
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
 import { verifyTicketLink } from "@/server/notifications/domain/TicketLinkToken";
+import { LINK_TOKEN_HEX_LENGTH } from "@/server/notifications/domain/linkTokenConfig";
 import { WINDOW_SECONDS } from "@/lib/tickets/signedQr";
 import { signTicketCert } from "@/server/tickets/domain/EventSignature";
 import { getOrCreateEventSigningKeys } from "@/server/tickets/application/EventSigningKeys";
@@ -35,13 +36,14 @@ export const POST = async (
   const url = new URL(req.url);
   const k = url.searchParams.get("k");
 
-  // Sin llave en el link → exigimos sesión ANTES de tocar la DB: así un request
-  // anónimo sin `?k` se rechaza sin consumir una query (evita amplificación de
-  // recursos) y sin exponer el oráculo de existencia 404-vs-403. Con `?k`, el
-  // acceso lo decide el token; para verificarlo necesitamos el transfer_count del
-  // ticket, así que abajo sí cargamos la fila.
+  // Solo un `?k` con FORMA de token válido (longitud exacta) justifica tocar la DB
+  // sin sesión. Un k ausente o malformado (`?k=basura`) exige sesión ANTES de la
+  // query: así un anónimo no consume una query por request (amplificación) ni
+  // sondea el oráculo de existencia 404-vs-403 con llaves inventadas. Con un k de
+  // forma válida sí cargamos la fila para verificar el token contra transfer_count.
+  const kLooksValid = !!k && k.length === LINK_TOKEN_HEX_LENGTH;
   let auth: Awaited<ReturnType<typeof getAuthContext>> | null = null;
-  if (!k) {
+  if (!kLooksValid) {
     auth = await getAuthContext();
     if (!auth.ok) {
       return NextResponse.json({ error: "forbidden" }, { status: 403 });
