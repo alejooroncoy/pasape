@@ -5,13 +5,15 @@ import { motion } from "motion/react";
 import { useSearchParams } from "next/navigation";
 import { GoogleBtn } from "@/components/design";
 import { useGoogleSignIn } from "@/lib/identity/hooks/useFirebaseAuth";
+import { safeNextPath } from "@/lib/_shared/safeNextPath";
 import { Logo } from "@/components/brand/Logo";
 
 // Login de asistentes (comprar entradas, guardar eventos, seguir productoras).
 // Para el panel de organizador ver /org/login (OrgLoginClient). Default next → home.
 export function LoginClient() {
   const search = useSearchParams();
-  const next = search.get("next") ?? "/es";
+  // Saneado: un ?next= con URL absoluta permitiría open redirect post-login.
+  const next = safeNextPath(search.get("next")) ?? "/es";
   const { signIn, pending, error } = useGoogleSignIn({ redirectTo: next });
 
   return (

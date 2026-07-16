@@ -1,10 +1,16 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { headers } from "next/headers";
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
+import { createRateLimiter } from "@/server/_shared/rateLimit";
 import {
   computePromoterPayout,
   resolveCommissionScheme,
 } from "@/server/promoters/application/CommissionResolver";
+
+// Público y pesado (~6 queries + 2 RPC por hit) sin secreto fuerte (los codes de
+// promotor se comparten en flyers). Rate limit por IP para que un flood no sature
+// el compute de Supabase, y Cache-Control corto para amortiguar hits repetidos.
+const rateLimiter = createRateLimiter("promoter:state", 30, 60_000);
 
 const resolveOrigin = async (req: NextRequest) => {
   const h = await headers();
@@ -23,6 +29,8 @@ export const GET = async (
   req: NextRequest,
   { params }: { params: Promise<{ code: string }> },
 ) => {
+  if (!(await rateLimiter.check(req))) return rateLimiter.response();
+
   const { code } = await params;
   const db = supabaseAdmin();
 
@@ -131,20 +139,27 @@ export const GET = async (
     link.org_promoter?.name?.split(" ")[0] ??
     "Promotor";
 
-  return NextResponse.json({
-    ok: true,
-    promoterName,
-    eventTitle: link.event.title,
-    eventStartsAt: link.event.starts_at,
-    eventVenue: link.event.venue,
-    eventSlug: link.event.slug,
-    ticketsSold,
-    ticketsValidated,
-    grossCents,
-    commissionConfig,
-    commissionPct,
-    payoutCents: payout.payoutCents,
-    unlockedRewards: payout.rewards,
-    publicSaleUrl,
-  });
+  return NextResponse.json(
+    {
+      ok: true,
+      promoterName,
+      eventTitle: link.event.title,
+      eventStartsAt: link.event.starts_at,
+      eventVenue: link.event.venue,
+      eventSlug: link.event.slug,
+      ticketsSold,
+      ticketsValidated,
+      grossCents,
+      commissionConfig,
+      commissionPct,
+      payoutCents: payout.payoutCents,
+      unlockedRewards: payout.rewards,
+      publicSaleUrl,
+    },
+    {
+      // s-maxage bajo: amortigua hits repetidos en el edge sin mostrar datos muy
+      // rancios (sold/validated cambian con cada venta/validación).
+      headers: { "Cache-Control": "public, s-maxage=30, stale-while-revalidate=60" },
+    },
+  );
 };

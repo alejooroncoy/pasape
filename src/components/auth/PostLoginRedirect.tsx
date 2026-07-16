@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
+import { safeNextPath } from "@/lib/_shared/safeNextPath";
 
 const KEY = "pasape:oauth_return";
 // Última cuenta cuya sesión conoció el service worker. Sirve para detectar un
@@ -34,6 +35,9 @@ export function PostLoginRedirect() {
     try {
       target = sessionStorage.getItem(KEY);
     } catch {}
+    // Defensa en profundidad: el valor guardado se usa en router.replace(); si
+    // algún flujo dejó una URL absoluta, la descartamos (open redirect).
+    target = safeNextPath(target);
     if (!target) return;
     // Ya estás donde querías volver → solo limpia (evita loop).
     if (target === pathname || target.startsWith(`${pathname}?`)) {

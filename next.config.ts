@@ -23,7 +23,32 @@ const nextConfig: NextConfig = {
     ];
   },
   async headers() {
+    // Cabeceras de seguridad globales. Deliberadamente NO incluimos una CSP con
+    // script-src/connect-src todavía: la app carga el SDK de Mercado Pago, PostHog,
+    // Sentry, pixels y Supabase (realtime/storage), y una CSP mal calibrada rompe
+    // el checkout. Lo de alto valor y sin riesgo va aquí; la CSP completa es una
+    // iteración aparte con pruebas del flujo de pago.
+    const securityHeaders = [
+      // Anti-clickjacking: nadie puede embeber Pasape en un iframe (protege el
+      // flujo de pago y el QR de la wallet). frame-ancestors es el mecanismo
+      // moderno; X-Frame-Options cubre navegadores viejos.
+      { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+      { key: "X-Frame-Options", value: "DENY" },
+      { key: "X-Content-Type-Options", value: "nosniff" },
+      { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+      // HSTS: fuerza HTTPS (Vercel siempre sirve TLS). 2 años + subdominios.
+      {
+        key: "Strict-Transport-Security",
+        value: "max-age=63072000; includeSubDomains",
+      },
+      // No desactivamos camera: el modo Puerta la usa para escanear QR.
+      {
+        key: "Permissions-Policy",
+        value: "microphone=(), geolocation=(), browsing-topics=()",
+      },
+    ];
     return [
+      { source: "/:path*", headers: securityHeaders },
       {
         source: "/icons/:path*",
         headers: [

@@ -5,13 +5,15 @@ import { motion } from "motion/react";
 import { useSearchParams } from "next/navigation";
 import { GoogleBtn } from "@/components/design";
 import { useGoogleSignIn } from "@/lib/identity/hooks/useFirebaseAuth";
+import { safeNextPath } from "@/lib/_shared/safeNextPath";
 import { Logo } from "@/components/brand/Logo";
 
 // Login del PANEL de organizador/promotor. Para el login de asistentes ver
 // /login (LoginClient). Default next → /es/org.
 export function OrgLoginClient() {
   const search = useSearchParams();
-  const next = search.get("next") ?? "/es/org";
+  // Saneado: evita open redirect post-login vía ?next= con URL absoluta.
+  const next = safeNextPath(search.get("next")) ?? "/es/org";
   const { signIn, pending, error } = useGoogleSignIn({ redirectTo: next });
 
   return (
