@@ -105,6 +105,15 @@ const entradaLabel = (x: {
 // distinción box/entrada individual del dominio.
 const kindLabelFor = (isBox: boolean): string => (isBox ? "Espacio" : "Entrada");
 
+// answers viene keyed por field.id (uuid) — ilegible en una columna de Excel.
+// La convertimos a texto plano con el label real de la pregunta.
+const formatCustomFieldAnswer = (v: string | string[] | boolean | undefined): string => {
+  if (v === undefined) return "";
+  if (typeof v === "boolean") return v ? "Sí" : "No";
+  if (Array.isArray(v)) return v.join(", ");
+  return v;
+};
+
 export const exportEventReport = async (
   { repo }: Deps,
   event: Event,
@@ -168,8 +177,21 @@ export const exportEventReport = async (
     { header: "Origen de la entrada", key: "origin", width: 24 },
     { header: "Promotor", key: "promoterCode", width: 18 },
     { header: "Código de compra", key: "orderId", width: 18 },
+    // Una columna por pregunta de registro del organizador (estilo Luma) — el
+    // header es el label real, no el uuid crudo de custom_field_answers.
+    ...event.customFields.map((f) => ({
+      header: f.label,
+      key: `cf_${f.id}`,
+      width: 24,
+    })),
   ];
   for (const a of sortedAttendees) {
+    const customFieldCells = Object.fromEntries(
+      event.customFields.map((f) => [
+        `cf_${f.id}`,
+        safeCell(formatCustomFieldAnswer(a.customFieldAnswers[f.id])),
+      ]),
+    );
     wsA.addRow({
       ticketId: shortId(a.ticketId),
       holderName: safeCell(a.holderName),
@@ -195,6 +217,7 @@ export const exportEventReport = async (
       origin: safeCell(originLabel(a)),
       promoterCode: safeCell(a.promoterCode),
       orderId: shortId(a.orderId),
+      ...customFieldCells,
     });
   }
   wsA.getColumn("usedAt").numFmt = "yyyy-mm-dd hh:mm";

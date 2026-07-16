@@ -31,7 +31,13 @@ import { persistOrderToken, processingQuery } from "@/lib/tickets/orderTokenStor
 import { checkoutErrorMessage } from "@/lib/tickets/checkoutErrors";
 import { formatPrice } from "@/lib/_shared/format";
 import { DatosForm } from "./DatosForm";
+import {
+  CustomFieldsForm,
+  customFieldsValid,
+  type CustomFieldAnswers,
+} from "./CustomFieldsForm";
 import { ContactReview, ContactConfirmActions } from "./ContactConfirmSheet";
+import type { CustomField } from "@/lib/events/customFields";
 
 type CheckoutItem = { ticketTypeId: string; qty: number };
 
@@ -40,6 +46,7 @@ export function CheckoutSheet({
   onClose,
   eventId,
   slug,
+  customFields,
   items,
   promo,
   accent,
@@ -51,6 +58,8 @@ export function CheckoutSheet({
   onClose: () => void;
   eventId: string;
   slug: string;
+  /** Preguntas extra de registro del organizador (estilo Luma). [] si no definió ninguna. */
+  customFields: CustomField[];
   items: CheckoutItem[];
   promo: string | null;
   accent?: string | null;
@@ -80,6 +89,7 @@ export function CheckoutSheet({
   const [guestName, setGuestName] = useState("");
   const [guestPhone, setGuestPhone] = useState("");
   const [guestEmail, setGuestEmail] = useState("");
+  const [customFieldAnswers, setCustomFieldAnswers] = useState<CustomFieldAnswers>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   // Pasos dentro de la MISMA hoja (no apilamos): datos → revisión → yendo →
   // pago. `dir` da la dirección del slide (1 avanza, -1 retrocede) para que el
@@ -183,8 +193,9 @@ export function CheckoutSheet({
   const phoneIsPeru = (parseE164(guestPhone).country?.code ?? "PE") === "PE";
   const phoneOk = phoneIsPeru ? phoneNational.length === 9 : phoneNational.length >= 6;
   const docValid = isValidDocument(guestDni, isForeigner);
+  const customFieldsOk = customFieldsValid(customFields, customFieldAnswers);
   const guestValid =
-    guestName.trim().length >= 2 && docValid && phoneOk && (isLogged || emailOk);
+    guestName.trim().length >= 2 && docValid && phoneOk && (isLogged || emailOk) && customFieldsOk;
 
   const totalCents = quoted?.totalCents ?? fallbackTotalCents;
   const isFree = totalCents === 0;
@@ -215,6 +226,8 @@ export function CheckoutSheet({
         promoCode: promo,
         guest: isLogged ? undefined : attendee,
         buyer: isLogged ? attendee : undefined,
+        customFieldAnswers:
+          Object.keys(customFieldAnswers).length > 0 ? customFieldAnswers : undefined,
       });
 
       // La orden creada es la verdad final. Solo el server decide si es gratis.
@@ -494,6 +507,15 @@ export function CheckoutSheet({
                 guestEmail={guestEmail}
                 setGuestEmail={setGuestEmail}
               />
+              {customFields.length > 0 && (
+                <div className="mt-6">
+                  <CustomFieldsForm
+                    fields={customFields}
+                    answers={customFieldAnswers}
+                    setAnswers={setCustomFieldAnswers}
+                  />
+                </div>
+              )}
               {submitError && (
                 <p className="mt-4 text-center text-[12.5px] text-rose-400">
                   {checkoutErrorMessage(submitError)}

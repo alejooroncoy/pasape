@@ -81,6 +81,12 @@ const buySchema = z.object({
   // Datos del comprador logueado — mismos campos que guest; se persisten en
   // su perfil/kyc para autorrellenar la próxima compra.
   buyer: guestSchema.optional(),
+  // Respuestas a events.customFields (estilo Luma). Solo shape acá — el
+  // "required" de cada pregunta lo hace cumplir el form (frontend), no es
+  // una regla de disponibilidad/precio que deba vivir en el backend.
+  customFieldAnswers: z
+    .record(z.string(), z.union([z.string().max(2000), z.array(z.string().max(200)).max(20), z.boolean()]))
+    .optional(),
 });
 
 const transferSchema = z.object({

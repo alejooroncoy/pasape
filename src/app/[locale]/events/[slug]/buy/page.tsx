@@ -48,6 +48,11 @@ import { sanitizeDocument, sanitizeEmail, sanitizePersonNameLive } from "@/lib/i
 import { checkoutErrorMessage, payErrorReasonParam } from "@/lib/tickets/checkoutErrors";
 import { RecoverTicketsLink } from "@/components/tickets/RecoverTicketsLink";
 import { DatosForm, Section, Field } from "../_checkout/DatosForm";
+import {
+  CustomFieldsForm,
+  customFieldsValid,
+  type CustomFieldAnswers,
+} from "../_checkout/CustomFieldsForm";
 import { ContactConfirmSheet } from "../_checkout/ContactConfirmSheet";
 
 type Props = { params: Promise<{ slug: string }> };
@@ -185,6 +190,9 @@ function BuyFlowInner({ params }: Props) {
   const [guestName, setGuestName] = useState("");
   const [guestEmail, setGuestEmail] = useState("");
   const [guestDni, setGuestDni] = useState("");
+  // Preguntas extra de registro del organizador (estilo Luma) — ver
+  // CustomFieldsForm. Vacío si el evento no definió ninguna.
+  const [customFieldAnswers, setCustomFieldAnswers] = useState<CustomFieldAnswers>({});
   // Extranjero: no tiene DNI peruano → usa pasaporte/documento (alfanumérico).
   // El tipo para Mercado Pago se deduce del formato en el server.
   const [isForeigner, setIsForeigner] = useState(false);
@@ -623,7 +631,8 @@ function BuyFlowInner({ params }: Props) {
   // cuenta (Google) como canal de recuperación garantizado, así que no hace
   // falta forzarlo dos veces.
   const guestValid = guestName.trim().length >= 2 && docValid && phoneOk && (isLogged || emailOk);
-  const orderValid = totalItems > 0 && guestValid;
+  const customFieldsOk = customFieldsValid(data?.event.customFields ?? [], customFieldAnswers);
+  const orderValid = totalItems > 0 && guestValid && customFieldsOk;
 
   if (!data) return <PageLoader />;
   // Redirigiendo al evento para reabrir la hoja de pago (ver efecto de arriba):
@@ -653,6 +662,8 @@ function BuyFlowInner({ params }: Props) {
         // Logueado → buyer (persiste en su perfil/kyc); guest → crea/reusa perfil.
         guest: isLogged ? undefined : attendee,
         buyer: isLogged ? attendee : undefined,
+        customFieldAnswers:
+          Object.keys(customFieldAnswers).length > 0 ? customFieldAnswers : undefined,
       });
       setPreferenceId(res.preference.id);
       setOrderId(res.order.id);
@@ -891,7 +902,17 @@ function BuyFlowInner({ params }: Props) {
                 guestEmail={guestEmail}
                 setGuestEmail={setGuestEmail}
               />
-            ) : (
+            ) : null}
+            {phase === "data" && data.event.customFields.length > 0 && (
+              <div className="mt-8">
+                <CustomFieldsForm
+                  fields={data.event.customFields}
+                  answers={customFieldAnswers}
+                  setAnswers={setCustomFieldAnswers}
+                />
+              </div>
+            )}
+            {phase !== "pick" && phase !== "data" && (
               <>
                 {reservedAt != null && !reservationExpired && (
                   <ReservationCountdown reservedAt={reservedAt} />

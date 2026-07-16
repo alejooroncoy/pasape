@@ -1,0 +1,42 @@
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { registerOAuthClient } from "@/server/identity/oauth/application/RegisterOAuthClient";
+
+// RFC 7591 Dynamic Client Registration: Claude.ai/Cursor llaman esto solos la
+// primera vez que el usuario pega la URL del MCP — no hay pantalla donde el
+// fundador da de alta apps a mano.
+const schema = z.object({
+  client_name: z.string().trim().min(1).max(120).optional(),
+  redirect_uris: z.array(z.string().url()).min(1),
+});
+
+export const POST = async (req: Request) => {
+  const body = await req.json().catch(() => null);
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: "invalid_client_metadata", error_description: parsed.error.issues[0]?.message },
+      { status: 400 },
+    );
+  }
+
+  const result = await registerOAuthClient({
+    clientName: parsed.data.client_name ?? "MCP client",
+    redirectUris: parsed.data.redirect_uris,
+  });
+  if (!result.ok) {
+    return NextResponse.json({ error: "invalid_client_metadata" }, { status: 400 });
+  }
+
+  return NextResponse.json(
+    {
+      client_id: result.value.clientId,
+      client_name: parsed.data.client_name ?? "MCP client",
+      redirect_uris: parsed.data.redirect_uris,
+      token_endpoint_auth_method: "none",
+      grant_types: ["authorization_code", "refresh_token"],
+      response_types: ["code"],
+    },
+    { status: 201 },
+  );
+};

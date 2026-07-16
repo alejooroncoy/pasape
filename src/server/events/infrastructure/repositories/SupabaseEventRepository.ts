@@ -16,6 +16,7 @@ import type {
 } from "@/server/events/ports/EventRepository";
 import type { Event, EventCard, EventCategory, EventSeoEntry, FeeMode, Promo, PresaleTier, TicketType } from "@/server/events/domain/Event";
 import { buyerUnitPriceCents } from "@/lib/tickets/serviceFee";
+import { customFieldsSchema, type CustomField } from "@/lib/events/customFields";
 import {
   computePromoterPayout,
   describePromoterMilestones,
@@ -60,8 +61,17 @@ type EventRow = {
   transfer_max_count: number;
   transfer_requires_kyc: boolean;
   fee_mode: Event["feeMode"];
+  custom_fields: unknown;
   version: number;
   created_at: string;
+};
+
+// Fila corrupta/legacy (columna nueva, filas viejas sin default aplicado, o
+// un valor que ya no matchea el schema vigente) no debe tumbar el render del
+// evento — degrada a "sin preguntas extra" y sigue.
+const parseCustomFields = (raw: unknown): CustomField[] => {
+  const parsed = customFieldsSchema.safeParse(raw ?? []);
+  return parsed.success ? parsed.data : [];
 };
 
 type TicketTypeRow = {
@@ -161,6 +171,7 @@ const toEvent = (r: EventRow): Event => ({
     requiresKyc: r.transfer_requires_kyc,
   },
   feeMode: r.fee_mode,
+  customFields: parseCustomFields(r.custom_fields),
   version: r.version,
   createdAt: r.created_at,
 });
@@ -439,6 +450,7 @@ export const supabaseEventRepository: EventRepository = {
         transfer_max_count: input.transferMaxCount,
         transfer_requires_kyc: input.transferRequiresKyc,
         fee_mode: input.feeMode ?? "buyer_pays_extra",
+        custom_fields: input.customFields ?? [],
       })
       .select("*")
       .single<EventRow>();
@@ -543,6 +555,7 @@ export const supabaseEventRepository: EventRepository = {
     if (input.transferRequiresKyc !== undefined)
       patch.transfer_requires_kyc = input.transferRequiresKyc;
     if (input.feeMode !== undefined) patch.fee_mode = input.feeMode;
+    if (input.customFields !== undefined) patch.custom_fields = input.customFields;
     if (Object.keys(patch).length === 0) return err("nothing_to_update");
     const { data, error } = await db
       .from("events")
@@ -1123,7 +1136,7 @@ export const supabaseEventRepository: EventRepository = {
            holder:profiles!tickets_current_holder_fkey(id, phone),
            order:orders!inner(
              id, event_id, promoter_link_id, status, is_courtesy,
-             guest_email, guest_phone,
+             guest_email, guest_phone, custom_field_answers,
              buyer:profiles!orders_buyer_id_fkey(id, email, phone),
              promoter_link:promoter_links(id, code)
            )`,
@@ -1160,6 +1173,7 @@ export const supabaseEventRepository: EventRepository = {
         is_courtesy: boolean | null;
         guest_email: string | null;
         guest_phone: string | null;
+        custom_field_answers: Record<string, string | string[] | boolean> | null;
         buyer: { id: string; email: string | null; phone: string | null };
         promoter_link: { id: string; code: string } | null;
       };
@@ -1232,6 +1246,7 @@ export const supabaseEventRepository: EventRepository = {
         promoterCode: t.order?.promoter_link?.code ?? null,
         isCourtesy: t.order?.is_courtesy ?? false,
         transferFromName: transfer?.fromName ?? null,
+        customFieldAnswers: t.order?.custom_field_answers ?? {},
       };
     });
 

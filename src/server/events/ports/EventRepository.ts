@@ -2,6 +2,7 @@ import type { Event, EventCard, EventCategory, EventSeoEntry, EventStatus, FeeMo
 import type { Result } from "@/server/_shared/result";
 import type { CommissionConfig } from "@/server/promoters/domain/OrgPromoter";
 import type { MilestoneProgress } from "@/server/promoters/application/CommissionResolver";
+import type { CustomField } from "@/lib/events/customFields";
 
 export type CreateEventInput = {
   organizationId: string;
@@ -34,6 +35,8 @@ export type CreateEventInput = {
   transferRequiresKyc: boolean;
   /** Default "buyer_pays_extra" si se omite. */
   feeMode?: FeeMode;
+  /** Preguntas extra de registro (estilo Luma). Default []. */
+  customFields?: CustomField[];
 };
 
 export type SalesSeriesPoint = {
@@ -236,6 +239,8 @@ export type UpdateEventInput = {
   transferMaxCount?: number;
   transferRequiresKyc?: boolean;
   feeMode?: FeeMode;
+  /** Preguntas extra de registro (estilo Luma). Reemplaza el array completo. */
+  customFields?: CustomField[];
 };
 
 export type AttendeeRow = {
@@ -275,6 +280,9 @@ export type AttendeeRow = {
       completada más reciente). null si nunca se transfirió. Alimenta el Origen
       "Transferida de X". */
   transferFromName: string | null;
+  /** Respuestas a event.customFields de la ORDEN (compartidas por todos los
+      tickets de esa orden) — keyed por field.id. Ver @/lib/events/customFields. */
+  customFieldAnswers: Record<string, string | string[] | boolean>;
 };
 
 export type PromoterReportRow = {

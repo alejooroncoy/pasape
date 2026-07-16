@@ -11,6 +11,8 @@ import { DatePicker, TimePicker } from "@/components/ui/DateTimePicker";
 import { VenueInput, type VenueValue } from "@/components/ui/VenueInput";
 import { MIN_PAID_TICKET_PRICE_CENTS } from "@/lib/tickets/serviceFee";
 import { CATEGORIES } from "@/app/[locale]/_home/categories";
+import { CustomFieldsEditor } from "../../_components/CustomFieldsEditor";
+import type { CustomField } from "@/lib/events/customFields";
 import type { Event, EventCategory, FeeMode, TicketType, Promo } from "@/server/events/domain/Event";
 
 // Versión reducida de EventComposer en modo edit, para eventos creados con la
@@ -63,6 +65,7 @@ export function QuickEditForm({
   const [capacity, setCapacity] = useState(String(ticketType.stock));
   const [promo2x1, setPromo2x1] = useState(promos.some((p) => p.kind === "2x1"));
   const [promo3x2, setPromo3x2] = useState(promos.some((p) => p.kind === "3x2"));
+  const [customFields, setCustomFields] = useState<CustomField[]>(event.customFields);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const priceCents = Money.toCents(priceSoles);
@@ -70,13 +73,23 @@ export function QuickEditForm({
   const priceValid =
     priceSoles.trim() === "" ? false : priceCents === 0 || priceCents >= MIN_PAID_TICKET_PRICE_CENTS;
   const capacityValid = Number.isInteger(capacityNum) && capacityNum > 0;
+  // Espejo del refine de customFieldSchema (zod): sin esto, una pregunta a
+  // medio llenar pasaría el "Guardar cambios" y recién fallaría en el server.
+  const customFieldsValid = customFields.every(
+    (f) =>
+      f.label.trim().length > 0 &&
+      (f.type !== "single_select" && f.type !== "multiple_select"
+        ? true
+        : (f.options?.length ?? 0) >= 2),
+  );
   const ready =
     title.trim().length > 0 &&
     date.length > 0 &&
     time.length > 0 &&
     venue.name.trim().length > 0 &&
     priceValid &&
-    capacityValid;
+    capacityValid &&
+    customFieldsValid;
 
   const isPending = updateEvent.isPending || updateTicketType.isPending || setPromos.isPending;
 
@@ -104,6 +117,9 @@ export function QuickEditForm({
       if (venue.lng !== event.venueLng) patch.venueLng = venue.lng;
       if (venue.url !== event.venueUrl) patch.venueUrl = venue.url;
       if (venue.source !== (event.venueSource ?? "manual")) patch.venueSource = venue.source;
+      if (JSON.stringify(customFields) !== JSON.stringify(event.customFields)) {
+        patch.customFields = customFields;
+      }
 
       const ttPatch: Record<string, unknown> = {};
       if (priceCents !== ticketType.priceCents) ttPatch.priceCents = priceCents;
@@ -315,6 +331,8 @@ export function QuickEditForm({
           </button>
         </div>
       </div>
+
+      <CustomFieldsEditor fields={customFields} onChange={setCustomFields} />
 
       {submitError && (
         <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3.5 py-2.5 text-[12.5px] text-rose-600">

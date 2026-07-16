@@ -516,6 +516,7 @@ export function EventDetailClient({
         onClose={() => setCheckoutOpen(false)}
         eventId={event.id}
         slug={slug}
+        customFields={event.customFields}
         items={checkoutItems}
         promo={promo}
         accent={palette?.accent}

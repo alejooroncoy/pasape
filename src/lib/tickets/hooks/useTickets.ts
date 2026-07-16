@@ -92,6 +92,8 @@ export type BuyInput = {
   /** Datos del comprador logueado (mismos campos que guest, sin crear auth user).
       Se persisten en su perfil/kyc para autorrellenar la próxima compra. */
   buyer?: GuestBuyer;
+  /** Respuestas a event.customFields (estilo Luma) — ver @/lib/events/customFields. */
+  customFieldAnswers?: Record<string, string | string[] | boolean>;
 };
 
 export type BuyResult = {

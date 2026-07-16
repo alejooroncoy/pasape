@@ -1,3 +1,5 @@
+import type { CustomField } from "@/lib/events/customFields";
+
 export type EventStatus = "draft" | "pending_review" | "published" | "closed" | "cancelled";
 
 // Ventana de gracia para vitrinas (org showcase, hub de marca): un evento que
@@ -83,6 +85,13 @@ export type Event = {
   feeMode: FeeMode;
   version: number;
   createdAt: string;
+  /**
+   * Preguntas extra de registro definidas por el organizador (estilo Luma:
+   * Custom Questions). El frontend solo renderiza el formulario a partir de
+   * este array — ver `@/lib/events/customFields` (módulo único, no
+   * reimplementar el shape en otro lado).
+   */
+  customFields: CustomField[];
   /**
    * Stats de listado (opcional): solo lo adjunta `listByOrganization` desde el
    * rollup para que las cards muestren ventas reales sin una query por card.

@@ -41,6 +41,8 @@ import type {
   TicketTypeKind,
 } from "@/server/events/domain/Event";
 import { CATEGORIES } from "../../../_home/categories";
+import { CustomFieldsEditor } from "./CustomFieldsEditor";
+import type { CustomField } from "@/lib/events/customFields";
 import { uploadEventAsset } from "@/lib/events/uploadEventAsset";
 import { extractFlyerPaletteFromUrl } from "@/lib/_shared/extractFlyerPalette";
 import { derivePalette, readableTextColor, type Palette } from "@/lib/_shared/color";
@@ -386,6 +388,7 @@ export function EventComposer(props: EventComposerProps) {
               },
             ],
       publishNow: ev.status === "published" || ev.status === "pending_review",
+      customFields: ev.customFields,
     };
     // initial is stable per mount in edit mode (we re-mount per slug).
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -393,6 +396,7 @@ export function EventComposer(props: EventComposerProps) {
 
   const [title, setTitle] = useState(seedFromEdit?.title ?? "");
   const [description, setDescription] = useState(seedFromEdit?.description ?? "");
+  const [customFields, setCustomFields] = useState<CustomField[]>(seedFromEdit?.customFields ?? []);
   // Preseleccionada en "fiestas" (categoría dominante del ICP nightlife) y requerida:
   // los chips funcionan como radio, nunca queda en null → el evento siempre es filtrable.
   const [category, setCategory] = useState<EventCategory>(seedFromEdit?.category ?? "fiestas");
@@ -463,7 +467,7 @@ export function EventComposer(props: EventComposerProps) {
   const [promoterAssignError, setPromoterAssignError] = useState(false);
   const [publishNow, setPublishNow] = useState(seedFromEdit?.publishNow ?? true);
   const [openSheet, setOpenSheet] = useState<
-    null | "tickets" | "promoters" | "description" | "promos"
+    null | "tickets" | "promoters" | "description" | "promos" | "customFields"
   >(null);
   const [highlight, setHighlight] = useState<
     null | "nombre" | "fecha" | "hora" | "entradas"
@@ -710,6 +714,7 @@ export function EventComposer(props: EventComposerProps) {
         transferRequiresKyc: false,
         feeMode,
         maxTicketsPerPerson: maxPerPerson.trim() ? Number(maxPerPerson) : null,
+        customFields,
       });
       if (selectedPromoterIds.size > 0 && ev.slug) {
         setPromoterAssignError(false);
@@ -816,6 +821,9 @@ export function EventComposer(props: EventComposerProps) {
       if (nextMid !== ev.paletteMid) patch.paletteMid = nextMid;
       if (nextAccent !== ev.paletteAccent) patch.paletteAccent = nextAccent;
       if (nextLayoutUrl !== undefined) patch.venueLayoutUrl = nextLayoutUrl;
+      if (JSON.stringify(customFields) !== JSON.stringify(ev.customFields)) {
+        patch.customFields = customFields;
+      }
 
       // "published" es la intención del organizador; en la PRIMERA publicación
       // el backend lo baja a pending_review hasta que Pasape lo aprueba (ver
@@ -1439,6 +1447,20 @@ export function EventComposer(props: EventComposerProps) {
             />
           )}
 
+          {/* Preguntas de registro (estilo Luma) — qué le pedís al comprador
+              además de nombre/correo. */}
+          <CardButton
+            icon={<IconTag />}
+            label="Preguntas de registro"
+            hint={
+              customFields.length > 0
+                ? `${customFields.length} ${customFields.length === 1 ? "pregunta" : "preguntas"} extra`
+                : "Opcional — además de nombre y correo"
+            }
+            onClick={() => setOpenSheet("customFields")}
+            active={customFields.length > 0}
+          />
+
           {/* Promotores (solo en create — en edit usar pestaña Equipo) */}
           {!isEdit && (
             <CardButton
@@ -1609,6 +1631,11 @@ export function EventComposer(props: EventComposerProps) {
               promos={promos}
               onChange={setPromos}
             />
+          </Sheet>
+        )}
+        {openSheet === "customFields" && (
+          <Sheet onClose={() => setOpenSheet(null)} title="Preguntas de registro">
+            <CustomFieldsEditor fields={customFields} onChange={setCustomFields} />
           </Sheet>
         )}
       </AnimatePresence>

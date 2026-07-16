@@ -59,6 +59,7 @@ import { supabaseTicketRepository as ticketRepo } from "@/server/tickets/infrast
 import type { CourtesySummary } from "@/server/tickets/ports/TicketRepository";
 import type { Event, EventCard, EventCategory, Promo, TicketType } from "../../domain/Event";
 import type { EventStats, ScanFeedItem } from "../../ports/EventRepository";
+import { customFieldsSchema } from "@/lib/events/customFields";
 
 const sanitizeHost = (raw: string): string => {
   let h = raw.trim();
@@ -133,6 +134,7 @@ const createSchema = z.object({
   transferMaxCount: z.number().int().min(0).default(1),
   transferRequiresKyc: z.boolean().default(false),
   feeMode: z.enum(["buyer_pays_extra", "included_in_price"]).optional(),
+  customFields: customFieldsSchema.optional(),
   ticketTypes: z
     .array(
       z.object({
@@ -255,6 +257,7 @@ export const EventsController = {
         transferMaxCount: parsed.data.transferMaxCount,
         transferRequiresKyc: parsed.data.transferRequiresKyc,
         feeMode: parsed.data.feeMode,
+        customFields: parsed.data.customFields,
         ticketTypes: parsed.data.ticketTypes,
       },
     );
@@ -704,6 +707,7 @@ const updateSchema = z.object({
   transferMaxCount: z.number().int().min(0).optional(),
   transferRequiresKyc: z.boolean().optional(),
   feeMode: z.enum(["buyer_pays_extra", "included_in_price"]).optional(),
+  customFields: customFieldsSchema.optional(),
 });
 
 async function guardEventMember(

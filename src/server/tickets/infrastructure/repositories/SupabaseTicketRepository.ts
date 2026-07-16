@@ -610,6 +610,7 @@ export const supabaseTicketRepository: TicketRepository = {
         // Solo en cortesías: así una compra normal no depende de la columna
         // (el default false lo pone la DB).
         ...(input.courtesy ? { is_courtesy: true } : {}),
+        ...(input.customFieldAnswers ? { custom_field_answers: input.customFieldAnswers } : {}),
       })
       .select("*")
       .single<OrderRow>();
