@@ -219,12 +219,19 @@ function LogoutRow({ onClose }: { onClose: () => void }) {
     onClose();
     await signOut();
     // Ruta que exige sesión (ej. /tickets): no tiene sentido quedarse ahí
-    // deslogeado, volvemos al home. En páginas públicas (ej. /events/[slug])
-    // el usuario se queda donde está — el header se actualiza solo porque
-    // useSignOut ya deja currentUserKey en null vía setQueryData.
+    // deslogeado, volvemos al home.
     if (isBuyerProtectedPath(pathname)) {
       router.replace("/");
+      return;
     }
+    // Páginas públicas (home, /events/[slug], etc.): el usuario se queda
+    // donde está, pero el `user` que ve Nav/SideDrawer viene de un prop
+    // server-rendered (getSessionUser() en el page.tsx), no de la query
+    // client-side que useSignOut ya limpia. Sin refresh(), ese prop queda
+    // congelado con la sesión vieja hasta un reload manual — el usuario ve
+    // que "no se cierra la sesión". router.refresh() re-ejecuta el Server
+    // Component con la cookie ya limpia y el header cae a deslogeado.
+    router.refresh();
   };
 
   return (
