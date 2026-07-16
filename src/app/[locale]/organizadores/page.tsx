@@ -86,7 +86,7 @@ export default async function OrganizadoresPage({ params }: Props) {
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }}
       />
       <div className="home-light home-wash cart-grain relative min-h-screen bg-cart-bg font-sans text-cart-ink">
         <Nav waHref={WA_HREF} />
