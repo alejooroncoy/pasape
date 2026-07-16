@@ -4,7 +4,8 @@ import { supabaseEventRepository } from "@/server/events/infrastructure/reposito
 import { unitsRemaining } from "@/lib/events/ticketDisplay";
 
 export type EventAvailability = {
-  totalRemaining: number;
+  /** `null` = sin límite (algún tipo de entrada no tiene tope) — nunca "low stock". */
+  totalRemaining: number | null;
   lowStock: boolean;
   asOf: string;
 };
@@ -17,14 +18,15 @@ export const getEventAvailability = async (slug: string): Promise<Result<EventAv
     return err("event_not_found");
   }
 
-  const totalRemaining = data.ticketTypes.reduce(
-    (sum, tt) => sum + unitsRemaining(tt),
-    0,
-  );
+  const totalRemaining = data.ticketTypes.reduce<number | null>((sum, tt) => {
+    if (sum === null) return null;
+    const remaining = unitsRemaining(tt);
+    return remaining === null ? null : sum + remaining;
+  }, 0);
 
   return ok({
     totalRemaining,
-    lowStock: totalRemaining > 0 && totalRemaining <= 20,
+    lowStock: totalRemaining !== null && totalRemaining > 0 && totalRemaining <= 20,
     asOf: new Date().toISOString(),
   });
 };

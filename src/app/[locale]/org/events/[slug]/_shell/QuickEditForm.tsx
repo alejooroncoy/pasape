@@ -62,17 +62,20 @@ export function QuickEditForm({
     source: event.venueSource ?? "manual",
   });
   const [priceSoles, setPriceSoles] = useState(String(Money.toSoles(ticketType.priceCents)));
-  const [capacity, setCapacity] = useState(String(ticketType.stock));
+  // Vacío = sin límite (ver AGENTS.md) — solo aplica acá porque QuickEditForm
+  // SIEMPRE maneja kind="general" (el tipo del prop lo garantiza).
+  const [capacity, setCapacity] = useState(ticketType.stock === null ? "" : String(ticketType.stock));
   const [promo2x1, setPromo2x1] = useState(promos.some((p) => p.kind === "2x1"));
   const [promo3x2, setPromo3x2] = useState(promos.some((p) => p.kind === "3x2"));
   const [customFields, setCustomFields] = useState<CustomField[]>(event.customFields);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const priceCents = Money.toCents(priceSoles);
-  const capacityNum = Number(capacity);
+  // "" = sin límite (null). Cualquier otra cosa debe ser un entero > 0.
+  const capacityNum = capacity.trim() === "" ? null : Number(capacity);
   const priceValid =
     priceSoles.trim() === "" ? false : priceCents === 0 || priceCents >= MIN_PAID_TICKET_PRICE_CENTS;
-  const capacityValid = Number.isInteger(capacityNum) && capacityNum > 0;
+  const capacityValid = capacityNum === null || (Number.isInteger(capacityNum) && capacityNum > 0);
   // Espejo del refine de customFieldSchema (zod): sin esto, una pregunta a
   // medio llenar pasaría el "Guardar cambios" y recién fallaría en el server.
   const customFieldsValid = customFields.every(
@@ -296,6 +299,7 @@ export function QuickEditForm({
               type="number"
               inputMode="numeric"
               min={1}
+              placeholder="Sin límite"
               value={capacity}
               onChange={(e) => setCapacity(e.target.value)}
               className="w-full bg-transparent text-[16px] text-cart-ink outline-none placeholder:text-cart-ink-4"

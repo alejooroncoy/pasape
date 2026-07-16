@@ -35,11 +35,12 @@ export function OrgHomeClient() {
   const draftCount = events.data?.filter((e) => e.status === "draft").length ?? 0;
   const pendingReviewCount =
     events.data?.filter((e) => e.status === "pending_review").length ?? 0;
-  const totalCapacity =
-    events.data?.reduce(
-      (sum, e) => sum + (e.listStats?.capacity ?? e.capacity.totalCapacity ?? 0),
-      0,
-    ) ?? 0;
+  // null = algún evento tiene un tipo de entrada sin límite (gana sobre la suma).
+  const totalCapacity = (events.data ?? []).reduce<number | null>((sum, e) => {
+    if (sum === null) return null;
+    const eventCapacity = e.listStats ? e.listStats.capacity : (e.capacity.totalCapacity ?? 0);
+    return eventCapacity === null ? null : sum + eventCapacity;
+  }, 0);
 
   // Revenue del evento activo (si hay uno publicado). Si hay varios, se suma el primero visible.
   const liveStats = useEventStats(liveEvent?.slug ?? "");
@@ -86,7 +87,10 @@ export function OrgHomeClient() {
               }
             />
             <StatCard label="Publicados" value={String(publishedCount)} tone="accent" />
-            <StatCard label="Aforo total" value={totalCapacity.toLocaleString("es-PE")} />
+            <StatCard
+              label="Aforo total"
+              value={totalCapacity === null ? "Sin límite" : totalCapacity.toLocaleString("es-PE")}
+            />
             <StatCard label="Recaudado" value={liveEvent ? formatMoney(liveRevenue) : "—"} hint={liveEvent ? liveEvent.title : "Sin evento activo"} tone="green" />
           </section>
 
@@ -137,7 +141,14 @@ export function OrgHomeClient() {
                       </p>
                     </div>
                     <div className="grid w-full grid-cols-3 gap-3 sm:w-auto sm:min-w-[360px]">
-                      <MiniStat label="Aforo" value={String(liveStats.data?.capacity ?? liveEvent.capacity.totalCapacity ?? 0)} />
+                      <MiniStat
+                        label="Aforo"
+                        value={
+                          liveStats.data
+                            ? (liveStats.data.capacity == null ? "Sin límite" : String(liveStats.data.capacity))
+                            : String(liveEvent.capacity.totalCapacity ?? 0)
+                        }
+                      />
                       <MiniStat label="Validadas" value={String(liveStats.data?.validated ?? 0)} tone="green" />
                       <MiniStat label="Recaudado" value={formatMoney(liveStats.data?.revenueCents ?? 0)} tone="accent" />
                     </div>

@@ -153,8 +153,9 @@ function Inner() {
   // stats se refrescan por polling de useEventStats (ver F3). El scan en vivo
   // ya actualiza la UI localmente.
   const validated = statsData?.validated ?? 0;
-  const capacity  = statsData?.capacity  ?? 0;
-  const aforo     = capacity > 0 ? Math.round((validated / capacity) * 100) : 0;
+  // null = sin límite. No cae en el `??` (se distingue explícito abajo).
+  const capacity  = statsData ? statsData.capacity : 0;
+  const aforo     = capacity !== null && capacity > 0 ? Math.round((validated / capacity) * 100) : 0;
 
   // Desktop detection
   const [isDesktop, setIsDesktop] = useState(false);
@@ -590,7 +591,7 @@ function Inner() {
           <div style={{ display: "flex", flexDirection: "column", padding: "20px 24px 20px 16px", gap: 14, overflow: "hidden" }}>
 
             {/* Stats */}
-            {capacity > 0 && (
+            {capacity !== null && capacity > 0 && (
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, flexShrink: 0 }}>
                 <div style={{ padding: "12px 16px", borderRadius: 14, background: C.bg2, border: `1px solid ${C.line}` }}>
                   <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", color: C.dimmer, textTransform: "uppercase", marginBottom: 4 }}>Ingresadas</div>
@@ -732,7 +733,7 @@ function Inner() {
 
         {/* Estado derecha: stats + online */}
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-          {capacity > 0 && (
+          {capacity !== null && capacity > 0 && (
             <div style={{ padding: "5px 10px", borderRadius: 999, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(8px)", fontSize: 12, fontWeight: 700, color: "#fff", display: "flex", alignItems: "center", gap: 4 }}>
               <span style={{ color: C.green }}>{validated}</span>
               <span style={{ color: "rgba(255,255,255,0.4)" }}>/{capacity}</span>

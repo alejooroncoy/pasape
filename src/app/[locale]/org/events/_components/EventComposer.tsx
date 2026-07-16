@@ -147,6 +147,9 @@ export type EventComposerProps =
 // ============================================================
 const uid = () => Math.random().toString(36).slice(2, 9);
 const toCents = (s: string) => Money.toCents(s);
+/** "" = sin límite (null). Un box nunca llega vacío (su UI siempre exige un número). */
+const capacityValue = (capacity: string): number | null =>
+  capacity.trim() === "" ? null : Number(capacity);
 
 /**
  * Preview de "cuánto le va a llegar cobrado al comprador" mientras el
@@ -336,7 +339,8 @@ export function EventComposer(props: EventComposerProps) {
       kind: tt.kind as TicketKind,
       priceSoles: fromCents(tt.priceCents),
       // El form usa un solo campo de cupo; el dominio lo separa por kind.
-      capacity: String(tt.kind === "box" ? tt.seats : tt.stock),
+      // "" = sin límite (solo posible en tt.stock, un box nunca es null).
+      capacity: tt.kind === "box" ? String(tt.seats) : (tt.stock === null ? "" : String(tt.stock)),
       boxLabel: tt.boxLabel ?? "",
       unitNoun: tt.unitNoun ?? "",
       saleEndsAt: tt.saleEndsAt ?? "",
@@ -545,10 +549,12 @@ export function EventComposer(props: EventComposerProps) {
     }
   }, [date]);
 
+  // Cupo vacío = sin límite (solo para entradas — un box siempre necesita un
+  // número real, ver AGENTS.md "capacity es ambiguo").
   const validTickets = tickets.filter(
     (t) =>
       t.name.trim() &&
-      Number(t.capacity) > 0 &&
+      (t.kind === "box" ? Number(t.capacity) > 0 : t.capacity.trim() === "" || Number(t.capacity) > 0) &&
       (t.kind !== "box" || t.boxLabel.trim().length > 0),
   );
 
@@ -649,7 +655,7 @@ export function EventComposer(props: EventComposerProps) {
           name: t.name,
           kind: t.kind,
           priceCents: toCents(t.priceSoles),
-          capacity: Number(t.capacity),
+          capacity: capacityValue(t.capacity),
           boxLabel: t.kind === "box" ? t.boxLabel.trim() : null,
           unitNoun: t.kind === "box" ? t.unitNoun.trim() || null : null,
           saleEndsAt: t.saleEndsAt || null,
@@ -877,7 +883,7 @@ export function EventComposer(props: EventComposerProps) {
           name: t.name,
           kind: t.kind,
           priceCents: toCents(t.priceSoles),
-          capacity: Number(t.capacity),
+          capacity: capacityValue(t.capacity),
           boxLabel: t.kind === "box" ? t.boxLabel.trim() : null,
           unitNoun: t.kind === "box" ? t.unitNoun.trim() || null : null,
           saleEndsAt: t.saleEndsAt || null,
@@ -926,7 +932,7 @@ export function EventComposer(props: EventComposerProps) {
         if (t.name !== orig.name) ttPatch.name = t.name;
         const nextPrice = toCents(t.priceSoles);
         if (nextPrice !== orig.priceCents) ttPatch.priceCents = nextPrice;
-        const nextCap = Number(t.capacity);
+        const nextCap = capacityValue(t.capacity);
         const origCap = orig.kind === "box" ? orig.seats : orig.stock;
         if (nextCap !== origCap) ttPatch.capacity = nextCap;
         const nextLabel = t.kind === "box" ? t.boxLabel.trim() : null;
@@ -2801,6 +2807,7 @@ function TicketsEditor({
             <Stepper
               label="Disponibles"
               value={t.capacity}
+              placeholder="Sin límite"
               onChange={(v) => update(t.rowKey, { capacity: v })}
             />
           </div>
@@ -2985,11 +2992,13 @@ function Stepper({
   suffix,
   value,
   onChange,
+  placeholder,
 }: {
   label: string;
   suffix?: string;
   value: string;
   onChange: (v: string) => void;
+  placeholder?: string;
 }) {
   return (
     <label className="flex flex-col gap-1 rounded-xl bg-cart-bg-elev px-3 py-2">
@@ -2999,8 +3008,9 @@ function Stepper({
         <input
           inputMode="numeric"
           value={value}
+          placeholder={placeholder}
           onChange={(e) => onChange(e.target.value.replace(/[^\d]/g, ""))}
-          className="w-full bg-transparent font-mono text-[15px] font-semibold text-cart-ink outline-none"
+          className="w-full bg-transparent font-mono text-[15px] font-semibold text-cart-ink outline-none placeholder:text-cart-ink-4"
         />
       </div>
     </label>

@@ -20,7 +20,8 @@ export type CreateTicketTypePayload = {
   name: string;
   kind: TicketTypeKind;
   priceCents: number;
-  capacity: number;
+  /** `null` = sin límite (solo válido para kind="general"). */
+  capacity: number | null;
   boxLabel?: string | null;
   unitNoun?: string | null;
   saleEndsAt?: string | null;
@@ -31,7 +32,8 @@ export type CreateTicketTypePayload = {
 export type UpdateTicketTypePayload = {
   name?: string;
   priceCents?: number;
-  capacity?: number;
+  /** `null` = sin límite (solo válido para kind="general"). */
+  capacity?: number | null;
   boxLabel?: string | null;
   unitNoun?: string | null;
   saleEndsAt?: string | null;

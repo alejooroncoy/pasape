@@ -29,7 +29,7 @@ export function unitNounPlural(noun: string): string {
  * invitar; no se venden plazas sueltas del mismo box a desconocidos.
  */
 export type TicketStatus =
-  | { kind: "available"; remaining: number }
+  | { kind: "available"; remaining: number | null }
   | { kind: "soldout" }
   | { kind: "expired" };
 
@@ -37,6 +37,7 @@ export function ticketStatus(tt: TicketType): TicketStatus {
   if (tt.saleStatus === "expired") return { kind: "expired" };
   if (tt.saleStatus === "soldout") return { kind: "soldout" };
   if (tt.kind === "box") return { kind: "available", remaining: 1 };
+  if (tt.stock === null) return { kind: "available", remaining: null };
   const remaining = Math.max(0, tt.stock - tt.sold);
   return { kind: "available", remaining };
 }
@@ -59,8 +60,8 @@ export function boxSeats(tt: TicketType): number {
   return tt.kind === "box" ? tt.seats : 0;
 }
 
-/** Unidades vendibles totales. Box = 1 (se vende entero). Entrada = su stock. */
-export function stockTotal(tt: TicketType): number {
+/** Unidades vendibles totales. Box = 1 (se vende entero). Entrada = su stock (`null` = sin límite). */
+export function stockTotal(tt: TicketType): number | null {
   return tt.kind === "box" ? 1 : tt.stock;
 }
 
@@ -69,9 +70,11 @@ export function unitsSold(tt: TicketType): number {
   return tt.kind === "box" ? (tt.sold > 0 ? 1 : 0) : tt.sold;
 }
 
-/** Unidades disponibles para vender. Box: 1 o 0. Entrada: stock − vendidas. */
-export function unitsRemaining(tt: TicketType): number {
-  return Math.max(0, stockTotal(tt) - unitsSold(tt));
+/** Unidades disponibles para vender. Box: 1 o 0. Entrada: stock − vendidas, o `null` si es sin límite. */
+export function unitsRemaining(tt: TicketType): number | null {
+  const total = stockTotal(tt);
+  if (total === null) return null;
+  return Math.max(0, total - unitsSold(tt));
 }
 
 /**
@@ -80,9 +83,10 @@ export function unitsRemaining(tt: TicketType): number {
  * columna cruda `capacity` (asientos en box, stock en entrada). Este helper es
  * el único punto que interpreta ese shape de stats.
  */
-export type StatTicketRow = { kind: string; sold: number; capacity: number };
+export type StatTicketRow = { kind: string; sold: number; capacity: number | null };
 export function soldLine(tt: StatTicketRow): string {
   if (tt.kind === "box") return tt.sold > 0 ? "Reservado" : "Disponible";
+  if (tt.capacity === null) return `${tt.sold} vendidas · sin límite`;
   return `${tt.sold} de ${tt.capacity} vendidas`;
 }
 
@@ -98,9 +102,8 @@ export function ticketSubtitle(tt: TicketType): string {
       ? "Reservado"
       : `Para ${boxSeats(tt)} personas · Tú invitas`;
   }
-  return status.kind === "soldout"
-    ? "Agotado"
-    : `${status.remaining} disponibles`;
+  if (status.kind === "soldout") return "Agotado";
+  return status.remaining === null ? "Disponible" : `${status.remaining} disponibles`;
 }
 
 /** Capitaliza la primera letra (ej. "box" → "Box"). */
@@ -133,8 +136,9 @@ export function groupBoxesByNoun(boxes: TicketType[]): TicketGroup[] {
 export type GroupSummary = {
   totalBoxes: number;
   freeBoxes: number;
-  totalSeats: number;
-  freeSeats: number;
+  /** `null` = alguna entrada del grupo es sin límite. */
+  totalSeats: number | null;
+  freeSeats: number | null;
   isAllBoxes: boolean;
   isAllSoldOut: boolean;
   minPriceCents: number | null;
@@ -146,8 +150,8 @@ export type GroupSummary = {
 export function summarizeGroup(group: TicketGroup): GroupSummary {
   let totalBoxes = 0;
   let freeBoxes = 0;
-  let totalSeats = 0;
-  let freeSeats = 0;
+  let totalSeats: number | null = 0;
+  let freeSeats: number | null = 0;
   let nonBoxCount = 0;
   let minPriceCents: number | null = null;
   let currency = "PEN";
@@ -162,8 +166,9 @@ export function summarizeGroup(group: TicketGroup): GroupSummary {
       nounCounts.set(n, (nounCounts.get(n) ?? 0) + 1);
     } else {
       nonBoxCount += 1;
-      totalSeats += tt.stock;
-      freeSeats += Math.max(0, tt.stock - tt.sold);
+      totalSeats = tt.stock === null || totalSeats === null ? null : totalSeats + tt.stock;
+      freeSeats =
+        tt.stock === null || freeSeats === null ? null : freeSeats + Math.max(0, tt.stock - tt.sold);
     }
     const status = ticketStatus(tt);
     if (status.kind === "available") {
@@ -204,17 +209,18 @@ export function summarizeGroup(group: TicketGroup): GroupSummary {
  */
 export function eventAvailability(items: TicketType[]): {
   freeBoxes: number;
-  freeSeats: number;
-  total: number;
+  /** `null` = alguna entrada del evento es sin límite. */
+  freeSeats: number | null;
+  total: number | null;
 } {
   let freeBoxes = 0;
-  let freeSeats = 0;
+  let freeSeats: number | null = 0;
   for (const tt of items) {
     if (tt.kind === "box") {
       if (tt.sold === 0) freeBoxes += 1;
     } else {
-      freeSeats += Math.max(0, tt.stock - tt.sold);
+      freeSeats = tt.stock === null || freeSeats === null ? null : freeSeats + Math.max(0, tt.stock - tt.sold);
     }
   }
-  return { freeBoxes, freeSeats, total: freeBoxes + freeSeats };
+  return { freeBoxes, freeSeats, total: freeSeats === null ? null : freeBoxes + freeSeats };
 }

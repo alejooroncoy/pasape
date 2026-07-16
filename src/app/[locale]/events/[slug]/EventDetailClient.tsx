@@ -793,7 +793,7 @@ function AvailabilityHeader({
   availability,
   palette,
 }: {
-  availability: { freeBoxes: number; freeSeats: number; total: number };
+  availability: { freeBoxes: number; freeSeats: number | null; total: number | null };
   palette: Palette | null;
 }) {
   // Verde/rojo fijos (emerald-400, rose-300) se pierden contra paletas de la
@@ -824,7 +824,9 @@ function AvailabilityHeader({
       `${availability.freeBoxes} ${availability.freeBoxes === 1 ? "espacio libre" : "espacios libres"}`,
     );
   }
-  if (availability.freeSeats > 0) {
+  if (availability.freeSeats === null) {
+    parts.push("Entradas disponibles");
+  } else if (availability.freeSeats > 0) {
     parts.push(`${availability.freeSeats} entradas`);
   }
   return (
@@ -879,7 +881,11 @@ function GroupCardList({
       {groups.map((group) => {
         const key = detailGroupKey(group);
         const summary = summarizeGroup(group);
-        const maxQty = summary.freeBoxes + summary.freeSeats;
+        // Los grupos acá son solo de boxes (ver groupBoxesByNoun) — freeSeats
+        // nunca debería ser null en la práctica, el `?? 0` es defensivo.
+        // null = sin límite (algún tipo del grupo no tiene tope) — NO se
+        // coerciona a 0, o el stepper queda bloqueado en 0 para siempre.
+        const maxQty = summary.freeSeats === null ? null : summary.freeBoxes + summary.freeSeats;
         return (
           <GroupCard
             key={key}
@@ -913,7 +919,8 @@ function GroupCard({
   summary: GroupSummary;
   compact?: boolean;
   qty: number;
-  maxQty: number;
+  /** `null` = sin límite. */
+  maxQty: number | null;
   onQtyChange?: (qty: number) => void;
   palette: Palette | null;
 }) {
@@ -932,7 +939,7 @@ function GroupCard({
 
   const handleCounterClick = (e: React.MouseEvent, delta: number) => {
     e.stopPropagation();
-    const next = Math.max(0, Math.min(maxQty, qty + delta));
+    const next = maxQty === null ? Math.max(0, qty + delta) : Math.max(0, Math.min(maxQty, qty + delta));
     onQtyChange?.(next);
   };
 
@@ -1060,7 +1067,7 @@ function GroupCard({
                 <motion.button
                   type="button"
                   onClick={(e) => handleCounterClick(e, +1)}
-                  disabled={qty >= maxQty}
+                  disabled={maxQty !== null && qty >= maxQty}
                   whileTap={{ scale: 0.8 }}
                   className="grid size-7 place-items-center rounded-full transition hover:brightness-110 disabled:opacity-40"
                   style={{ background: cardAccent, color: stepperTextColor }}
@@ -1130,7 +1137,7 @@ function GroupAvailabilityLine({ summary }: { summary: GroupSummary }) {
       `${summary.freeBoxes} de ${summary.totalBoxes} ${word} ${summary.freeBoxes === 1 ? "libre" : "libres"}`,
     );
   }
-  if (summary.freeSeats > 0) {
+  if (summary.freeSeats !== null && summary.freeSeats > 0) {
     parts.push(`${summary.freeSeats} disponibles`);
   }
   return <>{parts.join(" · ")}</>;

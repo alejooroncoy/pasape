@@ -31,8 +31,13 @@ export function EventCard({ event, variant }: { event: Event; variant: Variant }
       ? { label: eventStatusLabel(event.status), tone: eventStatusTone(event.status) }
       : STATUS_CONFIG[variant];
   const sold = event.listStats?.sold ?? 0;
-  const capacity = event.listStats?.capacity ?? event.capacity?.totalCapacity ?? 0;
-  const pct = capacity > 0 ? Math.min(100, Math.round((sold / capacity) * 100)) : 0;
+  // `listStats.capacity === null` es "sin límite" (explícito, no "sin dato") —
+  // no puede caer en el `??` de abajo o se confundiría con el fallback.
+  const capacity = event.listStats
+    ? event.listStats.capacity
+    : (event.capacity?.totalCapacity ?? 0);
+  const capacityLabel = capacity === null ? "sin límite" : String(capacity || "—");
+  const pct = capacity && capacity > 0 ? Math.min(100, Math.round((sold / capacity) * 100)) : 0;
 
   return (
     <motion.div
@@ -116,10 +121,10 @@ export function EventCard({ event, variant }: { event: Event; variant: Variant }
                 <span>
                   {sold}{" "}
                   <span className="text-cart-ink-4">
-                    / {capacity || "—"} vendidos
+                    / {capacityLabel} vendidos
                   </span>
                 </span>
-                <span className="text-cart-ink-4">{pct}%</span>
+                {capacity !== null && <span className="text-cart-ink-4">{pct}%</span>}
               </div>
               <div className="h-1 w-full overflow-hidden rounded-full bg-cart-line">
                 <motion.div
@@ -163,7 +168,7 @@ export function EventCard({ event, variant }: { event: Event; variant: Variant }
               />
             </div>
             <span className="text-[11px] tabular-nums text-cart-ink-4">
-              {sold}/{capacity || "—"}
+              {sold}/{capacityLabel}
             </span>
           </div>
         </div>

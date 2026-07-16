@@ -334,7 +334,7 @@ export const exportEventReport = async (
       v: kindLabelFor(t.kind === "box"),
     });
     row.getCell(3).value = t.sold;
-    row.getCell(4).value = t.capacity;
+    row.getCell(4).value = t.capacity ?? "Sin límite";
     row.getCell(5).value = Money.toSoles(t.revenueCents);
     row.getCell(5).numFmt = SOLES_FMT;
   }

@@ -97,7 +97,8 @@ export type Event = {
    * rollup para que las cards muestren ventas reales sin una query por card.
    * El frontend solo lo muestra; el backend lo calcula.
    */
-  listStats?: { sold: number; capacity: number; revenueCents: number };
+  /** `capacity: null` = sin límite (algún tipo de entrada del evento no tiene tope). */
+  listStats?: { sold: number; capacity: number | null; revenueCents: number };
 };
 
 /**
@@ -244,10 +245,14 @@ export type BoxTicketType = TicketTypeBase & {
   seats: number;
 };
 
-/** Entrada individual (1 acceso = 1 persona). `stock` = cuántas se venden. */
+/**
+ * Entrada individual (1 acceso = 1 persona). `stock` = cuántas se venden.
+ * `null` = sin límite (eventos virtuales o sin aforo físico) — un box SIEMPRE
+ * tiene asientos finitos, por eso esto no aplica a `BoxTicketType.seats`.
+ */
 export type AdmissionTicketType = TicketTypeBase & {
   kind: Exclude<TicketTypeKind, "box">;
-  stock: number;
+  stock: number | null;
 };
 
 /**

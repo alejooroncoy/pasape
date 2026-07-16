@@ -7,7 +7,7 @@ import { payErrorInfo, normalizeCheckoutErrorCode } from "@/lib/tickets/checkout
 import { api } from "@/lib/_shared/api-client";
 
 type Availability = {
-  totalRemaining: number;
+  totalRemaining: number | null;
   lowStock: boolean;
   asOf: string;
 };
@@ -104,7 +104,7 @@ export default function BuyerPayErrorPage({ params, searchParams }: Props) {
             <p className="mt-3 text-[13px] leading-relaxed text-cart-ink-3">{info.note}</p>
           )}
 
-          {showLowStock && availability && (
+          {showLowStock && availability && availability.totalRemaining !== null && (
             <div className="mt-3 flex flex-col gap-1 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-left">
               <div className="flex items-center gap-2">
                 <span className="size-2 animate-pulse rounded-full bg-amber-400" />

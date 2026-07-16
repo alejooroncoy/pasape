@@ -141,7 +141,9 @@ const createSchema = z.object({
         name: z.string().min(1),
         kind: z.enum(["general", "box"]).default("general"),
         priceCents: z.number().int().min(0),
-        capacity: z.number().int().min(0),
+        // null/ausente = sin límite (solo válido para kind="general" — se
+        // valida en createEvent()/updateEvent(), un box siempre es finito).
+        capacity: z.number().int().min(0).nullable().optional(),
         boxLabel: z.string().trim().min(1).max(40).nullable().optional(),
         unitNoun: z.string().trim().max(24).nullable().optional(),
         saleEndsAt: z.string().datetime().nullable().optional(),
@@ -258,7 +260,7 @@ export const EventsController = {
         transferRequiresKyc: parsed.data.transferRequiresKyc,
         feeMode: parsed.data.feeMode,
         customFields: parsed.data.customFields,
-        ticketTypes: parsed.data.ticketTypes,
+        ticketTypes: parsed.data.ticketTypes.map((tt) => ({ ...tt, capacity: tt.capacity ?? null })),
       },
     );
   },
@@ -368,7 +370,7 @@ export const EventsController = {
       name: parsed.data.name,
       kind: parsed.data.kind,
       priceCents: parsed.data.priceCents,
-      capacity: parsed.data.capacity,
+      capacity: parsed.data.capacity ?? null,
       boxLabel: parsed.data.boxLabel ?? null,
       unitNoun: parsed.data.unitNoun ?? null,
       saleEndsAt: parsed.data.saleEndsAt ?? null,
@@ -631,7 +633,8 @@ const createTicketTypeSchema = z.object({
   name: z.string().min(1),
   kind: z.enum(["general", "box"]).default("general"),
   priceCents: z.number().int().min(0),
-  capacity: z.number().int().min(0),
+  // null/ausente = sin límite (solo válido para kind="general").
+  capacity: z.number().int().min(0).nullable().optional(),
   boxLabel: z.string().trim().min(1).max(40).nullable().optional(),
   unitNoun: z.string().trim().max(24).nullable().optional(),
   saleEndsAt: z.string().datetime().nullable().optional(),
@@ -646,7 +649,7 @@ const createTicketTypeSchema = z.object({
 const updateTicketTypeSchema = z.object({
   name: z.string().min(1).optional(),
   priceCents: z.number().int().min(0).optional(),
-  capacity: z.number().int().min(0).optional(),
+  capacity: z.number().int().min(0).nullable().optional(),
   boxLabel: z.string().trim().min(1).max(40).nullable().optional(),
   unitNoun: z.string().trim().max(24).nullable().optional(),
   saleEndsAt: z.string().datetime().nullable().optional(),

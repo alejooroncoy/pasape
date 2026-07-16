@@ -68,7 +68,8 @@ export type EventStats = {
     name: string;
     kind: TicketType["kind"];
     priceCents: number;
-    capacity: number;
+    /** `null` = sin límite (no aplica a boxes, siempre finitos). */
+    capacity: number | null;
     /** Vendidas (pagadas) de este tipo — NO incluye reservas. */
     sold: number;
     /** Validadas (status 'used') de este tipo. En un box: personas que ya entraron. */
@@ -159,7 +160,8 @@ export type CreateTicketTypeInput = {
   name: string;
   kind: TicketType["kind"];
   priceCents: number;
-  capacity: number;
+  /** `null` = sin límite. Solo válido para kind="general". */
+  capacity: number | null;
   boxLabel?: string | null;
   unitNoun?: string | null;
   saleEndsAt?: string | null;
@@ -177,7 +179,8 @@ export type CreateTicketTypeInput = {
 export type UpdateTicketTypeInput = {
   name?: string;
   priceCents?: number;
-  capacity?: number;
+  /** `null` = sin límite. Solo válido para kind="general". */
+  capacity?: number | null;
   boxLabel?: string | null;
   unitNoun?: string | null;
   saleEndsAt?: string | null;

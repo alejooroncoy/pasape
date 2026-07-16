@@ -327,7 +327,7 @@ const priceOrder = async (
     if (isBox) {
       if (item.qty !== 1) return err("box_qty_must_be_one");
       if (tt.sold >= 1) return err("sold_out");
-    } else if (tt.sold + item.qty > tt.capacity) {
+    } else if (tt.capacity !== null && tt.sold + item.qty > tt.capacity) {
       return err("sold_out");
     }
     // El precio sale del ticket-type. Una entrada gratis es simplemente un tipo

@@ -26,13 +26,27 @@ const eventCustomFieldInput = withSelectOptionsRule(
   customFieldObjectSchema.omit({ id: true }).extend({ id: z.string().uuid().optional() }),
 );
 
-const ticketTypeInput = z.object({
-  name: z.string().min(1),
-  kind: z.enum(["general", "box"]).default("general"),
-  priceCents: z.number().int().min(0).default(0),
-  capacity: z.number().int().min(0),
-  boxLabel: z.string().trim().min(1).max(40).optional(),
-});
+// `capacity` null/ausente = sin límite (eventos virtuales o sin aforo físico)
+// — solo para kind="general". Un box SIEMPRE es finito (asientos reales), así
+// que ahí `capacity` sigue siendo obligatorio.
+const ticketTypeInput = z
+  .object({
+    name: z.string().min(1),
+    kind: z.enum(["general", "box"]).default("general"),
+    priceCents: z.number().int().min(0).default(0),
+    capacity: z
+      .number()
+      .int()
+      .min(0)
+      .nullable()
+      .optional()
+      .describe("Cupo. Null o ausente = sin límite (solo válido si kind=general)."),
+    boxLabel: z.string().trim().min(1).max(40).optional(),
+  })
+  .refine((v) => v.kind !== "box" || v.capacity != null, {
+    message: "Un box necesita capacity (asientos) — no puede ser sin límite",
+    path: ["capacity"],
+  });
 
 const identityFromAuth = (authInfo: AuthInfo | undefined): ApiKeyIdentity => {
   const extra = authInfo?.extra as ApiKeyIdentity | undefined;
@@ -106,7 +120,7 @@ const handler = createMcpHandler(
               ...f,
               id: f.id ?? crypto.randomUUID(),
             })),
-            ticketTypes: input.ticketTypes,
+            ticketTypes: input.ticketTypes.map((tt) => ({ ...tt, capacity: tt.capacity ?? null })),
           },
         );
         if (!result.ok) {
@@ -236,7 +250,7 @@ const handler = createMcpHandler(
           `Neto para la organización: S/${soles(stats.netCents)} (bruto S/${soles(stats.revenueCents)}, comisión Pasape S/${soles(stats.serviceFeeCents)}).`,
           ...stats.ticketTypes.map(
             (t) =>
-              `- ${t.name}: ${t.sold}/${t.capacity} vendidas, ${t.validated} validadas, S/${soles(t.revenueCents)}`,
+              `- ${t.name}: ${t.sold}/${t.capacity ?? "sin límite"} vendidas, ${t.validated} validadas, S/${soles(t.revenueCents)}`,
           ),
         ];
         return { content: [{ type: "text", text: lines.join("\n") }] };

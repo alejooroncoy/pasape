@@ -97,7 +97,12 @@ export const purchaseSignalsRepo = {
         .select("capacity, sold")
         .in("id", ticketTypeIds);
       if (!data?.length) return null;
-      const remainings = data.map((r) => Math.max(0, (r.capacity ?? 0) - (r.sold ?? 0)));
+      // capacity null = sin límite: no aporta señal de "quedan pocas" (nunca
+      // "quedan 0" — sería un falso positivo de scalping en un tipo sin tope).
+      const remainings = data
+        .filter((r) => r.capacity !== null)
+        .map((r) => Math.max(0, (r.capacity ?? 0) - (r.sold ?? 0)));
+      if (remainings.length === 0) return null;
       return Math.min(...remainings);
     } catch (e) {
       console.warn("[antibot] fallo leyendo stock remanente (fail-open):", e);

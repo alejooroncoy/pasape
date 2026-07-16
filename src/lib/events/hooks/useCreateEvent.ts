@@ -37,7 +37,8 @@ export type CreateEventInput = {
     name: string;
     kind?: "general" | "box";
     priceCents: number;
-    capacity: number;
+    /** `null` = sin límite (solo válido para kind="general"). */
+    capacity: number | null;
     boxLabel?: string | null;
     unitNoun?: string | null;
   }>;

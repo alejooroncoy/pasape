@@ -81,7 +81,8 @@ type TicketTypeRow = {
   kind: TicketType["kind"];
   price_cents: number;
   currency: string;
-  capacity: number;
+  /** `null` = sin límite (solo aplica a entradas; un box siempre es finito). */
+  capacity: number | null;
   sold: number;
   position: number;
   box_label: string | null;
@@ -117,6 +118,7 @@ const computeSaleStatus = (
 ): "available" | "expired" | "soldout" => {
   if (r.sale_ends_at && new Date(r.sale_ends_at) < now) return "expired";
   if (r.kind === "box") return r.sold > 0 ? "soldout" : "available";
+  if (r.capacity === null) return "available";
   return r.capacity - r.sold > 0 ? "available" : "soldout";
 };
 
@@ -298,7 +300,10 @@ const toTicketType = (
   // Normaliza kinds: 'box' aparte; cualquier otro (incl. 'vip' rezagado o
   // 'invitation' previo a la migración de cortesías) cae a 'general'. Desacopla
   // el código del momento exacto en que corre la migración de DB.
-  if (r.kind === "box") return { ...base, kind: "box", seats: r.capacity };
+  // Un box siempre es finito — lo garantiza el constraint
+  // ticket_types_box_capacity_not_null. El `?? 0` es solo para que TS no se
+  // queje del tipo compartido con `capacity` de entradas (que sí es nullable).
+  if (r.kind === "box") return { ...base, kind: "box", seats: r.capacity ?? 0 };
   return {
     ...base,
     kind: "general",
@@ -369,9 +374,14 @@ export const supabaseEventRepository: EventRepository = {
       .select("event_id, sold, capacity, revenue_cents")
       .in("event_id", events.map((e) => e.id));
     const byId = new Map(
-      (rollups as Array<{ event_id: string; sold: number; capacity: number; revenue_cents: number }> | null)?.map(
-        (r) => [r.event_id, r],
-      ) ?? [],
+      (
+        rollups as Array<{
+          event_id: string;
+          sold: number;
+          capacity: number | null;
+          revenue_cents: number;
+        }> | null
+      )?.map((r) => [r.event_id, r]) ?? [],
     );
     return events.map((e) => {
       const r = byId.get(e.id);
@@ -379,7 +389,7 @@ export const supabaseEventRepository: EventRepository = {
         ...e,
         listStats: {
           sold: r?.sold ?? 0,
-          capacity: r?.capacity ?? 0,
+          capacity: r ? r.capacity : 0,
           revenueCents: r?.revenue_cents ?? 0,
         },
       };
@@ -783,7 +793,7 @@ export const supabaseEventRepository: EventRepository = {
         name: string;
         kind: TicketType["kind"];
         price_cents: number;
-        capacity: number;
+        capacity: number | null;
         box_label: string | null;
         unit_noun: string | null;
       }> | null) ?? [];
@@ -796,7 +806,7 @@ export const supabaseEventRepository: EventRepository = {
       .select("capacity, sold, reserved, validated, revenue_cents")
       .eq("event_id", eventId)
       .maybeSingle<{
-        capacity: number;
+        capacity: number | null;
         sold: number;
         reserved: number;
         validated: number;
@@ -804,7 +814,7 @@ export const supabaseEventRepository: EventRepository = {
       }>();
     const sold = rollup?.sold ?? 0;
     const reserved = rollup?.reserved ?? 0;
-    const capacity = rollup?.capacity ?? 0;
+    const capacity = rollup?.capacity ?? null;
     const validatedCount = rollup?.validated ?? 0;
     const revenueCents = rollup?.revenue_cents ?? 0;
 
@@ -1094,7 +1104,7 @@ export const supabaseEventRepository: EventRepository = {
       revenueCents,
       serviceFeeCents,
       netCents,
-      capacity: capacity || null,
+      capacity,
       salesSeries,
       ticketTypes: ticketTypes.map((t) => ({
         id: t.id,
