@@ -4,11 +4,11 @@ type Variant = "primary" | "ghost" | "ghost-dark";
 
 const VARIANTS: Record<Variant, string> = {
   primary:
-    "bg-accent text-white font-medium shadow-cta hover:-translate-y-px hover:shadow-glow-strong",
+    "bg-cart-accent text-white font-medium shadow-[inset_0_0_0_1px_rgba(255,255,255,0.12),0_10px_28px_-10px_var(--color-cart-accent-glow-strong)] hover:-translate-y-px hover:brightness-105",
   ghost:
-    "text-ink-2 font-medium border border-line hover:text-ink hover:border-line-strong",
+    "text-cart-ink-2 font-medium border border-cart-line hover:text-cart-ink hover:border-cart-line-strong",
   "ghost-dark":
-    "text-ink-3 font-medium bg-transparent border-0 hover:text-accent",
+    "text-cart-ink-3 font-medium bg-transparent border-0 hover:text-cart-accent",
 };
 
 type CommonProps = {

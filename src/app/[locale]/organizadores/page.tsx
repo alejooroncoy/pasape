@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { setRequestLocale } from "next-intl/server";
 import { ComoFunciona } from "./components/como-funciona";
-import { Faq, FAQS } from "./components/faq";
+import { Faq } from "./components/faq";
+import { FAQS } from "./components/faq-data";
 import { SiteFooter } from "./components/footer";
 import { FormSection } from "./components/form-section";
 import { Hero } from "./components/hero";
@@ -21,9 +22,21 @@ type Props = {
   params: Promise<{ locale: string }>;
 };
 
-const ORG_TITLE = "Sistema operativo para eventos";
+const ORG_TITLE = "Vende tu fiesta sin Excel ni lista en la puerta";
 const ORG_DESCRIPTION =
-  "Vende entradas, gestiona pagos, QR, boxes, cortesías, reportes y control de acceso desde un solo lugar.";
+  "Para organizadores de fiestas, raves y eventos universitarios que hoy venden por WhatsApp y Yape. Cada entrada con su QR, tus promotores y boxes ordenados, y una puerta que ya no busca nombres en una lista de cientos.";
+
+const ORG_KEYWORDS = [
+  "vender entradas para fiestas",
+  "sistema de entradas para eventos universitarios",
+  "vender entradas por WhatsApp",
+  "ticketera para fiestas y raves",
+  "QR para control de acceso eventos",
+  "vender boxes y mesas para eventos",
+  "software para organizador de fiestas Perú",
+  "reemplazar Excel para vender entradas",
+  "cobrar entradas con Yape y Plin",
+];
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { locale } = await params;
@@ -32,6 +45,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     description: ORG_DESCRIPTION,
     locale,
     path: "/organizadores",
+    keywords: ORG_KEYWORDS,
   });
 }
 
@@ -48,7 +62,7 @@ export default async function OrganizadoresPage({ params }: Props) {
         url: SITE_URL,
         logo: `${SITE_URL}/icon`,
         description:
-          "Sistema operativo para vender, gestionar y controlar eventos con entradas digitales, pagos, QR, boxes, cortesías y reportes.",
+          "Pasape ayuda a organizadores de fiestas, raves y eventos universitarios a vender entradas con QR, ordenar promotores y boxes, y controlar el acceso en la puerta.",
         areaServed: "PE",
       },
       {
@@ -72,22 +86,24 @@ export default async function OrganizadoresPage({ params }: Props) {
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }}
       />
-      <Nav waHref={WA_HREF} />
-      <main>
-        <Hero waHref={WA_HREF} />
-        <Problema />
-        <Promos />
-        <PanelReporte />
-        <ComoFunciona />
-        <Price waHref={WA_HREF} />
-        <Faq />
-        <FormSection waHref={WA_HREF} />
-      </main>
-      <SiteFooter />
-      <WaFloat waHref={WA_HREF} />
-      <RevealObserver />
+      <div className="home-light home-wash cart-grain relative min-h-screen bg-cart-bg font-sans text-cart-ink">
+        <Nav waHref={WA_HREF} />
+        <main>
+          <Hero waHref={WA_HREF} />
+          <Problema />
+          <Promos />
+          <PanelReporte />
+          <ComoFunciona />
+          <Price waHref={WA_HREF} />
+          <Faq />
+          <FormSection waHref={WA_HREF} />
+        </main>
+        <SiteFooter />
+        <WaFloat waHref={WA_HREF} />
+        <RevealObserver />
+      </div>
     </>
   );
 }
