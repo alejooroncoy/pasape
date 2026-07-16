@@ -36,10 +36,13 @@ const nextConfig: NextConfig = {
       { key: "X-Frame-Options", value: "DENY" },
       { key: "X-Content-Type-Options", value: "nosniff" },
       { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-      // HSTS: fuerza HTTPS (Vercel siempre sirve TLS). 2 años + subdominios.
+      // HSTS: fuerza HTTPS en el host de la app (Vercel siempre sirve TLS). 2 años.
+      // NO usamos includeSubDomains: aplicaría a todo subdominio de pasape.lat por 2
+      // años (browser-cached, difícil de revertir) y rompería cualquier subdominio
+      // que no sirva HTTPS. Añadirlo requiere antes verificar el DNS de todos.
       {
         key: "Strict-Transport-Security",
-        value: "max-age=63072000; includeSubDomains",
+        value: "max-age=63072000",
       },
       // No desactivamos camera: el modo Puerta la usa para escanear QR.
       {
