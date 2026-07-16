@@ -35,6 +35,10 @@ export function SideDrawer({ user, open, onClose, onSignIn, onSelectCategory }: 
   // panel para alguien que ya es organizador. Mismo criterio que SellerCta.
   const me = useCurrentUser();
   const isSeller = Boolean(me.data?.activeOrgSlug);
+  // Mientras `activeOrgSlug` todavía no resuelve (primera sesión sin caché
+  // persistida), no sabemos si es seller o fan — mostrar el link equivocado
+  // un instante es peor que no mostrar ninguno hasta confirmarlo.
+  const sellerKnown = !me.isPending;
 
   const allEvents = useBrowseEvents(null);
   const categoriesWithEvents = new Set(
@@ -105,7 +109,7 @@ export function SideDrawer({ user, open, onClose, onSignIn, onSelectCategory }: 
                   {/* Ya vende (tiene marca activa): acceso directo a su panel
                       acá arriba, junto al resto de "tu cuenta" — evita el
                       doble tap de bajar a "Pasape" → landing → panel. */}
-                  {isSeller && (
+                  {sellerKnown && isSeller && (
                     <AccountRow
                       href="/org"
                       icon={
@@ -149,7 +153,7 @@ export function SideDrawer({ user, open, onClose, onSignIn, onSelectCategory }: 
               <Section title="Pasape" topBorder>
                 {/* Ya vende: su acceso al panel ya vive arriba en "Tu cuenta"
                     — repetirlo acá era el duplicado. */}
-                {!isSeller && (
+                {sellerKnown && !isSeller && (
                   <Link
                     href="/organizadores"
                     onClick={onClose}
