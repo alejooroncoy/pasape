@@ -174,6 +174,8 @@ export type CreateTicketTypeInput = {
   freeUntilAt?: string | null;
   /** Tramos de preventa. Si se pasa, reemplaza todos los existentes. */
   presaleTiers?: Array<Pick<PresaleTier, "priceCents" | "endsAt">>;
+  /** RSVP con aprobación. Solo válido si priceCents === 0. */
+  requiresApproval?: boolean;
 };
 
 export type UpdateTicketTypeInput = {
@@ -188,6 +190,8 @@ export type UpdateTicketTypeInput = {
   presaleQty?: number | null;
   presaleEndsAt?: string | null;
   description?: string | null;
+  /** RSVP con aprobación. Solo válido si priceCents === 0. */
+  requiresApproval?: boolean;
   /** Liberar gratis: toggle + fin opcional (null = mientras esté activa). */
   isFree?: boolean;
   freeUntilAt?: string | null;

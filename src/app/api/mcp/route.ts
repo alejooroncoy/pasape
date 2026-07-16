@@ -8,6 +8,7 @@ import { updateEvent } from "@/server/events/application/UpdateEvent";
 import { listEventsByOrganization } from "@/server/events/application/ListEventsByOrganization";
 import { getEventStats } from "@/server/events/application/GetEventStats";
 import { supabaseEventRepository as repo } from "@/server/events/infrastructure/repositories/SupabaseEventRepository";
+import { supabaseTicketRepository as ticketRepo } from "@/server/tickets/infrastructure/repositories/SupabaseTicketRepository";
 import { customFieldObjectSchema, withSelectOptionsRule } from "@/lib/events/customFields";
 import type { ApiKeyIdentity } from "@/server/identity/apiKeys/domain/ApiKey";
 
@@ -42,10 +43,21 @@ const ticketTypeInput = z
       .optional()
       .describe("Cupo. Null o ausente = sin límite (solo válido si kind=general)."),
     boxLabel: z.string().trim().min(1).max(40).optional(),
+    requiresApproval: z
+      .boolean()
+      .optional()
+      .describe(
+        "RSVP con aprobación (estilo Luma): el organizador aprueba/rechaza cada inscripción " +
+          "antes de emitir el QR. Solo válido si priceCents=0.",
+      ),
   })
   .refine((v) => v.kind !== "box" || v.capacity != null, {
     message: "Un box necesita capacity (asientos) — no puede ser sin límite",
     path: ["capacity"],
+  })
+  .refine((v) => !v.requiresApproval || v.priceCents === 0, {
+    message: "requiresApproval solo es válido para entradas gratis (priceCents=0)",
+    path: ["requiresApproval"],
   });
 
 const identityFromAuth = (authInfo: AuthInfo | undefined): ApiKeyIdentity => {
@@ -254,6 +266,81 @@ const handler = createMcpHandler(
           ),
         ];
         return { content: [{ type: "text", text: lines.join("\n") }] };
+      },
+    );
+
+    server.registerTool(
+      "list_pending_registrations",
+      {
+        title: "Ver inscripciones pendientes de aprobación",
+        description:
+          "Lista las inscripciones (RSVP con aprobación) que esperan tu decisión: aprobar o " +
+          "rechazar. Solo aparecen si el tipo de entrada tiene requiresApproval=true.",
+        inputSchema: { eventId: z.string().uuid() },
+      },
+      async ({ eventId }, extra) => {
+        const identity = identityFromAuth(extra.authInfo);
+        const event = await findEventById(identity.organizationId, eventId);
+        if (!event) {
+          return { content: [{ type: "text", text: "Error: evento no encontrado" }], isError: true };
+        }
+        const result = await ticketRepo.listPendingApprovals(eventId);
+        if (!result.ok) {
+          return { content: [{ type: "text", text: `Error: ${result.error}` }], isError: true };
+        }
+        if (result.value.length === 0) {
+          return { content: [{ type: "text", text: "No hay inscripciones pendientes de aprobación." }] };
+        }
+        const lines = result.value.map(
+          (p) =>
+            `- orderId=${p.orderId} — ${p.guestName ?? "sin nombre"} (${p.guestEmail ?? p.guestPhone ?? "sin contacto"}) — ${p.ticketTypeName}` +
+            (Object.keys(p.customFieldAnswers).length > 0
+              ? ` — respuestas: ${JSON.stringify(p.customFieldAnswers)}`
+              : ""),
+        );
+        return { content: [{ type: "text", text: lines.join("\n") }] };
+      },
+    );
+
+    server.registerTool(
+      "approve_registration",
+      {
+        title: "Aprobar inscripción",
+        description: "Aprueba una inscripción pendiente: se genera y envía el QR al asistente.",
+        inputSchema: { eventId: z.string().uuid(), orderId: z.string().uuid() },
+      },
+      async ({ eventId, orderId }, extra) => {
+        const identity = identityFromAuth(extra.authInfo);
+        const event = await findEventById(identity.organizationId, eventId);
+        if (!event) {
+          return { content: [{ type: "text", text: "Error: evento no encontrado" }], isError: true };
+        }
+        const result = await ticketRepo.approveRegistration(orderId, eventId);
+        if (!result.ok) {
+          return { content: [{ type: "text", text: `Error: ${result.error}` }], isError: true };
+        }
+        return { content: [{ type: "text", text: `Inscripción aprobada — el QR ya se envió.` }] };
+      },
+    );
+
+    server.registerTool(
+      "reject_registration",
+      {
+        title: "Rechazar inscripción",
+        description: "Rechaza una inscripción pendiente. No hay reembolso porque siempre es gratis.",
+        inputSchema: { eventId: z.string().uuid(), orderId: z.string().uuid() },
+      },
+      async ({ eventId, orderId }, extra) => {
+        const identity = identityFromAuth(extra.authInfo);
+        const event = await findEventById(identity.organizationId, eventId);
+        if (!event) {
+          return { content: [{ type: "text", text: "Error: evento no encontrado" }], isError: true };
+        }
+        const result = await ticketRepo.rejectRegistration(orderId, eventId);
+        if (!result.ok) {
+          return { content: [{ type: "text", text: `Error: ${result.error}` }], isError: true };
+        }
+        return { content: [{ type: "text", text: `Inscripción rechazada.` }] };
       },
     );
   },

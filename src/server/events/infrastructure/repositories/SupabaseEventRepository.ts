@@ -94,6 +94,7 @@ type TicketTypeRow = {
   description: string | null;
   is_free: boolean;
   free_until_at: string | null;
+  requires_approval: boolean;
 };
 
 type PromoRow = {
@@ -284,6 +285,7 @@ const toTicketType = (
     description: r.description,
     isFree: r.is_free,
     freeUntilAt: r.free_until_at,
+    requiresApproval: r.requires_approval,
     isFreeActive,
     saleStatus: computeSaleStatus(r, now),
     isPresaleActive: active != null,
@@ -683,6 +685,7 @@ export const supabaseEventRepository: EventRepository = {
         description: input.description ?? null,
         is_free: input.isFree ?? false,
         free_until_at: input.freeUntilAt ?? null,
+        requires_approval: input.requiresApproval ?? false,
       })
       .select("*")
       .single<TicketTypeRow>();
@@ -718,6 +721,7 @@ export const supabaseEventRepository: EventRepository = {
     if ("presaleQty" in input) patch.presale_qty = input.presaleQty ?? null;
     if ("presaleEndsAt" in input) patch.presale_ends_at = input.presaleEndsAt ?? null;
     if ("description" in input) patch.description = input.description ?? null;
+    if ("requiresApproval" in input) patch.requires_approval = input.requiresApproval ?? false;
     if ("isFree" in input) patch.is_free = input.isFree ?? false;
     if ("freeUntilAt" in input) patch.free_until_at = input.freeUntilAt ?? null;
     // presaleTiers se gestiona por separado (delete+insert)

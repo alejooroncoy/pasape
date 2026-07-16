@@ -26,6 +26,8 @@ type TicketTypeInput = {
   /** Liberar gratis: toggle + fin opcional (null = mientras esté activa). */
   isFree?: boolean;
   freeUntilAt?: string | null;
+  /** RSVP con aprobación (estilo Luma). Solo válido si priceCents === 0. */
+  requiresApproval?: boolean;
 };
 
 export const createEvent = async (
@@ -45,6 +47,9 @@ export const createEvent = async (
     if (tt.priceCents > 0 && tt.priceCents < MIN_PAID_TICKET_PRICE_CENTS) {
       return err("price_below_minimum");
     }
+    // RSVP con aprobación solo para entradas genuinamente gratis — combinar
+    // con pago abre una decisión de UX no resuelta (ver migración).
+    if (tt.requiresApproval && tt.priceCents > 0) return err("approval_only_for_free_tickets");
   }
 
   const created = await repo.create(input);
@@ -68,6 +73,7 @@ export const createEvent = async (
       presale_ends_at: tt.presaleEndsAt ?? null,
       is_free: tt.isFree ?? false,
       free_until_at: tt.freeUntilAt ?? null,
+      requires_approval: tt.requiresApproval ?? false,
     })),
   );
   if (error) return err(error.message);

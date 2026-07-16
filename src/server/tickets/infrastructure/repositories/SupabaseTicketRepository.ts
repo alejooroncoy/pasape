@@ -278,7 +278,7 @@ const priceOrder = async (
   const { data: tts, error: ttErr } = await db
     .from("ticket_types")
     .select(
-      "id, price_cents, capacity, sold, currency, event_id, kind, box_label, sale_ends_at, presale_price_cents, presale_qty, presale_ends_at, is_free, free_until_at",
+      "id, price_cents, capacity, sold, currency, event_id, kind, box_label, sale_ends_at, presale_price_cents, presale_qty, presale_ends_at, is_free, free_until_at, requires_approval",
     )
     .in("id", ttIds);
   if (ttErr || !tts) return err(ttErr?.message ?? "ticket_types_lookup_failed");
@@ -729,6 +729,30 @@ export const supabaseTicketRepository: TicketRepository = {
 
     // ticket_types.sold lo mantiene el trigger tickets_sync_sold a partir de los
     // tickets reales — no se toca a mano (antes se desfasaba).
+
+    // RSVP con aprobación: si CUALQUIER línea es de un ticket_type que exige
+    // aprobación, la orden entera queda pending_approval (no paid) y sus
+    // tickets pending_approval (no active, sin QR válido) — el organizador
+    // decide desde la bandeja de aprobación (ver ApproveRegistration.ts).
+    // Solo aplica a gratis (validado al crear/editar el ticket_type).
+    const requiresApproval = input.items.some(
+      (item) => tts.find((t) => t.id === item.ticketTypeId)?.requires_approval,
+    );
+    if (requiresApproval) {
+      await db
+        .from("orders")
+        .update({ status: "pending_approval" })
+        .eq("id", orderRow.id);
+      await db
+        .from("tickets")
+        .update({ status: "pending_approval" })
+        .eq("order_id", orderRow.id);
+      return ok({
+        order: { ...toOrder(orderRow), status: "pending_approval" as const },
+        tickets: (tkRows as TicketRow[]).map((r) => toTicket({ ...r, status: "pending_approval" })),
+        preference: { id: "", initPoint: "" },
+      });
+    }
 
     // Órdenes gratuitas: marcar paid inmediatamente, despachar QR, recalc hitos.
     if (total === 0) {
@@ -1518,6 +1542,85 @@ export const supabaseTicketRepository: TicketRepository = {
     }
 
     return ok({ ...summary, alreadyRequested: false });
+  },
+
+  async listPendingApprovals(eventId) {
+    const db = supabaseAdmin();
+    const { data, error } = await db
+      .from("orders")
+      .select(
+        "id, created_at, guest_name, guest_email, guest_phone, custom_field_answers, tickets!inner(ticket_type_id, ticket_types(name))",
+      )
+      .eq("event_id", eventId)
+      .eq("status", "pending_approval")
+      .order("created_at", { ascending: true });
+    if (error) return err(error.message);
+    const rows = (data as Array<{
+      id: string;
+      created_at: string;
+      guest_name: string | null;
+      guest_email: string | null;
+      guest_phone: string | null;
+      custom_field_answers: Record<string, string | string[] | boolean> | null;
+      tickets: Array<{ ticket_types: { name: string }[] | { name: string } | null }>;
+    }> | null) ?? [];
+    return ok(
+      rows.map((r) => {
+        const tt = r.tickets[0]?.ticket_types;
+        const ticketTypeName = (Array.isArray(tt) ? tt[0]?.name : tt?.name) ?? "Entrada";
+        return {
+          orderId: r.id,
+          createdAt: r.created_at,
+          guestName: r.guest_name,
+          guestEmail: r.guest_email,
+          guestPhone: r.guest_phone,
+          ticketTypeName,
+          customFieldAnswers: r.custom_field_answers ?? {},
+        };
+      }),
+    );
+  },
+
+  async approveRegistration(orderId, eventId) {
+    const db = supabaseAdmin();
+    const { data: order } = await db
+      .from("orders")
+      .select("id, status")
+      .eq("id", orderId)
+      .eq("event_id", eventId)
+      .maybeSingle<{ id: string; status: string }>();
+    if (!order) return err("not_found");
+    if (order.status !== "pending_approval") return err("not_pending_approval");
+    await db
+      .from("orders")
+      .update({ status: "paid", paid_at: new Date().toISOString() })
+      .eq("id", orderId);
+    await db.from("tickets").update({ status: "active" }).eq("order_id", orderId);
+    after(() =>
+      dispatchTicketDelivery({ db }, orderId).catch((e) => {
+        console.error("[approveRegistration] dispatchTicketDelivery failed:", (e as Error).message);
+        Sentry.captureException(e, {
+          tags: { area: "ticket-delivery" },
+          extra: { orderId, stage: "approveRegistration" },
+        });
+      }),
+    );
+    return ok({ orderId });
+  },
+
+  async rejectRegistration(orderId, eventId) {
+    const db = supabaseAdmin();
+    const { data: order } = await db
+      .from("orders")
+      .select("id, status")
+      .eq("id", orderId)
+      .eq("event_id", eventId)
+      .maybeSingle<{ id: string; status: string }>();
+    if (!order) return err("not_found");
+    if (order.status !== "pending_approval") return err("not_pending_approval");
+    await db.from("orders").update({ status: "rejected" }).eq("id", orderId);
+    await db.from("tickets").update({ status: "void" }).eq("order_id", orderId);
+    return ok({ orderId });
   },
 };
 

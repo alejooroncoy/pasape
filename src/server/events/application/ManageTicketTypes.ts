@@ -27,6 +27,7 @@ export const createTicketType = async (
   // Un box siempre es finito (asientos reales) — "sin límite" solo aplica a
   // entradas normales.
   if (input.kind === "box" && input.capacity === null) return err("box_capacity_required");
+  if (input.requiresApproval && input.priceCents > 0) return err("approval_only_for_free_tickets");
   return repo.createTicketType(eventId, input);
 };
 
@@ -47,6 +48,9 @@ export const updateTicketType = async (
   if (input.capacity === null && current.kind === "box") {
     return err("box_capacity_required");
   }
+  const nextPrice = input.priceCents ?? current.priceCents;
+  const nextRequiresApproval = input.requiresApproval ?? current.requiresApproval;
+  if (nextRequiresApproval && nextPrice > 0) return err("approval_only_for_free_tickets");
   if (input.priceCents !== undefined) {
     if (input.priceCents < 0) return err("price_invalid");
     if (input.priceCents > 0 && input.priceCents < MIN_PAID_TICKET_PRICE_CENTS) {

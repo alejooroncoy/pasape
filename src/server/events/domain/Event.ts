@@ -237,6 +237,13 @@ type TicketTypeBase = {
   countdownEndsAt: string | null;
   /** Tramos de preventa ordenados por ends_at asc. El backend elige el activo. */
   presaleTiers: PresaleTier[];
+  /**
+   * RSVP con aprobación (estilo Luma): el organizador aprueba/rechaza cada
+   * inscripción antes de emitir el QR. Solo válido si priceCents === 0 —
+   * combinar aprobación con pago es un caso no resuelto (deliberadamente
+   * fuera de alcance, ver migración 20260716110000_rsvp_approval.sql).
+   */
+  requiresApproval: boolean;
 };
 
 /** Espacio reservable. `seats` = personas que entran (NO es stock: el box se vende entero). */
