@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { optimizeImageUrl } from "@/lib/images/optimizeUrl";
 import { Link } from "@/i18n/navigation";
 import { getLegalEntityPublicHub } from "@/server/identity/organizations/application/GetLegalEntityPublicHub";
 import { BrandFilterBar, type BrandFilterItem, type FilterableEvent } from "./BrandFilterBar";
@@ -122,7 +123,7 @@ function Cover({
     <div className="relative h-[220px] w-full overflow-hidden lg:h-[320px]">
       {coverUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={coverUrl} alt="" className="absolute inset-0 size-full object-cover" />
+        <img src={optimizeImageUrl(coverUrl, "event-hero") ?? coverUrl} alt="" className="absolute inset-0 size-full object-cover" />
       ) : (
         <div
           className="absolute inset-0"
@@ -182,7 +183,7 @@ function HubLogo({
     >
       {logoUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={logoUrl} alt={name} className="size-full object-cover" />
+        <img src={optimizeImageUrl(logoUrl, "card") ?? logoUrl} alt={name} className="size-full object-cover" />
       ) : (
         <div
           className="grid size-full place-items-center font-sans font-semibold text-white"

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import QRCodeStyling from "qr-code-styling";
+import type QRCodeStyling from "qr-code-styling";
 
 type Props = {
   code: string;
@@ -16,36 +16,52 @@ export const QrSquare = ({ code, size = 220, centerImage, errorCorrectionLevel =
   const ref = useRef<HTMLDivElement | null>(null);
   const qrRef = useRef<QRCodeStyling | null>(null);
   const firstRender = useRef(true);
+  // Siempre el `code` más reciente: el import de qr-code-styling es asíncrono, así
+  // que el `code` pudo cambiar (rota cada 10s) antes de que la lib cargue. La ref
+  // se actualiza en un effect (no en render) para leerla desde el callback async.
+  const latestCode = useRef(code);
+  useEffect(() => {
+    latestCode.current = code;
+  });
 
   useEffect(() => {
     if (!ref.current) return;
+    // qr-code-styling es una lib pesada (canvas/SVG). Cargarla dinámicamente aquí
+    // — en vez de un import estático top-level — la saca del bundle inicial de todo
+    // el flujo de tickets (el QR siempre se pinta en cliente tras montar).
+    let cancelled = false;
+    void import("qr-code-styling").then(({ default: QRCodeStyling }) => {
+      if (cancelled || !ref.current) return;
 
-    const qr = new QRCodeStyling({
-      width: size,
-      height: size,
-      data: code,
-      image: centerImage,
-      qrOptions: { errorCorrectionLevel: centerImage ? "H" : errorCorrectionLevel },
-      // Balance estética/lectura: módulos LEVEMENTE redondeados ("rounded") para
-      // que se vea diseñado, pero los PATRONES DE ESQUINA (finder) CUADRADOS — son
-      // los que el lector usa para ubicar/orientar el QR; redondearlos lo hace
-      // lento/poco fiable. "extra-rounded" difumina demasiado los bordes. Negro
-      // puro sobre blanco = contraste máximo.
-      dotsOptions: { type: "rounded", color: "#000000" },
-      cornersSquareOptions: { type: "square", color: "#000000" },
-      cornersDotOptions: { type: "square", color: "#000000" },
-      backgroundOptions: { color: "#ffffff" },
-      imageOptions: {
-        crossOrigin: "anonymous",
-        margin: 6,
-        imageSize: 0.22,
-      },
+      const qr = new QRCodeStyling({
+        width: size,
+        height: size,
+        data: latestCode.current,
+        image: centerImage,
+        qrOptions: { errorCorrectionLevel: centerImage ? "H" : errorCorrectionLevel },
+        // Balance estética/lectura: módulos LEVEMENTE redondeados ("rounded") para
+        // que se vea diseñado, pero los PATRONES DE ESQUINA (finder) CUADRADOS — son
+        // los que el lector usa para ubicar/orientar el QR; redondearlos lo hace
+        // lento/poco fiable. "extra-rounded" difumina demasiado los bordes. Negro
+        // puro sobre blanco = contraste máximo.
+        dotsOptions: { type: "rounded", color: "#000000" },
+        cornersSquareOptions: { type: "square", color: "#000000" },
+        cornersDotOptions: { type: "square", color: "#000000" },
+        backgroundOptions: { color: "#ffffff" },
+        imageOptions: {
+          crossOrigin: "anonymous",
+          margin: 6,
+          imageSize: 0.22,
+        },
+      });
+
+      qr.append(ref.current);
+      qrRef.current = qr;
     });
 
-    qr.append(ref.current);
-    qrRef.current = qr;
-
     return () => {
+      cancelled = true;
+      qrRef.current = null;
       if (ref.current) ref.current.innerHTML = "";
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps

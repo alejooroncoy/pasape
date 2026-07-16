@@ -16,6 +16,7 @@ import { RefundRequestSheet } from "@/components/tickets/RefundRequestSheet";
 import { useTicket, useCancelTransfer, useMyTickets, useCarouselScope, ticketDetailKey } from "@/lib/tickets/hooks/useTickets";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { useOnline } from "@/lib/_shared/useOnline";
+import { optimizeImageUrl } from "@/lib/images/optimizeUrl";
 import { useLocalRotatingQr, prewarmTicketCert } from "@/lib/tickets/hooks/useLocalRotatingQr";
 import { clientEvents } from "@/lib/analytics/clientEvents";
 import { useBoxForTicket, useRealtimeBox, useRemoveBoxMember, useAddBoxCompanion } from "@/lib/boxes/hooks/useBoxes";
@@ -816,7 +817,7 @@ function CoverHero({
     >
       {cover ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={cover} alt="" className={"absolute inset-0 size-full object-cover " + (dim ? "grayscale" : "")} />
+        <img src={optimizeImageUrl(cover, "event-hero") ?? cover} alt="" className={"absolute inset-0 size-full object-cover " + (dim ? "grayscale" : "")} />
       ) : (
         <div className="absolute inset-0" style={{ background: gradient }} />
       )}
