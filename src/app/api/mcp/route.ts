@@ -6,6 +6,7 @@ import { verifyAccessToken } from "@/server/identity/oauth/application/VerifyAcc
 import { createEvent } from "@/server/events/application/CreateEvent";
 import { updateEvent } from "@/server/events/application/UpdateEvent";
 import { listEventsByOrganization } from "@/server/events/application/ListEventsByOrganization";
+import { getEventStats } from "@/server/events/application/GetEventStats";
 import { supabaseEventRepository as repo } from "@/server/events/infrastructure/repositories/SupabaseEventRepository";
 import { customFieldObjectSchema, withSelectOptionsRule } from "@/lib/events/customFields";
 import type { ApiKeyIdentity } from "@/server/identity/apiKeys/domain/ApiKey";
@@ -209,6 +210,35 @@ const handler = createMcpHandler(
         const lines = events.map(
           (e) => `- ${e.title} (${e.status}) — id=${e.id}, slug=${e.slug}`,
         );
+        return { content: [{ type: "text", text: lines.join("\n") }] };
+      },
+    );
+
+    server.registerTool(
+      "get_event_stats",
+      {
+        title: "Ver ventas e inscritos",
+        description:
+          "Cuántas entradas se vendieron/reservaron/validaron y cuánto se recaudó (neto para el " +
+          "organizador, después de la comisión de Pasape), con el desglose por tipo de entrada.",
+        inputSchema: { eventId: z.string().uuid() },
+      },
+      async ({ eventId }, extra) => {
+        const identity = identityFromAuth(extra.authInfo);
+        const event = await findEventById(identity.organizationId, eventId);
+        if (!event) {
+          return { content: [{ type: "text", text: "Error: evento no encontrado" }], isError: true };
+        }
+        const stats = await getEventStats({ repo }, eventId);
+        const soles = (cents: number) => (cents / 100).toFixed(2);
+        const lines = [
+          `"${event.title}" — ${stats.sold} vendidas, ${stats.reserved} reservadas, ${stats.validated} validadas en puerta.`,
+          `Neto para la organización: S/${soles(stats.netCents)} (bruto S/${soles(stats.revenueCents)}, comisión Pasape S/${soles(stats.serviceFeeCents)}).`,
+          ...stats.ticketTypes.map(
+            (t) =>
+              `- ${t.name}: ${t.sold}/${t.capacity} vendidas, ${t.validated} validadas, S/${soles(t.revenueCents)}`,
+          ),
+        ];
         return { content: [{ type: "text", text: lines.join("\n") }] };
       },
     );
