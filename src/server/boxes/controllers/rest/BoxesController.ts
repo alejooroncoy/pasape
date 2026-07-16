@@ -56,13 +56,15 @@ async function resolveTicketHolderViaLink(
   ticketId: string,
   k: string | null,
 ): Promise<string | null> {
-  if (!k || !verifyTicketLink(ticketId, k)) return null;
+  if (!k) return null;
   const { data } = await supabaseAdmin()
     .from("tickets")
-    .select("current_holder")
+    .select("current_holder, transfer_count")
     .eq("id", ticketId)
-    .maybeSingle<{ current_holder: string | null }>();
-  return data?.current_holder ?? null;
+    .maybeSingle<{ current_holder: string | null; transfer_count: number }>();
+  // El token se liga al transfer_count: un link previo a una transferencia ya no vale.
+  if (!data || !verifyTicketLink(ticketId, k, data.transfer_count)) return null;
+  return data.current_holder ?? null;
 }
 
 const createSchema = z.object({
@@ -160,6 +162,8 @@ export const BoxesController = {
     // guests sin sesión, que no pueden abrir `/tickets/[id]` (RLS por
     // current_holder = auth.uid()). El link `/t/[id]?k=...` usa HMAC.
     const mine = result.value.members.find((m) => m.profileId === profileId);
+    // Ticket de box recién emitido → transfer_count 0 (default): el link usa el
+    // payload legacy. Si luego se transfiere, el receptor accede por sesión.
     const joinedTicket = mine?.ticketId
       ? { id: mine.ticketId, k: signTicketLink(mine.ticketId) }
       : null;

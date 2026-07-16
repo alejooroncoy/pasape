@@ -204,16 +204,19 @@ export const TicketsController = {
     const auth = await getAuthContext();
     // Camino auth normal — buyer logueado pidiendo su propio ticket.
     let holderId: string | null = auth.ok ? auth.value.profileId : null;
-    // Camino guest — link público con HMAC. Resolvemos el current_holder
-    // desde la tabla y delegamos al mismo path (getMyTicketById filtra por
-    // current_holder, así que el resultado es el mismo).
-    if (!holderId && linkToken && verifyTicketLink(id, linkToken)) {
+    // Camino guest — link público con HMAC. Cargamos current_holder + transfer_count
+    // y verificamos el token contra el contador actual: un link de un titular
+    // anterior (pre-transferencia) ya no valida. Delegamos al mismo path
+    // (getMyTicketById filtra por current_holder, así que el resultado es el mismo).
+    if (!holderId && linkToken) {
       const { data } = await supabaseAdmin()
         .from("tickets")
-        .select("current_holder")
+        .select("current_holder, transfer_count")
         .eq("id", id)
-        .maybeSingle<{ current_holder: string | null }>();
-      holderId = data?.current_holder ?? null;
+        .maybeSingle<{ current_holder: string | null; transfer_count: number }>();
+      if (data && verifyTicketLink(id, linkToken, data.transfer_count)) {
+        holderId = data.current_holder ?? null;
+      }
     }
     if (!holderId) return err(auth.ok ? "not_found" : auth.error);
     const t = await getMyTicketById({ repo }, id, holderId);

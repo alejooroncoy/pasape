@@ -20,9 +20,14 @@ export default async function PublicTicketPage({ params, searchParams }: Props) 
   const db = supabaseAdmin();
   const { data: ticket } = await db
     .from("tickets")
-    .select("id, current_holder, order_id")
+    .select("id, current_holder, order_id, transfer_count")
     .eq("id", ticketId)
-    .maybeSingle<{ id: string; current_holder: string | null; order_id: string | null }>();
+    .maybeSingle<{
+      id: string;
+      current_holder: string | null;
+      order_id: string | null;
+      transfer_count: number;
+    }>();
   if (!ticket) notFound();
 
   // Dueño logueado → su página autenticada (QR, carrusel, enviar, cambiar datos).
@@ -31,8 +36,10 @@ export default async function PublicTicketPage({ params, searchParams }: Props) 
     redirect(`/${locale}/tickets/${ticketId}`);
   }
 
-  // No dueño → exige la llave del link y lo encauza al desbloqueo de la compra.
-  if (!k || !verifyTicketLink(ticketId, k)) notFound();
+  // No dueño → exige la llave del link (ligada al transfer_count actual, así que
+  // el link del emisor anterior ya no vale tras una transferencia) y lo encauza
+  // al desbloqueo de la compra.
+  if (!k || !verifyTicketLink(ticketId, k, ticket.transfer_count)) notFound();
   if (ticket.order_id) {
     redirect(`/${locale}/order/${ticket.order_id}/${signOrderLink(ticket.order_id)}`);
   }

@@ -74,14 +74,16 @@ export const GET = async (req: NextRequest, ctx: { params: Promise<{ id: string 
   if (row.status === "paid") {
     const { data: tickets } = await db
       .from("tickets")
-      .select("id, created_at")
+      .select("id, created_at, transfer_count")
       .eq("order_id", id)
       .eq("status", "active")
       .order("created_at", { ascending: true });
     ticketsCount = tickets?.length ?? 0;
-    const first = tickets?.[0];
+    const first = tickets?.[0] as { id: string; transfer_count: number } | undefined;
     if (first) {
-      const token = signTicketLink(first.id);
+      // El token se liga al transfer_count actual para que rote en cada
+      // transferencia (ver TicketLinkToken).
+      const token = signTicketLink(first.id, first.transfer_count);
       ticketUrl = `/t/${first.id}?k=${token}`;
     }
     // /order es el único punto de decisión post-pago (ver processing/page.tsx):
