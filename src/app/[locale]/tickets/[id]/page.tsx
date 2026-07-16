@@ -269,8 +269,18 @@ function TicketDetailInner({ id }: { id: string }) {
   const noSession = !isLoading && (error || !data) && online && !me.isLoading && !me.data?.user;
   useEffect(() => {
     if (!noSession) return;
-    const next = typeof window === "undefined" ? "" : window.location.pathname + window.location.search;
-    router.replace(`/login?next=${encodeURIComponent(next)}` as never);
+    // Debounce: justo tras volver de Google OAuth, `useTicket` y `useCurrentUser`
+    // pueden reportar "sin sesión" por una fracción de segundo mientras la
+    // cookie termina de asentar — sin este margen redirigíamos a /login y de
+    // inmediato de vuelta, tirando abajo el árbol de React (con cualquier hoja
+    // de Radix abierta, ej. Cambiar datos/Enviar) a mitad de un commit y
+    // disparando "React.Children.only" en Slot. 600ms alcanza para que ambas
+    // queries asienten sin sentirse como demora para quien sí está deslogeado.
+    const id = setTimeout(() => {
+      const next = typeof window === "undefined" ? "" : window.location.pathname + window.location.search;
+      router.replace(`/login?next=${encodeURIComponent(next)}` as never);
+    }, 600);
+    return () => clearTimeout(id);
   }, [noSession, router]);
 
   if (isLoading || noSession) {
