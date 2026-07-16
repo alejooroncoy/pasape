@@ -35,8 +35,21 @@ export const POST = async (
   const url = new URL(req.url);
   const k = url.searchParams.get("k");
 
-  // Cargamos el ticket ANTES de decidir el acceso: el token `?k=` se liga al
-  // transfer_count actual, así que necesitamos ese valor para verificarlo.
+  // Sin llave en el link → exigimos sesión ANTES de tocar la DB: así un request
+  // anónimo sin `?k` se rechaza sin consumir una query (evita amplificación de
+  // recursos) y sin exponer el oráculo de existencia 404-vs-403. Con `?k`, el
+  // acceso lo decide el token; para verificarlo necesitamos el transfer_count del
+  // ticket, así que abajo sí cargamos la fila.
+  let auth: Awaited<ReturnType<typeof getAuthContext>> | null = null;
+  if (!k) {
+    auth = await getAuthContext();
+    if (!auth.ok) {
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    }
+  }
+
+  // Cargamos el ticket antes de decidir el acceso vía link: el token `?k=` se liga
+  // al transfer_count actual, así que necesitamos ese valor para verificarlo.
   const db = supabaseAdmin();
   const { data: ticket, error: ticketErr } = await db
     .from("tickets")
@@ -65,9 +78,10 @@ export const POST = async (
   // esto, el comprador original podía re-emitir el QR (sobrescribir signing_pub)
   // de una entrada que ya había transferido.
   const linkOk = !!k && verifyTicketLink(ticketId, k, ticket.transfer_count);
-  let auth: Awaited<ReturnType<typeof getAuthContext>> | null = null;
   if (!linkOk) {
-    auth = await getAuthContext();
+    // ?k presente pero inválido (ej. link viejo tras una transferencia) → cae al
+    // chequeo por sesión. `auth` ya está resuelto si no vino `k`.
+    auth = auth ?? (await getAuthContext());
     if (!auth.ok) {
       return NextResponse.json({ error: "forbidden" }, { status: 403 });
     }
