@@ -10,13 +10,27 @@ const schema = z.object({
   redirect_uris: z.array(z.string().url()).min(1),
 });
 
+// CORS abierto (igual que /api/oauth/token): clientes MCP basados en browser
+// registran el client desde SU origen, no desde pasape.lat.
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "*",
+  "Access-Control-Max-Age": "86400",
+};
+
+const json = (body: unknown, status: number) =>
+  NextResponse.json(body, { status, headers: CORS_HEADERS });
+
+export const OPTIONS = () => new NextResponse(null, { status: 204, headers: CORS_HEADERS });
+
 export const POST = async (req: Request) => {
   const body = await req.json().catch(() => null);
   const parsed = schema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json(
+    return json(
       { error: "invalid_client_metadata", error_description: parsed.error.issues[0]?.message },
-      { status: 400 },
+      400,
     );
   }
 
@@ -25,10 +39,10 @@ export const POST = async (req: Request) => {
     redirectUris: parsed.data.redirect_uris,
   });
   if (!result.ok) {
-    return NextResponse.json({ error: "invalid_client_metadata" }, { status: 400 });
+    return json({ error: "invalid_client_metadata" }, 400);
   }
 
-  return NextResponse.json(
+  return json(
     {
       client_id: result.value.clientId,
       client_name: parsed.data.client_name ?? "MCP client",
@@ -37,6 +51,6 @@ export const POST = async (req: Request) => {
       grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],
     },
-    { status: 201 },
+    201,
   );
 };
