@@ -20,18 +20,18 @@ export function SectionHeader({
   return (
     <header className={textAlign}>
       <p
-        className={`m-0 mb-[18px] font-serif text-base font-normal italic text-accent ${blockAlign}`.trim()}
+        className={`m-0 mb-[18px] font-serif text-base font-normal italic text-cart-accent ${blockAlign}`.trim()}
       >
         {eyebrow}
       </p>
       <h2
-        className={`m-0 max-w-[22ch] text-balance font-display text-[clamp(30px,8vw,60px)] font-semibold leading-[1.06] tracking-[-0.03em] text-ink [&_em]:font-serif [&_em]:font-normal [&_em]:italic [&_em]:tracking-[-0.02em] [&_em]:text-accent [&_em]:[text-shadow:0_0_28px_var(--color-accent-glow)] ${textAlign} ${blockAlign}`.trim()}
+        className={`m-0 max-w-[22ch] text-balance font-sans text-[clamp(30px,8vw,60px)] font-semibold leading-[1.06] tracking-[-0.03em] text-cart-ink [&_em]:font-serif [&_em]:font-normal [&_em]:italic [&_em]:tracking-[-0.02em] [&_em]:text-cart-accent ${textAlign} ${blockAlign}`.trim()}
       >
         {title}
       </h2>
       {lede ? (
         <p
-          className={`mt-[22px] max-w-[60ch] text-pretty font-body text-[clamp(15px,4vw,19px)] leading-[1.55] text-ink-2 ${textAlign} ${blockAlign}`.trim()}
+          className={`mt-[22px] max-w-[60ch] text-pretty font-sans text-[clamp(15px,4vw,19px)] leading-[1.55] text-cart-ink-2 ${textAlign} ${blockAlign}`.trim()}
         >
           {lede}
         </p>

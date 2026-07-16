@@ -15,6 +15,7 @@ type PageMetaInput = {
   locale: string;
   path: string;
   ogType?: "website" | "article";
+  keywords?: string[];
 };
 
 export function buildPageMetadata({
@@ -23,6 +24,7 @@ export function buildPageMetadata({
   locale,
   path,
   ogType = "website",
+  keywords,
 }: PageMetaInput): Metadata {
   const canonicalPath = localePath(locale, path);
   const url = absoluteUrl(canonicalPath);
@@ -33,6 +35,7 @@ export function buildPageMetadata({
   return {
     title: shortTitle,
     description,
+    ...(keywords ? { keywords } : {}),
     alternates: {
       canonical: canonicalPath,
       languages: {

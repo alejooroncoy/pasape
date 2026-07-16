@@ -50,8 +50,8 @@ export function Nav(_props: { waHref?: string }) {
     const update = () => {
       const range = window.innerHeight * 0.5;
       const p = Math.min(1, Math.max(0, window.scrollY / range));
-      el.style.backgroundColor = `rgba(10, 10, 15, ${(0.92 * p).toFixed(3)})`;
-      el.style.borderBottomColor = `rgba(255, 255, 255, ${(0.08 * p).toFixed(3)})`;
+      el.style.backgroundColor = `rgba(251, 250, 255, ${(0.88 * p).toFixed(3)})`;
+      el.style.borderBottomColor = `rgba(28, 20, 60, ${(0.12 * p).toFixed(3)})`;
       if (p > 0) {
         const f = `saturate(${(100 + 80 * p).toFixed(0)}%) blur(${(16 * p).toFixed(1)}px)`;
         el.style.backdropFilter = f;
@@ -86,14 +86,14 @@ export function Nav(_props: { waHref?: string }) {
       <div className="mx-auto flex h-[68px] w-full max-w-[1160px] items-center justify-between px-[22px] md:px-8">
         <Logo />
         <nav
-          className="hidden h-full items-stretch gap-7 text-sm font-medium text-ink-3 lg:inline-flex"
+          className="hidden h-full items-stretch gap-7 text-sm font-medium text-cart-ink-3 lg:inline-flex"
           aria-label="Principal"
         >
           {LINKS.map((l) => (
             <a
               key={l.href}
               href={l.href}
-              className="relative flex items-center transition-colors hover:text-ink after:absolute after:bottom-[22px] after:left-0 after:right-0 after:h-px after:origin-left after:scale-x-0 after:bg-accent after:transition-transform after:duration-200 hover:after:scale-x-100"
+              className="relative flex items-center transition-colors hover:text-cart-ink after:absolute after:bottom-[22px] after:left-0 after:right-0 after:h-px after:origin-left after:scale-x-0 after:bg-cart-accent after:transition-transform after:duration-200 hover:after:scale-x-100"
             >
               {l.label}
             </a>
@@ -103,7 +103,7 @@ export function Nav(_props: { waHref?: string }) {
           {/* Ver eventos como text link sutil — secundario */}
           <Link
             href="/"
-            className="group inline-flex items-center gap-1.5 text-sm font-medium text-ink-3 transition-colors hover:text-ink"
+            className="group inline-flex items-center gap-1.5 text-sm font-medium text-cart-ink-3 transition-colors hover:text-cart-ink"
           >
             Ver eventos
             <Icon
@@ -150,13 +150,13 @@ export function Nav(_props: { waHref?: string }) {
         aria-modal="true"
         aria-label="Menú de navegación"
       >
-        <div className="flex items-center justify-between border-b border-line pb-[22px]">
+        <div className="flex items-center justify-between border-b border-cart-line pb-[22px]">
           <Logo />
           <button
             type="button"
             aria-label="Cerrar menú"
             onClick={() => setMenuOpen(false)}
-            className="inline-grid size-9 cursor-pointer place-items-center rounded-full border-0 bg-transparent text-ink-2 transition-[background-color,color] duration-150 hover:bg-line hover:text-ink"
+            className="inline-grid size-9 cursor-pointer place-items-center rounded-full border-0 bg-transparent text-cart-ink-2 transition-[background-color,color] duration-150 hover:bg-cart-line hover:text-cart-ink"
           >
             <Icon name="close" width={20} height={20} />
           </button>
@@ -191,7 +191,7 @@ export function Nav(_props: { waHref?: string }) {
           <Link
             href="/"
             onClick={() => setMenuOpen(false)}
-            className="block w-full px-[18px] py-2 text-center text-sm font-medium text-ink-3 transition-colors hover:text-ink"
+            className="block w-full px-[18px] py-2 text-center text-sm font-medium text-cart-ink-3 transition-colors hover:text-cart-ink"
           >
             Ver eventos →
           </Link>

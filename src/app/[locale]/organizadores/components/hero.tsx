@@ -1,30 +1,30 @@
 import { Button } from "./ui/button";
 import { Eyebrow } from "./ui/eyebrow";
 import { Icon } from "./icons";
+import { HeroPreview } from "./hero-preview";
 
 export function Hero({ waHref }: { waHref: string }) {
   return (
     <section
       id="top"
-      className="hero relative w-full max-w-dvw isolate overflow-hidden pt-28 pb-16 lg:flex lg:min-h-dvh lg:items-center lg:py-24"
+      className="relative z-[1] w-full max-w-dvw isolate overflow-hidden pt-28 pb-16 lg:flex lg:min-h-dvh lg:items-center lg:py-24"
     >
-      <div className="hero-bleed" aria-hidden="true" />
-
-      <div className="relative z-10 mx-auto w-full max-w-[1160px] px-[22px] lg:px-8">
-        <div className="mx-auto flex max-w-[640px] flex-col items-center text-center">
-          <Eyebrow withDot>Sistema operativo para eventos</Eyebrow>
-          <h1 className="reveal in m-0 mt-7 max-w-[13ch] text-balance font-display text-[clamp(44px,6.8vw,80px)] font-semibold leading-[0.98] tracking-[-0.035em] text-ink [&_em]:font-serif [&_em]:font-normal [&_em]:italic [&_em]:tracking-[-0.02em] [&_em]:text-accent [&_em]:[text-shadow:0_0_32px_var(--color-accent-glow)]">
-            Vende entradas.
+      <div className="relative z-10 mx-auto grid w-full max-w-[1160px] items-center gap-12 px-[22px] lg:grid-cols-[1.05fr_0.95fr] lg:gap-10 lg:px-8">
+        <div className="mx-auto flex max-w-[640px] flex-col items-center text-center lg:mx-0 lg:items-start lg:text-left">
+          <Eyebrow withDot>Para fiestas, raves y eventos universitarios</Eyebrow>
+          <h1 className="reveal in m-0 mt-7 max-w-[15ch] text-balance font-sans text-[clamp(40px,6.8vw,72px)] font-semibold leading-[0.98] tracking-[-0.03em] text-cart-ink [&_em]:font-serif [&_em]:font-normal [&_em]:italic [&_em]:tracking-[-0.02em] [&_em]:text-cart-accent">
+            Deja el Excel.
             <br />
-            <em>Controla todo.</em>
+            <em>Entra con QR.</em>
           </h1>
-          <p className="reveal in mt-6 max-w-[42ch] text-pretty text-[clamp(16px,1.5vw,18px)] leading-normal text-ink-2">
-            Tickets, pagos, QR, boxes, cortesías, reportes y control de acceso
-            en un solo lugar. Pasape reduce la fricción de compra y ordena la
-            operación para que llegues al día del evento con menos pendientes.
+          <p className="reveal in mt-6 max-w-[46ch] text-pretty text-[clamp(16px,1.5vw,18px)] leading-normal text-cart-ink-2">
+            Hoy vendes por WhatsApp, cobras por Yape y en la puerta alguien
+            busca nombres en una lista de cientos. Con Pasape, en cambio,
+            compartes un link, cada entrada llega con su QR y en la puerta ya
+            sabes quién entró y quién no.
           </p>
 
-          <div className="reveal in mt-9 flex w-full max-w-[320px] flex-col items-stretch gap-3 sm:max-w-none sm:flex-row sm:flex-wrap sm:items-center sm:justify-center">
+          <div className="reveal in mt-9 flex w-full max-w-[320px] flex-col items-stretch gap-3 sm:max-w-none sm:flex-row sm:flex-wrap sm:items-center sm:justify-center lg:justify-start">
             <Button
               href={waHref}
               target="_blank"
@@ -35,14 +35,16 @@ export function Hero({ waHref }: { waHref: string }) {
               Quiero vender con Pasape
             </Button>
             <Button href="#promos" variant="ghost" className="w-full justify-center text-sm sm:w-auto">
-              Ver el sistema
+              Ver cómo funciona
             </Button>
           </div>
-          <p className="reveal in mt-5 font-serif text-[17px] italic text-ink-3">
-            Compra web <span className="not-italic text-accent opacity-80 mx-2">·</span> QR único{" "}
-            <span className="not-italic text-accent opacity-80 mx-2">·</span> Panel en vivo
+          <p className="reveal in mt-5 font-serif text-[17px] italic text-cart-ink-3">
+            Compra por link <span className="not-italic text-cart-accent opacity-80 mx-2">·</span> QR único{" "}
+            <span className="not-italic text-cart-accent opacity-80 mx-2">·</span> Sabes quién entró
           </p>
         </div>
+
+        <HeroPreview />
       </div>
     </section>
   );

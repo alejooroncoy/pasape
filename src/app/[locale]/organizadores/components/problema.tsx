@@ -5,32 +5,33 @@ const PROBLEMAS: { text: ReactNode }[] = [
   {
     text: (
       <>
-        Tienes entradas, boxes, cortesías y promotores, pero cada cosa termina
-        en <span className="hl">un archivo o chat distinto</span>.
+        Vendes por WhatsApp y armas la lista de invitados en un Excel que{" "}
+        <span className="hl">solo tú entiendes</span>.
       </>
     ),
   },
   {
     text: (
       <>
-        El comprador pregunta por precio, stock o QR porque la información no
-        está clara en <span className="hl">un solo link de compra</span>.
+        En la puerta, alguien busca un nombre{" "}
+        <span className="hl">en una lista de cientos</span> mientras la fila
+        crece afuera.
       </>
     ),
   },
   {
     text: (
       <>
-        Para saber cómo va el evento tienes que cruzar ventas, listas,
-        promotores y pagos <span className="hl">a mano</span>.
+        Un pantallazo de Yape se puede reenviar, y no tienes forma de saber{" "}
+        <span className="hl">quién ya entró</span>.
       </>
     ),
   },
   {
     text: (
       <>
-        En puerta necesitas validar rápido, ver quién ya entró y evitar que un
-        QR o una lista <span className="hl">se use dos veces</span>.
+        No sabes qué promotor trajo a quién, ni cuánto le debes al cierre —{" "}
+        <span className="hl">todo queda a memoria</span>.
       </>
     ),
   },
@@ -40,31 +41,31 @@ export function Problema() {
   return (
     <section
       id="problema"
-      className="relative bg-bg pt-14 pb-16 md:pt-16 md:pb-20"
+      className="relative bg-cart-bg pt-14 pb-16 md:pt-16 md:pb-20"
     >
       <div className="relative z-[2] mx-auto w-full max-w-[1160px] px-[22px] md:px-8">
         <SectionHeader
-          eyebrow="El problema"
+          eyebrow="El problema de vender a mano"
           title={
             <>
-              Tu evento necesita una operación clara, <em>no más parches.</em>
+              Tu evento crece, <em>pero tu Excel no.</em>
             </>
           }
-          lede="Pasape no promete llenar tu evento. Te da la infraestructura para cobrar, emitir QR, ordenar invitados, medir canales y controlar accesos desde el mismo panel."
+          lede="No es que no sepas vender: las plataformas de ticketing dan por hecho que ya sabes usarlas. Pasape empieza donde tú ya estás — WhatsApp, Yape y una lista de invitados."
         />
         <div className="mt-10 grid grid-cols-1 gap-3.5 md:grid-cols-2 md:gap-[18px]">
           {PROBLEMAS.map((p, i) => (
             <div
               key={i}
-              className="reveal prob-card group relative grid grid-cols-[44px_1fr] items-start gap-5 overflow-hidden rounded-2xl border border-line bg-[linear-gradient(180deg,rgba(255,255,255,0.025),rgba(255,255,255,0)),var(--color-bg-elev)] p-6 transition-[border-color,transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:border-accent/35 hover:shadow-[0_16px_40px_-16px_var(--color-accent-glow)]"
+              className="reveal group relative grid grid-cols-[44px_1fr] items-start gap-5 rounded-2xl border border-cart-line bg-cart-bg-elev p-6 transition-colors duration-200 hover:border-cart-line-strong"
             >
               <span
                 aria-hidden="true"
-                className="font-serif text-[32px] italic leading-none text-accent [text-shadow:0_0_16px_var(--color-accent-glow)]"
+                className="font-serif text-[32px] italic leading-none text-cart-accent"
               >
                 “
               </span>
-              <p className="m-0 text-pretty font-display text-[clamp(17px,1.9vw,20px)] font-medium leading-snug tracking-[-0.012em] text-ink">
+              <p className="m-0 text-pretty font-sans text-[clamp(17px,1.9vw,20px)] font-medium leading-snug tracking-[-0.012em] text-cart-ink">
                 {p.text}
               </p>
             </div>

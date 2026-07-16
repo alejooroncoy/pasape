@@ -5,10 +5,10 @@ export function Logo() {
     <a
       href="#top"
       aria-label="Pasape — Inicio"
-      className="inline-flex items-center gap-2.5 font-display text-[19px] font-semibold tracking-[-0.01em] text-ink"
+      className="inline-flex items-center gap-2.5 font-sans text-[19px] font-semibold tracking-[-0.01em] text-cart-ink"
     >
       <span aria-hidden="true" className="grid size-8 place-items-center">
-        <LogoIcon className="size-full drop-shadow-[0_2px_10px_rgba(184,124,255,0.35)]" />
+        <LogoIcon className="size-full" />
       </span>
       <span>Pasape</span>
     </a>

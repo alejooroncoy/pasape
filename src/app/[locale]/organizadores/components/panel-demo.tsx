@@ -93,7 +93,7 @@ function KpiCard({
   layout: Layout;
 }) {
   const barColor =
-    tone === "accent" ? "var(--color-cart-accent)" : tone === "green" ? "#22D17F" : "rgba(255,255,255,0.5)";
+    tone === "accent" ? "var(--color-cart-accent)" : tone === "green" ? "#22D17F" : "rgba(20,16,38,0.35)";
 
   const compact = layout === "hero" || layout === "stacked";
   const sizeCls = compact ? "text-[17px]" : "text-[26px] lg:text-[30px]";
@@ -110,14 +110,14 @@ function KpiCard({
         )}
         <span className="truncate">{label}</span>
       </div>
-      <div className={`mt-1.5 whitespace-nowrap font-sans font-semibold leading-none tracking-[-0.035em] text-white lg:mt-2 ${sizeCls}`}>
+      <div className={`mt-1.5 whitespace-nowrap font-sans font-semibold leading-none tracking-[-0.035em] text-cart-ink lg:mt-2 ${sizeCls}`}>
         <CountUp to={to} format={format} />
       </div>
       {!compact ? (
         <div className="mt-1.5 text-[11px] leading-snug text-cart-ink-3 lg:mt-2 lg:text-[12px]">{hint}</div>
       ) : null}
       {typeof progress === "number" && (
-        <div className={`overflow-hidden rounded-full bg-white/5 ${compact ? "mt-2 h-0.5" : "mt-2.5 h-1 lg:mt-3"}`}>
+        <div className={`overflow-hidden rounded-full bg-cart-ink/10 ${compact ? "mt-2 h-0.5" : "mt-2.5 h-1 lg:mt-3"}`}>
           <div className="h-full rounded-full" style={{ width: `${progress}%`, background: barColor }} />
         </div>
       )}
@@ -166,7 +166,7 @@ export function PanelDemo({ layout = "grid" }: { layout?: Layout }) {
             </span>
           </div>
           <h3
-            className={`mt-0.5 font-sans font-semibold leading-[1.15] tracking-[-0.02em] text-white lg:mt-1 ${
+            className={`mt-0.5 font-sans font-semibold leading-[1.15] tracking-[-0.02em] text-cart-ink lg:mt-1 ${
               hero ? "text-[15px]" : "text-[16px] lg:text-[17px]"
             }`}
           >
@@ -205,7 +205,7 @@ export function PanelDemo({ layout = "grid" }: { layout?: Layout }) {
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
-                  <span className="truncate text-[11px] font-semibold tracking-[-0.01em] text-white">
+                  <span className="truncate text-[11px] font-semibold tracking-[-0.01em] text-cart-ink">
                     {p.name}
                   </span>
                   <span
@@ -216,7 +216,7 @@ export function PanelDemo({ layout = "grid" }: { layout?: Layout }) {
                 <div className="truncate font-mono text-[9px] text-cart-ink-3">{p.code}</div>
               </div>
               <div className="flex items-baseline gap-2 text-right">
-                <span className="w-6 font-mono text-[10px] font-semibold text-white">{p.sold}</span>
+                <span className="w-6 font-mono text-[10px] font-semibold text-cart-ink">{p.sold}</span>
                 <span className="w-6 font-mono text-[10px] font-semibold text-[#22D17F]">{p.validated}</span>
                 <span className="w-9 font-mono text-[9.5px] text-cart-ink-3">{p.revenue}</span>
               </div>
@@ -229,7 +229,7 @@ export function PanelDemo({ layout = "grid" }: { layout?: Layout }) {
           <div className="rounded-2xl border border-cart-line bg-cart-bg-elev">
             <header className="flex items-center justify-between border-b border-cart-line px-4 py-2.5 lg:py-3">
               <div>
-                <h4 className="text-[12px] font-semibold tracking-[-0.01em] text-white lg:text-[13px]">Promotores</h4>
+                <h4 className="text-[12px] font-semibold tracking-[-0.01em] text-cart-ink lg:text-[13px]">Promotores</h4>
                 <p className="text-[10px] text-cart-ink-3 lg:text-[10.5px]">vendido · validado · ingreso</p>
               </div>
               <span className="text-[10px] text-cart-ink-4 lg:text-[11px]">Ver links →</span>
@@ -245,7 +245,7 @@ export function PanelDemo({ layout = "grid" }: { layout?: Layout }) {
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5">
-                      <span className="truncate text-[12px] font-semibold tracking-[-0.01em] text-white lg:text-[13px]">
+                      <span className="truncate text-[12px] font-semibold tracking-[-0.01em] text-cart-ink lg:text-[13px]">
                         {p.name}
                       </span>
                       <span
@@ -258,7 +258,7 @@ export function PanelDemo({ layout = "grid" }: { layout?: Layout }) {
                     </div>
                   </div>
                   <div className="flex items-baseline gap-2 text-right lg:gap-2.5">
-                    <span className="font-mono text-[11px] font-semibold text-white lg:text-[12px]">{p.sold}</span>
+                    <span className="font-mono text-[11px] font-semibold text-cart-ink lg:text-[12px]">{p.sold}</span>
                     <span className="font-mono text-[11px] font-semibold text-[#22D17F] lg:text-[11.5px]">{p.validated}</span>
                     <span className="font-mono text-[10.5px] text-cart-ink-3 lg:text-[11.5px]">{p.revenue}</span>
                   </div>
@@ -274,7 +274,7 @@ export function PanelDemo({ layout = "grid" }: { layout?: Layout }) {
                   <span className="absolute size-3 animate-ping rounded-full bg-cart-accent/40" />
                   <span className="size-1.5 rounded-full bg-cart-accent shadow-[0_0_8px_var(--color-cart-accent-glow-strong)]" />
                 </span>
-                <h4 className="text-[12px] font-semibold tracking-[-0.01em] text-white lg:text-[13px]">Accesos en vivo</h4>
+                <h4 className="text-[12px] font-semibold tracking-[-0.01em] text-cart-ink lg:text-[13px]">Accesos en vivo</h4>
               </div>
               <span className="text-[10px] text-cart-ink-4 lg:text-[10.5px]">últimos 10</span>
             </header>
@@ -286,7 +286,7 @@ export function PanelDemo({ layout = "grid" }: { layout?: Layout }) {
                       className="size-1.5 rounded-full"
                       style={{ background: "#22D17F", boxShadow: "0 0 6px #22D17F88" }}
                     />
-                    <span className="text-[11px] font-medium text-white lg:text-[12px]">Válido</span>
+                    <span className="text-[11px] font-medium text-cart-ink lg:text-[12px]">Válido</span>
                   </div>
                   <span className="font-mono text-[10px] text-cart-ink-3 lg:text-[10.5px]">{t}</span>
                 </li>
