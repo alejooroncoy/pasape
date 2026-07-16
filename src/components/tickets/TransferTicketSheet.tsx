@@ -46,7 +46,7 @@ export function TransferTicketSheet({
       side="bottom"
       align="end"
     >
-      <h2 className="text-[20px] font-bold tracking-[-0.02em]">Enviar entrada</h2>
+      <h2 className="text-[20px] font-bold tracking-[-0.02em] text-cart-ink">Enviar entrada</h2>
       <p className="mt-2 text-[13px] leading-normal text-cart-ink-3">
         Le llega por WhatsApp. La entrada <span className="font-semibold text-cart-ink">sigue siendo tuya</span> hasta
         que la abra y la reclame.

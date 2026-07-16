@@ -51,7 +51,7 @@ export function RefundRequestSheet({
     >
       {sent ? (
         <>
-          <h2 className="text-[20px] font-bold tracking-[-0.02em]">Solicitud enviada</h2>
+          <h2 className="text-[20px] font-bold tracking-[-0.02em] text-cart-ink">Solicitud enviada</h2>
           <p className="mt-2 text-[13px] leading-normal text-cart-ink-3">
             Nos contactamos contigo apenas la revisemos. Te llega la confirmación al mismo
             correo/WhatsApp con el que compraste.
@@ -67,7 +67,7 @@ export function RefundRequestSheet({
         </>
       ) : (
         <>
-          <h2 className="text-[20px] font-bold tracking-[-0.02em]">Solicitar reembolso</h2>
+          <h2 className="text-[20px] font-bold tracking-[-0.02em] text-cart-ink">Solicitar reembolso</h2>
           <p className="mt-2 text-[13px] leading-normal text-cart-ink-3">
             Cuéntanos qué pasó. Un miembro del equipo revisa tu caso a mano y te escribe para
             coordinar la devolución.
