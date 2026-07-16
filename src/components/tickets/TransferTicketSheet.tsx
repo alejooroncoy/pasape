@@ -68,13 +68,13 @@ export function TransferTicketSheet({
 
       <div className="mt-2 min-h-[20px] text-[12.5px]">
         {!online ? (
-          <span className="text-amber-300">Necesitas conexión para enviar.</span>
+          <span className="text-amber-600">Necesitas conexión para enviar.</span>
         ) : recipientIsPeru && recipientDigits.length > 0 && recipientDigits.length < 9 ? (
           <span className="text-cart-ink-4">Faltan {9 - recipientDigits.length} dígitos</span>
         ) : recipientDigits.length >= 9 && recipientLookup.loading ? (
           <span className="text-cart-ink-3">Verificando número…</span>
         ) : recipientDigits.length >= 9 && recipientLookup.result ? (
-          <span className="inline-flex items-center gap-1.5 text-emerald-300">
+          <span className="inline-flex items-center gap-1.5 text-emerald-600">
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
               <path d="M3 8l3.5 3.5L13 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
@@ -121,7 +121,7 @@ export function TransferTicketSheet({
             initial={{ opacity: 0, y: -4 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
-            className="mt-3 text-center text-[12px] text-rose-300"
+            className="mt-3 text-center text-[12px] text-rose-600"
           >
             {transferErrorCopy((transfer.error as Error).message)}
           </motion.p>

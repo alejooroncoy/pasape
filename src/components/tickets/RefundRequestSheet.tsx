@@ -91,7 +91,7 @@ export function RefundRequestSheet({
 
           <div className="mt-2 min-h-[20px] text-[12.5px]">
             {!online ? (
-              <span className="text-amber-300">Necesitas conexión para enviar.</span>
+              <span className="text-amber-600">Necesitas conexión para enviar.</span>
             ) : null}
           </div>
 

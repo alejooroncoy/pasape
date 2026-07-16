@@ -38,7 +38,10 @@ export function TicketActionSurface({
         <AnimatePresence>
           {open && (
             <Popover.Portal forceMount>
-              <div>
+              {/* home-light explícito: el Portal de Radix cuelga de <body>,
+                  fuera del DOM del ticket — sin esto pierde el scope claro y
+                  el panel se ve con la escala oscura por defecto. */}
+              <div className="home-light">
                 <div className="fixed inset-0 z-[70]" onClick={onClose} aria-hidden />
                 <Popover.Content
                   side={side}

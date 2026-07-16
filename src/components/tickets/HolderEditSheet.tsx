@@ -101,7 +101,7 @@ export function HolderEditSheet({
             className="mt-1 w-full rounded-xl border border-cart-line bg-cart-bg px-3 py-2.5 text-[14px] text-cart-ink outline-none focus:border-cart-accent/60"
           />
           {!dniValid && (
-            <p className="mt-1 text-[11px] text-red-400">
+            <p className="mt-1 text-[11px] text-red-600">
               {isForeigner ? "Documento inválido." : "El DNI debe tener 8 dígitos."}
             </p>
           )}
@@ -109,7 +109,7 @@ export function HolderEditSheet({
       </div>
 
       {setHolder.isError && (
-        <p className="mt-3 text-[12px] text-red-400">No se pudo guardar. Reintenta.</p>
+        <p className="mt-3 text-[12px] text-red-600">No se pudo guardar. Reintenta.</p>
       )}
 
       <button
