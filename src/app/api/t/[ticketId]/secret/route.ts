@@ -4,6 +4,7 @@ import type { JWK } from "jose";
 import * as Sentry from "@sentry/nextjs";
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
 import { verifyTicketLink } from "@/server/notifications/domain/TicketLinkToken";
+import { LINK_TOKEN_HEX_LENGTH } from "@/server/notifications/domain/linkTokenConfig";
 import { WINDOW_SECONDS } from "@/lib/tickets/signedQr";
 import { signTicketCert } from "@/server/tickets/domain/EventSignature";
 import { getOrCreateEventSigningKeys } from "@/server/tickets/application/EventSigningKeys";
@@ -22,6 +23,7 @@ type TicketRow = {
   holder_name: string | null;
   holder_dni_last2: string | null;
   ticket_type_id: string;
+  transfer_count: number;
   ticket_types: { event_id: string; zone_id: string | null } | null;
   order: { status: string } | null;
 };
@@ -34,11 +36,54 @@ export const POST = async (
   const url = new URL(req.url);
   const k = url.searchParams.get("k");
 
-  // Dual-auth: guest via ?k=<signed> OR holder logueado (session).
-  const linkOk = !!k && verifyTicketLink(ticketId, k);
+  // Solo un `?k` con FORMA de token válido (longitud exacta) justifica tocar la DB
+  // sin sesión. Un k ausente o malformado (`?k=basura`) exige sesión ANTES de la
+  // query: así un anónimo no consume una query por request (amplificación) ni
+  // sondea el oráculo de existencia 404-vs-403 con llaves inventadas. Con un k de
+  // forma válida sí cargamos la fila para verificar el token contra transfer_count.
+  const kLooksValid = !!k && k.length === LINK_TOKEN_HEX_LENGTH;
   let auth: Awaited<ReturnType<typeof getAuthContext>> | null = null;
-  if (!linkOk) {
+  if (!kLooksValid) {
     auth = await getAuthContext();
+    if (!auth.ok) {
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    }
+  }
+
+  // Cargamos el ticket antes de decidir el acceso vía link: el token `?k=` se liga
+  // al transfer_count actual, así que necesitamos ese valor para verificarlo.
+  const db = supabaseAdmin();
+  const { data: ticket, error: ticketErr } = await db
+    .from("tickets")
+    .select(
+      "id, status, current_holder, holder_name, holder_dni_last2, ticket_type_id, transfer_count, ticket_types(event_id, zone_id), order:orders(status)",
+    )
+    .eq("id", ticketId)
+    .maybeSingle<TicketRow>();
+  // Why: antes el error del select se ignoraba y un fallo de query (ej. relación
+  // PostgREST rota, columna faltante) se enmascaraba como 404. Ahora lo
+  // diferenciamos: error real → 500 reportado a Sentry; fila ausente → 404.
+  if (ticketErr) {
+    Sentry.captureException(ticketErr, {
+      tags: { route: "ticket-secret" },
+      extra: { ticketId, op: "select_ticket" },
+    });
+    console.error("[ticket-secret] ticket select failed:", ticketErr.message);
+    return NextResponse.json({ error: "ticket_lookup_failed" }, { status: 500 });
+  }
+  if (!ticket) return NextResponse.json({ error: "not_found" }, { status: 404 });
+
+  // Dual-auth: guest via ?k=<firmado, ligado al transfer_count> OR holder logueado.
+  // Al ligar el token al transfer_count, el link del emisor anterior deja de
+  // validar apenas el receptor reclama (claimTransfer incrementa el contador):
+  // linkOk pasa a false y cae al chequeo de titular por sesión de abajo. Sin
+  // esto, el comprador original podía re-emitir el QR (sobrescribir signing_pub)
+  // de una entrada que ya había transferido.
+  const linkOk = !!k && verifyTicketLink(ticketId, k, ticket.transfer_count);
+  if (!linkOk) {
+    // ?k presente pero inválido (ej. link viejo tras una transferencia) → cae al
+    // chequeo por sesión. `auth` ya está resuelto si no vino `k`.
+    auth = auth ?? (await getAuthContext());
     if (!auth.ok) {
       return NextResponse.json({ error: "forbidden" }, { status: 403 });
     }
@@ -55,26 +100,6 @@ export const POST = async (
     return NextResponse.json({ error: "invalid_public_key" }, { status: 400 });
   }
 
-  const db = supabaseAdmin();
-  const { data: ticket, error: ticketErr } = await db
-    .from("tickets")
-    .select(
-      "id, status, current_holder, holder_name, holder_dni_last2, ticket_type_id, ticket_types(event_id, zone_id), order:orders(status)",
-    )
-    .eq("id", ticketId)
-    .maybeSingle<TicketRow>();
-  // Why: antes el error del select se ignoraba y un fallo de query (ej. relación
-  // PostgREST rota, columna faltante) se enmascaraba como 404. Ahora lo
-  // diferenciamos: error real → 500 reportado a Sentry; fila ausente → 404.
-  if (ticketErr) {
-    Sentry.captureException(ticketErr, {
-      tags: { route: "ticket-secret" },
-      extra: { ticketId, op: "select_ticket" },
-    });
-    console.error("[ticket-secret] ticket select failed:", ticketErr.message);
-    return NextResponse.json({ error: "ticket_lookup_failed" }, { status: 500 });
-  }
-  if (!ticket) return NextResponse.json({ error: "not_found" }, { status: 404 });
   if (ticket.status !== "active") {
     return NextResponse.json({ error: "ticket_inactive" }, { status: 410 });
   }
