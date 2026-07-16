@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { supabaseAdmin } from "@/server/_shared/supabase/admin";
+import { createRateLimiter } from "@/server/_shared/rateLimit";
 import {
   PLAZO_RESPUESTA_DIAS_HABILES,
   PROVEEDOR,
@@ -35,25 +36,12 @@ const schema = z
     message: "Si el consumidor es menor de edad, indica al padre/madre o apoderado.",
   });
 
-// Rate limit in-memory: 3 reclamos/10min por IP. Mitiga spam sin bloquear al usuario legítimo.
-type Bucket = { count: number; resetAt: number };
-const BUCKETS = new Map<string, Bucket>();
-const consumeRate = (ip: string): boolean => {
-  const now = Date.now();
-  const b = BUCKETS.get(ip);
-  if (!b || now > b.resetAt) {
-    BUCKETS.set(ip, { count: 1, resetAt: now + 600_000 });
-    return true;
-  }
-  if (b.count >= 3) return false;
-  b.count += 1;
-  return true;
-};
-
-const ipOf = (req: NextRequest): string =>
-  req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-  req.headers.get("x-real-ip") ??
-  "unknown";
+// Rate limit por IP con Upstash (distribuido). Antes era un Map in-memory (inútil
+// en serverless multi-instancia) + un ipOf casero que leía x-forwarded-for PRIMERO
+// (spoofable: XFF aleatorio por request = bucket nuevo). Cada POST dispara DOS
+// envíos Resend + 8 cifrados AES + insert, así que sin límite real era un vector
+// de email-bombing y de bloat de tabla. 3 reclamos/10min por IP real.
+const rateLimiter = createRateLimiter("legal:complaint-book", 3, 600_000);
 
 const esc = (s: string): string =>
   s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
@@ -128,9 +116,8 @@ const sendConstancia = async (
 };
 
 export const POST = async (req: NextRequest) => {
-  if (!consumeRate(ipOf(req))) {
-    return NextResponse.json({ error: "rate_limited" }, { status: 429 });
-  }
+  if (!(await rateLimiter.check(req))) return rateLimiter.response();
+
   const body = await req.json().catch(() => null);
   const parsed = schema.safeParse(body);
   if (!parsed.success) {

@@ -2,6 +2,7 @@
 
 import { Suspense, use, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { clientEvents } from "@/lib/analytics/clientEvents";
+import { optimizeImageUrl } from "@/lib/images/optimizeUrl";
 import { AnimatePresence, motion } from "motion/react";
 import { useSearchParams } from "next/navigation";
 
@@ -2142,10 +2143,10 @@ function OrderSummary({
             <>
               <div
                 className="absolute inset-0 scale-110 bg-cover bg-center blur-md"
-                style={{ backgroundImage: `url(${event.coverUrl})` }}
+                style={{ backgroundImage: `url(${optimizeImageUrl(event.coverUrl, "hero-blur") ?? event.coverUrl})` }}
               />
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={event.coverUrl} alt="" className="relative size-full object-contain" />
+              <img src={optimizeImageUrl(event.coverUrl, "event-hero") ?? event.coverUrl} alt="" className="relative size-full object-contain" />
             </>
           ) : (
             <div className="size-full" style={{ background: "linear-gradient(135deg, #4B1F9A, #FF4D5E)" }} />

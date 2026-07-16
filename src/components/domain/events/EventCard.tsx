@@ -1,6 +1,7 @@
 import { Link } from "@/i18n/navigation";
 import type { Event } from "@/server/events/domain/Event";
 import { formatDate } from "@/lib/_shared/format";
+import { optimizeImageUrl } from "@/lib/images/optimizeUrl";
 
 export const EventCard = ({ event }: { event: Event }) => (
   <Link
@@ -10,8 +11,15 @@ export const EventCard = ({ event }: { event: Event }) => (
   >
     <div className="aspect-[3/2] w-full bg-(--color-bg-elevated)">
       {event.coverUrl && (
+        // Preset "card": redimensiona a ~480px + WebP en Supabase en vez de bajar
+        // el flyer original (3-5 MB) para pintarlo en una card de listado.
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={event.coverUrl} alt={event.title} className="h-full w-full object-cover" />
+        <img
+          src={optimizeImageUrl(event.coverUrl, "card") ?? event.coverUrl}
+          alt={event.title}
+          loading="lazy"
+          className="h-full w-full object-cover"
+        />
       )}
     </div>
     <div className="flex flex-col gap-1 px-4 pb-4 pt-2">
