@@ -48,7 +48,7 @@ export function UserSidebar() {
   const sub = user?.email ?? user?.phone ?? "";
 
   return (
-    <aside className="sticky top-[68px] hidden h-[calc(100dvh-68px)] w-[248px] shrink-0 flex-col border-r border-cart-line px-3 pb-5 pt-6 lg:flex">
+    <aside className="sticky top-[84px] my-4 hidden h-[calc(100dvh-100px)] w-[248px] shrink-0 flex-col rounded-2xl border border-cart-line bg-cart-bg-elev px-3 pb-5 pt-6 lg:flex">
       {/* Secciones (la marca vive en el header superior) */}
       <nav className="flex flex-col gap-0.5" aria-label="Navegación de cuenta">
         {ITEMS.map(({ id, label, href, Icon }) => {
@@ -135,7 +135,7 @@ function IdentityPill({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 6, scale: 0.97 }}
             transition={{ duration: 0.15 }}
-            className="absolute bottom-[calc(100%+8px)] left-0 right-0 z-10 overflow-hidden rounded-2xl border border-cart-line bg-cart-bg-elev p-1 shadow-[0_20px_50px_-12px_rgba(20,10,60,0.28)]"
+            className="absolute bottom-[calc(100%+8px)] left-0 right-0 z-10 overflow-hidden rounded-2xl border border-cart-line bg-cart-bg-elev-2 p-1 shadow-[0_20px_50px_-12px_rgba(20,10,60,0.28)]"
             role="menu"
           >
             <button
@@ -175,7 +175,7 @@ function IdentityPill({
         aria-haspopup="menu"
         aria-expanded={open}
         className={
-          "flex w-full items-center gap-3 rounded-2xl border bg-cart-bg-elev p-2.5 text-left transition-colors " +
+          "flex w-full items-center gap-3 rounded-2xl border bg-cart-bg-elev-2 p-2.5 text-left transition-colors " +
           (open ? "border-cart-line-strong" : "border-cart-line hover:border-cart-line-strong")
         }
       >

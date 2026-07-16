@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { Ticket, Heart, Bell, LogOut, ChevronRight } from "lucide-react";
 import { usePathname, useRouter } from "@/i18n/navigation";
 import { useSignOut } from "@/lib/identity/hooks/useSupabaseAuth";
+import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 import { CloseIcon, WaIcon, PinIcon } from "./icons";
 import { Logo } from "@/components/brand/Logo";
 import { WA_HREF } from "./wa";
@@ -29,6 +30,12 @@ export function SideDrawer({ user, open, onClose, onSignIn, onSelectCategory }: 
 }) {
   // Solo categorías que tienen al menos 1 evento publicado y en vivo (el backend
   // ya filtra por estado en /api/events). Mismo criterio que los chips del home.
+  // Ya vende (tiene marca activa) → manda directo a su panel en vez de la
+  // landing de venta — evitaba el doble tap "Soy organizador" → landing →
+  // panel para alguien que ya es organizador. Mismo criterio que SellerCta.
+  const me = useCurrentUser();
+  const isSeller = Boolean(me.data?.activeOrgSlug);
+
   const allEvents = useBrowseEvents(null);
   const categoriesWithEvents = new Set(
     (allEvents.data ?? []).map((e) => e.category).filter(Boolean),
@@ -95,6 +102,24 @@ export function SideDrawer({ user, open, onClose, onSignIn, onSelectCategory }: 
 
               {user && (
                 <Section title="Tu cuenta" topBorder>
+                  {/* Ya vende (tiene marca activa): acceso directo a su panel
+                      acá arriba, junto al resto de "tu cuenta" — evita el
+                      doble tap de bajar a "Pasape" → landing → panel. */}
+                  {isSeller && (
+                    <AccountRow
+                      href="/org"
+                      icon={
+                        <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
+                          <rect x="2" y="2" width="5" height="5" rx="1.3" stroke="currentColor" strokeWidth="1.4" />
+                          <rect x="9" y="2" width="5" height="5" rx="1.3" stroke="currentColor" strokeWidth="1.4" />
+                          <rect x="2" y="9" width="5" height="5" rx="1.3" stroke="currentColor" strokeWidth="1.4" />
+                          <rect x="9" y="9" width="5" height="5" rx="1.3" stroke="currentColor" strokeWidth="1.4" />
+                        </svg>
+                      }
+                      label="Mi panel de eventos y shows"
+                      onClose={onClose}
+                    />
+                  )}
                   <AccountRow href="/tickets" icon={<Ticket size={18} strokeWidth={1.8} />} label="Mis entradas" onClose={onClose} />
                   <AccountRow href="/profile/following" icon={<Heart size={18} strokeWidth={1.8} />} label="Organizadores que sigues" onClose={onClose} />
                   <AccountRow href="/profile/notifications" icon={<Bell size={18} strokeWidth={1.8} />} label="Notificaciones" onClose={onClose} />
@@ -122,18 +147,22 @@ export function SideDrawer({ user, open, onClose, onSignIn, onSelectCategory }: 
               )}
 
               <Section title="Pasape" topBorder>
-                <Link
-                  href="/organizadores"
-                  onClick={onClose}
-                  className="flex w-full cursor-pointer items-center gap-3.5 rounded-[10px] bg-transparent px-4 py-[11px] text-[15px] font-medium text-cart-ink-2 transition-colors hover:bg-cart-bg-elev hover:text-cart-ink"
-                >
-                  <span className="grid size-[22px] flex-shrink-0 place-items-center text-cart-ink-3">
-                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                      <path d="M2.5 8a1.5 1.5 0 003 0V6.5h7V8a1.5 1.5 0 003 0V5.5a1 1 0 00-1-1h-11a1 1 0 00-1 1V8zm0 5a1.5 1.5 0 013 0v1.5h7V13a1.5 1.5 0 013 0v2.5a1 1 0 01-1 1h-11a1 1 0 01-1-1V13z" stroke="currentColor" strokeWidth="1.4" />
-                    </svg>
-                  </span>
-                  Soy organizador
-                </Link>
+                {/* Ya vende: su acceso al panel ya vive arriba en "Tu cuenta"
+                    — repetirlo acá era el duplicado. */}
+                {!isSeller && (
+                  <Link
+                    href="/organizadores"
+                    onClick={onClose}
+                    className="flex w-full cursor-pointer items-center gap-3.5 rounded-[10px] bg-transparent px-4 py-[11px] text-[15px] font-medium text-cart-ink-2 transition-colors hover:bg-cart-bg-elev hover:text-cart-ink"
+                  >
+                    <span className="grid size-[22px] flex-shrink-0 place-items-center text-cart-ink-3">
+                      <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                        <path d="M2.5 8a1.5 1.5 0 003 0V6.5h7V8a1.5 1.5 0 003 0V5.5a1 1 0 00-1-1h-11a1 1 0 00-1 1V8zm0 5a1.5 1.5 0 013 0v1.5h7V13a1.5 1.5 0 013 0v2.5a1 1 0 01-1 1h-11a1 1 0 01-1-1V13z" stroke="currentColor" strokeWidth="1.4" />
+                      </svg>
+                    </span>
+                    Soy organizador
+                  </Link>
+                )}
                 <a
                   href={WA_HREF}
                   target="_blank"
@@ -277,7 +306,7 @@ function DrawerAvatar({ user }: { user: NavUser }) {
   }
   const initial = (user.fullName?.trim()?.[0] ?? "?").toUpperCase();
   return (
-    <span className="grid size-11 flex-shrink-0 place-items-center rounded-full bg-cart-accent text-[16px] font-semibold text-cart-ink">
+    <span className="grid size-11 flex-shrink-0 place-items-center rounded-full bg-cart-accent text-[16px] font-semibold text-white">
       {initial}
     </span>
   );
