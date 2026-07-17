@@ -102,7 +102,14 @@ export interface TicketRepository {
       sola query — para recuperación de entradas de una orden grupal (varios
       current_holder). */
   listManyByHolders(holderIds: string[]): Promise<WalletTicket[]>;
-  getById(ticketId: string, buyerId: string): Promise<WalletTicket | null>;
+  /** Entradas de las órdenes dadas (por order_id), mismo shape que listMine —
+      para recuperar compras de invitado, que ya no tienen current_holder (NULL
+      hasta reclamar) y solo se anclan por la orden (hallada por guest_email). */
+  listByOrderIds(orderIds: string[]): Promise<WalletTicket[]>;
+  /** buyerId null = acceso ya autorizado por el link HMAC de la entrada (guest
+      sin sesión): no acota por current_holder (que puede ser NULL en una compra
+      de invitado no reclamada). Con buyerId set, acota al dueño. */
+  getById(ticketId: string, buyerId: string | null): Promise<WalletTicket | null>;
   /** Asigna/edita el titular de una entrada propia (reparto post-compra). Solo
       el dueño actual y solo si está active. dni = DNI completo (se cifra y se
       derivan last4/last2 server-side). */

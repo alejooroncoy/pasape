@@ -100,34 +100,31 @@ export const verifyTicketRecovery = async (
   // Fuente de verdad: contacto guest en orders (no profiles.email sintético).
   const { data: orders } = await db
     .from("orders")
-    .select("id, buyer_id")
+    .select("id")
     .eq("status", "paid")
     .ilike("guest_email", email)
-    .returns<Array<{ id: string; buyer_id: string | null }>>();
+    .returns<Array<{ id: string }>>();
   if (!orders?.length) return ok({ profileId: null, tickets: [], orderLinks: [] });
 
+  // Ancla por ORDEN, no por titular: una compra de invitado ya no tiene
+  // current_holder (es NULL hasta que la persona hace login y reclama). Las
+  // órdenes salen del match por guest_email, así que listamos sus entradas
+  // directo por order_id (una sola query para toda la orden grupal).
   const orderIds = orders.map((o) => o.id);
-  const { data: ticketRows } = await db
-    .from("tickets")
-    .select("id, order_id, status, current_holder")
-    .in("order_id", orderIds)
-    .eq("status", "active");
+  const allTickets = await supabaseTicketRepository.listByOrderIds(orderIds);
+  const activeTickets = allTickets.filter((t) => t.status === "active");
 
-  const holderIds = [...new Set((ticketRows ?? []).map((t) => (t as { current_holder: string }).current_holder))];
-  // Una sola query para todos los titulares (en vez de listMine() por cada
-  // uno) — una orden grupal reparte tickets a varios current_holder distintos.
-  const allTickets = await supabaseTicketRepository.listManyByHolders(holderIds);
-  const filteredTickets = allTickets.filter((t) => t.status === "active" && orderIds.includes(t.orderId));
-
-  const uniqueTickets = [...new Map(filteredTickets.map((t) => [t.id, t])).values()];
+  const uniqueTickets = [...new Map(activeTickets.map((t) => [t.id, t])).values()];
   const recoveredOrderIds = [...new Set(uniqueTickets.map((t) => t.orderId))];
   const orderLinks: RecoveredOrderLink[] = recoveredOrderIds.map((orderId) => ({
     orderId,
     token: signOrderLink(orderId),
   }));
 
+  // profileId ya no aplica: el guest no tiene profile. El desbloqueo va por los
+  // orderLinks (HMAC de la orden), que enganchan las entradas a la cuenta real.
   return ok({
-    profileId: holderIds[0] ?? null,
+    profileId: null,
     tickets: uniqueTickets,
     orderLinks,
   });

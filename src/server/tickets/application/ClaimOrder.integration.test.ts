@@ -49,8 +49,12 @@ const createProfile = async (tag: string, email?: string): Promise<string> => {
   return data.user.id;
 };
 
+// guestProfileId null = modelo nuevo (guest sin usuario): la compra no tiene
+// placeholder, buyer_id y current_holder quedan NULL. Con un id = modelo legacy
+// (órdenes viejas creadas antes del cambio, que conservan su profile-guest).
+// claimOrder debe reclamar ambos por igual (reasigna por order_id).
 const createPaidGuestOrder = async (params: {
-  guestProfileId: string;
+  guestProfileId: string | null;
   guestEmail: string;
   paidAt: Date;
 }): Promise<string> => {
@@ -73,7 +77,7 @@ const createPaidGuestOrder = async (params: {
   const { error: tErr } = await db.from("tickets").insert({
     order_id: data.id,
     ticket_type_id: TICKET_TYPE_ID,
-    qr_code: `vitest-claimorder-${params.guestProfileId}-${RUN}`,
+    qr_code: `vitest-claimorder-${params.guestProfileId ?? "nouser"}-${RUN}`,
     current_holder: params.guestProfileId,
     status: "active",
   });
@@ -129,6 +133,42 @@ describe.skipIf(!hasCreds)("claimOrder (integración)", () => {
       .select("current_holder")
       .eq("order_id", orderId)
       .maybeSingle<{ current_holder: string }>();
+    expect(ticket?.current_holder).toBe(claimer);
+  }, 15_000);
+
+  it("reclama una compra de invitado SIN usuario (buyer_id/current_holder null)", async () => {
+    // Modelo nuevo: el guest no genera profile. La orden se ancla solo por
+    // guest_email y sus entradas tienen current_holder NULL hasta este reclamo.
+    const guestEmail = `vitest-guest-nouser-${RUN}@example.com`;
+    const claimer = await createProfile("claimer-nouser");
+    const orderId = await createPaidGuestOrder({
+      guestProfileId: null,
+      guestEmail,
+      paidAt: new Date(),
+    });
+
+    const res = await claimOrder(
+      { repo: supabaseTicketRepository },
+      { orderId, toProfile: claimer },
+    );
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.value.ticketsClaimed).toBe(1);
+
+    const db = supabaseAdmin();
+    const { data: order } = await db
+      .from("orders")
+      .select("claimed_by, buyer_id")
+      .eq("id", orderId)
+      .maybeSingle<{ claimed_by: string | null; buyer_id: string | null }>();
+    expect(order?.claimed_by).toBe(claimer);
+    expect(order?.buyer_id).toBe(claimer);
+
+    const { data: ticket } = await db
+      .from("tickets")
+      .select("current_holder")
+      .eq("order_id", orderId)
+      .maybeSingle<{ current_holder: string | null }>();
     expect(ticket?.current_holder).toBe(claimer);
   }, 15_000);
 
