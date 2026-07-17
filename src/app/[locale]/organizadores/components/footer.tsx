@@ -10,9 +10,9 @@ export function SiteFooter() {
           <div className="flex flex-col items-start gap-4">
             <Logo />
             <p className="m-0 max-w-[60ch] text-sm leading-relaxed text-cart-ink-3">
-              Pasape ayuda a organizadores de fiestas, raves y eventos
-              universitarios a vender por link, entregar QR y controlar la
-              puerta sin depender solo de Excel y WhatsApp.
+              Pasape ayuda a organizadores de fiestas, conciertos, charlas y
+              eventos universitarios a vender por link, entregar QR y
+              controlar la puerta sin depender solo de Excel y WhatsApp.
             </p>
             <p className="m-0 font-mono text-[11px] uppercase tracking-[0.08em] text-cart-ink-4">
               © {new Date().getFullYear()} PASAPE · LIMA, PERÚ

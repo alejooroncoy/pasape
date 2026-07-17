@@ -22,18 +22,19 @@ type Props = {
   params: Promise<{ locale: string }>;
 };
 
-const ORG_TITLE = "Vende tu fiesta sin Excel ni lista en la puerta";
+const ORG_TITLE = "Vende tu evento sin Excel ni lista en la puerta";
 const ORG_DESCRIPTION =
-  "Para organizadores de fiestas, raves y eventos universitarios que hoy venden por WhatsApp y Yape. Cada entrada con su QR, tus promotores y boxes ordenados, y una puerta que ya no busca nombres en una lista de cientos.";
+  "Para organizadores de fiestas, conciertos, charlas y eventos universitarios que hoy venden por WhatsApp y Yape. Cada entrada con su QR, tus promotores y boxes ordenados, y una puerta que ya no busca nombres en una lista de cientos.";
 
 const ORG_KEYWORDS = [
+  "vender entradas para eventos",
   "vender entradas para fiestas",
   "sistema de entradas para eventos universitarios",
   "vender entradas por WhatsApp",
-  "ticketera para fiestas y raves",
+  "ticketera para fiestas y eventos",
   "QR para control de acceso eventos",
   "vender boxes y mesas para eventos",
-  "software para organizador de fiestas Perú",
+  "software para organizadores de eventos Perú",
   "reemplazar Excel para vender entradas",
   "cobrar entradas con Yape y Plin",
 ];
@@ -62,7 +63,7 @@ export default async function OrganizadoresPage({ params }: Props) {
         url: SITE_URL,
         logo: `${SITE_URL}/icon`,
         description:
-          "Pasape ayuda a organizadores de fiestas, raves y eventos universitarios a vender entradas con QR, ordenar promotores y boxes, y controlar el acceso en la puerta.",
+          "Pasape ayuda a organizadores de fiestas, conciertos, charlas y eventos universitarios a vender entradas con QR, ordenar promotores y boxes, y controlar el acceso en la puerta.",
         areaServed: "PE",
       },
       {

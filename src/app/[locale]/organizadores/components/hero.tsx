@@ -11,7 +11,7 @@ export function Hero({ waHref }: { waHref: string }) {
     >
       <div className="relative z-10 mx-auto grid w-full max-w-[1160px] items-center gap-12 px-[22px] lg:grid-cols-[1.05fr_0.95fr] lg:gap-10 lg:px-8">
         <div className="mx-auto flex max-w-[640px] flex-col items-center text-center lg:mx-0 lg:items-start lg:text-left">
-          <Eyebrow withDot>Para fiestas, raves y eventos universitarios</Eyebrow>
+          <Eyebrow withDot>Para fiestas, conciertos, charlas y eventos universitarios</Eyebrow>
           <h1 className="reveal in m-0 mt-7 max-w-[15ch] text-balance font-sans text-[clamp(40px,6.8vw,72px)] font-semibold leading-[0.98] tracking-[-0.03em] text-cart-ink [&_em]:font-serif [&_em]:font-normal [&_em]:italic [&_em]:tracking-[-0.02em] [&_em]:text-cart-accent">
             Deja el Excel.
             <br />
