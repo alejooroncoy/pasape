@@ -12,6 +12,8 @@ import { PERSIST_GC_TIME_MS } from "@/lib/_shared/query-client-config";
 import { useSessionReady } from "@/lib/identity/hooks/useSessionReady";
 import { currentUserKey } from "@/lib/identity/hooks/useCurrentUser";
 import type { Order, OrderQuote, Ticket, TransferOutcome, WalletTicket } from "@/server/tickets/domain/Ticket";
+import type { CustomField } from "@/lib/events/customFields";
+import type { CustomFieldAnswers } from "@/app/[locale]/events/[slug]/_checkout/CustomFieldsForm";
 
 export const myTicketsKey = ["tickets", "mine"] as const;
 
@@ -239,11 +241,28 @@ export const useCarouselScope = (ticketId: string) =>
 export const useClaimTransfer = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { token: string; fullName?: string | null; dni?: string | null; isForeigner?: boolean }) =>
-      api.post<{ ticketId: string; eventSlug: string }>("/api/tickets/claim", input),
+    mutationFn: (input: {
+      token: string;
+      fullName?: string | null;
+      dni?: string | null;
+      isForeigner?: boolean;
+      customFieldAnswers?: CustomFieldAnswers;
+    }) => api.post<{ ticketId: string; eventSlug: string }>("/api/tickets/claim", input),
     onSuccess: () => qc.invalidateQueries({ queryKey: ticketsRoot }),
   });
 };
+
+// Preview de solo-lectura antes de reclamar: qué preguntas del evento debe
+// responder quien está a punto de canjear esta entrada (por persona, no por
+// orden). `enabled: !!token` porque la página de claim recién tiene el token
+// tras montar (viene de la URL).
+export const useClaimPreview = (token: string) =>
+  useQuery({
+    queryKey: ["tickets", "claim-preview", token],
+    queryFn: () =>
+      api.get<{ eventTitle: string; customFields: CustomField[] }>(`/api/tickets/claim/${token}`),
+    enabled: !!token,
+  });
 
 // Desbloqueo de la PROPIA compra al loguearse tras pagar como invitado.
 export const useClaimOrder = () => {

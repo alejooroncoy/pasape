@@ -18,6 +18,7 @@ import {
 import type { EventCategory, EventStatus, Promo } from "@/server/events/domain/Event";
 import { activePricing, applyPromos, type PromoLineInput } from "@/lib/events/pricing";
 import { resolveOrderFee } from "@/lib/tickets/serviceFee";
+import { customFieldsSchema } from "@/lib/events/customFields";
 import { dispatchTicketDelivery } from "@/server/notifications/application/DispatchTicketDelivery";
 import { supabaseBoxRepository } from "@/server/boxes/infrastructure/repositories/SupabaseBoxRepository";
 import { encryptDni, dniLast4, decryptDni, normalizeDni } from "@/server/_shared/crypto/dni";
@@ -651,6 +652,12 @@ export const supabaseTicketRepository: TicketRepository = {
       .single<{ full_name: string | null }>();
     const buyerFullName = buyerProfile?.full_name ?? null;
 
+    // Las respuestas a las preguntas del evento (customFieldAnswers) son POR
+    // ENTRADA, no por orden: solo el comprador respondió en el checkout, así
+    // que solo el PRIMER ticket generado en toda la orden se queda con esas
+    // respuestas. El resto las pide recién quien reclame esa entrada
+    // (ClaimTransfer) — cada persona responde por su cuenta.
+    let firstTicketAssigned = false;
     const ticketsToInsert = input.items.flatMap((item) => {
       const tt = tts.find((t) => t.id === item.ticketTypeId);
       // Why: para boxes solo generamos 1 ticket (el "host") sin importar qty.
@@ -665,30 +672,35 @@ export const supabaseTicketRepository: TicketRepository = {
       const lineSubtotal = subtotalByType.get(item.ticketTypeId) ?? 0;
       const base = Math.floor(lineSubtotal / slots);
       const remainder = lineSubtotal - base * slots;
-      return Array.from({ length: slots }).map((_, i) => ({
-        order_id: orderRow.id,
-        ticket_type_id: item.ticketTypeId,
-        price_cents: base + (i === 0 ? remainder : 0),
-        holder_name: item.holderName ?? attendee?.fullName ?? buyerFullName,
-        holder_email: null,
-        holder_phone: null,
-        holder_email_enc: encryptHolderEmail(attendee?.email),
-        holder_phone_enc: encryptHolderPhone(attendee?.phone),
-        // El portero busca por últimos dígitos del DNI — sin esto las
-        // entradas de compradores logueados eran inubicables por DNI. last2
-        // (deprecado) se mantiene en sync; last4 viaja al offline y enc cifrado
-        // (completo) sirve a la lista/Excel del organizador.
-        holder_dni_last2: attendee?.dni ? attendee.dni.slice(-2) : null,
-        holder_dni_enc: encryptDni(attendee?.dni),
-        holder_dni_last4: dniLast4(attendee?.dni),
-        // Hash determinista para el conteo atómico del cap por persona (trigger
-        // + CHECK en dni_event_usage). Se mantiene en sync al reasignar el holder.
-        holder_dni_hash: signalHash("dni", normalizeDni(attendee?.dni)),
-        qr_code: generateQr(),
-        current_holder: effectiveBuyerId,
-        box_label: tt?.box_label ?? null,
-        box_host_ticket_id: null,
-      }));
+      return Array.from({ length: slots }).map((_, i) => {
+        const isFirstOfOrder = !firstTicketAssigned;
+        if (isFirstOfOrder) firstTicketAssigned = true;
+        return {
+          order_id: orderRow.id,
+          ticket_type_id: item.ticketTypeId,
+          price_cents: base + (i === 0 ? remainder : 0),
+          custom_field_answers: isFirstOfOrder ? input.customFieldAnswers ?? {} : {},
+          holder_name: item.holderName ?? attendee?.fullName ?? buyerFullName,
+          holder_email: null,
+          holder_phone: null,
+          holder_email_enc: encryptHolderEmail(attendee?.email),
+          holder_phone_enc: encryptHolderPhone(attendee?.phone),
+          // El portero busca por últimos dígitos del DNI — sin esto las
+          // entradas de compradores logueados eran inubicables por DNI. last2
+          // (deprecado) se mantiene en sync; last4 viaja al offline y enc cifrado
+          // (completo) sirve a la lista/Excel del organizador.
+          holder_dni_last2: attendee?.dni ? attendee.dni.slice(-2) : null,
+          holder_dni_enc: encryptDni(attendee?.dni),
+          holder_dni_last4: dniLast4(attendee?.dni),
+          // Hash determinista para el conteo atómico del cap por persona (trigger
+          // + CHECK en dni_event_usage). Se mantiene en sync al reasignar el holder.
+          holder_dni_hash: signalHash("dni", normalizeDni(attendee?.dni)),
+          qr_code: generateQr(),
+          current_holder: effectiveBuyerId,
+          box_label: tt?.box_label ?? null,
+          box_host_ticket_id: null,
+        };
+      });
     });
 
     const { data: tkRows, error: tkErr } = await db
@@ -1080,6 +1092,32 @@ export const supabaseTicketRepository: TicketRepository = {
     return ok({ event: { title: loaded.value.event.title, startsAt: loaded.value.event.starts_at } });
   },
 
+  async previewClaim(token) {
+    const db = supabaseAdmin();
+    const { data: pendingRow } = await db
+      .from("ticket_transfers")
+      .select("ticket_id")
+      .eq("pending_token", token)
+      .eq("status", "pending")
+      .maybeSingle<{ ticket_id: string }>();
+    if (!pendingRow) return err("claim_not_found");
+
+    const { data: tk } = await db
+      .from("tickets")
+      .select("ticket_type:ticket_types!inner(event:events!inner(title, custom_fields))")
+      .eq("id", pendingRow.ticket_id)
+      .single();
+    if (!tk) return err("ticket_not_found");
+    const joined = tk as unknown as {
+      ticket_type: { event: { title: string; custom_fields: unknown } };
+    };
+    const parsed = customFieldsSchema.safeParse(joined.ticket_type.event.custom_fields ?? []);
+    return ok({
+      eventTitle: joined.ticket_type.event.title,
+      customFields: parsed.success ? parsed.data : [],
+    });
+  },
+
   async claimTransfer(input): Promise<Result<{ ticket: Ticket; eventSlug: string }>> {
     const db = supabaseAdmin();
     const { data: pendingRow } = await db
@@ -1125,10 +1163,14 @@ export const supabaseTicketRepository: TicketRepository = {
       holder_dni_last4?: string | null;
       holder_dni_last2?: string | null;
       holder_dni_hash?: string | null;
+      custom_field_answers?: Record<string, unknown>;
     } = {
       current_holder: input.toProfile,
       transfer_count: joined.transfer_count + 1,
     };
+    if (input.customFieldAnswers !== undefined) {
+      claimPatch.custom_field_answers = input.customFieldAnswers;
+    }
     if (input.fullName !== undefined && input.fullName !== null) {
       claimPatch.holder_name = input.fullName;
     }

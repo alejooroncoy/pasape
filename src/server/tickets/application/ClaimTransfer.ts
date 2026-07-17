@@ -9,6 +9,7 @@ type Input = {
   toProfile: string;
   fullName?: string | null;
   dni?: string | null;
+  customFieldAnswers?: Record<string, unknown>;
 };
 
 // Reclama una transferencia pendiente. La posesión del token (que llegó por
@@ -19,4 +20,11 @@ export const claimTransfer = async (
   input: Input,
 ): Promise<Result<{ ticket: Ticket; eventSlug: string }>> => {
   return repo.claimTransfer(input);
+};
+
+// Preview de solo-lectura para la página de canje: qué preguntas debe
+// responder quien está a punto de reclamar (customFieldAnswers son por
+// entrada, no por orden — cada persona real las responde por su cuenta).
+export const previewClaimTransfer = async ({ repo }: Deps, token: string) => {
+  return repo.previewClaim(token);
 };

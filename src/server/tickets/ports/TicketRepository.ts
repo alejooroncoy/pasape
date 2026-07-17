@@ -1,5 +1,6 @@
 import type { Order, OrderQuote, Ticket, WalletTicket } from "../domain/Ticket";
 import type { Result } from "@/server/_shared/result";
+import type { CustomField } from "@/lib/events/customFields";
 
 // Quién escanea: el organizador tiene profile (membership); el portero por
 // código tiene sesión (sin profile). Se registra uno u otro en scan_events.
@@ -127,13 +128,21 @@ export interface TicketRepository {
     token: string;
   }): Promise<Result<{ event: { title: string; startsAt: string } }>>;
   /** Reclama una transferencia pendiente: el ticket pasa a `toProfile`. Captura
-      la identidad del holder real (nombre + DNI completo) en SU ticket. */
+      la identidad del holder real (nombre + DNI completo) en SU ticket, y sus
+      respuestas a las preguntas del evento (customFieldAnswers son por
+      ENTRADA, no por orden — quien reclama responde por su cuenta). */
   claimTransfer(input: {
     token: string;
     toProfile: string;
     fullName?: string | null;
     dni?: string | null;
+    customFieldAnswers?: Record<string, unknown>;
   }): Promise<Result<{ ticket: Ticket; eventSlug: string }>>;
+  /** Preview de solo-lectura para la página de canje: qué evento y qué
+      preguntas debe responder quien está a punto de reclamar. No muta nada. */
+  previewClaim(
+    token: string,
+  ): Promise<Result<{ eventTitle: string; customFields: CustomField[] }>>;
   /** Reclama la PROPIA compra al loguearse tras pagar como invitado: reasigna
       `current_holder` de las entradas de la orden al `toProfile`. Idempotente;
       bloquea re-claim por otra cuenta una vez enganchada. No es transferencia

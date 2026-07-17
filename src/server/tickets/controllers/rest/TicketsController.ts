@@ -16,11 +16,12 @@ import { supabaseTicketRepository as repo } from "../../infrastructure/repositor
 import { buyTickets } from "../../application/BuyTickets";
 import { getMyTicketById, getMyTickets } from "../../application/GetMyTickets";
 import { transferTicket } from "../../application/TransferTicket";
-import { claimTransfer } from "../../application/ClaimTransfer";
+import { claimTransfer, previewClaimTransfer } from "../../application/ClaimTransfer";
 import { claimOrder } from "../../application/ClaimOrder";
 import { requestRefund } from "../../application/RequestRefund";
 import type { OrderQuote, Ticket, TransferOutcome, WalletTicket } from "../../domain/Ticket";
 import type { BuyOutput, RefundRequestSummary } from "../../ports/TicketRepository";
+import type { CustomField } from "@/lib/events/customFields";
 
 // Why: el QR llega por WhatsApp o email — exigimos al menos uno. DNI es
 // obligatorio (lo verifica el portero en puerta).
@@ -106,6 +107,11 @@ const claimObject = z.object({
   fullName: z.string().nullable().optional(),
   dni: z.string().nullable().optional(),
   isForeigner: z.boolean().optional(),
+  // Respuestas del evento para ESTA entrada puntual (por persona, no por
+  // orden) — mismo shape que customFieldAnswers en buySchema.
+  customFieldAnswers: z
+    .record(z.string(), z.union([z.string().max(2000), z.array(z.string().max(200)).max(20), z.boolean()]))
+    .optional(),
 });
 
 const claimSchema = claimObject
@@ -293,10 +299,19 @@ export const TicketsController = {
         toProfile: auth.value.profileId,
         fullName: parsed.data.fullName,
         dni: parsed.data.dni,
+        customFieldAnswers: parsed.data.customFieldAnswers,
       },
     );
     if (!res.ok) return res;
     return { ok: true, value: { ticketId: res.value.ticket.id, eventSlug: res.value.eventSlug } };
+  },
+
+  async previewClaim(
+    token: unknown,
+  ): Promise<Result<{ eventTitle: string; customFields: CustomField[] }>> {
+    const parsed = z.string().min(10).safeParse(token);
+    if (!parsed.success) return err("invalid_input");
+    return previewClaimTransfer({ repo }, parsed.data);
   },
 
   async claimOrder(

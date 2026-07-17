@@ -1145,12 +1145,12 @@ export const supabaseEventRepository: EventRepository = {
         .from("tickets")
         .select(
           `id, holder_name, holder_dni_enc, holder_dni_last4, status, used_at, order_id,
-           box_label, box_host_ticket_id, current_holder, transfer_count,
+           box_label, box_host_ticket_id, current_holder, transfer_count, custom_field_answers,
            ticket_type:ticket_types!inner(id, name, unit_noun),
            holder:profiles!tickets_current_holder_fkey(id, phone),
            order:orders!inner(
              id, event_id, promoter_link_id, status, is_courtesy,
-             guest_email, guest_phone, custom_field_answers,
+             guest_email, guest_phone,
              buyer:profiles!orders_buyer_id_fkey(id, email, phone),
              promoter_link:promoter_links(id, code)
            )`,
@@ -1178,6 +1178,7 @@ export const supabaseEventRepository: EventRepository = {
       box_host_ticket_id: string | null;
       current_holder: string;
       transfer_count: number;
+      custom_field_answers: Record<string, string | string[] | boolean> | null;
       ticket_type: { id: string; name: string; unit_noun: string | null };
       holder: { id: string; phone: string | null } | null;
       order: {
@@ -1187,7 +1188,6 @@ export const supabaseEventRepository: EventRepository = {
         is_courtesy: boolean | null;
         guest_email: string | null;
         guest_phone: string | null;
-        custom_field_answers: Record<string, string | string[] | boolean> | null;
         buyer: { id: string; email: string | null; phone: string | null };
         promoter_link: { id: string; code: string } | null;
       };
@@ -1260,7 +1260,9 @@ export const supabaseEventRepository: EventRepository = {
         promoterCode: t.order?.promoter_link?.code ?? null,
         isCourtesy: t.order?.is_courtesy ?? false,
         transferFromName: transfer?.fromName ?? null,
-        customFieldAnswers: t.order?.custom_field_answers ?? {},
+        // Por ENTRADA, no por orden: cada ticket lleva sus propias respuestas
+        // (las llenó el comprador al pagar, o quien la reclamó después).
+        customFieldAnswers: t.custom_field_answers ?? {},
       };
     });
 

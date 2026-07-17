@@ -3,7 +3,7 @@
 import { use, useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { useRouter } from "@/i18n/navigation";
-import { useClaimTransfer } from "@/lib/tickets/hooks/useTickets";
+import { useClaimPreview, useClaimTransfer } from "@/lib/tickets/hooks/useTickets";
 import { sanitizeDocument, sanitizePersonNameLive } from "@/lib/input/sanitize";
 import { isValidDocument } from "@/lib/identity/document";
 import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
@@ -11,6 +11,11 @@ import { useGoogleSignIn } from "@/lib/identity/hooks/useFirebaseAuth";
 import { GoogleBtn } from "@/components/design";
 import { setOauthReturn } from "@/components/auth/PostLoginRedirect";
 import { Logo } from "@/components/brand/Logo";
+import {
+  CustomFieldsForm,
+  customFieldsValid,
+  type CustomFieldAnswers,
+} from "@/app/[locale]/events/[slug]/_checkout/CustomFieldsForm";
 
 type Props = { params: Promise<{ token: string }> };
 
@@ -18,7 +23,10 @@ export default function ClaimPage(props: Props) {
   const { token } = use(props.params);
   const me = useCurrentUser();
   const claim = useClaimTransfer();
+  const preview = useClaimPreview(token);
   const router = useRouter();
+  const customFields = preview.data?.customFields ?? [];
+  const [customFieldAnswers, setCustomFieldAnswers] = useState<CustomFieldAnswers>({});
   // Google directo (sin /login, que desvía al panel de organizador). El token va
   // en la ruta, así que vuelve intacto del OAuth.
   const google = useGoogleSignIn({});
@@ -46,14 +54,15 @@ export default function ClaimPage(props: Props) {
 
   const nameValid = name.trim().length >= 2;
   const dniValid = isValidDocument(dni, isForeigner);
-  const canSubmit = isLogged && nameValid && dniValid && !claim.isPending;
+  const customFieldsOk = customFieldsValid(customFields, customFieldAnswers);
+  const canSubmit = isLogged && nameValid && dniValid && customFieldsOk && !claim.isPending;
 
   const submit = () => {
     setTouched(true);
-    if (!isLogged || !nameValid || !dniValid || claim.isPending || claimInFlightRef.current) return;
+    if (!canSubmit || claimInFlightRef.current) return;
     claimInFlightRef.current = true;
     claim
-      .mutateAsync({ token, fullName: name.trim(), dni, isForeigner })
+      .mutateAsync({ token, fullName: name.trim(), dni, isForeigner, customFieldAnswers })
       .then((res) => setDone({ ticketId: res.ticketId }))
       .catch(() => {
         /* el error se muestra abajo */
@@ -196,6 +205,19 @@ export default function ClaimPage(props: Props) {
                 )}
               </label>
             </div>
+
+            {customFields.length > 0 && (
+              <div className="mt-4 text-left">
+                <p className="mb-2 text-[12px] font-medium text-cart-ink-3">
+                  El organizador también pide esto a cada asistente:
+                </p>
+                <CustomFieldsForm
+                  fields={customFields}
+                  answers={customFieldAnswers}
+                  setAnswers={setCustomFieldAnswers}
+                />
+              </div>
+            )}
 
             {claim.isError && (
               <p className="mt-3 text-[12px] text-rose-300">
