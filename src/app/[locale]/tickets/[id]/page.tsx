@@ -407,6 +407,23 @@ function TicketDetailInner({ id }: { id: string }) {
                     </div>
                   </div>
                 </div>
+              ) : data.status === "pending_approval" ? (
+                // RSVP con aprobación: el organizador no decidió aún. Sin QR
+                // hasta que apruebe — nunca "lista de espera", es revisión.
+                <div className="grid size-[240px] place-items-center gap-3 px-6 text-center">
+                  <div className="grid size-[88px] place-items-center rounded-full bg-amber-400/15 ring-1 ring-amber-400/30">
+                    <svg width="42" height="42" viewBox="0 0 24 24" fill="none">
+                      <circle cx="12" cy="12" r="9" stroke="#d97706" strokeWidth="2" />
+                      <path d="M12 7.5v5l3 2" stroke="#d97706" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </div>
+                  <div>
+                    <div className="text-[18px] font-bold tracking-[-0.01em] text-neutral-900">Tu inscripción está en revisión</div>
+                    <div className="mt-1 text-[12.5px] leading-relaxed text-neutral-500">
+                      El organizador la revisará pronto. Te avisamos por correo y en la app en cuanto la apruebe.
+                    </div>
+                  </div>
+                </div>
               ) : data.status === "used" ? (
                 // Ya ingresó: estampa clara y bonita en vez del QR (que ya no sirve).
                 <div className="grid size-[240px] place-items-center gap-3 px-6 text-center">
@@ -865,6 +882,17 @@ function StatusBadge({ status }: { status: WalletTicket["status"] }) {
     return (
       <span className="rounded-full bg-black/50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/60 backdrop-blur-md">
         Anulada
+      </span>
+    );
+  }
+  if (status === "pending_approval") {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-black/45 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-300 backdrop-blur-md">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2.4" />
+          <path d="M12 7.5v5l3 2" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        En revisión
       </span>
     );
   }

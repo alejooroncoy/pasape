@@ -1,13 +1,17 @@
 import { z } from "zod";
-import { headers } from "next/headers";
 import { err, ok, type Result } from "@/server/_shared/result";
+import { supabaseAdmin } from "@/server/_shared/supabase/admin";
+import { addEventCoOrganizer } from "@/server/events/application/EventCoOrganizers";
 import { getAuthContext, getActiveOrgSlug } from "@/server/_shared/AuthContext";
 import { supabaseOrganizationRepository } from "../../infrastructure/repositories/SupabaseOrganizationRepository";
 import { supabaseInviteRepository } from "../../infrastructure/repositories/SupabaseInviteRepository";
 import { supabaseMembershipRepository } from "../../infrastructure/repositories/SupabaseMembershipRepository";
 import { createInvite } from "../../application/CreateInvite";
 import { acceptInvite } from "../../application/AcceptInvite";
-import { dispatchTeamInviteNotification } from "../../application/dispatchTeamInviteNotification";
+import {
+  dispatchTeamInviteNotification,
+  buildInviteUrl,
+} from "../../application/dispatchTeamInviteNotification";
 import { listInvites, type InviteWithStatus } from "../../application/ListInvites";
 import { revokeInvite } from "../../application/RevokeInvite";
 import { isTeamInviteWhatsAppEnabled } from "../../teamInviteChannels";
@@ -28,6 +32,14 @@ const resolveScopeLabel = async (
     const e = await supabaseLegalEntityRepository.findById(scopeId);
     return e?.name ?? fallback;
   }
+  if (scopeType === "event") {
+    const { data } = await supabaseAdmin()
+      .from("events")
+      .select("title")
+      .eq("id", scopeId)
+      .maybeSingle<{ title: string }>();
+    return data?.title ? `Evento: ${data.title}` : "Evento";
+  }
   const owner = await supabaseUserRepository.findById(scopeId);
   return owner?.fullName ? `Portafolio de ${owner.fullName}` : "Portafolio";
 };
@@ -36,6 +48,8 @@ const deps = {
   invites: supabaseInviteRepository,
   orgs: supabaseOrganizationRepository,
   memberships: supabaseMembershipRepository,
+  onEventScope: (eventId: string, profileId: string) =>
+    addEventCoOrganizer(eventId, profileId),
 };
 
 const INVITABLE_ROLES: InvitableOrgRole[] = ["admin", "editor", "reporter"];
@@ -57,24 +71,6 @@ const createSchema = z
     (v) => (v.channel === "email" ? Boolean(v.email) : Boolean(v.phone)),
     { message: "Falta el destinatario.", path: ["email"] },
   );
-
-const sanitizeHost = (raw: string): string => {
-  let h = raw.trim();
-  if (h.startsWith("http://")) h = h.slice("http://".length);
-  else if (h.startsWith("https://")) h = h.slice("https://".length);
-  const slashAt = h.indexOf("/");
-  if (slashAt > -1) h = h.slice(0, slashAt);
-  return h || "pasape.lat";
-};
-
-const buildInviteUrl = async (token: string): Promise<string> => {
-  const envUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
-  if (envUrl) return `${envUrl.replace(/\/+$/, "")}/es/invites/${token}`;
-  const h = await headers();
-  const host = sanitizeHost(h.get("x-forwarded-host") ?? h.get("host") ?? "pasape.lat");
-  const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
-  return `${proto}://${host}/es/invites/${token}`;
-};
 
 export type ListInvitesResponse = {
   members: Array<{

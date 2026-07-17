@@ -26,6 +26,14 @@ export const useAddEventCoOrganizer = (slug: string) => {
   });
 };
 
+export const useInviteEventCoOrganizer = (slug: string) =>
+  useMutation({
+    mutationFn: (email: string) =>
+      api.post<{ inviteId: string }>(`/api/events/${slug}/co-organizers/invite`, {
+        email,
+      }),
+  });
+
 export const useRemoveEventCoOrganizer = (slug: string) => {
   const qc = useQueryClient();
   return useMutation({

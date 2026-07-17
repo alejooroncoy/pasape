@@ -81,9 +81,9 @@ export const ORGANIZER_TYPE_OPTIONS: ReadonlyArray<OrganizerTypeOption> = [
   {
     value: "independent_host",
     icon: HostIcon,
-    label: "Artista independiente",
+    label: "Organizador independiente",
     description:
-      "Soy artista, banda o DJ y organizo mis propios shows, sin productora ni local fijo.",
+      "Organizo mis propios eventos, sin productora ni local fijo.",
   },
 ];
 

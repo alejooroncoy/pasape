@@ -142,7 +142,7 @@ function QuickCreateForm() {
             </svg>
           </button>
           <h1 className="font-sans text-[22px] font-semibold leading-tight tracking-[-0.02em] lg:text-[26px]">
-            Publicar tu show
+            Publicar tu evento
           </h1>
         </div>
         <Link
@@ -201,7 +201,7 @@ function QuickCreateForm() {
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Reverb x La Selva"
+              placeholder="¿Cómo se llama tu evento?"
               autoFocus
               className="mt-1.5 w-full bg-transparent font-sans text-[22px] font-semibold leading-tight tracking-[-0.02em] text-cart-ink outline-none placeholder:text-cart-ink-4 lg:text-[26px]"
             />

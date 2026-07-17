@@ -63,6 +63,44 @@ export const addEventCoOrganizer = async (
   return ok({ profileId });
 };
 
+/**
+ * Invita a alguien por email como co-organizador de UN evento puntual, sin
+ * volverlo miembro de la marca (a diferencia del invite de equipo normal, que
+ * vive en el BC identity/organizations). Reusa el MISMO mecanismo de invites
+ * (token, email, aceptar) con scope_type="event" — ver AcceptInvite.ts, que
+ * al aceptar inserta en `event_co_organizers` en vez de `memberships`.
+ */
+export const inviteEventCoOrganizer = async (
+  deps: {
+    invites: import("@/server/identity/organizations/ports/InviteRepository").InviteRepository;
+    memberships: import("@/server/identity/organizations/ports/MembershipRepository").MembershipRepository;
+  },
+  input: { eventId: string; organizationId: string; callerProfileId: string; email: string },
+): Promise<Result<{ inviteId: string; token: string; expiresAt: string; email: string }>> => {
+  const email = input.email.trim().toLowerCase();
+  if (!email.includes("@")) return err("invalid_email");
+  const allowed = await deps.memberships.hasAdminOver({
+    profileId: input.callerProfileId,
+    scopeType: "organization",
+    scopeId: input.organizationId,
+  });
+  if (!allowed) return err("forbidden");
+  const created = await deps.invites.create({
+    scope: { type: "event", id: input.eventId },
+    invitedBy: input.callerProfileId,
+    email,
+    phone: null,
+    role: "editor",
+  });
+  if (!created.ok) return err(created.error);
+  return ok({
+    inviteId: created.value.id,
+    token: created.value.token,
+    expiresAt: created.value.expiresAt,
+    email,
+  });
+};
+
 export const removeEventCoOrganizer = async (
   eventId: string,
   profileId: string,

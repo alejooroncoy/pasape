@@ -6,11 +6,13 @@ export type OrgInviteRole = Exclude<OrgRole, "owner">;
 /** Roles invitables al panel (admin/editor/reporter). Porteros usan código de puerta. */
 export type InvitableOrgRole = Exclude<OrgInviteRole, "door">;
 
-export type InviteScopeType = "portfolio" | "legal_entity" | "organization";
+// "event" invita a alguien como co-organizador de UN evento puntual (tabla
+// event_co_organizers), no como miembro de la marca — ver AcceptInvite.ts.
+export type InviteScopeType = "portfolio" | "legal_entity" | "organization" | "event";
 
 export type InviteScope = {
   type: InviteScopeType;
-  id: string; // profile_id (portfolio) | legal_entity.id | organization.id
+  id: string; // profile_id (portfolio) | legal_entity.id | organization.id | event.id
 };
 
 export type OrgInviteStatus = "pending" | "accepted" | "expired" | "revoked";

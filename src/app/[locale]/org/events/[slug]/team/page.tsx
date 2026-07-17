@@ -12,6 +12,7 @@ import { useOrgInvites } from "@/lib/identity/organizations/hooks/useOrgInvites"
 import {
   useAddEventCoOrganizer,
   useEventCoOrganizers,
+  useInviteEventCoOrganizer,
   useRemoveEventCoOrganizer,
 } from "@/lib/events/hooks/useEventCoOrganizers";
 import { useOrgPromoters, useOrgScheme } from "@/lib/promoters/hooks/useOrgPromoters";
@@ -158,8 +159,10 @@ function EventCoOrganizersSection({ slug }: { slug: string }) {
   const invites = useOrgInvites();
   const coorgs = useEventCoOrganizers(slug);
   const add = useAddEventCoOrganizer(slug);
+  const invite = useInviteEventCoOrganizer(slug);
   const remove = useRemoveEventCoOrganizer(slug);
   const [picker, setPicker] = useState(false);
+  const [invited, setInvited] = useState<string | null>(null);
 
   const myProfileId = me.data?.user?.id ?? null;
   const assignedIds = useMemo(
@@ -174,14 +177,14 @@ function EventCoOrganizersSection({ slug }: { slug: string }) {
     <section>
       <SectionHeader
         title="Co-organizadores de este evento"
-        subtitle="Gente del equipo de tu marca invitada solo a este evento."
+        subtitle="Gente invitada solo a este evento — de tu equipo o por correo."
         action={
           <button
             type="button"
             onClick={() => setPicker(true)}
             className="inline-flex items-center gap-1.5 rounded-full bg-cart-accent px-4 py-2 text-[13px] font-semibold text-white shadow-[0_8px_24px_-8px_var(--color-cart-accent-glow-strong)]"
           >
-            <PlusIcon /> Agregar de tu equipo
+            <PlusIcon /> Agregar co-organizador
           </button>
         }
       />
@@ -233,12 +236,11 @@ function EventCoOrganizersSection({ slug }: { slug: string }) {
       <AnimatePresence>
         {picker && (
           <Sheet
-            onClose={() => setPicker(false)}
-            title={
-              available.length > 0
-                ? "Agregar del equipo"
-                : "No hay nadie disponible"
-            }
+            onClose={() => {
+              setPicker(false);
+              setInvited(null);
+            }}
+            title="Agregar co-organizador"
           >
             <CoOrgPicker
               available={available}
@@ -248,6 +250,14 @@ function EventCoOrganizersSection({ slug }: { slug: string }) {
                   onSuccess: () => setPicker(false),
                 })
               }
+              onInvite={(email) =>
+                invite.mutate(email, {
+                  onSuccess: () => setInvited(email),
+                })
+              }
+              inviting={invite.isPending}
+              inviteError={invite.error?.message ?? null}
+              invited={invited}
             />
           </Sheet>
         )}
@@ -260,6 +270,10 @@ function CoOrgPicker({
   available,
   busy,
   onPick,
+  onInvite,
+  inviting,
+  inviteError,
+  invited,
 }: {
   available: Array<{
     profileId: string;
@@ -269,50 +283,132 @@ function CoOrgPicker({
   }>;
   busy: boolean;
   onPick: (profileId: string) => void;
+  onInvite: (email: string) => void;
+  inviting: boolean;
+  inviteError: string | null;
+  invited: string | null;
 }) {
-  if (available.length === 0) {
+  return (
+    <div className="flex flex-col gap-5 pb-4">
+      {available.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <p className="text-[12.5px] text-cart-ink-3">
+            De tu equipo de marca:
+          </p>
+          {available.map((m) => (
+            <button
+              key={m.profileId}
+              type="button"
+              disabled={busy}
+              onClick={() => onPick(m.profileId)}
+              className="flex items-center gap-3 rounded-2xl border border-cart-line bg-cart-bg-elev p-3 text-left transition hover:border-cart-line-strong disabled:opacity-60"
+            >
+              <Avatar name={m.fullName || m.email || "?"} />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[14px] font-semibold">
+                  {m.fullName || m.email}
+                </div>
+                {m.fullName && m.email && (
+                  <div className="truncate text-[11.5px] text-cart-ink-3">
+                    {m.email}
+                  </div>
+                )}
+              </div>
+              <RoleChip role={m.role} />
+            </button>
+          ))}
+        </div>
+      )}
+
+      {available.length > 0 && (
+        <div className="flex items-center gap-3">
+          <div className="h-px flex-1 bg-cart-line" />
+          <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-cart-ink-4">
+            o
+          </span>
+          <div className="h-px flex-1 bg-cart-line" />
+        </div>
+      )}
+
+      <InviteByEmailForm
+        busy={inviting}
+        error={inviteError}
+        invited={invited}
+        onSubmit={onInvite}
+      />
+    </div>
+  );
+}
+
+// Invitar por correo a alguien que NO está en el equipo de la marca — solo
+// para este evento. Es la opción obvia por defecto: caso más común cuando el
+// organizador quiere sumar a alguien puntual (ej. un amigo, un freelance).
+function InviteByEmailForm({
+  busy,
+  error,
+  invited,
+  onSubmit,
+}: {
+  busy: boolean;
+  error: string | null;
+  invited: string | null;
+  onSubmit: (email: string) => void;
+}) {
+  const [email, setEmail] = useState("");
+  const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+
+  if (invited) {
     return (
-      <div className="flex flex-col items-center gap-3 pb-6 text-center">
-        <p className="max-w-[280px] text-[13.5px] text-cart-ink-3">
-          Todo el equipo de tu marca ya está acá, o aún no tienes a nadie.
+      <div className="flex flex-col items-center gap-2 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-6 text-center">
+        <span className="grid size-9 place-items-center rounded-full bg-emerald-500 text-white">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M3 8.5l3 3 7-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </span>
+        <p className="text-[13.5px] font-semibold text-cart-ink">Invitación enviada</p>
+        <p className="max-w-[280px] text-[12.5px] text-cart-ink-3">
+          Le llegó un correo a <span className="font-medium text-cart-ink-2">{invited}</span>. Cuando
+          lo acepte, va a poder editar solo este evento.
         </p>
-        <Link
-          href="/org/team"
-          className="inline-flex items-center gap-1.5 rounded-full bg-cart-accent px-4 py-2 text-[13px] font-semibold text-white"
-        >
-          Ir a Equipo de la marca
-        </Link>
       </div>
     );
   }
+
   return (
-    <div className="flex flex-col gap-2 pb-4">
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (valid && !busy) onSubmit(email.trim());
+      }}
+      className="flex flex-col gap-2"
+    >
       <p className="text-[12.5px] text-cart-ink-3">
-        Elige a quién sumar como co-organizador solo de este evento.
+        Invita por correo a alguien nuevo — quedará solo en este evento, sin acceso al resto de tu
+        marca.
       </p>
-      {available.map((m) => (
+      <div className="flex items-center gap-2">
+        <input
+          type="email"
+          inputMode="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="correo@ejemplo.com"
+          className="h-12 flex-1 rounded-2xl border border-cart-line bg-cart-bg-elev px-4 text-[14px] font-medium outline-none focus:border-cart-accent"
+        />
         <button
-          key={m.profileId}
-          type="button"
-          disabled={busy}
-          onClick={() => onPick(m.profileId)}
-          className="flex items-center gap-3 rounded-2xl border border-cart-line bg-cart-bg-elev p-3 text-left transition hover:border-cart-line-strong disabled:opacity-60"
+          type="submit"
+          disabled={!valid || busy}
+          className="inline-flex h-12 shrink-0 items-center justify-center rounded-2xl bg-cart-accent px-5 text-[13.5px] font-semibold text-white shadow-[0_8px_24px_-8px_var(--color-cart-accent-glow-strong)] disabled:opacity-50"
         >
-          <Avatar name={m.fullName || m.email || "?"} />
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-[14px] font-semibold">
-              {m.fullName || m.email}
-            </div>
-            {m.fullName && m.email && (
-              <div className="truncate text-[11.5px] text-cart-ink-3">
-                {m.email}
-              </div>
-            )}
-          </div>
-          <RoleChip role={m.role} />
+          {busy ? "Enviando…" : "Invitar"}
         </button>
-      ))}
-    </div>
+      </div>
+      {error && (
+        <p className="text-[12px] font-medium text-red-600">
+          No se pudo enviar. Revisa el correo e intenta de nuevo.
+        </p>
+      )}
+    </form>
   );
 }
 

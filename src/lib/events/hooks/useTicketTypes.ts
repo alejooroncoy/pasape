@@ -27,6 +27,8 @@ export type CreateTicketTypePayload = {
   saleEndsAt?: string | null;
   description?: string | null;
   presaleTiers?: Array<{ priceCents: number; endsAt: string }>;
+  /** RSVP con aprobación — solo válido si priceCents === 0. */
+  requiresApproval?: boolean;
 } & PresalePayload & FreePayload;
 
 export type UpdateTicketTypePayload = {
@@ -39,6 +41,8 @@ export type UpdateTicketTypePayload = {
   saleEndsAt?: string | null;
   description?: string | null;
   presaleTiers?: Array<{ priceCents: number; endsAt: string }>;
+  /** RSVP con aprobación — solo válido si priceCents === 0. */
+  requiresApproval?: boolean;
 } & PresalePayload & FreePayload;
 
 const invalidate = (qc: ReturnType<typeof useQueryClient>, slug: string) => {

@@ -103,6 +103,8 @@ type TicketRow = {
   isFree: boolean;
   /** ISO 8601. Fin de la liberación. "" = mientras esté activa (la apaga el organizador). */
   freeUntilAt: string;
+  /** RSVP con aprobación (estilo Luma). Solo válido si el precio es S/0 — ver AGENTS.md. */
+  requiresApproval: boolean;
 };
 
 /**
@@ -211,6 +213,12 @@ const presaleTiersPayload = (t: TicketRow) => ({
 const freeReleasePayload = (t: TicketRow) => ({
   isFree: t.isFree,
   freeUntilAt: t.isFree && t.freeUntilAt ? t.freeUntilAt : null,
+});
+
+/** RSVP con aprobación: solo aplica a entradas gratis (CHECK en DB
+    ticket_types_approval_only_free) — nunca se envía true fuera de eso. */
+const approvalPayload = (t: TicketRow) => ({
+  requiresApproval: t.kind !== "box" && toCents(t.priceSoles) === 0 ? t.requiresApproval : false,
 });
 
 // ── Helpers de grupos de espacios (boxes/mesas) ──────────────────────────────
@@ -352,6 +360,7 @@ export function EventComposer(props: EventComposerProps) {
       })),
       isFree: tt.isFree,
       freeUntilAt: tt.freeUntilAt ?? "",
+      requiresApproval: tt.requiresApproval,
     }));
     const durationHoursFromEdit = ev.endsAt
       ? Math.round((new Date(ev.endsAt).getTime() - new Date(ev.startsAt).getTime()) / 3_600_000)
@@ -389,6 +398,7 @@ export function EventComposer(props: EventComposerProps) {
                 presaleTiers: [],
                 isFree: false,
                 freeUntilAt: "",
+                requiresApproval: false,
               },
             ],
       publishNow: ev.status === "published" || ev.status === "pending_review",
@@ -438,6 +448,7 @@ export function EventComposer(props: EventComposerProps) {
         presaleTiers: [],
         isFree: false,
         freeUntilAt: "",
+        requiresApproval: false,
       },
     ],
   );
@@ -662,6 +673,7 @@ export function EventComposer(props: EventComposerProps) {
           description: t.description.trim() || null,
           ...presaleTiersPayload(t),
           ...freeReleasePayload(t),
+          ...approvalPayload(t),
         })),
         // Expandir cada grupo de espacios a N boxes (Box A…F).
         ...spaceGroups.flatMap(expandSpaceGroup),
@@ -917,6 +929,7 @@ export function EventComposer(props: EventComposerProps) {
             presaleTiers: [],
             isFree: false,
             freeUntilAt: "",
+            requiresApproval: false,
           });
         }
         setTickets((prev) => [...prev, ...createdRows]);
@@ -953,6 +966,8 @@ export function EventComposer(props: EventComposerProps) {
         const nextFree = freeReleasePayload(t);
         if (nextFree.isFree !== orig.isFree) ttPatch.isFree = nextFree.isFree;
         if (nextFree.freeUntilAt !== (orig.freeUntilAt ?? null)) ttPatch.freeUntilAt = nextFree.freeUntilAt;
+        const nextApproval = approvalPayload(t).requiresApproval;
+        if (nextApproval !== orig.requiresApproval) ttPatch.requiresApproval = nextApproval;
         if (Object.keys(ttPatch).length > 0) {
           await updateTT.mutateAsync({ id: t.id!, input: ttPatch });
         }
@@ -1974,7 +1989,7 @@ function TitleField({
         ref={inputRef}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="Reverb x La Selva"
+        placeholder="¿Cómo se llama tu evento?"
         className="mt-1.5 w-full bg-transparent font-sans text-[22px] font-semibold leading-tight tracking-[-0.02em] text-cart-ink outline-none placeholder:text-cart-ink-4 lg:text-[26px]"
       />
     </div>
@@ -2407,6 +2422,57 @@ function FreeReleaseEditor({
   );
 }
 
+// ============================================================
+// RequiresApprovalToggle — RSVP con aprobación (estilo Luma). Solo aplica a
+// entradas gratis (CHECK ticket_types_approval_only_free) — deshabilitado,
+// no oculto, si hay precio puesto.
+// ============================================================
+function RequiresApprovalToggle({
+  requiresApproval,
+  isFreeTicket,
+  onChange,
+}: {
+  requiresApproval: boolean;
+  isFreeTicket: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  const on = isFreeTicket && requiresApproval;
+  return (
+    <div className="mt-2 rounded-xl bg-cart-bg-elev px-3 py-2.5">
+      <div className="flex items-center gap-3">
+        <div className="flex-1">
+          <span className="text-[13px] font-semibold text-cart-ink">Solicitar aprobación</span>
+          <p className="text-[10.5px] leading-tight text-cart-ink-4">
+            {isFreeTicket
+              ? "Revisas cada inscripción antes de emitir la entrada."
+              : "Solo disponible para entradas gratis."}
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={on}
+          aria-label="Solicitar aprobación"
+          disabled={!isFreeTicket}
+          title={isFreeTicket ? undefined : "Solo disponible para entradas gratis"}
+          onClick={() => onChange(!requiresApproval)}
+          className={
+            "relative h-6 w-11 shrink-0 rounded-full transition disabled:cursor-not-allowed disabled:opacity-50 " +
+            (on ? "bg-emerald-500/80" : "bg-cart-bg-elev-2 ring-1 ring-cart-line")
+          }
+        >
+          <span
+            className={
+              "absolute top-0.5 size-5 rounded-full bg-cart-ink transition-all " +
+              (on ? "left-[22px]" : "left-0.5")
+            }
+          />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // BoxGroupEditor — edición masiva de boxes
 function DescriptionField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return (
@@ -2722,6 +2788,7 @@ function TicketsEditor({
         presaleTiers: [],
         isFree: false,
         freeUntilAt: "",
+        requiresApproval: false,
       },
     ]);
   };
@@ -2815,13 +2882,18 @@ function TicketsEditor({
           <AdvancedToggle
             open={advancedOpen.has(t.rowKey)}
             onToggle={() => toggleAdvanced(t.rowKey)}
-            hasContent={!!(t.description || t.presaleTiers.length > 0 || t.isFree)}
+            hasContent={!!(t.description || t.presaleTiers.length > 0 || t.isFree || t.requiresApproval)}
           />
           {advancedOpen.has(t.rowKey) && (
             <>
               <DescriptionField value={t.description} onChange={(v) => update(t.rowKey, { description: v })} />
               <PresaleTiersEditor tiers={t.presaleTiers} base={t.priceSoles} onChange={(tiers) => update(t.rowKey, { presaleTiers: tiers })} />
               <FreeReleaseEditor isFree={t.isFree} freeUntilAt={t.freeUntilAt} base={t.priceSoles} onChange={(patch) => update(t.rowKey, patch)} />
+              <RequiresApprovalToggle
+                requiresApproval={t.requiresApproval}
+                isFreeTicket={toCents(t.priceSoles) === 0}
+                onChange={(v) => update(t.rowKey, { requiresApproval: v })}
+              />
             </>
           )}
         </div>
@@ -2864,6 +2936,7 @@ function TicketsEditor({
                     presaleTiers: [],
                     isFree: false,
                     freeUntilAt: "",
+                    requiresApproval: false,
                   },
                 ]);
               }}

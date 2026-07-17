@@ -21,7 +21,8 @@ export type EventCategory =
   | "festivales"
   | "comedia"
   | "cultura"
-  | "deportes";
+  | "deportes"
+  | "charlas";
 
 export type TransferPolicy = {
   enabled: boolean;
