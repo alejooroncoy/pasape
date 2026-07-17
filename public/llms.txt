@@ -1,0 +1,44 @@
+# Pasape
+
+> Plataforma de venta de entradas y gestión de eventos en Perú, pensada para
+> organizadores de fiestas, conciertos y vida nocturna que hoy venden por
+> WhatsApp, Yape y listas de invitados en Excel.
+
+Pasape reemplaza esa operación manual sin pedirle al organizador que cambie
+cómo vende: cada promotor tiene su propio link de venta (ventas atribuibles,
+sin discutir comisión al cierre), cada entrada llega con un QR único y
+rotativo (cambia cada 10 segundos, para que un pantallazo reenviado no sirva
+en la puerta), y los boxes/mesas se venden como un solo espacio que el
+anfitrión reparte con invitaciones. El organizador paga con Yape o tarjeta a
+través de Mercado Pago, y el asistente compra sin necesidad de crear cuenta
+(guest checkout).
+
+Pasape también expone un servidor MCP en `/api/mcp` (OAuth 2.1 con PKCE) para
+que agentes de IA creen y gestionen eventos en lenguaje natural: crear
+evento, definir entradas y precios, publicarlo, ver estadísticas de venta,
+aprobar inscripciones, exportar asistentes. Documentación de conexión en
+`/oauth/authorize` y los endpoints `.well-known/oauth-authorization-server`
+y `.well-known/oauth-protected-resource`.
+
+## Para organizadores
+
+- [Landing de organizadores](https://pasape.lat/es/organizadores): qué
+  resuelve Pasape para quien hoy vende por WhatsApp/Yape/lista de invitados,
+  con ejemplos reales de promotores, entradas, boxes, preventa y cortesías.
+
+## Producto
+
+- Entradas individuales y por combo, cada una con su propio QR.
+- Boxes/mesas: se vende el espacio completo, el anfitrión invita a su grupo.
+- Promotores con link propio y atribución de ventas por promotor.
+- Preventa por tramos de precio y cortesías (invitados/prensa) sin lista
+  aparte.
+- Modo Puerta para validar entradas en el ingreso del evento.
+
+## Notas para agentes / crawlers
+
+- El sitio es Next.js con renderizado server-side; el contenido de
+  `/es/organizadores` y las páginas públicas de evento (`/es/events/[slug]`)
+  es accesible sin JavaScript.
+- Pasape opera en Perú (soles, PEN); no es una fintech ni un producto de
+  pagos genérico, es una plataforma de eventos.
