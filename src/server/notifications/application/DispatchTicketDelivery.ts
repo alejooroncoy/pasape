@@ -58,6 +58,7 @@ type TicketRow = {
   box_label: string | null;
   box_host_ticket_id: string | null;
   ticket_type_id: string;
+  ticket_type: { unit_noun: string | null } | null;
 };
 
 const defaultSender = (): NotificationSender =>
@@ -107,7 +108,7 @@ export const dispatchTicketDelivery = async (
     db
       .from("tickets")
       .select(
-        "id, holder_name, holder_email, holder_phone, holder_email_enc, holder_phone_enc, box_label, box_host_ticket_id, ticket_type_id",
+        "id, holder_name, holder_email, holder_phone, holder_email_enc, holder_phone_enc, box_label, box_host_ticket_id, ticket_type_id, ticket_type:ticket_types(unit_noun)",
       )
       .eq("order_id", order.id)
       .returns<TicketRow[]>(),
@@ -228,11 +229,18 @@ export const dispatchTicketDelivery = async (
         .limit(1)
         .maybeSingle<{ invite_token: string; box_number: string | null; capacity: number }>();
       if (!box || box.capacity <= 1) continue;
+      // "Box" era literal — si el organizador llamó a su unidad "Mesa" o
+      // "Grupo" (ticket_type.unit_noun), el mensaje de WhatsApp seguía
+      // diciendo "Box 4" igual. Con unit_noun, usa el sustantivo que el
+      // organizador eligió; sin personalizar, cae a "Box" (default actual).
+      const unitNoun = host.ticket_type?.unit_noun?.trim() || "Box";
+      const unitNounEscaped = unitNoun.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const alreadyPrefixed = new RegExp(`^${unitNounEscaped}\\b`, "i").test(box.box_number?.trim() ?? "");
       const boxLabel = box.box_number
-        ? /^box\b/i.test(box.box_number.trim())
+        ? alreadyPrefixed
           ? box.box_number
-          : `Box ${box.box_number}`
-        : host.box_label ?? "tu box";
+          : `${unitNoun} ${box.box_number}`
+        : host.box_label ?? `tu ${unitNoun.toLowerCase()}`;
       await whatsapp.sendBoxInvite({
         phone: group.to.phone,
         holderName: group.holderName,
