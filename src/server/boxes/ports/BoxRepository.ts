@@ -24,7 +24,7 @@ export type BoxRepository = {
   removeMember(input: {
     token: string;
     ownerId: string;
-    memberProfileId: string;
+    memberTicketId: string;
   }): Promise<Result<Box>>;
   /** El host agrega un acompañante SIN celular: ocupa un asiento, pero su QR lo
       lleva el host (current_holder = ownerId). Solo el dueño del box. */

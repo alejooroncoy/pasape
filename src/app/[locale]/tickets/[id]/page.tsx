@@ -1092,8 +1092,8 @@ function BoxPanel({
       </div>
       <div className="mt-2">
         <div className="divide-y divide-cart-line">
-          {box.members.map((m) => {
-            const isHostMember = m.profileId === host?.profileId;
+          {box.members.map((m, i) => {
+            const isHostMember = !!m.ticketId && m.ticketId === host?.ticketId;
             // Lo "llevas tú" si su QR lo sostiene el host (acompañante sin cel):
             // el backend lo marca comparando current_holder con el dueño del box.
             const heldByYou = !isHostMember && m.heldByHost;
@@ -1102,11 +1102,11 @@ function BoxPanel({
             // que se unió por su cuenta (ese QR no es tuyo para mostrar).
             const navigable = !!m.ticketId && (isHostMember || heldByYou);
             const isActive = navigable && m.ticketId === activeTicketId;
-            const confirming = confirmId === m.profileId;
+            const confirming = confirmId === m.ticketId;
             const initial = (m.name?.[0] ?? "?").toUpperCase();
             return (
               <div
-                key={m.profileId}
+                key={m.ticketId ?? `seat-${i}`}
                 className={
                   "flex w-full items-center gap-3 rounded-xl py-2.5 text-left transition " +
                   (isActive ? "-mx-2 bg-cart-accent/[0.08] px-2" : "")
@@ -1161,7 +1161,7 @@ function BoxPanel({
                     disabled={removeMember.isPending}
                     onClick={() =>
                       removeMember.mutate(
-                        { token: box.inviteToken, memberProfileId: m.profileId },
+                        { token: box.inviteToken, memberTicketId: m.ticketId as string },
                         { onSettled: () => setConfirmId(null) },
                       )
                     }
@@ -1182,15 +1182,16 @@ function BoxPanel({
                     ) : (
                       <span className="text-[11px] font-medium text-cart-ink-4">en el box</span>
                     )}
-                    {/* Solo se puede quitar mientras no haya entrado (status "used"). */}
-                    {!m.used && (
+                    {/* Solo se puede quitar mientras no haya entrado (status "used")
+                        y tengamos su ticket (identidad del asiento). */}
+                    {!m.used && m.ticketId && (
                       <button
                         type="button"
                         aria-label={`Quitar a ${m.name ?? "este invitado"}`}
                         onClick={() => {
-                          setConfirmId(m.profileId);
+                          setConfirmId(m.ticketId);
                           setTimeout(
-                            () => setConfirmId((c) => (c === m.profileId ? null : c)),
+                            () => setConfirmId((c) => (c === m.ticketId ? null : c)),
                             3000,
                           );
                         }}

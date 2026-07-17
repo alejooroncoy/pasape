@@ -22,7 +22,7 @@ export const joinBox = (
 
 export const removeBoxMember = (
   { repo }: Deps,
-  input: { token: string; ownerId: string; memberProfileId: string },
+  input: { token: string; ownerId: string; memberTicketId: string },
 ) => repo.removeMember(input);
 
 export const addBoxCompanion = (
