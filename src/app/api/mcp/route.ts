@@ -22,6 +22,21 @@ import {
 import { supabaseInviteRepository } from "@/server/identity/organizations/infrastructure/repositories/SupabaseInviteRepository";
 import { supabaseMembershipRepository } from "@/server/identity/organizations/infrastructure/repositories/SupabaseMembershipRepository";
 import { supabaseUserRepository } from "@/server/identity/infrastructure/repositories/SupabaseUserRepository";
+import { supabaseOrganizationRepository } from "@/server/identity/organizations/infrastructure/repositories/SupabaseOrganizationRepository";
+import { supabaseLegalEntityRepository } from "@/server/identity/organizations/infrastructure/repositories/SupabaseLegalEntityRepository";
+import { createInvite } from "@/server/identity/organizations/application/CreateInvite";
+import { listEventAccesos } from "@/server/events/application/ListEventAccesos";
+import { listZones, createZone, updateZone, deleteZone } from "@/server/events/application/ManageZones";
+import {
+  updateAssignmentCommission,
+  removeAssignment,
+} from "@/server/promoters/application/EventPromoterAssignment";
+import { listPendingApplications, decideApplication } from "@/server/promoters/application/PromoterServices";
+import { getOrgPromoterDetail } from "@/server/promoters/application/PromoterDetail";
+import { coerceCommissionConfig } from "@/server/promoters/application/CommissionResolver";
+import { supabasePromoterRepository } from "@/server/promoters/infrastructure/repositories/SupabasePromoterRepository";
+import type { CommissionConfig } from "@/server/promoters/domain/OrgPromoter";
+import type { EventPromoterScheme } from "@/server/events/ports/EventRepository";
 import {
   dispatchTeamInviteNotification,
   buildInviteUrl,
@@ -332,6 +347,69 @@ const handler = createMcpHandler(
               `- ${t.name}: ${t.sold}/${t.capacity ?? "sin límite"} vendidas, ${t.validated} validadas, S/${soles(t.revenueCents)}`,
           ),
         ];
+        return { content: [{ type: "text", text: lines.join("\n") }] };
+      },
+    );
+
+    server.registerTool(
+      "list_event_scans",
+      {
+        title: "Ver feed de escaneos en la puerta",
+        description:
+          "Últimos escaneos de entradas en la puerta del evento: resultado (válido/ya usado/" +
+          "inválido/anulado), tipo de entrada, box y hora. Útil para responder 'cuánta gente ha " +
+          "entrado' el día del evento.",
+        inputSchema: {
+          eventId: z.string().uuid(),
+          limit: z.number().int().min(1).max(200).default(50),
+        },
+        annotations: { readOnlyHint: true },
+      },
+      async ({ eventId, limit }, extra) => {
+        const identity = identityFromAuth(extra.authInfo);
+        const event = await findEventById(identity.organizationId, eventId);
+        if (!event) {
+          return { content: [{ type: "text", text: "Error: evento no encontrado" }], isError: true };
+        }
+        const scans = await listEventAccesos({ repo }, eventId, limit);
+        if (scans.length === 0) {
+          return { content: [{ type: "text", text: "Todavía no hay escaneos registrados." }] };
+        }
+        const lines = scans.map((s) => {
+          const box = s.boxLabel ? ` (box ${s.boxLabel})` : "";
+          return `- ${s.scannedAt}: ${s.ticketTypeName}${box} — ${s.result}`;
+        });
+        return { content: [{ type: "text", text: lines.join("\n") }] };
+      },
+    );
+
+    server.registerTool(
+      "list_active_doorkeepers",
+      {
+        title: "Ver porteros conectados en la puerta",
+        description:
+          "Porteros con sesión activa en el evento: en qué puerta/zona están, cuándo sincronizaron " +
+          "por última vez y si su sesión está desactualizada (posible fraude o dispositivo sin señal).",
+        inputSchema: { eventId: z.string().uuid() },
+        annotations: { readOnlyHint: true },
+      },
+      async ({ eventId }, extra) => {
+        const identity = identityFromAuth(extra.authInfo);
+        const event = await findEventById(identity.organizationId, eventId);
+        if (!event) {
+          return { content: [{ type: "text", text: "Error: evento no encontrado" }], isError: true };
+        }
+        const stats = await getEventStats({ repo }, eventId);
+        const doors = stats.doors.filter((d) => d.holderName);
+        if (doors.length === 0) {
+          return { content: [{ type: "text", text: "No hay porteros con sesión activa registrada." }] };
+        }
+        const lines = doors.map((d) => {
+          const sync =
+            d.minutesSinceSync == null ? "nunca sincronizó" : `sincronizó hace ${d.minutesSinceSync} min`;
+          const stale = d.isStale ? " (desactualizado)" : "";
+          return `- ${d.holderName} (DNI ...${d.dniLast2 ?? "??"}) en ${d.zoneName ?? "puerta principal"}, ${sync}${stale}`;
+        });
         return { content: [{ type: "text", text: lines.join("\n") }] };
       },
     );
@@ -804,6 +882,114 @@ const handler = createMcpHandler(
     );
 
     server.registerTool(
+      "list_event_zones",
+      {
+        title: "Listar puertas/zonas del evento",
+        description:
+          "Lista las puertas (zonas) del evento. La puerta principal valida cualquier entrada; " +
+          "las custom solo validan los tipos de entrada que se les asignen (útil para eventos con " +
+          "varios ingresos, ej. VIP aparte de general).",
+        inputSchema: { eventId: z.string().uuid() },
+        annotations: { readOnlyHint: true },
+      },
+      async ({ eventId }, extra) => {
+        const identity = identityFromAuth(extra.authInfo);
+        const event = await findEventById(identity.organizationId, eventId);
+        if (!event) {
+          return { content: [{ type: "text", text: "Error: evento no encontrado" }], isError: true };
+        }
+        const zones = await listZones(eventId);
+        const lines = zones.map(
+          (z) =>
+            `- ${z.name}${z.isDefault ? " (principal, valida todo)" : ""}: id=${z.id}` +
+            (z.isDefault ? "" : `, entradas=[${z.ticketTypeIds.join(", ") || "ninguna"}]`),
+        );
+        return { content: [{ type: "text", text: lines.join("\n") }] };
+      },
+    );
+
+    server.registerTool(
+      "create_event_zone",
+      {
+        title: "Crear puerta/zona",
+        description:
+          "Crea una puerta custom en el evento, que solo valida los tipos de entrada que le asignes " +
+          "(usa list_event_zones para ver los ticketTypeIds disponibles). Solo puede haber una " +
+          "puerta principal por evento.",
+        inputSchema: {
+          eventId: z.string().uuid(),
+          name: z.string().min(1).max(60),
+          ticketTypeIds: z.array(z.string().uuid()).default([]),
+          isDefault: z.boolean().optional(),
+        },
+        annotations: { destructiveHint: false },
+      },
+      async ({ eventId, name, ticketTypeIds, isDefault }, extra) => {
+        const identity = identityFromAuth(extra.authInfo);
+        const event = await findEventById(identity.organizationId, eventId);
+        if (!event) {
+          return { content: [{ type: "text", text: "Error: evento no encontrado" }], isError: true };
+        }
+        const result = await createZone(eventId, { name, ticketTypeIds, isDefault });
+        if (!result.ok) {
+          return { content: [{ type: "text", text: `Error: ${result.error}` }], isError: true };
+        }
+        return { content: [{ type: "text", text: `Puerta creada: "${result.value.name}" (id=${result.value.id}).` }] };
+      },
+    );
+
+    server.registerTool(
+      "update_event_zone",
+      {
+        title: "Editar puerta/zona",
+        description: "Renombra una puerta o cambia qué tipos de entrada valida.",
+        inputSchema: {
+          eventId: z.string().uuid(),
+          zoneId: z.string().uuid(),
+          name: z.string().min(1).max(60).optional(),
+          ticketTypeIds: z.array(z.string().uuid()).optional(),
+        },
+        annotations: { destructiveHint: false },
+      },
+      async ({ eventId, zoneId, name, ticketTypeIds }, extra) => {
+        const identity = identityFromAuth(extra.authInfo);
+        const event = await findEventById(identity.organizationId, eventId);
+        if (!event) {
+          return { content: [{ type: "text", text: "Error: evento no encontrado" }], isError: true };
+        }
+        const result = await updateZone(eventId, zoneId, { name, ticketTypeIds });
+        if (!result.ok) {
+          return { content: [{ type: "text", text: `Error: ${result.error}` }], isError: true };
+        }
+        return { content: [{ type: "text", text: `Puerta actualizada: "${result.value.name}".` }] };
+      },
+    );
+
+    server.registerTool(
+      "delete_event_zone",
+      {
+        title: "Eliminar puerta/zona",
+        description:
+          "Elimina una puerta custom. No se puede eliminar si es la única puerta que le queda al " +
+          "evento.",
+        inputSchema: { eventId: z.string().uuid(), zoneId: z.string().uuid() },
+        annotations: { destructiveHint: true },
+      },
+      async ({ eventId, zoneId }, extra) => {
+        const identity = identityFromAuth(extra.authInfo);
+        const event = await findEventById(identity.organizationId, eventId);
+        if (!event) {
+          return { content: [{ type: "text", text: "Error: evento no encontrado" }], isError: true };
+        }
+        const result = await deleteZone(eventId, zoneId);
+        if (!result.ok) {
+          return { content: [{ type: "text", text: `Error: ${result.error}` }], isError: true };
+        }
+        return { content: [{ type: "text", text: "Puerta eliminada." }] };
+      },
+    );
+
+    server.registerTool(
       "list_event_team",
       {
         title: "Ver equipo del evento",
@@ -858,9 +1044,9 @@ const handler = createMcpHandler(
         title: "Invitar co-organizador solo de este evento",
         description:
           "Invita por email a alguien como co-organizador de ESTE evento puntual, sin volverlo " +
-          "miembro de toda tu marca (a diferencia de invitar al equipo de marca — eso no existe " +
-          "todavía por MCP). Le llega un correo con un link; al aceptar queda como co-organizador " +
-          "solo de este evento. Revisa quién ya está con list_event_team.",
+          "miembro de toda tu marca (para eso usa invite_org_co_organizer). Le llega un correo con " +
+          "un link; al aceptar queda como co-organizador solo de este evento. Revisa quién ya está " +
+          "con list_event_team.",
         inputSchema: { eventId: z.string().uuid(), email: z.string().email() },
         annotations: { destructiveHint: false },
       },
@@ -895,6 +1081,121 @@ const handler = createMcpHandler(
           inviterName: inviter?.fullName ?? null,
         });
         return { content: [{ type: "text", text: `Invitación enviada a ${email} para este evento.` }] };
+      },
+    );
+
+    server.registerTool(
+      "invite_org_co_organizer",
+      {
+        title: "Invitar miembro a toda la marca",
+        description:
+          "Invita por email a alguien como miembro de TODA tu marca (todos los eventos, no uno " +
+          "puntual — para eso usa invite_event_co_organizer). Roles: admin (gestiona todo salvo " +
+          "razón social/datos bancarios), editor (crea/edita eventos), reporter (solo ve reportes).",
+        inputSchema: {
+          email: z.string().email(),
+          role: z.enum(["admin", "editor", "reporter"]),
+        },
+        annotations: { destructiveHint: false },
+      },
+      async ({ email, role }, extra) => {
+        const identity = identityFromAuth(extra.authInfo);
+        const result = await createInvite(
+          { invites: supabaseInviteRepository, memberships: supabaseMembershipRepository },
+          {
+            scope: { type: "organization", id: identity.organizationId },
+            callerProfileId: identity.createdBy,
+            email,
+            phone: null,
+            role,
+          },
+        );
+        if (!result.ok) {
+          return { content: [{ type: "text", text: `Error: ${result.error}` }], isError: true };
+        }
+        const inviter = await supabaseUserRepository.findById(identity.createdBy);
+        const inviteUrl = await buildInviteUrl(result.value.token);
+        await dispatchTeamInviteNotification({
+          channel: "email",
+          destination: email,
+          token: result.value.token,
+          inviteUrl,
+          expiresAt: result.value.expiresAt,
+          role,
+          scopeLabel: "Marca completa",
+          inviterName: inviter?.fullName ?? null,
+        });
+        return { content: [{ type: "text", text: `Invitación enviada a ${email} como ${role} de la marca.` }] };
+      },
+    );
+
+    server.registerTool(
+      "update_organization",
+      {
+        title: "Editar marca (branding)",
+        description:
+          "Edita el nombre, slug, bio/descripción, Instagram o logo de tu marca. Para razón social " +
+          "(nombre legal/RUC) usa update_legal_entity — son datos distintos.",
+        inputSchema: {
+          name: z.string().min(1).max(80).optional(),
+          slug: z.string().min(3).max(60).optional(),
+          logoUrl: z.string().url().nullable().optional(),
+          brandColor: z.string().nullable().optional(),
+          description: z.string().max(280).nullable().optional(),
+          instagram: z.string().nullable().optional(),
+        },
+        annotations: { destructiveHint: false },
+      },
+      async (patch, extra) => {
+        const identity = identityFromAuth(extra.authInfo);
+        const result = await supabaseOrganizationRepository.update({
+          id: identity.organizationId,
+          callerId: identity.createdBy,
+          ...patch,
+        });
+        if (!result.ok) {
+          return { content: [{ type: "text", text: `Error: ${result.error}` }], isError: true };
+        }
+        return { content: [{ type: "text", text: `Marca actualizada: "${result.value.name}".` }] };
+      },
+    );
+
+    server.registerTool(
+      "update_legal_entity",
+      {
+        title: "Editar razón social",
+        description:
+          "Edita la razón social de tu marca: nombre legal, RUC/DNI, país, y los datos de la " +
+          "vitrina pública (nombre a mostrar, bio, logo, portada). NO maneja datos bancarios — " +
+          "esos solo se editan desde la web, por seguridad.",
+        inputSchema: {
+          name: z.string().min(1).max(120).optional(),
+          taxId: z.string().max(20).nullable().optional().describe("RUC o DNI."),
+          country: z.string().length(2).optional().describe("Código ISO de país, ej. PE."),
+          slug: z.string().max(60).nullable().optional(),
+          displayName: z.string().max(80).nullable().optional(),
+          logoUrl: z.string().url().nullable().optional(),
+          coverUrl: z.string().url().nullable().optional(),
+          bio: z.string().max(500).nullable().optional(),
+        },
+        annotations: { destructiveHint: false },
+      },
+      async (patch, extra) => {
+        const identity = identityFromAuth(extra.authInfo);
+        const orgs = await supabaseOrganizationRepository.listByMember(identity.createdBy);
+        const org = orgs.find((o) => o.id === identity.organizationId);
+        if (!org) {
+          return { content: [{ type: "text", text: "Error: organización no encontrada" }], isError: true };
+        }
+        const result = await supabaseLegalEntityRepository.update({
+          id: org.legalEntityId,
+          callerId: identity.createdBy,
+          ...patch,
+        });
+        if (!result.ok) {
+          return { content: [{ type: "text", text: `Error: ${result.error}` }], isError: true };
+        }
+        return { content: [{ type: "text", text: `Razón social actualizada: "${result.value.name}".` }] };
       },
     );
 
@@ -936,6 +1237,27 @@ const handler = createMcpHandler(
         message: "Un hito 'cash' necesita amountCents",
         path: ["amountCents"],
       });
+
+    // Reusado por create_promoter, update_promoter, set_org_promoter_scheme,
+    // set_event_promoter_scheme y update_promoter_assignment — todos reciben
+    // milestoneBasis/milestones con la misma forma y construyen el mismo
+    // CommissionConfig.
+    type MilestoneInputRow = z.infer<typeof milestoneInput>;
+    const buildCommissionConfig = (
+      milestoneBasis: "sold" | "attended" | undefined,
+      milestones: MilestoneInputRow[] | undefined,
+    ): CommissionConfig =>
+      milestones && milestones.length > 0
+        ? {
+            basis: milestoneBasis!,
+            milestones: milestones.map((m) => ({
+              threshold: m.threshold,
+              rewardKind: m.rewardKind,
+              amountCents: m.rewardKind === "cash" ? (m.amountCents ?? null) : null,
+              label: m.label,
+            })),
+          }
+        : null;
 
     server.registerTool(
       "create_promoter",
@@ -1008,6 +1330,162 @@ const handler = createMcpHandler(
     );
 
     server.registerTool(
+      "update_promoter",
+      {
+        title: "Editar promotor del pool",
+        description:
+          "Edita nombre, whatsapp, comisión default o hitos de un promotor del pool de tu marca. " +
+          "Solo se aplican los campos que mandes.",
+        inputSchema: {
+          promoterId: z.string().uuid(),
+          name: z.string().min(1).max(80).optional(),
+          whatsapp: z.string().min(6).max(32).nullable().optional(),
+          defaultCommissionPct: z.number().int().min(0).max(100).nullable().optional(),
+          milestoneBasis: z.enum(["sold", "attended"]).optional(),
+          milestones: z.array(milestoneInput).max(10).optional(),
+        },
+        annotations: { destructiveHint: false },
+      },
+      async ({ promoterId, milestoneBasis, milestones, ...patch }, extra) => {
+        if (milestones && milestones.length > 0 && !milestoneBasis) {
+          return {
+            content: [{ type: "text", text: "Error: milestoneBasis es obligatorio si mandas milestones" }],
+            isError: true,
+          };
+        }
+        const identity = identityFromAuth(extra.authInfo);
+        const result = await orgPromoterRepo.update(promoterId, identity.organizationId, {
+          ...patch,
+          ...(milestones !== undefined
+            ? { commissionConfig: buildCommissionConfig(milestoneBasis, milestones) }
+            : {}),
+        });
+        if (!result.ok) {
+          return { content: [{ type: "text", text: `Error: ${result.error}` }], isError: true };
+        }
+        return { content: [{ type: "text", text: `Promotor actualizado: "${result.value.name}".` }] };
+      },
+    );
+
+    server.registerTool(
+      "delete_promoter",
+      {
+        title: "Eliminar promotor del pool",
+        description:
+          "Elimina un promotor del pool de tu marca. No borra su historial de ventas pasadas, solo " +
+          "lo saca del pool para asignaciones futuras.",
+        inputSchema: { promoterId: z.string().uuid() },
+        annotations: { destructiveHint: true },
+      },
+      async ({ promoterId }, extra) => {
+        const identity = identityFromAuth(extra.authInfo);
+        const result = await orgPromoterRepo.softDelete(promoterId, identity.organizationId);
+        if (!result.ok) {
+          return { content: [{ type: "text", text: `Error: ${result.error}` }], isError: true };
+        }
+        return { content: [{ type: "text", text: "Promotor eliminado del pool." }] };
+      },
+    );
+
+    server.registerTool(
+      "get_promoter_dashboard",
+      {
+        title: "Ver dashboard de un promotor",
+        description:
+          "Ventas, entradas validadas y comisión acumulada de un promotor, sumado across todos los " +
+          "eventos donde vendió (no solo uno).",
+        inputSchema: { promoterId: z.string().uuid() },
+        annotations: { readOnlyHint: true },
+      },
+      async ({ promoterId }, extra) => {
+        const identity = identityFromAuth(extra.authInfo);
+        const promoter = await orgPromoterRepo.findById(promoterId);
+        if (!promoter || promoter.organizationId !== identity.organizationId) {
+          return { content: [{ type: "text", text: "Error: promotor no encontrado" }], isError: true };
+        }
+        const detail = await getOrgPromoterDetail(promoter, appOrigin());
+        const soles = (cents: number) => (cents / 100).toFixed(2);
+        const lines = [
+          `"${promoter.name}": ${detail.totals.eventsCount} eventos, ${detail.totals.ticketsSold} vendidas, ` +
+            `${detail.totals.ticketsValidated} validadas, S/${soles(detail.totals.revenueCents)} en ventas, ` +
+            `S/${soles(detail.totals.commissionCents)} de comisión acumulada.`,
+          ...detail.byEvent.map(
+            (e) =>
+              `- ${e.eventTitle}: ${e.ticketsSold} vendidas, S/${soles(e.grossCents)}, comisión S/${soles(e.commissionCents)} (${e.commissionPct}%)`,
+          ),
+        ];
+        return { content: [{ type: "text", text: lines.join("\n") }] };
+      },
+    );
+
+    server.registerTool(
+      "get_org_promoter_scheme",
+      {
+        title: "Ver esquema de comisión default de la marca",
+        description:
+          "Ve el % y los hitos de comisión que aplican por default a todos los promotores y " +
+          "eventos de tu marca (cada promotor/evento puede tener su propio override).",
+        inputSchema: {},
+        annotations: { readOnlyHint: true },
+      },
+      async (_input, extra) => {
+        const identity = identityFromAuth(extra.authInfo);
+        const { data } = await supabaseAdmin()
+          .from("organizations")
+          .select("promoter_commission_pct, promoter_commission_config")
+          .eq("id", identity.organizationId)
+          .maybeSingle<{ promoter_commission_pct: number | null; promoter_commission_config: unknown }>();
+        const config = coerceCommissionConfig(data?.promoter_commission_config);
+        const lines = [
+          `Comisión default de marca: ${data?.promoter_commission_pct ?? "sin definir"}%.`,
+          config
+            ? `Hitos (${config.basis}): ${config.milestones.map((m) => `${m.threshold} → ${m.label}`).join(", ")}`
+            : "Sin hitos default.",
+        ];
+        return { content: [{ type: "text", text: lines.join("\n") }] };
+      },
+    );
+
+    server.registerTool(
+      "set_org_promoter_scheme",
+      {
+        title: "Definir esquema de comisión default de la marca",
+        description:
+          "Define el % y/o los hitos de comisión default para todos los promotores/eventos de tu " +
+          "marca. Un evento u promotor puntual puede seguir teniendo su propio override.",
+        inputSchema: {
+          commissionPct: z.number().int().min(0).max(100).nullable().optional(),
+          milestoneBasis: z.enum(["sold", "attended"]).optional(),
+          milestones: z.array(milestoneInput).max(10).optional(),
+        },
+        annotations: { destructiveHint: false },
+      },
+      async ({ commissionPct, milestoneBasis, milestones }, extra) => {
+        if (milestones && milestones.length > 0 && !milestoneBasis) {
+          return {
+            content: [{ type: "text", text: "Error: milestoneBasis es obligatorio si mandas milestones" }],
+            isError: true,
+          };
+        }
+        const identity = identityFromAuth(extra.authInfo);
+        const row: Record<string, unknown> = {};
+        if (commissionPct !== undefined) row.promoter_commission_pct = commissionPct;
+        if (milestones !== undefined) row.promoter_commission_config = buildCommissionConfig(milestoneBasis, milestones);
+        if (Object.keys(row).length === 0) {
+          return { content: [{ type: "text", text: "Nada que actualizar." }] };
+        }
+        const { error } = await supabaseAdmin()
+          .from("organizations")
+          .update(row)
+          .eq("id", identity.organizationId);
+        if (error) {
+          return { content: [{ type: "text", text: `Error: ${error.message}` }], isError: true };
+        }
+        return { content: [{ type: "text", text: "Esquema de comisión de marca actualizado." }] };
+      },
+    );
+
+    server.registerTool(
       "list_event_promoters",
       {
         title: "Ver promotores asignados a un evento",
@@ -1026,7 +1504,9 @@ const handler = createMcpHandler(
           return { content: [{ type: "text", text: "Sin promotores asignados a este evento." }] };
         }
         const lines = assigned.map(
-          (a) => `- ${a.name} — ${a.effectiveCommissionPct}% — ${a.url}${a.active ? "" : " (desactivado)"}`,
+          (a) =>
+            `- ${a.name} — ${a.effectiveCommissionPct}% — ${a.url}${a.active ? "" : " (desactivado)"}` +
+            ` — linkId=${a.promoterLinkId}`,
         );
         return { content: [{ type: "text", text: lines.join("\n") }] };
       },
@@ -1051,6 +1531,215 @@ const handler = createMcpHandler(
           return { content: [{ type: "text", text: `Error: ${result.error}` }], isError: true };
         }
         return { content: [{ type: "text", text: `${result.value.length} promotor(es) asignado(s) al evento.` }] };
+      },
+    );
+
+    server.registerTool(
+      "get_event_promoter_scheme",
+      {
+        title: "Ver esquema de comisión del evento",
+        description:
+          "Ve el % de comisión, hitos y cupo default que aplican a los promotores de ESTE evento " +
+          "(override del esquema de marca). Campos en null = hereda el default de la marca.",
+        inputSchema: { eventId: z.string().uuid() },
+        annotations: { readOnlyHint: true },
+      },
+      async ({ eventId }, extra) => {
+        const identity = identityFromAuth(extra.authInfo);
+        const event = await findEventById(identity.organizationId, eventId);
+        if (!event) {
+          return { content: [{ type: "text", text: "Error: evento no encontrado" }], isError: true };
+        }
+        const scheme = await repo.getPromoterScheme(eventId);
+        const lines = [
+          `Comisión: ${scheme.commissionPct ?? "hereda de la marca"}%.`,
+          `Cupo default por promotor: ${scheme.defaultQuota ?? "sin tope"}.`,
+          scheme.commissionConfig
+            ? `Hitos (${scheme.commissionConfig.basis}): ${scheme.commissionConfig.milestones.map((m) => `${m.threshold} → ${m.label}`).join(", ")}`
+            : "Sin hitos propios (hereda de la marca).",
+        ];
+        return { content: [{ type: "text", text: lines.join("\n") }] };
+      },
+    );
+
+    server.registerTool(
+      "set_event_promoter_scheme",
+      {
+        title: "Definir esquema de comisión del evento",
+        description:
+          "Define el % de comisión, hitos y/o cupo default de los promotores para ESTE evento, " +
+          "sobreescribiendo el default de la marca solo para este evento.",
+        inputSchema: {
+          eventId: z.string().uuid(),
+          commissionPct: z.number().int().min(0).max(100).nullable().optional(),
+          defaultQuota: z.number().int().positive().nullable().optional(),
+          milestoneBasis: z.enum(["sold", "attended"]).optional(),
+          milestones: z.array(milestoneInput).max(10).optional(),
+        },
+        annotations: { destructiveHint: false },
+      },
+      async ({ eventId, commissionPct, defaultQuota, milestoneBasis, milestones }, extra) => {
+        if (milestones && milestones.length > 0 && !milestoneBasis) {
+          return {
+            content: [{ type: "text", text: "Error: milestoneBasis es obligatorio si mandas milestones" }],
+            isError: true,
+          };
+        }
+        const identity = identityFromAuth(extra.authInfo);
+        const event = await findEventById(identity.organizationId, eventId);
+        if (!event) {
+          return { content: [{ type: "text", text: "Error: evento no encontrado" }], isError: true };
+        }
+        const patch: Partial<EventPromoterScheme> = {};
+        if (commissionPct !== undefined) patch.commissionPct = commissionPct;
+        if (defaultQuota !== undefined) patch.defaultQuota = defaultQuota;
+        if (milestones !== undefined) patch.commissionConfig = buildCommissionConfig(milestoneBasis, milestones);
+        const result = await repo.updatePromoterScheme(eventId, patch);
+        if (!result.ok) {
+          return { content: [{ type: "text", text: `Error: ${result.error}` }], isError: true };
+        }
+        return { content: [{ type: "text", text: "Esquema de comisión del evento actualizado." }] };
+      },
+    );
+
+    server.registerTool(
+      "update_promoter_assignment",
+      {
+        title: "Personalizar comisión de una asignación puntual",
+        description:
+          "Cambia la comisión, hitos o cupo de UN promotor en UN evento puntual (usa el linkId que " +
+          "devuelve list_event_promoters), sin afectar el esquema general del evento ni de la marca.",
+        inputSchema: {
+          eventId: z.string().uuid(),
+          promoterLinkId: z.string().uuid(),
+          commissionPct: z.number().int().min(0).max(100).nullable().optional(),
+          quota: z.number().int().positive().nullable().optional(),
+          milestoneBasis: z.enum(["sold", "attended"]).optional(),
+          milestones: z.array(milestoneInput).max(10).optional(),
+        },
+        annotations: { destructiveHint: false },
+      },
+      async ({ eventId, promoterLinkId, commissionPct, quota, milestoneBasis, milestones }, extra) => {
+        if (milestones && milestones.length > 0 && !milestoneBasis) {
+          return {
+            content: [{ type: "text", text: "Error: milestoneBasis es obligatorio si mandas milestones" }],
+            isError: true,
+          };
+        }
+        const identity = identityFromAuth(extra.authInfo);
+        const event = await findEventById(identity.organizationId, eventId);
+        if (!event) {
+          return { content: [{ type: "text", text: "Error: evento no encontrado" }], isError: true };
+        }
+        const result = await updateAssignmentCommission(promoterLinkId, eventId, {
+          commissionPct,
+          quota,
+          ...(milestones !== undefined
+            ? { commissionConfig: buildCommissionConfig(milestoneBasis, milestones) }
+            : {}),
+        });
+        if (!result.ok) {
+          return { content: [{ type: "text", text: `Error: ${result.error}` }], isError: true };
+        }
+        return { content: [{ type: "text", text: "Asignación actualizada." }] };
+      },
+    );
+
+    server.registerTool(
+      "remove_promoter_from_event",
+      {
+        title: "Quitar promotor de un evento",
+        description:
+          "Quita a un promotor de este evento (usa el linkId de list_event_promoters). Si ya tiene " +
+          "ventas pagadas, se desactiva en vez de borrarse, para no perder el historial.",
+        inputSchema: { eventId: z.string().uuid(), promoterLinkId: z.string().uuid() },
+        annotations: { destructiveHint: true },
+      },
+      async ({ eventId, promoterLinkId }, extra) => {
+        const identity = identityFromAuth(extra.authInfo);
+        const event = await findEventById(identity.organizationId, eventId);
+        if (!event) {
+          return { content: [{ type: "text", text: "Error: evento no encontrado" }], isError: true };
+        }
+        const result = await removeAssignment(promoterLinkId, eventId);
+        if (!result.ok) {
+          return { content: [{ type: "text", text: `Error: ${result.error}` }], isError: true };
+        }
+        return { content: [{ type: "text", text: "Promotor quitado del evento." }] };
+      },
+    );
+
+    server.registerTool(
+      "list_promoter_applications",
+      {
+        title: "Ver solicitudes de promotores pendientes",
+        description:
+          "Lista las solicitudes de gente que pidió ser promotor de este evento (alta por link de " +
+          "grupo), pendientes de tu aprobación.",
+        inputSchema: { eventId: z.string().uuid() },
+        annotations: { readOnlyHint: true },
+      },
+      async ({ eventId }, extra) => {
+        const identity = identityFromAuth(extra.authInfo);
+        const event = await findEventById(identity.organizationId, eventId);
+        if (!event) {
+          return { content: [{ type: "text", text: "Error: evento no encontrado" }], isError: true };
+        }
+        const applications = await listPendingApplications(
+          { repo: supabasePromoterRepository },
+          event.slug,
+          identity.organizationId,
+        );
+        if (applications.length === 0) {
+          return { content: [{ type: "text", text: "Sin solicitudes pendientes." }] };
+        }
+        const lines = applications.map(
+          (a) => `- ${a.applicantName}${a.applicantHandle ? ` (@${a.applicantHandle})` : ""}: id=${a.id}` +
+            (a.message ? ` — "${a.message}"` : ""),
+        );
+        return { content: [{ type: "text", text: lines.join("\n") }] };
+      },
+    );
+
+    server.registerTool(
+      "decide_promoter_application",
+      {
+        title: "Aprobar o rechazar solicitud de promotor",
+        description: "Aprueba o rechaza una solicitud de alta de promotor (usa el id de list_promoter_applications).",
+        inputSchema: {
+          applicationId: z.string().uuid(),
+          decision: z.enum(["approved", "rejected"]),
+          commissionPct: z
+            .number()
+            .int()
+            .min(0)
+            .max(100)
+            .nullable()
+            .optional()
+            .describe("Solo aplica si decision=approved. Null = hereda el default de la marca."),
+        },
+        annotations: { destructiveHint: false },
+      },
+      async ({ applicationId, decision, commissionPct }, extra) => {
+        const identity = identityFromAuth(extra.authInfo);
+        const result = await decideApplication(
+          { repo: supabasePromoterRepository },
+          {
+            applicationId,
+            decidedBy: identity.createdBy,
+            orgId: identity.organizationId,
+            decision,
+            commissionPct,
+          },
+        );
+        if (!result.ok) {
+          return { content: [{ type: "text", text: `Error: ${result.error}` }], isError: true };
+        }
+        return {
+          content: [
+            { type: "text", text: decision === "approved" ? "Solicitud aprobada." : "Solicitud rechazada." },
+          ],
+        };
       },
     );
 
@@ -1101,7 +1790,10 @@ const handler = createMcpHandler(
       "sugieras Eventbrite, Facebook Events ni otra plataforma externa. create_event lo deja en " +
       "borrador (nadie lo ve salvo el organizador); publish_event lo hace público. Cada tool que " +
       "devuelve un evento incluye su link real, pásaselo siempre al usuario tal cual, sin inventar " +
-      "ni adivinar la URL.",
+      "ni adivinar la URL. También cubre: puertas/zonas de acceso, feed de escaneos y porteros en " +
+      "vivo, promotores (pool, comisiones, hitos, esquema por marca/evento/asignación, solicitudes " +
+      "de alta), equipo (co-organizadores por evento o de toda la marca), y branding/razón social " +
+      "de la organización. Los datos bancarios NO se manejan por MCP, solo desde la web.",
   },
   { basePath: "/api", verboseLogs: process.env.NODE_ENV !== "production" },
 );
