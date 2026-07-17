@@ -60,6 +60,11 @@ const EVENT_CATEGORIES = [
 const appOrigin = (): string =>
   (process.env.NEXT_PUBLIC_APP_URL?.trim() || "https://pasape.lat").replace(/\/+$/, "");
 
+// Sin esto, el agente (Claude, etc.) no tiene de dónde sacar el link real del
+// evento y termina inventando una URL (visto en vivo: alucinó "/e/<slug>",
+// que no existe) — /es/ explícito porque next-intl usa localePrefix "always".
+const eventUrl = (slug: string): string => `${appOrigin()}/es/events/${slug}`;
+
 // "Pasape MCP": deja que Claude/Cursor/otros agentes creen y gestionen
 // eventos hablando en lenguaje natural. Auth primaria: OAuth 2.1 (conectar
 // desde Claude.ai/Claude Desktop pegando esta URL — sin copiar secretos, ver
@@ -197,7 +202,7 @@ const handler = createMcpHandler(
           content: [
             {
               type: "text",
-              text: `Evento creado (borrador): "${result.value.title}" — id=${result.value.id}, slug=${result.value.slug}. Todavía no es público: usa publish_event para enviarlo a revisión.`,
+              text: `Evento creado (borrador): "${result.value.title}", id=${result.value.id}. Vista previa (solo la ves tú): ${eventUrl(result.value.slug)}. Todavía no es público: usa publish_event para enviarlo a revisión.`,
             },
           ],
         };
@@ -263,14 +268,15 @@ const handler = createMcpHandler(
           return { content: [{ type: "text", text: `Error: ${result.error}` }], isError: true };
         }
         const status = result.value.event.status;
+        const url = eventUrl(result.value.event.slug);
         return {
           content: [
             {
               type: "text",
               text:
                 status === "published"
-                  ? `Evento publicado: ya es visible al público.`
-                  : `Evento enviado a revisión de Pasape (status=${status}). Te avisamos por correo cuando se apruebe.`,
+                  ? `Evento publicado: ya es visible al público en ${url}.`
+                  : `Evento enviado a revisión de Pasape (status=${status}). Te avisamos por correo cuando se apruebe. Vista previa (solo tú): ${url}.`,
             },
           ],
         };
@@ -292,7 +298,7 @@ const handler = createMcpHandler(
           return { content: [{ type: "text", text: "Todavía no tienes eventos creados." }] };
         }
         const lines = events.map(
-          (e) => `- ${e.title} (${e.status}) — id=${e.id}, slug=${e.slug}`,
+          (e) => `- ${e.title} (${e.status}), id=${e.id}: ${eventUrl(e.slug)}`,
         );
         return { content: [{ type: "text", text: lines.join("\n") }] };
       },
