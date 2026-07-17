@@ -156,6 +156,7 @@ const handler = createMcpHandler(
             .optional()
             .describe("Preguntas extra de registro, estilo Luma (ver set_custom_fields)."),
         },
+        annotations: { destructiveHint: false },
       },
       async (input, extra) => {
         const identity = identityFromAuth(extra.authInfo);
@@ -214,6 +215,7 @@ const handler = createMcpHandler(
           eventId: z.string().uuid(),
           customFields: z.array(eventCustomFieldInput).max(20),
         },
+        annotations: { destructiveHint: false },
       },
       async ({ eventId, customFields }, extra) => {
         const identity = identityFromAuth(extra.authInfo);
@@ -252,6 +254,7 @@ const handler = createMcpHandler(
           "Envía el evento a revisión de Pasape (o lo publica directo si la organización es de " +
           "confianza). Sin esto el evento no es visible al público.",
         inputSchema: { eventId: z.string().uuid() },
+        annotations: { destructiveHint: false },
       },
       async ({ eventId }, extra) => {
         const identity = identityFromAuth(extra.authInfo);
@@ -280,6 +283,7 @@ const handler = createMcpHandler(
         title: "Listar mis eventos",
         description: "Lista los eventos de tu organización, con status y link.",
         inputSchema: {},
+        annotations: { readOnlyHint: true },
       },
       async (_input, extra) => {
         const identity = identityFromAuth(extra.authInfo);
@@ -302,6 +306,7 @@ const handler = createMcpHandler(
           "Cuántas entradas se vendieron/reservaron/validaron y cuánto se recaudó (neto para el " +
           "organizador, después de la comisión de Pasape), con el desglose por tipo de entrada.",
         inputSchema: { eventId: z.string().uuid() },
+        annotations: { readOnlyHint: true },
       },
       async ({ eventId }, extra) => {
         const identity = identityFromAuth(extra.authInfo);
@@ -331,6 +336,7 @@ const handler = createMcpHandler(
           "Lista las inscripciones (RSVP con aprobación) que esperan tu decisión: aprobar o " +
           "rechazar. Solo aparecen si el tipo de entrada tiene requiresApproval=true.",
         inputSchema: { eventId: z.string().uuid() },
+        annotations: { readOnlyHint: true },
       },
       async ({ eventId }, extra) => {
         const identity = identityFromAuth(extra.authInfo);
@@ -362,6 +368,7 @@ const handler = createMcpHandler(
         title: "Aprobar inscripción",
         description: "Aprueba una inscripción pendiente: se genera y envía el QR al asistente.",
         inputSchema: { eventId: z.string().uuid(), orderId: z.string().uuid() },
+        annotations: { destructiveHint: false },
       },
       async ({ eventId, orderId }, extra) => {
         const identity = identityFromAuth(extra.authInfo);
@@ -383,6 +390,7 @@ const handler = createMcpHandler(
         title: "Rechazar inscripción",
         description: "Rechaza una inscripción pendiente. No hay reembolso porque siempre es gratis.",
         inputSchema: { eventId: z.string().uuid(), orderId: z.string().uuid() },
+        annotations: { destructiveHint: false },
       },
       async ({ eventId, orderId }, extra) => {
         const identity = identityFromAuth(extra.authInfo);
@@ -429,6 +437,7 @@ const handler = createMcpHandler(
           feeMode: z.enum(["buyer_pays_extra", "included_in_price"]).optional(),
           status: z.enum(["draft", "published", "closed", "cancelled"]).optional(),
         },
+        annotations: { destructiveHint: false },
       },
       async ({ eventId, ...patch }, extra) => {
         const identity = identityFromAuth(extra.authInfo);
@@ -473,6 +482,7 @@ const handler = createMcpHandler(
             .optional()
             .describe("RSVP con aprobación. Solo válido si priceCents=0."),
         },
+        annotations: { destructiveHint: false },
       },
       async ({ eventId, ...input }, extra) => {
         const identity = identityFromAuth(extra.authInfo);
@@ -522,6 +532,7 @@ const handler = createMcpHandler(
           freeUntilAt: z.string().nullable().optional(),
           requiresApproval: z.boolean().optional(),
         },
+        annotations: { destructiveHint: false },
       },
       async ({ eventId, ticketTypeId, ...patch }, extra) => {
         const identity = identityFromAuth(extra.authInfo);
@@ -543,6 +554,7 @@ const handler = createMcpHandler(
         title: "Borrar tipo de entrada",
         description: "Borra un tipo de entrada. Solo funciona si todavía no tiene ventas.",
         inputSchema: { eventId: z.string().uuid(), ticketTypeId: z.string().uuid() },
+        annotations: { destructiveHint: true },
       },
       async ({ eventId, ticketTypeId }, extra) => {
         const identity = identityFromAuth(extra.authInfo);
@@ -575,6 +587,7 @@ const handler = createMcpHandler(
             }),
           ),
         },
+        annotations: { destructiveHint: false },
       },
       async ({ eventId, promos }, extra) => {
         const identity = identityFromAuth(extra.authInfo);
@@ -596,6 +609,7 @@ const handler = createMcpHandler(
         title: "Ver promociones",
         description: "Lista las promociones (2x1/3x2) activas del evento.",
         inputSchema: { eventId: z.string().uuid() },
+        annotations: { readOnlyHint: true },
       },
       async ({ eventId }, extra) => {
         const identity = identityFromAuth(extra.authInfo);
@@ -620,6 +634,7 @@ const handler = createMcpHandler(
         title: "Ver cortesías enviadas",
         description: "Lista las cortesías (entradas regaladas) enviadas para este evento.",
         inputSchema: { eventId: z.string().uuid() },
+        annotations: { readOnlyHint: true },
       },
       async ({ eventId }, extra) => {
         const identity = identityFromAuth(extra.authInfo);
@@ -658,6 +673,7 @@ const handler = createMcpHandler(
           guestEmail: z.string().trim().email().nullable().optional(),
           guestPhone: z.string().trim().min(6).max(20).nullable().optional(),
         },
+        annotations: { destructiveHint: false },
       },
       async ({ eventId, ticketTypeId, qty, guestFullName, guestEmail, guestPhone }, extra) => {
         const identity = identityFromAuth(extra.authInfo);
@@ -691,6 +707,7 @@ const handler = createMcpHandler(
         description:
           "Genera (o reusa) el link + código corto para que tu portero escanee QRs en la entrada.",
         inputSchema: { eventId: z.string().uuid() },
+        annotations: { destructiveHint: false },
       },
       async ({ eventId }, extra) => {
         const identity = identityFromAuth(extra.authInfo);
@@ -718,6 +735,7 @@ const handler = createMcpHandler(
           "Lista los co-organizadores asignados solo a este evento (no incluye gente con acceso " +
           "heredado de la marca — eso se gestiona desde la web en Equipo de la marca).",
         inputSchema: { eventId: z.string().uuid() },
+        annotations: { readOnlyHint: true },
       },
       async ({ eventId }, extra) => {
         const identity = identityFromAuth(extra.authInfo);
@@ -742,6 +760,7 @@ const handler = createMcpHandler(
           "Quita a alguien de los co-organizadores de este evento (no afecta su acceso heredado de " +
           "la marca, si lo tiene). Necesita el profileId — sácalo de list_event_team.",
         inputSchema: { eventId: z.string().uuid(), profileId: z.string().uuid() },
+        annotations: { destructiveHint: true },
       },
       async ({ eventId, profileId }, extra) => {
         const identity = identityFromAuth(extra.authInfo);
@@ -767,6 +786,7 @@ const handler = createMcpHandler(
           "todavía por MCP). Le llega un correo con un link; al aceptar queda como co-organizador " +
           "solo de este evento. Revisa quién ya está con list_event_team.",
         inputSchema: { eventId: z.string().uuid(), email: z.string().email() },
+        annotations: { destructiveHint: false },
       },
       async ({ eventId, email }, extra) => {
         const identity = identityFromAuth(extra.authInfo);
@@ -808,6 +828,7 @@ const handler = createMcpHandler(
         title: "Ver pool de promotores",
         description: "Lista los promotores de tu marca (pool completo, no solo los de un evento).",
         inputSchema: {},
+        annotations: { readOnlyHint: true },
       },
       async (_input, extra) => {
         const identity = identityFromAuth(extra.authInfo);
@@ -873,6 +894,7 @@ const handler = createMcpHandler(
             .optional()
             .describe("Metas por umbral. Si mandas esto, milestoneBasis es obligatorio."),
         },
+        annotations: { destructiveHint: false },
       },
       async ({ name, whatsapp, defaultCommissionPct, milestoneBasis, milestones }, extra) => {
         if (milestones && milestones.length > 0 && !milestoneBasis) {
@@ -915,6 +937,7 @@ const handler = createMcpHandler(
         title: "Ver promotores asignados a un evento",
         description: "Lista los promotores asignados a este evento, con su link y ventas.",
         inputSchema: { eventId: z.string().uuid() },
+        annotations: { readOnlyHint: true },
       },
       async ({ eventId }, extra) => {
         const identity = identityFromAuth(extra.authInfo);
@@ -939,6 +962,7 @@ const handler = createMcpHandler(
         title: "Asignar promotor a un evento",
         description: "Asigna uno o más promotores de tu pool a este evento, para que puedan vender con su link.",
         inputSchema: { eventId: z.string().uuid(), orgPromoterIds: z.array(z.string().uuid()).min(1) },
+        annotations: { destructiveHint: false },
       },
       async ({ eventId, orgPromoterIds }, extra) => {
         const identity = identityFromAuth(extra.authInfo);
@@ -962,6 +986,7 @@ const handler = createMcpHandler(
           "Genera el reporte de asistentes/ventas del evento en Excel (.xlsx) y lo devuelve como " +
           "archivo adjunto en la respuesta.",
         inputSchema: { eventId: z.string().uuid() },
+        annotations: { readOnlyHint: true },
       },
       async ({ eventId }, extra) => {
         const identity = identityFromAuth(extra.authInfo);
@@ -1024,4 +1049,28 @@ const verifyToken = async (
 
 const authHandler = withMcpAuth(handler, verifyToken, { required: true });
 
-export { authHandler as GET, authHandler as POST, authHandler as DELETE };
+// mcp-handler solo agrega CORS a los endpoints .well-known (metadataCorsOptionsRequestHandler) —
+// este endpoint principal se queda sin cabeceras y sin handler de OPTIONS. Un cliente MCP basado
+// en navegador (Claude.ai web, el webview de Claude Desktop) manda un preflight OPTIONS antes del
+// POST real; sin este export, Next.js responde 405 Method Not Allowed automáticamente y la
+// conexión nunca llega a intentar el POST. Ver también CORS_HEADERS en los .well-known.
+const MCP_CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "*",
+  "Access-Control-Max-Age": "86400",
+};
+
+const withCors = (
+  fn: (req: Request) => Promise<Response>,
+) => async (req: Request) => {
+  const res = await fn(req);
+  const headers = new Headers(res.headers);
+  for (const [k, v] of Object.entries(MCP_CORS_HEADERS)) headers.set(k, v);
+  return new Response(res.body, { status: res.status, headers });
+};
+
+export const OPTIONS = () => new Response(null, { status: 204, headers: MCP_CORS_HEADERS });
+export const GET = withCors(authHandler);
+export const POST = withCors(authHandler);
+export const DELETE = withCors(authHandler);
