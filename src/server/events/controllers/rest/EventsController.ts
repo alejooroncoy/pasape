@@ -794,8 +794,8 @@ async function guardEventMember(
   if (!auth.ok) return err(auth.error);
   const detail = await getEventBySlug({ repo }, slug);
   if (!detail) return err("not_found");
-  // Verify the caller is a member of the event's organization.
   const db = supabaseAdmin();
+  // Verify the caller is a member of the event's organization.
   const { data: membership } = await db
     .from("memberships")
     .select("role")
@@ -803,8 +803,21 @@ async function guardEventMember(
     .eq("scope_id", detail.event.organizationId)
     .eq("profile_id", auth.value.profileId)
     .maybeSingle<{ role: string }>();
-  if (!membership) return err("forbidden");
-  if (allowedRoles && !allowedRoles.includes(membership.role)) return err("forbidden");
+  let role = membership?.role ?? null;
+  if (!role) {
+    // Sin membership de marca: puede ser co-organizador invitado solo a
+    // ESTE evento (event_co_organizers, ver EventCoOrganizers.ts). El
+    // invite siempre se crea con role="editor" — mismo techo acá.
+    const { data: coOrg } = await db
+      .from("event_co_organizers")
+      .select("profile_id")
+      .eq("event_id", detail.event.id)
+      .eq("profile_id", auth.value.profileId)
+      .maybeSingle<{ profile_id: string }>();
+    if (coOrg) role = "editor";
+  }
+  if (!role) return err("forbidden");
+  if (allowedRoles && !allowedRoles.includes(role)) return err("forbidden");
   return ok(detail);
 }
 

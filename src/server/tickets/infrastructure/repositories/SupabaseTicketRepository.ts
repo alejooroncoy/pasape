@@ -1600,18 +1600,26 @@ export const supabaseTicketRepository: TicketRepository = {
 
   async approveRegistration(orderId, eventId) {
     const db = supabaseAdmin();
-    const { data: order } = await db
-      .from("orders")
-      .select("id, status")
-      .eq("id", orderId)
-      .eq("event_id", eventId)
-      .maybeSingle<{ id: string; status: string }>();
-    if (!order) return err("not_found");
-    if (order.status !== "pending_approval") return err("not_pending_approval");
-    await db
+    // CAS atómico: el WHERE status="pending_approval" en el UPDATE (no un
+    // check-then-set separado) evita que un doble clic o una carrera con
+    // rejectRegistration aplique ambas transiciones sobre la misma orden.
+    const { data: updated, error } = await db
       .from("orders")
       .update({ status: "paid", paid_at: new Date().toISOString() })
-      .eq("id", orderId);
+      .eq("id", orderId)
+      .eq("event_id", eventId)
+      .eq("status", "pending_approval")
+      .select("id");
+    if (error) return err(error.message);
+    if (!updated || updated.length === 0) {
+      const { data: order } = await db
+        .from("orders")
+        .select("id")
+        .eq("id", orderId)
+        .eq("event_id", eventId)
+        .maybeSingle<{ id: string }>();
+      return err(order ? "not_pending_approval" : "not_found");
+    }
     await db.from("tickets").update({ status: "active" }).eq("order_id", orderId);
     after(() =>
       dispatchTicketDelivery({ db }, orderId).catch((e) => {
@@ -1627,15 +1635,23 @@ export const supabaseTicketRepository: TicketRepository = {
 
   async rejectRegistration(orderId, eventId) {
     const db = supabaseAdmin();
-    const { data: order } = await db
+    const { data: updated, error } = await db
       .from("orders")
-      .select("id, status")
+      .update({ status: "rejected" })
       .eq("id", orderId)
       .eq("event_id", eventId)
-      .maybeSingle<{ id: string; status: string }>();
-    if (!order) return err("not_found");
-    if (order.status !== "pending_approval") return err("not_pending_approval");
-    await db.from("orders").update({ status: "rejected" }).eq("id", orderId);
+      .eq("status", "pending_approval")
+      .select("id");
+    if (error) return err(error.message);
+    if (!updated || updated.length === 0) {
+      const { data: order } = await db
+        .from("orders")
+        .select("id")
+        .eq("id", orderId)
+        .eq("event_id", eventId)
+        .maybeSingle<{ id: string }>();
+      return err(order ? "not_pending_approval" : "not_found");
+    }
     await db.from("tickets").update({ status: "void" }).eq("order_id", orderId);
     return ok({ orderId });
   },

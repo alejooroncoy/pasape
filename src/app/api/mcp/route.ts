@@ -29,6 +29,11 @@ import {
 import { supabaseEventRepository as repo } from "@/server/events/infrastructure/repositories/SupabaseEventRepository";
 import { supabaseTicketRepository as ticketRepo } from "@/server/tickets/infrastructure/repositories/SupabaseTicketRepository";
 import {
+  listPendingApprovals as listPendingApprovalsUc,
+  approveRegistration as approveRegistrationUc,
+  rejectRegistration as rejectRegistrationUc,
+} from "@/server/tickets/application/RegistrationApprovals";
+import {
   issueCourtesy as issueCourtesyUc,
   listCourtesies as listCourtesiesUc,
 } from "@/server/tickets/application/Courtesies";
@@ -149,7 +154,7 @@ const handler = createMcpHandler(
           customFields: z
             .array(eventCustomFieldInput)
             .optional()
-            .describe("Preguntas extra de registro, estilo Luma (ver add_custom_fields)."),
+            .describe("Preguntas extra de registro, estilo Luma (ver set_custom_fields)."),
         },
       },
       async (input, extra) => {
@@ -333,7 +338,7 @@ const handler = createMcpHandler(
         if (!event) {
           return { content: [{ type: "text", text: "Error: evento no encontrado" }], isError: true };
         }
-        const result = await ticketRepo.listPendingApprovals(eventId);
+        const result = await listPendingApprovalsUc({ repo: ticketRepo }, eventId);
         if (!result.ok) {
           return { content: [{ type: "text", text: `Error: ${result.error}` }], isError: true };
         }
@@ -364,7 +369,7 @@ const handler = createMcpHandler(
         if (!event) {
           return { content: [{ type: "text", text: "Error: evento no encontrado" }], isError: true };
         }
-        const result = await ticketRepo.approveRegistration(orderId, eventId);
+        const result = await approveRegistrationUc({ repo: ticketRepo }, orderId, eventId);
         if (!result.ok) {
           return { content: [{ type: "text", text: `Error: ${result.error}` }], isError: true };
         }
@@ -385,7 +390,7 @@ const handler = createMcpHandler(
         if (!event) {
           return { content: [{ type: "text", text: "Error: evento no encontrado" }], isError: true };
         }
-        const result = await ticketRepo.rejectRegistration(orderId, eventId);
+        const result = await rejectRegistrationUc({ repo: ticketRepo }, orderId, eventId);
         if (!result.ok) {
           return { content: [{ type: "text", text: `Error: ${result.error}` }], isError: true };
         }
