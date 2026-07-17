@@ -17,7 +17,7 @@ export function FormSection({ waHref }: { waHref: string }) {
               Vendamos tu próxima fecha <em>sin Excel.</em>
             </>
           }
-          lede="Cuéntanos qué estás organizando — fiesta, rave, evento universitario — y vemos si Pasape encaja para tu venta y tu puerta."
+          lede="Cuéntanos qué estás organizando — fiesta, concierto, charla, evento universitario — y vemos si Pasape encaja para tu venta y tu puerta."
         />
 
         <div className="mt-9 flex w-full flex-col items-center gap-3.5">

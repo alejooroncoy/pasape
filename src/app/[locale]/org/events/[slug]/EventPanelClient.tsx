@@ -72,14 +72,19 @@ function LivePanel({
   const revenue = stats?.revenueCents ?? 0;
   // Aforo: el evento casi nunca tiene total_capacity (el composer no lo pide);
   // caemos al derivado del backend (suma de capacidades de entradas + asientos
-  // de boxes, vía event_stats_rollup) para no mostrar "Sin aforo definido".
-  const capacity = ev?.capacity.totalCapacity ?? stats?.capacity ?? 0;
+  // de boxes, vía event_stats_rollup). `null` = sin límite (algún tipo de
+  // entrada no tiene tope) — distinto de "no definido", así que no cae en el
+  // `??` (se resuelve explícito abajo).
+  const capacity = ev?.capacity.totalCapacity ?? (stats ? stats.capacity : 0);
   const soldPct = capacity ? Math.min(100, Math.round((sold / capacity) * 100)) : 0;
   const validatedPct = sold ? Math.round((validated / sold) * 100) : 0;
   // Reservadas = en proceso de pago (orden pending <30min). No son ventas aún.
-  const soldHint = capacity
-    ? `${soldPct}% del aforo (${capacity.toLocaleString("es-PE")})`
-    : "Sin aforo definido";
+  const soldHint =
+    capacity === null
+      ? "Sin límite de aforo"
+      : capacity
+        ? `${soldPct}% del aforo (${capacity.toLocaleString("es-PE")})`
+        : "Sin aforo definido";
 
   // Promotor abierto en el sheet de detalle — derivado del cache para reflejar
   // actualizaciones en vivo (Realtime) mientras está abierto.
@@ -329,7 +334,8 @@ function FinalReport({
   const noShow = Math.max(0, sold - validated);
   const revenue = stats?.revenueCents ?? 0;
   // Mismo fallback de aforo que el panel en vivo (total_capacity casi nunca existe).
-  const capacity = ev?.capacity.totalCapacity ?? stats?.capacity ?? 0;
+  // `null` = sin límite — no cae en el `??`, se resuelve explícito donde se usa.
+  const capacity = ev?.capacity.totalCapacity ?? (stats ? stats.capacity : 0);
   const soldPct = capacity ? Math.min(100, Math.round((sold / capacity) * 100)) : 0;
   const attendancePct = sold ? Math.round((validated / sold) * 100) : 0;
 
@@ -430,7 +436,10 @@ function FinalReport({
         )}
 
         {/* Aforo */}
-        {capacity > 0 && (
+        {capacity === null && (
+          <div className="mt-4 text-[11px] text-cart-ink-3">Sin límite de aforo</div>
+        )}
+        {capacity !== null && capacity > 0 && (
           <div className="mt-4">
             <div className="mb-1.5 flex justify-between text-[11px] text-cart-ink-3">
               <span>Aforo cubierto</span>
@@ -490,28 +499,32 @@ function FinalReport({
                 const nonBox = stats.ticketTypes.filter((t) => t.kind !== "box");
                 const boxes = stats.ticketTypes.filter((t) => t.kind === "box");
                 const rows: React.ReactNode[] = nonBox.map((t) => {
-                  const fillPct = t.capacity > 0 ? Math.round((t.sold / t.capacity) * 100) : 0;
+                  const fillPct = t.capacity && t.capacity > 0 ? Math.round((t.sold / t.capacity) * 100) : 0;
                   return (
                     <div key={t.id} className="px-4 py-3 lg:px-5">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="truncate text-[13.5px] font-semibold">{t.name}</div>
                           <div className="mt-0.5 text-[11px] text-cart-ink-3">
-                            {t.sold} de {t.capacity} vendidas
+                            {t.capacity === null ? `${t.sold} vendidas · sin límite` : `${t.sold} de ${t.capacity} vendidas`}
                           </div>
                         </div>
                         <div className="shrink-0 text-right">
                           <div className="font-mono text-[13px] font-semibold">
                             {formatMoneyClean(t.revenueCents, ev?.currency)}
                           </div>
-                          <div className="mt-0.5 text-[11px] text-cart-ink-3">
-                            {fillPct}% del cupo
-                          </div>
+                          {t.capacity !== null && (
+                            <div className="mt-0.5 text-[11px] text-cart-ink-3">
+                              {fillPct}% del cupo
+                            </div>
+                          )}
                         </div>
                       </div>
-                      <div className="mt-2 h-1 overflow-hidden rounded-full bg-cart-line">
-                        <div className="h-full rounded-full bg-cart-accent/60" style={{ width: `${fillPct}%` }} />
-                      </div>
+                      {t.capacity !== null && (
+                        <div className="mt-2 h-1 overflow-hidden rounded-full bg-cart-line">
+                          <div className="h-full rounded-full bg-cart-accent/60" style={{ width: `${fillPct}%` }} />
+                        </div>
+                      )}
                     </div>
                   );
                 });
@@ -632,8 +645,11 @@ function BoxesSection({ ticketTypes }: { ticketTypes: EventStatsPayload["ticketT
       <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3 lg:p-5">
         {boxes.map((b) => {
           const label = boxDisplayLabel(b);
-          const pct = b.capacity > 0 ? Math.min(100, Math.round((b.validated / b.capacity) * 100)) : 0;
-          const full = b.capacity > 0 && b.validated >= b.capacity;
+          // Un box siempre es finito (capacity nunca null acá) — el `?? 0` es
+          // solo para que TS no se queje del tipo compartido con entradas.
+          const boxCapacity = b.capacity ?? 0;
+          const pct = boxCapacity > 0 ? Math.min(100, Math.round((b.validated / boxCapacity) * 100)) : 0;
+          const full = boxCapacity > 0 && b.validated >= boxCapacity;
           return (
             <div key={b.id} className="rounded-xl border border-cart-line bg-cart-bg-elev-2 p-3.5">
               <div className="flex items-center justify-between gap-2">
@@ -645,7 +661,7 @@ function BoxesSection({ ticketTypes }: { ticketTypes: EventStatsPayload["ticketT
                 )}
               </div>
               <div className="mt-1.5 font-mono text-[13px] text-cart-ink-3">
-                <span className="font-semibold text-cart-ink">{b.validated}</span> / {b.capacity} personas
+                <span className="font-semibold text-cart-ink">{b.validated}</span> / {boxCapacity} personas
               </div>
               <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-cart-line">
                 <div

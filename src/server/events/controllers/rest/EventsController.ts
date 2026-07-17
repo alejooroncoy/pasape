@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { headers } from "next/headers";
-import { unstable_cache, updateTag } from "next/cache";
+import { revalidateTag, unstable_cache } from "next/cache";
 import { err, ok, type Result } from "@/server/_shared/result";
 import { getAuthContext, resolveActiveOrgSlug } from "@/server/_shared/AuthContext";
 import { supabaseEventRepository as repo } from "../../infrastructure/repositories/SupabaseEventRepository";
@@ -41,8 +41,16 @@ import {
   addEventCoOrganizer,
   listEventCoOrganizers,
   removeEventCoOrganizer,
+  inviteEventCoOrganizer,
   type EventCoOrganizer,
 } from "../../application/EventCoOrganizers";
+import { supabaseInviteRepository } from "@/server/identity/organizations/infrastructure/repositories/SupabaseInviteRepository";
+import { supabaseUserRepository } from "@/server/identity/infrastructure/repositories/SupabaseUserRepository";
+import {
+  dispatchTeamInviteNotification,
+  buildInviteUrl,
+} from "@/server/identity/organizations/application/dispatchTeamInviteNotification";
+import { supabaseMembershipRepository } from "@/server/identity/organizations/infrastructure/repositories/SupabaseMembershipRepository";
 import {
   addEventPartner,
   listEventPartners,
@@ -55,10 +63,16 @@ import {
   issueCourtesy as issueCourtesyUc,
   listCourtesies as listCourtesiesUc,
 } from "@/server/tickets/application/Courtesies";
+import {
+  approveRegistration as approveRegistrationUc,
+  listPendingApprovals as listPendingApprovalsUc,
+  rejectRegistration as rejectRegistrationUc,
+} from "@/server/tickets/application/RegistrationApprovals";
 import { supabaseTicketRepository as ticketRepo } from "@/server/tickets/infrastructure/repositories/SupabaseTicketRepository";
-import type { CourtesySummary } from "@/server/tickets/ports/TicketRepository";
+import type { CourtesySummary, PendingApproval } from "@/server/tickets/ports/TicketRepository";
 import type { Event, EventCard, EventCategory, Promo, TicketType } from "../../domain/Event";
 import type { EventStats, ScanFeedItem } from "../../ports/EventRepository";
+import { customFieldsSchema } from "@/lib/events/customFields";
 
 const sanitizeHost = (raw: string): string => {
   let h = raw.trim();
@@ -124,7 +138,7 @@ const createSchema = z.object({
   startsAt: z.string().min(1),
   endsAt: z.string().nullable().optional(),
   timezone: z.string().default("America/Lima"),
-  category: z.enum(["conciertos","fiestas","festivales","comedia","cultura","deportes"]).nullable().optional(),
+  category: z.enum(["conciertos","fiestas","festivales","comedia","cultura","deportes","charlas"]).nullable().optional(),
   totalCapacity: z.number().int().nullable().optional(),
   overbookPct: z.number().int().min(0).max(100).default(0),
   maxTicketsPerPerson: z.number().int().positive().nullable().optional(),
@@ -133,13 +147,16 @@ const createSchema = z.object({
   transferMaxCount: z.number().int().min(0).default(1),
   transferRequiresKyc: z.boolean().default(false),
   feeMode: z.enum(["buyer_pays_extra", "included_in_price"]).optional(),
+  customFields: customFieldsSchema.optional(),
   ticketTypes: z
     .array(
       z.object({
         name: z.string().min(1),
         kind: z.enum(["general", "box"]).default("general"),
         priceCents: z.number().int().min(0),
-        capacity: z.number().int().min(0),
+        // null/ausente = sin límite (solo válido para kind="general" — se
+        // valida en createEvent()/updateEvent(), un box siempre es finito).
+        capacity: z.number().int().min(0).nullable().optional(),
         boxLabel: z.string().trim().min(1).max(40).nullable().optional(),
         unitNoun: z.string().trim().max(24).nullable().optional(),
         saleEndsAt: z.string().datetime().nullable().optional(),
@@ -255,7 +272,8 @@ export const EventsController = {
         transferMaxCount: parsed.data.transferMaxCount,
         transferRequiresKyc: parsed.data.transferRequiresKyc,
         feeMode: parsed.data.feeMode,
-        ticketTypes: parsed.data.ticketTypes,
+        customFields: parsed.data.customFields,
+        ticketTypes: parsed.data.ticketTypes.map((tt) => ({ ...tt, capacity: tt.capacity ?? null })),
       },
     );
   },
@@ -267,7 +285,7 @@ export const EventsController = {
     if (!result.ok) return result;
     // Publicar cambia el listado público del home → invalidar su cache ISR
     // al instante (antes solo se limpiaba al cumplirse los 60s de revalidate).
-    updateTag("events:browse");
+    revalidateTag("events:browse", "max");
     // Solo notificar si ESTA llamada causó la transición real (ver
     // SupabaseEventRepository.publish) — evita duplicar el correo interno de
     // revisión si dos requests concurrentes (doble clic, retry) llegan aquí.
@@ -305,7 +323,7 @@ export const EventsController = {
     );
     // Editar / despublicar / cerrar / reabrir cambia lo que ve el home →
     // invalidar el cache ISR del listado al instante.
-    if (result.ok) updateTag("events:browse");
+    if (result.ok) revalidateTag("events:browse", "max");
     return result;
   },
 
@@ -365,7 +383,7 @@ export const EventsController = {
       name: parsed.data.name,
       kind: parsed.data.kind,
       priceCents: parsed.data.priceCents,
-      capacity: parsed.data.capacity,
+      capacity: parsed.data.capacity ?? null,
       boxLabel: parsed.data.boxLabel ?? null,
       unitNoun: parsed.data.unitNoun ?? null,
       saleEndsAt: parsed.data.saleEndsAt ?? null,
@@ -443,6 +461,45 @@ export const EventsController = {
     const guard = await guardEventMember(slug, ["owner", "admin", "editor"]);
     if (!guard.ok) return err(guard.error);
     return removeEventCoOrganizer(guard.value.event.id, profileId);
+  },
+
+  // Invita por email a alguien como co-organizador de ESTE evento puntual —
+  // no requiere que ya sea miembro del equipo de la marca (a diferencia de
+  // addCoOrganizer, que elige de esa lista). Ver AcceptInvite.ts / migración
+  // invite_scope_type_event.
+  async inviteEventCoOrganizer(
+    slug: string,
+    input: unknown,
+  ): Promise<Result<{ inviteId: string }>> {
+    const guard = await guardEventMember(slug, ["owner", "admin", "editor"]);
+    if (!guard.ok) return err(guard.error);
+    const parsed = z.object({ email: z.string().email() }).safeParse(input);
+    if (!parsed.success) return err("invalid_input");
+    const auth = await getAuthContext();
+    if (!auth.ok) return err(auth.error);
+    const result = await inviteEventCoOrganizer(
+      { invites: supabaseInviteRepository, memberships: supabaseMembershipRepository },
+      {
+        eventId: guard.value.event.id,
+        organizationId: guard.value.event.organizationId,
+        callerProfileId: auth.value.profileId,
+        email: parsed.data.email,
+      },
+    );
+    if (!result.ok) return err(result.error);
+    const inviter = await supabaseUserRepository.findById(auth.value.profileId);
+    const inviteUrl = await buildInviteUrl(result.value.token);
+    await dispatchTeamInviteNotification({
+      channel: "email",
+      destination: result.value.email,
+      token: result.value.token,
+      inviteUrl,
+      expiresAt: result.value.expiresAt,
+      role: "editor",
+      scopeLabel: `Evento: ${guard.value.event.title}`,
+      inviterName: inviter?.fullName ?? null,
+    });
+    return ok({ inviteId: result.value.inviteId });
   },
 
   async getScanCache(slug: string, since?: string | null): Promise<Result<{
@@ -579,6 +636,25 @@ export const EventsController = {
     return ok({ orderId: sent.value.order.id });
   },
 
+  async listPendingApprovals(slug: string): Promise<Result<PendingApproval[]>> {
+    // PII de inscritos: solo roles que pueden decidir (no reporter/door).
+    const guard = await guardEventMember(slug, ORG_WRITE_ROLES);
+    if (!guard.ok) return err(guard.error);
+    return listPendingApprovalsUc({ repo: ticketRepo }, guard.value.event.id);
+  },
+
+  async approveRegistration(slug: string, orderId: string): Promise<Result<{ orderId: string }>> {
+    const guard = await guardEventMember(slug, ORG_WRITE_ROLES);
+    if (!guard.ok) return err(guard.error);
+    return approveRegistrationUc({ repo: ticketRepo }, orderId, guard.value.event.id);
+  },
+
+  async rejectRegistration(slug: string, orderId: string): Promise<Result<{ orderId: string }>> {
+    const guard = await guardEventMember(slug, ORG_WRITE_ROLES);
+    if (!guard.ok) return err(guard.error);
+    return rejectRegistrationUc({ repo: ticketRepo }, orderId, guard.value.event.id);
+  },
+
   async listPartners(slug: string): Promise<Result<EventPartner[]>> {
     const found = await getEventBySlug({ repo }, slug);
     if (!found) return err("not_found");
@@ -628,7 +704,8 @@ const createTicketTypeSchema = z.object({
   name: z.string().min(1),
   kind: z.enum(["general", "box"]).default("general"),
   priceCents: z.number().int().min(0),
-  capacity: z.number().int().min(0),
+  // null/ausente = sin límite (solo válido para kind="general").
+  capacity: z.number().int().min(0).nullable().optional(),
   boxLabel: z.string().trim().min(1).max(40).nullable().optional(),
   unitNoun: z.string().trim().max(24).nullable().optional(),
   saleEndsAt: z.string().datetime().nullable().optional(),
@@ -637,13 +714,14 @@ const createTicketTypeSchema = z.object({
     priceCents: z.number().int().min(0),
     endsAt: z.string().datetime(),
   })).max(10).optional(),
+  requiresApproval: z.boolean().optional(),
   ...presaleFields,
 });
 
 const updateTicketTypeSchema = z.object({
   name: z.string().min(1).optional(),
   priceCents: z.number().int().min(0).optional(),
-  capacity: z.number().int().min(0).optional(),
+  capacity: z.number().int().min(0).nullable().optional(),
   boxLabel: z.string().trim().min(1).max(40).nullable().optional(),
   unitNoun: z.string().trim().max(24).nullable().optional(),
   saleEndsAt: z.string().datetime().nullable().optional(),
@@ -652,6 +730,7 @@ const updateTicketTypeSchema = z.object({
     priceCents: z.number().int().min(0),
     endsAt: z.string().datetime(),
   })).max(10).optional(),
+  requiresApproval: z.boolean().optional(),
   ...presaleFields,
 });
 
@@ -695,7 +774,7 @@ const updateSchema = z.object({
   paletteAccent: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable().optional(),
   startsAt: z.string().min(1).optional(),
   endsAt: z.string().nullable().optional(),
-  category: z.enum(["conciertos","fiestas","festivales","comedia","cultura","deportes"]).nullable().optional(),
+  category: z.enum(["conciertos","fiestas","festivales","comedia","cultura","deportes","charlas"]).nullable().optional(),
   totalCapacity: z.number().int().nullable().optional(),
   overbookPct: z.number().int().min(0).max(100).optional(),
   maxTicketsPerPerson: z.number().int().positive().nullable().optional(),
@@ -704,6 +783,7 @@ const updateSchema = z.object({
   transferMaxCount: z.number().int().min(0).optional(),
   transferRequiresKyc: z.boolean().optional(),
   feeMode: z.enum(["buyer_pays_extra", "included_in_price"]).optional(),
+  customFields: customFieldsSchema.optional(),
 });
 
 async function guardEventMember(
@@ -714,8 +794,8 @@ async function guardEventMember(
   if (!auth.ok) return err(auth.error);
   const detail = await getEventBySlug({ repo }, slug);
   if (!detail) return err("not_found");
-  // Verify the caller is a member of the event's organization.
   const db = supabaseAdmin();
+  // Verify the caller is a member of the event's organization.
   const { data: membership } = await db
     .from("memberships")
     .select("role")
@@ -723,8 +803,21 @@ async function guardEventMember(
     .eq("scope_id", detail.event.organizationId)
     .eq("profile_id", auth.value.profileId)
     .maybeSingle<{ role: string }>();
-  if (!membership) return err("forbidden");
-  if (allowedRoles && !allowedRoles.includes(membership.role)) return err("forbidden");
+  let role = membership?.role ?? null;
+  if (!role) {
+    // Sin membership de marca: puede ser co-organizador invitado solo a
+    // ESTE evento (event_co_organizers, ver EventCoOrganizers.ts). El
+    // invite siempre se crea con role="editor" — mismo techo acá.
+    const { data: coOrg } = await db
+      .from("event_co_organizers")
+      .select("profile_id")
+      .eq("event_id", detail.event.id)
+      .eq("profile_id", auth.value.profileId)
+      .maybeSingle<{ profile_id: string }>();
+    if (coOrg) role = "editor";
+  }
+  if (!role) return err("forbidden");
+  if (allowedRoles && !allowedRoles.includes(role)) return err("forbidden");
   return ok(detail);
 }
 

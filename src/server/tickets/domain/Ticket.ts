@@ -1,7 +1,9 @@
 import type { EventCategory, EventStatus } from "@/server/events/domain/Event";
 
-export type TicketStatus = "active" | "used" | "void" | "refunded";
-export type OrderStatus = "pending" | "paid" | "failed" | "expired" | "refunded";
+/** "pending_approval" = RSVP con aprobación, esperando decisión del organizador (sin QR válido). */
+export type TicketStatus = "active" | "used" | "void" | "refunded" | "pending_approval";
+/** "pending_approval"/"rejected" = RSVP con aprobación (ver ticket_types.requires_approval). */
+export type OrderStatus = "pending" | "paid" | "failed" | "expired" | "refunded" | "pending_approval" | "rejected";
 
 export type Order = {
   id: string;

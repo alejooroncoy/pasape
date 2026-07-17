@@ -49,6 +49,11 @@ import { sanitizeDocument, sanitizeEmail, sanitizePersonNameLive } from "@/lib/i
 import { checkoutErrorMessage, payErrorReasonParam } from "@/lib/tickets/checkoutErrors";
 import { RecoverTicketsLink } from "@/components/tickets/RecoverTicketsLink";
 import { DatosForm, Section, Field } from "../_checkout/DatosForm";
+import {
+  CustomFieldsForm,
+  customFieldsValid,
+  type CustomFieldAnswers,
+} from "../_checkout/CustomFieldsForm";
 import { ContactConfirmSheet } from "../_checkout/ContactConfirmSheet";
 
 type Props = { params: Promise<{ slug: string }> };
@@ -102,7 +107,9 @@ function evaluateRestoredCart(
       changed = true;
       continue;
     }
-    const clamped = Math.min(q, status.remaining);
+    // remaining null = sin límite: no hay contra qué clampear por stock (el
+    // tope real es el máximo por persona, que se valida aparte).
+    const clamped = status.remaining === null ? q : Math.min(q, status.remaining);
     if (clamped <= 0) {
       changed = true;
       continue;
@@ -186,6 +193,9 @@ function BuyFlowInner({ params }: Props) {
   const [guestName, setGuestName] = useState("");
   const [guestEmail, setGuestEmail] = useState("");
   const [guestDni, setGuestDni] = useState("");
+  // Preguntas extra de registro del organizador (estilo Luma) — ver
+  // CustomFieldsForm. Vacío si el evento no definió ninguna.
+  const [customFieldAnswers, setCustomFieldAnswers] = useState<CustomFieldAnswers>({});
   // Extranjero: no tiene DNI peruano → usa pasaporte/documento (alfanumérico).
   // El tipo para Mercado Pago se deduce del formato en el server.
   const [isForeigner, setIsForeigner] = useState(false);
@@ -624,7 +634,8 @@ function BuyFlowInner({ params }: Props) {
   // cuenta (Google) como canal de recuperación garantizado, así que no hace
   // falta forzarlo dos veces.
   const guestValid = guestName.trim().length >= 2 && docValid && phoneOk && (isLogged || emailOk);
-  const orderValid = totalItems > 0 && guestValid;
+  const customFieldsOk = customFieldsValid(data?.event.customFields ?? [], customFieldAnswers);
+  const orderValid = totalItems > 0 && guestValid && customFieldsOk;
 
   if (!data) return <PageLoader />;
   // Redirigiendo al evento para reabrir la hoja de pago (ver efecto de arriba):
@@ -654,6 +665,8 @@ function BuyFlowInner({ params }: Props) {
         // Logueado → buyer (persiste en su perfil/kyc); guest → crea/reusa perfil.
         guest: isLogged ? undefined : attendee,
         buyer: isLogged ? attendee : undefined,
+        customFieldAnswers:
+          Object.keys(customFieldAnswers).length > 0 ? customFieldAnswers : undefined,
       });
       setPreferenceId(res.preference.id);
       setOrderId(res.order.id);
@@ -892,7 +905,17 @@ function BuyFlowInner({ params }: Props) {
                 guestEmail={guestEmail}
                 setGuestEmail={setGuestEmail}
               />
-            ) : (
+            ) : null}
+            {phase === "data" && data.event.customFields.length > 0 && (
+              <div className="mt-8">
+                <CustomFieldsForm
+                  fields={data.event.customFields}
+                  answers={customFieldAnswers}
+                  setAnswers={setCustomFieldAnswers}
+                />
+              </div>
+            )}
+            {phase !== "pick" && phase !== "data" && (
               <>
                 {reservedAt != null && !reservationExpired && (
                   <ReservationCountdown reservedAt={reservedAt} />
@@ -1383,8 +1406,12 @@ function TicketBadge({
   return null;
 }
 
-/** Escasez por umbral porcentual: solo "enciende" cuando queda ≤30% del stock. */
-function lowStock(sold: number, capacity: number) {
+/**
+ * Escasez por umbral porcentual: solo "enciende" cuando queda ≤30% del stock.
+ * `capacity: null` = sin límite — nunca hay escasez que avisar.
+ */
+function lowStock(sold: number, capacity: number | null) {
+  if (capacity === null) return { remaining: null, pct: 0, low: false };
   const remaining = Math.max(0, capacity - sold);
   const pct = capacity > 0 ? remaining / capacity : 0;
   return { remaining, pct, low: capacity > 0 && remaining > 0 && pct <= 0.3 };
@@ -1399,10 +1426,13 @@ function ScarcityNote({
   pct,
   noun,
 }: {
-  remaining: number;
+  // Solo se renderiza cuando `stock.low` es true, que ya garantiza no-null —
+  // el tipo queda number|null porque comparte shape con `lowStock()`.
+  remaining: number | null;
   pct: number;
   noun?: string;
 }) {
+  if (remaining === null) return null;
   const label = noun
     ? `Solo ${remaining === 1 ? "queda" : "quedan"} ${remaining} ${
         remaining === 1 ? noun : unitNounPlural(noun)
@@ -1599,12 +1629,17 @@ function TicketCard({
   // El tope por persona limita el total de entradas individuales del carrito.
   // `capLeft` ya descuenta lo elegido en otras cards; le sumamos el valor de
   // ESTA card para obtener su techo propio. Los boxes no tienen tope.
+  // `stockRemaining === null` = sin límite de stock — el único techo que
+  // queda es el tope por persona (o ninguno, si tampoco hay tope).
   const remaining =
     capLeft == null || isBox
       ? stockRemaining
-      : Math.min(stockRemaining, value + capLeft);
+      : stockRemaining === null
+        ? value + capLeft
+        : Math.min(stockRemaining, value + capLeft);
   // El tope (no el stock) es lo que frena al comprador en esta card.
-  const cappedByLimit = capLeft != null && !isBox && remaining < stockRemaining;
+  const cappedByLimit =
+    capLeft != null && !isBox && stockRemaining !== null && remaining !== null && remaining < stockRemaining;
   const selected = value > 0;
   const ap = activePricing(tt);
   // Solo aplica a entradas (no box); stockTotal() resuelve el cupo correcto.
@@ -1695,7 +1730,7 @@ function TicketCard({
           />
         )}
       </div>
-      {cappedByLimit && value >= remaining && remaining > 0 && (
+      {cappedByLimit && remaining !== null && value >= remaining && remaining > 0 && (
         <p className="mt-2 text-right text-[11px] text-cart-ink-3">
           Máximo por persona alcanzado
         </p>
@@ -1754,7 +1789,8 @@ function QtyControl({
   disabled,
 }: {
   value: number;
-  max: number;
+  /** `null` = sin límite (ni de stock ni de tope por persona). */
+  max: number | null;
   onChange: (v: number) => void;
   disabled?: boolean;
 }) {
@@ -1769,7 +1805,7 @@ function QtyControl({
     // max < 1 con la card disponible = el tope por persona ya se llenó en otras
     // entradas del carrito. "Agregar" salta 0→1 sin pasar por el stepper, así que
     // hay que frenarlo acá o el comprador se pasaría del tope.
-    const noAllowance = max < 1;
+    const noAllowance = max !== null && max < 1;
     return (
       <button
         type="button"
@@ -1794,9 +1830,9 @@ function QtyControl({
       <span className="min-w-5 text-center text-[14px] font-bold tabular-nums">{value}</span>
       <button
         type="button"
-        onClick={() => onChange(Math.min(max, value + 1))}
+        onClick={() => onChange(max === null ? value + 1 : Math.min(max, value + 1))}
         aria-label="Sumar"
-        disabled={value >= max}
+        disabled={max !== null && value >= max}
         className="grid size-7 place-items-center rounded-full bg-cart-bg text-cart-ink transition hover:bg-cart-accent hover:text-cart-bg disabled:cursor-not-allowed disabled:opacity-50"
       >
         <svg width="10" height="10" viewBox="0 0 10 10"><path d="M5 2v6M2 5h6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>

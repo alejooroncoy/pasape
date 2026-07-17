@@ -34,6 +34,10 @@ function Inner({ params }: Props) {
   const { loggedIn } = useSessionReady();
   const [startedAt] = useState(() => Date.now());
   const [paid, setPaid] = useState(false);
+  // RSVP con aprobación: el organizador aún no decidió. No es un error de pago
+  // — es el estado esperado, así que no debe caer en el timeout de pay-error.
+  const [pendingApproval, setPendingApproval] = useState(false);
+  const [rejected, setRejected] = useState(false);
   const [pollError, setPollError] = useState<string | null>(null);
   // Delay entre confirmar `paid` y navegar a la orden — le da tiempo al usuario
   // de ver el check de éxito antes de saltar (LOW-10/LOW-20).
@@ -52,7 +56,7 @@ function Inner({ params }: Props) {
   }, [orderId, orderTokenFromUrl]);
 
   useEffect(() => {
-    if (!orderId || paid) return;
+    if (!orderId || paid || rejected) return;
     let cancelled = false;
     const tick = async () => {
       try {
@@ -74,6 +78,11 @@ function Inner({ params }: Props) {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             router.replace((res.orderUrl ?? "/tickets") as any);
           }, SUCCESS_NAV_DELAY_MS);
+        } else if (res.status === "pending_approval") {
+          setPollError(null);
+          setPendingApproval(true);
+        } else if (res.status === "rejected") {
+          setRejected(true);
         } else if (res.status === "failed" || res.status === "expired") {
           router.replace(
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -97,7 +106,7 @@ function Inner({ params }: Props) {
       cancelled = true;
       clearInterval(id);
     };
-  }, [orderId, orderToken, router, slug, refetchTickets, paid]);
+  }, [orderId, orderToken, router, slug, refetchTickets, paid, rejected]);
 
   // Cleanup del salto a /order SOLO al desmontar de verdad (no en cada re-run
   // del efecto de arriba, que se dispara también cuando `paid` cambia a true
@@ -135,8 +144,9 @@ function Inner({ params }: Props) {
     // Si el pago ya se confirmó (paid=true), NO armar el timeout duro: un
     // pago aprobado en el último instante nunca debe poder disparar
     // pay-error, así este efecto se re-arme por el cambio de `paid`
-    // (LOW-10/LOW-20).
-    if (paid) return;
+    // (LOW-10/LOW-20). Tampoco si quedó pendiente de aprobación del
+    // organizador: ahí "no terminó" es el estado esperado, no un fallo de pago.
+    if (paid || pendingApproval || rejected) return;
     const t = setTimeout(() => {
       // Llegar acá a los 60s significa que NUNCA vimos un estado terminal: un
       // pago rechazado/expirado ya habría redirigido dentro del propio poll. Sea
@@ -150,7 +160,7 @@ function Inner({ params }: Props) {
       );
     }, PROCESSING_TIMEOUT_MS);
     return () => clearTimeout(t);
-  }, [router, slug, paid]);
+  }, [router, slug, paid, pendingApproval, rejected]);
 
   const summary = useMemo(() => {
     if (!eventData) return null;
@@ -222,6 +232,46 @@ function Inner({ params }: Props) {
             style={{ animation: "pasape-fade-in 420ms ease-out 540ms both" }}
           >
             {loggedIn ? "Llevándote a tu QR…" : "Ya casi. Entra con tu cuenta para guardarlas…"}
+          </p>
+        </div>
+      ) : rejected ? (
+        <div className="relative z-10 flex max-w-[420px] flex-col items-center">
+          <div className="grid size-[140px] place-items-center rounded-full bg-neutral-400/15 ring-1 ring-neutral-400/30">
+            <svg width="52" height="52" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="9" stroke="#9ca3af" strokeWidth="2" />
+              <path d="M8.5 8.5l7 7M15.5 8.5l-7 7" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          </div>
+          <h1 className="mt-8 text-[22px] font-bold tracking-[-0.02em]">
+            El organizador no aprobó tu inscripción
+          </h1>
+          <p className="mt-2 text-[14px] leading-[1.5] text-cart-ink-2">
+            Esta vez no se pudo. Puedes escribirle al organizador si crees que
+            fue un error.
+          </p>
+        </div>
+      ) : pendingApproval ? (
+        <div className="relative z-10 flex max-w-[420px] flex-col items-center">
+          <div className="grid size-[140px] place-items-center rounded-full bg-amber-400/15 ring-1 ring-amber-400/30">
+            <svg width="56" height="56" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="9" stroke="#d97706" strokeWidth="2" />
+              <path d="M12 7.5v5l3 2" stroke="#d97706" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </div>
+          <h1 className="mt-8 text-[22px] font-bold tracking-[-0.02em]">
+            Tu inscripción está en revisión
+          </h1>
+          <p className="mt-2 text-[14px] leading-[1.5] text-cart-ink-2">
+            El organizador la revisará pronto. Te avisamos por correo y en la
+            app en cuanto la apruebe.
+          </p>
+          {summary && (
+            <div className="mt-7 rounded-full border border-cart-line bg-cart-bg-elev px-4 py-2 font-mono text-[12px] text-cart-ink-3 shadow-[0_0_0_1px_var(--color-cart-accent-soft)_inset]">
+              {summary.title}
+            </div>
+          )}
+          <p className="mt-6">
+            <RecoverTicketsLink compact />
           </p>
         </div>
       ) : (

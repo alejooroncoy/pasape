@@ -1,6 +1,25 @@
+import { headers } from "next/headers";
 import { inviteEmailSender } from "@/server/notifications/infrastructure/InviteEmailSender";
 import { inviteWhatsAppSender } from "@/server/notifications/infrastructure/InviteWhatsAppSender";
 import type { InvitableOrgRole } from "../domain/Invite";
+
+const sanitizeHost = (raw: string): string => {
+  let h = raw.trim();
+  if (h.startsWith("http://")) h = h.slice("http://".length);
+  else if (h.startsWith("https://")) h = h.slice("https://".length);
+  const slashAt = h.indexOf("/");
+  if (slashAt > -1) h = h.slice(0, slashAt);
+  return h || "pasape.lat";
+};
+
+export const buildInviteUrl = async (token: string): Promise<string> => {
+  const envUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
+  if (envUrl) return `${envUrl.replace(/\/+$/, "")}/es/invites/${token}`;
+  const h = await headers();
+  const host = sanitizeHost(h.get("x-forwarded-host") ?? h.get("host") ?? "pasape.lat");
+  const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
+  return `${proto}://${host}/es/invites/${token}`;
+};
 
 export type TeamInviteChannel = "email" | "whatsapp";
 

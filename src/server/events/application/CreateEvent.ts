@@ -11,7 +11,8 @@ type TicketTypeInput = {
   name: string;
   kind: "general" | "box";
   priceCents: number;
-  capacity: number;
+  /** `null` = sin límite. Solo válido para kind="general" — un box siempre es finito. */
+  capacity: number | null;
   /** Etiqueta del box (A, B, VIP-1). Requerido cuando kind === "box". */
   boxLabel?: string | null;
   /** Cómo llamar a la unidad reservable (box, mesa, lounge...). Opcional. */
@@ -25,6 +26,8 @@ type TicketTypeInput = {
   /** Liberar gratis: toggle + fin opcional (null = mientras esté activa). */
   isFree?: boolean;
   freeUntilAt?: string | null;
+  /** RSVP con aprobación (estilo Luma). Solo válido si priceCents === 0. */
+  requiresApproval?: boolean;
 };
 
 export const createEvent = async (
@@ -37,12 +40,16 @@ export const createEvent = async (
   // Sin label no podemos diferenciar box 10 vs box 11 — se exige al crear.
   for (const tt of input.ticketTypes) {
     if (tt.kind === "box" && !tt.boxLabel?.trim()) return err("box_label_required");
+    if (tt.kind === "box" && tt.capacity == null) return err("box_capacity_required");
     // Piso absoluto S/3 (el fee nunca puede superar el precio). Entre S/3 y
     // S/15 el fee se cobra igual pero se oculta como línea aparte (ver
     // resolveOrderFee) — no depende de fee_mode, por eso el mínimo es fijo.
     if (tt.priceCents > 0 && tt.priceCents < MIN_PAID_TICKET_PRICE_CENTS) {
       return err("price_below_minimum");
     }
+    // RSVP con aprobación solo para entradas genuinamente gratis — combinar
+    // con pago abre una decisión de UX no resuelta (ver migración).
+    if (tt.requiresApproval && tt.priceCents > 0) return err("approval_only_for_free_tickets");
   }
 
   const created = await repo.create(input);
@@ -66,6 +73,7 @@ export const createEvent = async (
       presale_ends_at: tt.presaleEndsAt ?? null,
       is_free: tt.isFree ?? false,
       free_until_at: tt.freeUntilAt ?? null,
+      requires_approval: tt.requiresApproval ?? false,
     })),
   );
   if (error) return err(error.message);

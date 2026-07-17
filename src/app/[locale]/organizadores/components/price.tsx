@@ -40,7 +40,7 @@ export function Price({ waHref }: { waHref: string }) {
 
             <p className="relative z-[1] m-0 text-[15px] leading-normal text-cart-ink-2 md:text-base">
               Buscamos{" "}
-              <b className="font-semibold text-cart-ink">fiestas, raves y eventos universitarios</b>{" "}
+              <b className="font-semibold text-cart-ink">fiestas, conciertos, charlas y eventos universitarios</b>{" "}
               reales para afinar Pasape contigo: venta, QR, boxes y la puerta.
             </p>
 

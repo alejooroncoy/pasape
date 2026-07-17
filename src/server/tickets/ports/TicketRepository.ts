@@ -26,6 +26,9 @@ export type BuyInput = {
       cortesía. El endpoint público de compra nunca lo acepta (buySchema no lo
       incluye, zod lo descarta). */
   courtesy?: boolean;
+  /** Respuestas del comprador a events.customFields (estilo Luma). Keyed por
+      field.id — ver @/lib/events/customFields, único módulo con el shape. */
+  customFieldAnswers?: Record<string, string | string[] | boolean> | null;
 };
 
 export type CourtesyInput = {
@@ -66,8 +69,25 @@ export type QuoteInput = {
   items: Array<{ ticketTypeId: string; qty: number }>;
 };
 
+/** Fila de la bandeja de aprobación (RSVP con aprobación, ver ticket_types.requires_approval). */
+export type PendingApproval = {
+  orderId: string;
+  createdAt: string;
+  guestName: string | null;
+  guestEmail: string | null;
+  guestPhone: string | null;
+  ticketTypeName: string;
+  customFieldAnswers: Record<string, string | string[] | boolean>;
+};
+
 export interface TicketRepository {
   buy(input: BuyInput): Promise<Result<BuyOutput>>;
+  /** Inscripciones pendientes de aprobación de un evento (más antiguas primero). */
+  listPendingApprovals(eventId: string): Promise<Result<PendingApproval[]>>;
+  /** Aprueba: orden→paid, tickets→active, se despacha el QR. */
+  approveRegistration(orderId: string, eventId: string): Promise<Result<{ orderId: string }>>;
+  /** Rechaza: orden→rejected, tickets→void. No hay reembolso (siempre es gratis). */
+  rejectRegistration(orderId: string, eventId: string): Promise<Result<{ orderId: string }>>;
   /** Emite una cortesía del organizador: misma tubería que buy() pero a S/0
       (sin Mercado Pago, paid inmediato, envío del link de entrega por
       email/WhatsApp). El DNI del beneficiario se captura cuando reclama. */

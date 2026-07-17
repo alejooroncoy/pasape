@@ -3,6 +3,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/_shared/api-client";
 import type { Event, EventCategory, FeeMode } from "@/server/events/domain/Event";
+import type { CustomField } from "@/lib/events/customFields";
 
 export type CreateEventInput = {
   title: string;
@@ -31,11 +32,13 @@ export type CreateEventInput = {
   transferDeadlineHours?: number | null;
   transferMaxCount?: number;
   transferRequiresKyc?: boolean;
+  customFields?: CustomField[];
   ticketTypes: Array<{
     name: string;
     kind?: "general" | "box";
     priceCents: number;
-    capacity: number;
+    /** `null` = sin límite (solo válido para kind="general"). */
+    capacity: number | null;
     boxLabel?: string | null;
     unitNoun?: string | null;
   }>;

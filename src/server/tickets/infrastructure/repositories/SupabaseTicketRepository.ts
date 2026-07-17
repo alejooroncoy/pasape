@@ -179,11 +179,12 @@ const finishTicketListing = async (
     (pend ?? []).map((p) => [p.ticket_id, p.to_contact]),
   );
   return (rows as unknown as TicketRowJoined[])
-    // Pagadas + en revisión (pending con pago vivo). Descarta reservas
-    // abandonadas (pending sin in_process).
+    // Pagadas + en revisión de pago (pending con pago vivo) + en revisión de
+    // aprobación (RSVP). Descarta reservas abandonadas (pending sin in_process).
     .filter(
       (row) =>
         row.order.status === "paid" ||
+        row.order.status === "pending_approval" ||
         (row.order.status === "pending" && row.order.mp_status === "in_process"),
     )
     .map((row) => ({
@@ -278,7 +279,7 @@ const priceOrder = async (
   const { data: tts, error: ttErr } = await db
     .from("ticket_types")
     .select(
-      "id, price_cents, capacity, sold, currency, event_id, kind, box_label, sale_ends_at, presale_price_cents, presale_qty, presale_ends_at, is_free, free_until_at",
+      "id, price_cents, capacity, sold, currency, event_id, kind, box_label, sale_ends_at, presale_price_cents, presale_qty, presale_ends_at, is_free, free_until_at, requires_approval",
     )
     .in("id", ttIds);
   if (ttErr || !tts) return err(ttErr?.message ?? "ticket_types_lookup_failed");
@@ -327,7 +328,7 @@ const priceOrder = async (
     if (isBox) {
       if (item.qty !== 1) return err("box_qty_must_be_one");
       if (tt.sold >= 1) return err("sold_out");
-    } else if (tt.sold + item.qty > tt.capacity) {
+    } else if (tt.capacity !== null && tt.sold + item.qty > tt.capacity) {
       return err("sold_out");
     }
     // El precio sale del ticket-type. Una entrada gratis es simplemente un tipo
@@ -610,6 +611,7 @@ export const supabaseTicketRepository: TicketRepository = {
         // Solo en cortesías: así una compra normal no depende de la columna
         // (el default false lo pone la DB).
         ...(input.courtesy ? { is_courtesy: true } : {}),
+        ...(input.customFieldAnswers ? { custom_field_answers: input.customFieldAnswers } : {}),
       })
       .select("*")
       .single<OrderRow>();
@@ -729,6 +731,30 @@ export const supabaseTicketRepository: TicketRepository = {
     // ticket_types.sold lo mantiene el trigger tickets_sync_sold a partir de los
     // tickets reales — no se toca a mano (antes se desfasaba).
 
+    // RSVP con aprobación: si CUALQUIER línea es de un ticket_type que exige
+    // aprobación, la orden entera queda pending_approval (no paid) y sus
+    // tickets pending_approval (no active, sin QR válido) — el organizador
+    // decide desde la bandeja de aprobación (ver ApproveRegistration.ts).
+    // Solo aplica a gratis (validado al crear/editar el ticket_type).
+    const requiresApproval = input.items.some(
+      (item) => tts.find((t) => t.id === item.ticketTypeId)?.requires_approval,
+    );
+    if (requiresApproval) {
+      await db
+        .from("orders")
+        .update({ status: "pending_approval" })
+        .eq("id", orderRow.id);
+      await db
+        .from("tickets")
+        .update({ status: "pending_approval" })
+        .eq("order_id", orderRow.id);
+      return ok({
+        order: { ...toOrder(orderRow), status: "pending_approval" as const },
+        tickets: (tkRows as TicketRow[]).map((r) => toTicket({ ...r, status: "pending_approval" })),
+        preference: { id: "", initPoint: "" },
+      });
+    }
+
     // Órdenes gratuitas: marcar paid inmediatamente, despachar QR, recalc hitos.
     if (total === 0) {
       await db
@@ -839,10 +865,11 @@ export const supabaseTicketRepository: TicketRepository = {
   async listMine(buyerId: string): Promise<WalletTicket[]> {
     const db = supabaseAdmin();
     // Solo entradas que existen para el usuario: active (válida) + used (historial
-    // de asistencia). Excluye void/refunded — son ventas que nunca cuajaron
-    // (carrito expirado, pago fallido) o se reembolsaron; no deben aparecer ni
-    // contar en la cuenta. El resto de cálculos (sold, revenue, asistentes) ya
-    // los excluye en sus views/queries.
+    // de asistencia) + pending_approval (RSVP con aprobación, sin QR todavía).
+    // Excluye void/refunded — son ventas que nunca cuajaron (carrito expirado,
+    // pago fallido, rechazado) o se reembolsaron; no deben aparecer ni contar
+    // en la cuenta. El resto de cálculos (sold, revenue, asistentes) ya los
+    // excluye en sus views/queries.
     // Filtro por orden PAGADA o EN REVISIÓN: los tickets se insertan `active`
     // aunque la orden siga `pending` (el check constraint del schema no permite
     // 'pending_payment'). Mostramos lo pagado + las órdenes con pago vivo en
@@ -850,12 +877,14 @@ export const supabaseTicketRepository: TicketRepository = {
     // comprador ve su entrada mientras MP decide, sin QR hasta que se confirme.
     // Una reserva abandonada (pending sin pago) NO aparece. El filtro fino vive
     // en finishTicketListing (compartido con listManyByHolders). Las órdenes
-    // gratis (total 0) nacen `paid`, así que sí aparecen.
+    // gratis (total 0) nacen `paid`, así que sí aparecen. Sin pending_approval
+    // acá, el comprador pierde toda visibilidad de su inscripción en revisión
+    // apenas sale de /processing — no hay otro lugar donde volver a verla.
     const { data } = await db
       .from("tickets")
       .select(WALLET_TICKET_SELECT)
       .eq("current_holder", buyerId)
-      .in("status", ["active", "used"])
+      .in("status", ["active", "used", "pending_approval"])
       .order("created_at", { ascending: false });
     return finishTicketListing(db, (data as unknown as TicketRow[] | null) ?? []);
   },
@@ -880,7 +909,7 @@ export const supabaseTicketRepository: TicketRepository = {
         .from("tickets")
         .select(WALLET_TICKET_SELECT)
         .in("current_holder", holderIds)
-        .in("status", ["active", "used"])
+        .in("status", ["active", "used", "pending_approval"])
         .order("created_at", { ascending: false })
         .range(from, from + PAGE_SIZE - 1);
       const page = (data as unknown as TicketRow[] | null) ?? [];
@@ -928,9 +957,11 @@ export const supabaseTicketRepository: TicketRepository = {
       };
     };
     const row = data as unknown as Joined;
-    // Descarta reservas abandonadas (pending sin pago vivo). Pagada o en revisión sí.
+    // Descarta reservas abandonadas (pending sin pago vivo). Pagada, en revisión
+    // de pago o en revisión de aprobación (RSVP) sí.
     const visible =
       row.order.status === "paid" ||
+      row.order.status === "pending_approval" ||
       (row.order.status === "pending" && row.order.mp_status === "in_process");
     if (!visible) return null;
     const { data: pend } = await db
@@ -1517,6 +1548,112 @@ export const supabaseTicketRepository: TicketRepository = {
     }
 
     return ok({ ...summary, alreadyRequested: false });
+  },
+
+  async listPendingApprovals(eventId) {
+    const db = supabaseAdmin();
+    // orders.guest_* solo se llena en compra de invitado — un comprador
+    // logueado con su propia cuenta deja esos campos null y su nombre/contacto
+    // vive en profiles (buyer_id). Sin el fallback, la bandeja mostraba "Sin
+    // nombre · sin contacto" para cualquiera que compró logueado.
+    const { data, error } = await db
+      .from("orders")
+      .select(
+        `id, created_at, guest_name, guest_email, guest_phone, custom_field_answers,
+         tickets!inner(ticket_type_id, ticket_types(name)),
+         buyer:profiles!orders_buyer_id_fkey(full_name, email, phone)`,
+      )
+      .eq("event_id", eventId)
+      .eq("status", "pending_approval")
+      .order("created_at", { ascending: true });
+    if (error) return err(error.message);
+    const rows = (data as Array<{
+      id: string;
+      created_at: string;
+      guest_name: string | null;
+      guest_email: string | null;
+      guest_phone: string | null;
+      custom_field_answers: Record<string, string | string[] | boolean> | null;
+      tickets: Array<{ ticket_types: { name: string }[] | { name: string } | null }>;
+      buyer:
+        | { full_name: string | null; email: string | null; phone: string | null }
+        | { full_name: string | null; email: string | null; phone: string | null }[]
+        | null;
+    }> | null) ?? [];
+    return ok(
+      rows.map((r) => {
+        const tt = r.tickets[0]?.ticket_types;
+        const ticketTypeName = (Array.isArray(tt) ? tt[0]?.name : tt?.name) ?? "Entrada";
+        const buyer = Array.isArray(r.buyer) ? r.buyer[0] : r.buyer;
+        return {
+          orderId: r.id,
+          createdAt: r.created_at,
+          guestName: r.guest_name ?? buyer?.full_name ?? null,
+          guestEmail: r.guest_email ?? buyer?.email ?? null,
+          guestPhone: r.guest_phone ?? buyer?.phone ?? null,
+          ticketTypeName,
+          customFieldAnswers: r.custom_field_answers ?? {},
+        };
+      }),
+    );
+  },
+
+  async approveRegistration(orderId, eventId) {
+    const db = supabaseAdmin();
+    // CAS atómico: el WHERE status="pending_approval" en el UPDATE (no un
+    // check-then-set separado) evita que un doble clic o una carrera con
+    // rejectRegistration aplique ambas transiciones sobre la misma orden.
+    const { data: updated, error } = await db
+      .from("orders")
+      .update({ status: "paid", paid_at: new Date().toISOString() })
+      .eq("id", orderId)
+      .eq("event_id", eventId)
+      .eq("status", "pending_approval")
+      .select("id");
+    if (error) return err(error.message);
+    if (!updated || updated.length === 0) {
+      const { data: order } = await db
+        .from("orders")
+        .select("id")
+        .eq("id", orderId)
+        .eq("event_id", eventId)
+        .maybeSingle<{ id: string }>();
+      return err(order ? "not_pending_approval" : "not_found");
+    }
+    await db.from("tickets").update({ status: "active" }).eq("order_id", orderId);
+    after(() =>
+      dispatchTicketDelivery({ db }, orderId).catch((e) => {
+        console.error("[approveRegistration] dispatchTicketDelivery failed:", (e as Error).message);
+        Sentry.captureException(e, {
+          tags: { area: "ticket-delivery" },
+          extra: { orderId, stage: "approveRegistration" },
+        });
+      }),
+    );
+    return ok({ orderId });
+  },
+
+  async rejectRegistration(orderId, eventId) {
+    const db = supabaseAdmin();
+    const { data: updated, error } = await db
+      .from("orders")
+      .update({ status: "rejected" })
+      .eq("id", orderId)
+      .eq("event_id", eventId)
+      .eq("status", "pending_approval")
+      .select("id");
+    if (error) return err(error.message);
+    if (!updated || updated.length === 0) {
+      const { data: order } = await db
+        .from("orders")
+        .select("id")
+        .eq("id", orderId)
+        .eq("event_id", eventId)
+        .maybeSingle<{ id: string }>();
+      return err(order ? "not_pending_approval" : "not_found");
+    }
+    await db.from("tickets").update({ status: "void" }).eq("order_id", orderId);
+    return ok({ orderId });
   },
 };
 

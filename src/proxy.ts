@@ -49,6 +49,9 @@ export const config = {
   // `organizadores` (landing B2B) ya vive bajo [locale] — pasa por el intl
   // middleware como cualquier otra ruta, preparado para más idiomas.
   // Excluimos `auth/callback` para que reciba el `code` sin redirects de i18n.
+  // Excluimos `oauth/authorize` (consentimiento de Pasape MCP): vive sin
+  // locale como sibling de [locale] — sin esta exclusión el middleware la
+  // redirige a /es/oauth/authorize y esa ruta no existe (404).
   // Excluimos `monitoring` (tunnelRoute de Sentry) y `ingest` (proxy de
   // PostHog) para que no los locale-routee: sus rewrites en next.config.ts
   // solo cubren el path sin prefijo, y varias de sus rutas (/ingest/s,
@@ -58,7 +61,7 @@ export const config = {
   // Excluimos las rutas de metadatos de imagen (opengraph-image/twitter-image),
   // que viven en la raíz y no deben recibir prefijo de locale.
   matcher: [
-    "/((?!api|_next|_vercel|monitoring|ingest|auth/callback|opengraph-image|twitter-image|.*\\..*).*)",
+    "/((?!api|_next|_vercel|monitoring|ingest|auth/callback|oauth/authorize|opengraph-image|twitter-image|.*\\..*).*)",
     // Excepción al `?!api` de arriba: el proxy SÍ corre en la fase de compra para
     // aplicar el tarpit anti-bot diferido antes de tocar la función serverless.
     // Debe ser un literal estático (el matcher se analiza en build).

@@ -288,7 +288,7 @@ function EntryAvatar({ label, color, kind }: { label: string; color: string; kin
 }
 
 // ── Nivel 2: una fila de entrada individual ──────────────────────────────────
-type EntradaState = "you" | "held" | "sent" | "review" | "unassigned" | "used" | "ended";
+type EntradaState = "you" | "held" | "sent" | "review" | "approvalReview" | "unassigned" | "used" | "ended";
 
 function EntradaRow({
   ticket,
@@ -304,19 +304,22 @@ function EntradaRow({
   onAssign: (t: WalletTicket) => void;
 }) {
   const inReview = ticket.orderStatus === "pending";
+  const inApprovalReview = ticket.status === "pending_approval";
   const state: EntradaState = past
     ? ticket.status === "used"
       ? "used"
       : "ended"
     : inReview
       ? "review"
-      : ticket.pendingTransferTo
-        ? "sent"
-        : isYou
-          ? "you"
-          : ticket.holderName
-            ? "held"
-            : "unassigned";
+      : inApprovalReview
+        ? "approvalReview"
+        : ticket.pendingTransferTo
+          ? "sent"
+          : isYou
+            ? "you"
+            : ticket.holderName
+              ? "held"
+              : "unassigned";
 
   const name = isYou ? "Tú" : ticket.holderName ?? "Sin asignar";
   const avatarLabel = isYou ? "Tú" : (ticket.holderName?.trim()?.[0] ?? "?").toUpperCase();
@@ -325,6 +328,7 @@ function EntradaRow({
     held: "1 persona · la muestras tú",
     sent: "Va por su lado · enviada a su cel",
     review: "Pago en revisión",
+    approvalReview: "El organizador la revisará pronto",
     unassigned: "¿De quién es esta?",
     used: "Ya ingresó",
     ended: "Evento finalizado",
@@ -339,6 +343,8 @@ function EntradaRow({
       case "sent":
         return <span className="rounded-full bg-emerald-500/12 px-2.5 py-1 text-[10.5px] font-extrabold text-emerald-600">Enviada</span>;
       case "review":
+        return <span className="rounded-full bg-amber-400/15 px-2.5 py-1 text-[10.5px] font-extrabold text-amber-600">En revisión</span>;
+      case "approvalReview":
         return <span className="rounded-full bg-amber-400/15 px-2.5 py-1 text-[10.5px] font-extrabold text-amber-600">En revisión</span>;
       default:
         return null;

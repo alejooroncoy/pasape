@@ -10,6 +10,9 @@ type Deps = {
   invites: InviteRepository;
   memberships: MembershipRepository;
   orgs: OrganizationRepository;
+  // Wiring cross-BC (identity → events) vive en el controller, no acá: se
+  // inyecta la función en vez de importar el BC de eventos directamente.
+  onEventScope?: (eventId: string, profileId: string) => Promise<Result<unknown>>;
 };
 
 type Input = { token: string; profileId: string; profileEmail: string | null };
@@ -20,7 +23,7 @@ const normEmail = (raw: string | null | undefined): string | null => {
 };
 
 export const acceptInvite = async (
-  { invites, memberships, orgs }: Deps,
+  { invites, memberships, orgs, onEventScope }: Deps,
   input: Input,
 ): Promise<Result<{ org: Organization | null }>> => {
   const invite = await invites.findRowByToken(input.token);
@@ -52,13 +55,19 @@ export const acceptInvite = async (
   if (!accepterEmail) return err("invite_sign_in_with_email");
   if (accepterEmail !== invitedEmail) return err("invite_wrong_account");
 
-  const upserted = await memberships.upsert({
-    profileId: input.profileId,
-    role: invite.role,
-    scopeType: invite.scope.type,
-    scopeId: invite.scope.id,
-  });
-  if (!upserted.ok) return err(upserted.error);
+  if (invite.scope.type === "event") {
+    if (!onEventScope) return err("event_invite_not_supported");
+    const evResult = await onEventScope(invite.scope.id, input.profileId);
+    if (!evResult.ok) return err(evResult.error);
+  } else {
+    const upserted = await memberships.upsert({
+      profileId: input.profileId,
+      role: invite.role,
+      scopeType: invite.scope.type,
+      scopeId: invite.scope.id,
+    });
+    if (!upserted.ok) return err(upserted.error);
+  }
 
   const accepted = await invites.markAccepted({
     id: invite.id,
@@ -66,14 +75,19 @@ export const acceptInvite = async (
   });
   if (!accepted.ok) return err(accepted.error);
 
-  const reachable = await orgs.listByMember(input.profileId);
+  // Un invite de evento no da acceso a ninguna organización reachable nueva
+  // (el co-organizador ve el evento por su propio mecanismo, no por org) —
+  // target queda null en ese caso, el caller redirige directo al evento.
   let target: Organization | null = null;
-  if (invite.scope.type === "organization") {
-    target = reachable.find((o) => o.id === invite.scope.id) ?? null;
-  } else if (invite.scope.type === "legal_entity") {
-    target = reachable.find((o) => o.legalEntityId === invite.scope.id) ?? reachable[0] ?? null;
-  } else {
-    target = reachable[0] ?? null;
+  if (invite.scope.type !== "event") {
+    const reachable = await orgs.listByMember(input.profileId);
+    if (invite.scope.type === "organization") {
+      target = reachable.find((o) => o.id === invite.scope.id) ?? null;
+    } else if (invite.scope.type === "legal_entity") {
+      target = reachable.find((o) => o.legalEntityId === invite.scope.id) ?? reachable[0] ?? null;
+    } else {
+      target = reachable[0] ?? null;
+    }
   }
 
   return ok({ org: target });

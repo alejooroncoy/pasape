@@ -152,9 +152,14 @@ function CourtesyForm({ slug, ticketTypes }: { slug: string; ticketTypes: Ticket
 
   // Solo tipos con stock: la cortesía reserva de verdad (un box regalado ya no
   // se vende). Sí se puede regalar aunque la venta del tipo haya cerrado.
-  const selectable = ticketTypes.filter((tt) => unitsRemaining(tt) > 0);
+  // `unitsRemaining === null` = sin límite → siempre seleccionable.
+  const selectable = ticketTypes.filter((tt) => {
+    const remaining = unitsRemaining(tt);
+    return remaining === null || remaining > 0;
+  });
   const selected = selectable.find((tt) => tt.id === ttId) ?? null;
-  const maxQty = selected ? Math.min(10, unitsRemaining(selected)) : 1;
+  const selectedRemaining = selected ? unitsRemaining(selected) : null;
+  const maxQty = selected ? (selectedRemaining === null ? 10 : Math.min(10, selectedRemaining)) : 1;
   const effectiveQty = selected && isBox(selected) ? 1 : Math.min(qty, maxQty);
 
   const canSend =

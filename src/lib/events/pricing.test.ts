@@ -28,6 +28,7 @@ const tt = (over: Partial<AdmissionTicketType>): TicketType => ({
   showCountdown: false,
   countdownEndsAt: null,
   presaleTiers: [],
+  requiresApproval: false,
   ...over,
 });
 

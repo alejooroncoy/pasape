@@ -19,7 +19,7 @@ import {
 import { QuickEditForm } from "./QuickEditForm";
 import type { Promo, TicketType } from "@/server/events/domain/Event";
 
-export type EventTab = "panel" | "team" | "promoters" | "courtesies" | "settings";
+export type EventTab = "panel" | "team" | "promoters" | "attendees" | "courtesies" | "settings";
 
 const TABS: Array<{ key: EventTab; label: string; href: (slug: string) => string; icon: ReactNode }> = [
   {
@@ -56,6 +56,17 @@ const TABS: Array<{ key: EventTab; label: string; href: (slug: string) => string
         <circle cx="7" cy="7" r="2.6" stroke="currentColor" strokeWidth="1.6" />
         <path d="M2.5 16c.4-2.3 2.2-3.8 4.5-3.8s4.1 1.5 4.5 3.8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
         <path d="M13.5 8.5l1.6 1.6L18 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    ),
+  },
+  {
+    key: "attendees",
+    label: "Asistentes",
+    href: (s) => `/org/events/${s}/attendees`,
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
+        <circle cx="10" cy="7" r="3" stroke="currentColor" strokeWidth="1.6" />
+        <path d="M4 17c.6-3.2 3-5 6-5s5.4 1.8 6 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
       </svg>
     ),
   },
@@ -110,7 +121,12 @@ export function EventShell({
   const promos = event.data?.promos ?? [];
   const router = useRouter();
   const { visible: promotersVisible } = usePanelPromotersVisible();
-  const visibleTabs = TABS.filter((t) => t.key !== "promoters" || promotersVisible);
+  const hasApprovalTicketTypes = ticketTypes.some((tt) => tt.requiresApproval);
+  const visibleTabs = TABS.filter(
+    (t) =>
+      (t.key !== "promoters" || promotersVisible) &&
+      (t.key !== "attendees" || hasApprovalTicketTypes),
+  );
   const [shareOpen, setShareOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
 

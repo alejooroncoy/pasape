@@ -20,23 +20,29 @@ export type CreateTicketTypePayload = {
   name: string;
   kind: TicketTypeKind;
   priceCents: number;
-  capacity: number;
+  /** `null` = sin límite (solo válido para kind="general"). */
+  capacity: number | null;
   boxLabel?: string | null;
   unitNoun?: string | null;
   saleEndsAt?: string | null;
   description?: string | null;
   presaleTiers?: Array<{ priceCents: number; endsAt: string }>;
+  /** RSVP con aprobación — solo válido si priceCents === 0. */
+  requiresApproval?: boolean;
 } & PresalePayload & FreePayload;
 
 export type UpdateTicketTypePayload = {
   name?: string;
   priceCents?: number;
-  capacity?: number;
+  /** `null` = sin límite (solo válido para kind="general"). */
+  capacity?: number | null;
   boxLabel?: string | null;
   unitNoun?: string | null;
   saleEndsAt?: string | null;
   description?: string | null;
   presaleTiers?: Array<{ priceCents: number; endsAt: string }>;
+  /** RSVP con aprobación — solo válido si priceCents === 0. */
+  requiresApproval?: boolean;
 } & PresalePayload & FreePayload;
 
 const invalidate = (qc: ReturnType<typeof useQueryClient>, slug: string) => {

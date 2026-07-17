@@ -1,3 +1,5 @@
+import type { CustomField } from "@/lib/events/customFields";
+
 export type EventStatus = "draft" | "pending_review" | "published" | "closed" | "cancelled";
 
 // Ventana de gracia para vitrinas (org showcase, hub de marca): un evento que
@@ -19,7 +21,8 @@ export type EventCategory =
   | "festivales"
   | "comedia"
   | "cultura"
-  | "deportes";
+  | "deportes"
+  | "charlas";
 
 export type TransferPolicy = {
   enabled: boolean;
@@ -84,11 +87,19 @@ export type Event = {
   version: number;
   createdAt: string;
   /**
+   * Preguntas extra de registro definidas por el organizador (estilo Luma:
+   * Custom Questions). El frontend solo renderiza el formulario a partir de
+   * este array — ver `@/lib/events/customFields` (módulo único, no
+   * reimplementar el shape en otro lado).
+   */
+  customFields: CustomField[];
+  /**
    * Stats de listado (opcional): solo lo adjunta `listByOrganization` desde el
    * rollup para que las cards muestren ventas reales sin una query por card.
    * El frontend solo lo muestra; el backend lo calcula.
    */
-  listStats?: { sold: number; capacity: number; revenueCents: number };
+  /** `capacity: null` = sin límite (algún tipo de entrada del evento no tiene tope). */
+  listStats?: { sold: number; capacity: number | null; revenueCents: number };
 };
 
 /**
@@ -227,6 +238,13 @@ type TicketTypeBase = {
   countdownEndsAt: string | null;
   /** Tramos de preventa ordenados por ends_at asc. El backend elige el activo. */
   presaleTiers: PresaleTier[];
+  /**
+   * RSVP con aprobación (estilo Luma): el organizador aprueba/rechaza cada
+   * inscripción antes de emitir el QR. Solo válido si priceCents === 0 —
+   * combinar aprobación con pago es un caso no resuelto (deliberadamente
+   * fuera de alcance, ver migración 20260716110000_rsvp_approval.sql).
+   */
+  requiresApproval: boolean;
 };
 
 /** Espacio reservable. `seats` = personas que entran (NO es stock: el box se vende entero). */
@@ -235,10 +253,14 @@ export type BoxTicketType = TicketTypeBase & {
   seats: number;
 };
 
-/** Entrada individual (1 acceso = 1 persona). `stock` = cuántas se venden. */
+/**
+ * Entrada individual (1 acceso = 1 persona). `stock` = cuántas se venden.
+ * `null` = sin límite (eventos virtuales o sin aforo físico) — un box SIEMPRE
+ * tiene asientos finitos, por eso esto no aplica a `BoxTicketType.seats`.
+ */
 export type AdmissionTicketType = TicketTypeBase & {
   kind: Exclude<TicketTypeKind, "box">;
-  stock: number;
+  stock: number | null;
 };
 
 /**

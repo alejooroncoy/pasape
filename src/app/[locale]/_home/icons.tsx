@@ -90,6 +90,13 @@ export const CultureIcon = (p: SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
+export const TalkIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg width={18} height={18} viewBox="0 0 18 18" {...base} strokeWidth={1.6} {...p}>
+    <path d="M3 5.5A2.5 2.5 0 015.5 3h7A2.5 2.5 0 0115 5.5V10a2.5 2.5 0 01-2.5 2.5H8l-3.5 3v-3H5.5A2.5 2.5 0 013 10V5.5z" />
+    <path d="M6.5 6.5h5M6.5 9h3.5" />
+  </svg>
+);
+
 export const SportIcon = (p: SVGProps<SVGSVGElement>) => (
   <svg width={18} height={18} viewBox="0 0 18 18" {...base} strokeWidth={1.6} {...p}>
     <circle cx="9" cy="9" r="6" />

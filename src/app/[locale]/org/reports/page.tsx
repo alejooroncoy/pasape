@@ -901,7 +901,8 @@ type BreakdownRow = {
   name: string;
   price: number;
   sold: number;
-  capacity: number;
+  /** `null` = sin límite (no aplica a boxes/mesas agrupados, siempre finitos). */
+  capacity: number | null;
   /** Cantidad de tipos individuales que componen este grupo (1 = no agrupado). */
   count?: number;
   /** Boxes/mesas ocupados (al menos 1 ticket vendido). Sólo relevante si count>1. */
@@ -921,7 +922,7 @@ type BreakdownRow = {
  * ticket_type es su propia fila con su precio real.
  */
 function groupTicketRows(
-  rows: { name: string; kind: TicketTypeKind; price: number; sold: number; capacity: number }[],
+  rows: { name: string; kind: TicketTypeKind; price: number; sold: number; capacity: number | null }[],
 ): BreakdownRow[] {
   const groups = new Map<string, BreakdownRow>();
   rows.forEach((r, i) => {
@@ -941,7 +942,9 @@ function groupTicketRows(
       });
     } else {
       existing.sold += r.sold;
-      existing.capacity += r.capacity;
+      // Solo boxes se agrupan (ver `key` arriba) y un box siempre es finito —
+      // el `?? 0` es defensivo, no debería ejercitarse en la práctica.
+      existing.capacity = (existing.capacity ?? 0) + (r.capacity ?? 0);
       existing.count = (existing.count ?? 1) + 1;
       existing.unitsOccupied = (existing.unitsOccupied ?? 0) + (r.sold > 0 ? 1 : 0);
       existing.price = Math.min(existing.price, r.price);
@@ -960,7 +963,7 @@ function groupTicketRows(
  *  - Para tickets singulares (Preventa, General): la métrica natural es
  *    asientos vendidos sobre aforo.
  */
-function displayMetric(r: BreakdownRow): { sold: number; total: number; unitLabel: string | null } {
+function displayMetric(r: BreakdownRow): { sold: number; total: number | null; unitLabel: string | null } {
   if ((r.count ?? 1) > 1) {
     return {
       sold: r.unitsOccupied ?? 0,
@@ -999,7 +1002,7 @@ function TicketBreakdown({ rows }: { rows: BreakdownRow[] }) {
       <div className="flex flex-col gap-2.5 sm:hidden">
         {rows.map((r, i) => {
           const m = displayMetric(r);
-          const pct = m.total > 0 ? Math.min(100, (m.sold / m.total) * 100) : 0;
+          const pct = m.total !== null && m.total > 0 ? Math.min(100, (m.sold / m.total) * 100) : 0;
           return (
             <motion.div
               key={r.name}
@@ -1024,7 +1027,10 @@ function TicketBreakdown({ rows }: { rows: BreakdownRow[] }) {
                 </div>
                 <span className="text-[11px] font-semibold tabular-nums text-cart-ink-3">
                   {m.sold.toLocaleString("es-PE")}
-                  <span className="text-cart-ink-4"> / {m.total.toLocaleString("es-PE")}</span>
+                  <span className="text-cart-ink-4">
+                    {" "}
+                    / {m.total === null ? "sin límite" : m.total.toLocaleString("es-PE")}
+                  </span>
                 </span>
               </div>
               <div className="flex items-center gap-2.5">
@@ -1063,7 +1069,7 @@ function TicketBreakdown({ rows }: { rows: BreakdownRow[] }) {
           <tbody>
             {rows.map((r, i) => {
               const m = displayMetric(r);
-              const pct = m.total > 0 ? Math.min(100, (m.sold / m.total) * 100) : 0;
+              const pct = m.total !== null && m.total > 0 ? Math.min(100, (m.sold / m.total) * 100) : 0;
               return (
                 <motion.tr
                   key={r.name}
@@ -1086,7 +1092,7 @@ function TicketBreakdown({ rows }: { rows: BreakdownRow[] }) {
                     {m.sold.toLocaleString("es-PE")}
                   </td>
                   <td className="bg-cart-bg-elev-2/70 px-3 py-3 text-right text-[13px] tabular-nums text-cart-ink-3">
-                    {m.total.toLocaleString("es-PE")}
+                    {m.total === null ? "Sin límite" : m.total.toLocaleString("es-PE")}
                   </td>
                   <td className="rounded-r-xl bg-cart-bg-elev-2/70 px-3 py-3">
                     <div className="flex items-center gap-2">

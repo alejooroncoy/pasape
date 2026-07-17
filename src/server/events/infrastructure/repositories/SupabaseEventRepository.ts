@@ -16,6 +16,7 @@ import type {
 } from "@/server/events/ports/EventRepository";
 import type { Event, EventCard, EventCategory, EventSeoEntry, FeeMode, Promo, PresaleTier, TicketType } from "@/server/events/domain/Event";
 import { buyerUnitPriceCents } from "@/lib/tickets/serviceFee";
+import { customFieldsSchema, type CustomField } from "@/lib/events/customFields";
 import {
   computePromoterPayout,
   describePromoterMilestones,
@@ -60,8 +61,17 @@ type EventRow = {
   transfer_max_count: number;
   transfer_requires_kyc: boolean;
   fee_mode: Event["feeMode"];
+  custom_fields: unknown;
   version: number;
   created_at: string;
+};
+
+// Fila corrupta/legacy (columna nueva, filas viejas sin default aplicado, o
+// un valor que ya no matchea el schema vigente) no debe tumbar el render del
+// evento — degrada a "sin preguntas extra" y sigue.
+const parseCustomFields = (raw: unknown): CustomField[] => {
+  const parsed = customFieldsSchema.safeParse(raw ?? []);
+  return parsed.success ? parsed.data : [];
 };
 
 type TicketTypeRow = {
@@ -71,7 +81,8 @@ type TicketTypeRow = {
   kind: TicketType["kind"];
   price_cents: number;
   currency: string;
-  capacity: number;
+  /** `null` = sin límite (solo aplica a entradas; un box siempre es finito). */
+  capacity: number | null;
   sold: number;
   position: number;
   box_label: string | null;
@@ -83,6 +94,7 @@ type TicketTypeRow = {
   description: string | null;
   is_free: boolean;
   free_until_at: string | null;
+  requires_approval: boolean;
 };
 
 type PromoRow = {
@@ -107,6 +119,7 @@ const computeSaleStatus = (
 ): "available" | "expired" | "soldout" => {
   if (r.sale_ends_at && new Date(r.sale_ends_at) < now) return "expired";
   if (r.kind === "box") return r.sold > 0 ? "soldout" : "available";
+  if (r.capacity === null) return "available";
   return r.capacity - r.sold > 0 ? "available" : "soldout";
 };
 
@@ -161,6 +174,7 @@ const toEvent = (r: EventRow): Event => ({
     requiresKyc: r.transfer_requires_kyc,
   },
   feeMode: r.fee_mode,
+  customFields: parseCustomFields(r.custom_fields),
   version: r.version,
   createdAt: r.created_at,
 });
@@ -271,6 +285,7 @@ const toTicketType = (
     description: r.description,
     isFree: r.is_free,
     freeUntilAt: r.free_until_at,
+    requiresApproval: r.requires_approval,
     isFreeActive,
     saleStatus: computeSaleStatus(r, now),
     isPresaleActive: active != null,
@@ -287,7 +302,10 @@ const toTicketType = (
   // Normaliza kinds: 'box' aparte; cualquier otro (incl. 'vip' rezagado o
   // 'invitation' previo a la migración de cortesías) cae a 'general'. Desacopla
   // el código del momento exacto en que corre la migración de DB.
-  if (r.kind === "box") return { ...base, kind: "box", seats: r.capacity };
+  // Un box siempre es finito — lo garantiza el constraint
+  // ticket_types_box_capacity_not_null. El `?? 0` es solo para que TS no se
+  // queje del tipo compartido con `capacity` de entradas (que sí es nullable).
+  if (r.kind === "box") return { ...base, kind: "box", seats: r.capacity ?? 0 };
   return {
     ...base,
     kind: "general",
@@ -358,9 +376,14 @@ export const supabaseEventRepository: EventRepository = {
       .select("event_id, sold, capacity, revenue_cents")
       .in("event_id", events.map((e) => e.id));
     const byId = new Map(
-      (rollups as Array<{ event_id: string; sold: number; capacity: number; revenue_cents: number }> | null)?.map(
-        (r) => [r.event_id, r],
-      ) ?? [],
+      (
+        rollups as Array<{
+          event_id: string;
+          sold: number;
+          capacity: number | null;
+          revenue_cents: number;
+        }> | null
+      )?.map((r) => [r.event_id, r]) ?? [],
     );
     return events.map((e) => {
       const r = byId.get(e.id);
@@ -368,7 +391,7 @@ export const supabaseEventRepository: EventRepository = {
         ...e,
         listStats: {
           sold: r?.sold ?? 0,
-          capacity: r?.capacity ?? 0,
+          capacity: r ? r.capacity : 0,
           revenueCents: r?.revenue_cents ?? 0,
         },
       };
@@ -439,6 +462,7 @@ export const supabaseEventRepository: EventRepository = {
         transfer_max_count: input.transferMaxCount,
         transfer_requires_kyc: input.transferRequiresKyc,
         fee_mode: input.feeMode ?? "buyer_pays_extra",
+        custom_fields: input.customFields ?? [],
       })
       .select("*")
       .single<EventRow>();
@@ -543,6 +567,7 @@ export const supabaseEventRepository: EventRepository = {
     if (input.transferRequiresKyc !== undefined)
       patch.transfer_requires_kyc = input.transferRequiresKyc;
     if (input.feeMode !== undefined) patch.fee_mode = input.feeMode;
+    if (input.customFields !== undefined) patch.custom_fields = input.customFields;
     if (Object.keys(patch).length === 0) return err("nothing_to_update");
     const { data, error } = await db
       .from("events")
@@ -660,6 +685,7 @@ export const supabaseEventRepository: EventRepository = {
         description: input.description ?? null,
         is_free: input.isFree ?? false,
         free_until_at: input.freeUntilAt ?? null,
+        requires_approval: input.requiresApproval ?? false,
       })
       .select("*")
       .single<TicketTypeRow>();
@@ -695,6 +721,7 @@ export const supabaseEventRepository: EventRepository = {
     if ("presaleQty" in input) patch.presale_qty = input.presaleQty ?? null;
     if ("presaleEndsAt" in input) patch.presale_ends_at = input.presaleEndsAt ?? null;
     if ("description" in input) patch.description = input.description ?? null;
+    if ("requiresApproval" in input) patch.requires_approval = input.requiresApproval ?? false;
     if ("isFree" in input) patch.is_free = input.isFree ?? false;
     if ("freeUntilAt" in input) patch.free_until_at = input.freeUntilAt ?? null;
     // presaleTiers se gestiona por separado (delete+insert)
@@ -770,7 +797,7 @@ export const supabaseEventRepository: EventRepository = {
         name: string;
         kind: TicketType["kind"];
         price_cents: number;
-        capacity: number;
+        capacity: number | null;
         box_label: string | null;
         unit_noun: string | null;
       }> | null) ?? [];
@@ -783,7 +810,7 @@ export const supabaseEventRepository: EventRepository = {
       .select("capacity, sold, reserved, validated, revenue_cents")
       .eq("event_id", eventId)
       .maybeSingle<{
-        capacity: number;
+        capacity: number | null;
         sold: number;
         reserved: number;
         validated: number;
@@ -791,7 +818,7 @@ export const supabaseEventRepository: EventRepository = {
       }>();
     const sold = rollup?.sold ?? 0;
     const reserved = rollup?.reserved ?? 0;
-    const capacity = rollup?.capacity ?? 0;
+    const capacity = rollup?.capacity ?? null;
     const validatedCount = rollup?.validated ?? 0;
     const revenueCents = rollup?.revenue_cents ?? 0;
 
@@ -1081,7 +1108,7 @@ export const supabaseEventRepository: EventRepository = {
       revenueCents,
       serviceFeeCents,
       netCents,
-      capacity: capacity || null,
+      capacity,
       salesSeries,
       ticketTypes: ticketTypes.map((t) => ({
         id: t.id,
@@ -1123,7 +1150,7 @@ export const supabaseEventRepository: EventRepository = {
            holder:profiles!tickets_current_holder_fkey(id, phone),
            order:orders!inner(
              id, event_id, promoter_link_id, status, is_courtesy,
-             guest_email, guest_phone,
+             guest_email, guest_phone, custom_field_answers,
              buyer:profiles!orders_buyer_id_fkey(id, email, phone),
              promoter_link:promoter_links(id, code)
            )`,
@@ -1160,6 +1187,7 @@ export const supabaseEventRepository: EventRepository = {
         is_courtesy: boolean | null;
         guest_email: string | null;
         guest_phone: string | null;
+        custom_field_answers: Record<string, string | string[] | boolean> | null;
         buyer: { id: string; email: string | null; phone: string | null };
         promoter_link: { id: string; code: string } | null;
       };
@@ -1232,6 +1260,7 @@ export const supabaseEventRepository: EventRepository = {
         promoterCode: t.order?.promoter_link?.code ?? null,
         isCourtesy: t.order?.is_courtesy ?? false,
         transferFromName: transfer?.fromName ?? null,
+        customFieldAnswers: t.order?.custom_field_answers ?? {},
       };
     });
 

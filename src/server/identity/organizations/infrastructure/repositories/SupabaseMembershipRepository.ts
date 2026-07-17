@@ -165,7 +165,9 @@ export const supabaseMembershipRepository: MembershipRepository = {
     grantsByProfile.set(portfolioOwnerId, ownerGrant);
 
     // Priorizar el scope más específico cuando un profile aparece varias veces.
-    const specificity: Record<InviteScopeType, number> = {
+    // "event" nunca aparece en `memberships` (vive en event_co_organizers) —
+    // se excluye del tipo en vez de inventarle una prioridad sin sentido acá.
+    const specificity: Record<Exclude<InviteScopeType, "event">, number> = {
       organization: 1,
       legal_entity: 2,
       portfolio: 3,
@@ -183,8 +185,8 @@ export const supabaseMembershipRepository: MembershipRepository = {
       if (
         !existing ||
         existing.via === "legal_entity_owner" ||
-        specificity[r.scope_type] <
-          specificity[existing.via as InviteScopeType]
+        specificity[r.scope_type as Exclude<InviteScopeType, "event">] <
+          specificity[existing.via as Exclude<InviteScopeType, "event">]
       ) {
         // Conservar el "owner" implícito si el profile es el dueño y el row no es mejor.
         if (existing?.via === "legal_entity_owner" && r.profile_id === portfolioOwnerId) {

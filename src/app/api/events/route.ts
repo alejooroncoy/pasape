@@ -5,7 +5,7 @@ import type { EventCategory } from "@/server/events/domain/Event";
 import { getAuthDistinctId } from "@/lib/posthog-server";
 import { serverEvents } from "@/lib/analytics/serverEvents";
 
-const VALID_CATEGORIES = new Set<string>(["conciertos","fiestas","festivales","comedia","cultura","deportes"]);
+const VALID_CATEGORIES = new Set<string>(["conciertos","fiestas","festivales","comedia","cultura","deportes","charlas"]);
 
 export const GET = async (req: NextRequest) => {
   const scope = req.nextUrl.searchParams.get("scope");

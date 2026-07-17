@@ -5,7 +5,7 @@ import type { EventCategory } from "@/server/events/domain/Event";
 // Set validado contra Joinnus/Teleticket/Eventbrite/DICE (jun 2026):
 // "Conciertos" y "Fiestas" son el vocabulario peruano estándar; DJ/electrónica
 // y after-office viven dentro de "Fiestas", no como categorías propias.
-import { AfterIcon, ComedyIcon, CultureIcon, DjIcon, MusicIcon, SportIcon } from "./icons";
+import { AfterIcon, ComedyIcon, CultureIcon, DjIcon, MusicIcon, SportIcon, TalkIcon } from "./icons";
 
 export type CategoryDef = {
   id: EventCategory;
@@ -60,6 +60,13 @@ export const CATEGORIES: CategoryDef[] = [
     Icon: SportIcon,
     color: "#ff7a59",
     gradient: "linear-gradient(150deg,#2a0d03 0%,#4a1c07 55%,#d65a2e 100%)",
+  },
+  {
+    id: "charlas",
+    label: "Charlas & Networking",
+    Icon: TalkIcon,
+    color: "#7ea6ff",
+    gradient: "linear-gradient(150deg,#050b26 0%,#0d1b4a 55%,#3d63d6 100%)",
   },
 ];
 

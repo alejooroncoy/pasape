@@ -41,6 +41,8 @@ import type {
   TicketTypeKind,
 } from "@/server/events/domain/Event";
 import { CATEGORIES } from "../../../_home/categories";
+import { CustomFieldsEditor } from "./CustomFieldsEditor";
+import type { CustomField } from "@/lib/events/customFields";
 import { uploadEventAsset } from "@/lib/events/uploadEventAsset";
 import { extractFlyerPaletteFromUrl } from "@/lib/_shared/extractFlyerPalette";
 import { derivePalette, readableTextColor, type Palette } from "@/lib/_shared/color";
@@ -101,6 +103,8 @@ type TicketRow = {
   isFree: boolean;
   /** ISO 8601. Fin de la liberación. "" = mientras esté activa (la apaga el organizador). */
   freeUntilAt: string;
+  /** RSVP con aprobación (estilo Luma). Solo válido si el precio es S/0 — ver AGENTS.md. */
+  requiresApproval: boolean;
 };
 
 /**
@@ -145,6 +149,9 @@ export type EventComposerProps =
 // ============================================================
 const uid = () => Math.random().toString(36).slice(2, 9);
 const toCents = (s: string) => Money.toCents(s);
+/** "" = sin límite (null). Un box nunca llega vacío (su UI siempre exige un número). */
+const capacityValue = (capacity: string): number | null =>
+  capacity.trim() === "" ? null : Number(capacity);
 
 /**
  * Preview de "cuánto le va a llegar cobrado al comprador" mientras el
@@ -206,6 +213,12 @@ const presaleTiersPayload = (t: TicketRow) => ({
 const freeReleasePayload = (t: TicketRow) => ({
   isFree: t.isFree,
   freeUntilAt: t.isFree && t.freeUntilAt ? t.freeUntilAt : null,
+});
+
+/** RSVP con aprobación: solo aplica a entradas gratis (CHECK en DB
+    ticket_types_approval_only_free) — nunca se envía true fuera de eso. */
+const approvalPayload = (t: TicketRow) => ({
+  requiresApproval: t.kind !== "box" && toCents(t.priceSoles) === 0 ? t.requiresApproval : false,
 });
 
 // ── Helpers de grupos de espacios (boxes/mesas) ──────────────────────────────
@@ -334,7 +347,8 @@ export function EventComposer(props: EventComposerProps) {
       kind: tt.kind as TicketKind,
       priceSoles: fromCents(tt.priceCents),
       // El form usa un solo campo de cupo; el dominio lo separa por kind.
-      capacity: String(tt.kind === "box" ? tt.seats : tt.stock),
+      // "" = sin límite (solo posible en tt.stock, un box nunca es null).
+      capacity: tt.kind === "box" ? String(tt.seats) : (tt.stock === null ? "" : String(tt.stock)),
       boxLabel: tt.boxLabel ?? "",
       unitNoun: tt.unitNoun ?? "",
       saleEndsAt: tt.saleEndsAt ?? "",
@@ -346,6 +360,7 @@ export function EventComposer(props: EventComposerProps) {
       })),
       isFree: tt.isFree,
       freeUntilAt: tt.freeUntilAt ?? "",
+      requiresApproval: tt.requiresApproval,
     }));
     const durationHoursFromEdit = ev.endsAt
       ? Math.round((new Date(ev.endsAt).getTime() - new Date(ev.startsAt).getTime()) / 3_600_000)
@@ -383,9 +398,11 @@ export function EventComposer(props: EventComposerProps) {
                 presaleTiers: [],
                 isFree: false,
                 freeUntilAt: "",
+                requiresApproval: false,
               },
             ],
       publishNow: ev.status === "published" || ev.status === "pending_review",
+      customFields: ev.customFields,
     };
     // initial is stable per mount in edit mode (we re-mount per slug).
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -393,6 +410,7 @@ export function EventComposer(props: EventComposerProps) {
 
   const [title, setTitle] = useState(seedFromEdit?.title ?? "");
   const [description, setDescription] = useState(seedFromEdit?.description ?? "");
+  const [customFields, setCustomFields] = useState<CustomField[]>(seedFromEdit?.customFields ?? []);
   // Preseleccionada en "fiestas" (categoría dominante del ICP nightlife) y requerida:
   // los chips funcionan como radio, nunca queda en null → el evento siempre es filtrable.
   const [category, setCategory] = useState<EventCategory>(seedFromEdit?.category ?? "fiestas");
@@ -430,6 +448,7 @@ export function EventComposer(props: EventComposerProps) {
         presaleTiers: [],
         isFree: false,
         freeUntilAt: "",
+        requiresApproval: false,
       },
     ],
   );
@@ -463,7 +482,7 @@ export function EventComposer(props: EventComposerProps) {
   const [promoterAssignError, setPromoterAssignError] = useState(false);
   const [publishNow, setPublishNow] = useState(seedFromEdit?.publishNow ?? true);
   const [openSheet, setOpenSheet] = useState<
-    null | "tickets" | "promoters" | "description" | "promos"
+    null | "tickets" | "promoters" | "description" | "promos" | "customFields"
   >(null);
   const [highlight, setHighlight] = useState<
     null | "nombre" | "fecha" | "hora" | "entradas"
@@ -541,10 +560,12 @@ export function EventComposer(props: EventComposerProps) {
     }
   }, [date]);
 
+  // Cupo vacío = sin límite (solo para entradas — un box siempre necesita un
+  // número real, ver AGENTS.md "capacity es ambiguo").
   const validTickets = tickets.filter(
     (t) =>
       t.name.trim() &&
-      Number(t.capacity) > 0 &&
+      (t.kind === "box" ? Number(t.capacity) > 0 : t.capacity.trim() === "" || Number(t.capacity) > 0) &&
       (t.kind !== "box" || t.boxLabel.trim().length > 0),
   );
 
@@ -645,13 +666,14 @@ export function EventComposer(props: EventComposerProps) {
           name: t.name,
           kind: t.kind,
           priceCents: toCents(t.priceSoles),
-          capacity: Number(t.capacity),
+          capacity: capacityValue(t.capacity),
           boxLabel: t.kind === "box" ? t.boxLabel.trim() : null,
           unitNoun: t.kind === "box" ? t.unitNoun.trim() || null : null,
           saleEndsAt: t.saleEndsAt || null,
           description: t.description.trim() || null,
           ...presaleTiersPayload(t),
           ...freeReleasePayload(t),
+          ...approvalPayload(t),
         })),
         // Expandir cada grupo de espacios a N boxes (Box A…F).
         ...spaceGroups.flatMap(expandSpaceGroup),
@@ -710,6 +732,7 @@ export function EventComposer(props: EventComposerProps) {
         transferRequiresKyc: false,
         feeMode,
         maxTicketsPerPerson: maxPerPerson.trim() ? Number(maxPerPerson) : null,
+        customFields,
       });
       if (selectedPromoterIds.size > 0 && ev.slug) {
         setPromoterAssignError(false);
@@ -816,6 +839,9 @@ export function EventComposer(props: EventComposerProps) {
       if (nextMid !== ev.paletteMid) patch.paletteMid = nextMid;
       if (nextAccent !== ev.paletteAccent) patch.paletteAccent = nextAccent;
       if (nextLayoutUrl !== undefined) patch.venueLayoutUrl = nextLayoutUrl;
+      if (JSON.stringify(customFields) !== JSON.stringify(ev.customFields)) {
+        patch.customFields = customFields;
+      }
 
       // "published" es la intención del organizador; en la PRIMERA publicación
       // el backend lo baja a pending_review hasta que Pasape lo aprueba (ver
@@ -869,7 +895,7 @@ export function EventComposer(props: EventComposerProps) {
           name: t.name,
           kind: t.kind,
           priceCents: toCents(t.priceSoles),
-          capacity: Number(t.capacity),
+          capacity: capacityValue(t.capacity),
           boxLabel: t.kind === "box" ? t.boxLabel.trim() : null,
           unitNoun: t.kind === "box" ? t.unitNoun.trim() || null : null,
           saleEndsAt: t.saleEndsAt || null,
@@ -903,6 +929,7 @@ export function EventComposer(props: EventComposerProps) {
             presaleTiers: [],
             isFree: false,
             freeUntilAt: "",
+            requiresApproval: false,
           });
         }
         setTickets((prev) => [...prev, ...createdRows]);
@@ -918,7 +945,7 @@ export function EventComposer(props: EventComposerProps) {
         if (t.name !== orig.name) ttPatch.name = t.name;
         const nextPrice = toCents(t.priceSoles);
         if (nextPrice !== orig.priceCents) ttPatch.priceCents = nextPrice;
-        const nextCap = Number(t.capacity);
+        const nextCap = capacityValue(t.capacity);
         const origCap = orig.kind === "box" ? orig.seats : orig.stock;
         if (nextCap !== origCap) ttPatch.capacity = nextCap;
         const nextLabel = t.kind === "box" ? t.boxLabel.trim() : null;
@@ -939,6 +966,8 @@ export function EventComposer(props: EventComposerProps) {
         const nextFree = freeReleasePayload(t);
         if (nextFree.isFree !== orig.isFree) ttPatch.isFree = nextFree.isFree;
         if (nextFree.freeUntilAt !== (orig.freeUntilAt ?? null)) ttPatch.freeUntilAt = nextFree.freeUntilAt;
+        const nextApproval = approvalPayload(t).requiresApproval;
+        if (nextApproval !== orig.requiresApproval) ttPatch.requiresApproval = nextApproval;
         if (Object.keys(ttPatch).length > 0) {
           await updateTT.mutateAsync({ id: t.id!, input: ttPatch });
         }
@@ -1439,6 +1468,20 @@ export function EventComposer(props: EventComposerProps) {
             />
           )}
 
+          {/* Preguntas de registro (estilo Luma) — qué le pedís al comprador
+              además de nombre/correo. */}
+          <CardButton
+            icon={<IconTag />}
+            label="Preguntas de registro"
+            hint={
+              customFields.length > 0
+                ? `${customFields.length} ${customFields.length === 1 ? "pregunta" : "preguntas"} extra`
+                : "Opcional — además de nombre y correo"
+            }
+            onClick={() => setOpenSheet("customFields")}
+            active={customFields.length > 0}
+          />
+
           {/* Promotores (solo en create — en edit usar pestaña Equipo) */}
           {!isEdit && (
             <CardButton
@@ -1609,6 +1652,11 @@ export function EventComposer(props: EventComposerProps) {
               promos={promos}
               onChange={setPromos}
             />
+          </Sheet>
+        )}
+        {openSheet === "customFields" && (
+          <Sheet onClose={() => setOpenSheet(null)} title="Preguntas de registro">
+            <CustomFieldsEditor fields={customFields} onChange={setCustomFields} />
           </Sheet>
         )}
       </AnimatePresence>
@@ -1941,7 +1989,7 @@ function TitleField({
         ref={inputRef}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="Reverb x La Selva"
+        placeholder="¿Cómo se llama tu evento?"
         className="mt-1.5 w-full bg-transparent font-sans text-[22px] font-semibold leading-tight tracking-[-0.02em] text-cart-ink outline-none placeholder:text-cart-ink-4 lg:text-[26px]"
       />
     </div>
@@ -2374,6 +2422,57 @@ function FreeReleaseEditor({
   );
 }
 
+// ============================================================
+// RequiresApprovalToggle — RSVP con aprobación (estilo Luma). Solo aplica a
+// entradas gratis (CHECK ticket_types_approval_only_free) — deshabilitado,
+// no oculto, si hay precio puesto.
+// ============================================================
+function RequiresApprovalToggle({
+  requiresApproval,
+  isFreeTicket,
+  onChange,
+}: {
+  requiresApproval: boolean;
+  isFreeTicket: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  const on = isFreeTicket && requiresApproval;
+  return (
+    <div className="mt-2 rounded-xl bg-cart-bg-elev px-3 py-2.5">
+      <div className="flex items-center gap-3">
+        <div className="flex-1">
+          <span className="text-[13px] font-semibold text-cart-ink">Solicitar aprobación</span>
+          <p className="text-[10.5px] leading-tight text-cart-ink-4">
+            {isFreeTicket
+              ? "Revisas cada inscripción antes de emitir la entrada."
+              : "Solo disponible para entradas gratis."}
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={on}
+          aria-label="Solicitar aprobación"
+          disabled={!isFreeTicket}
+          title={isFreeTicket ? undefined : "Solo disponible para entradas gratis"}
+          onClick={() => onChange(!requiresApproval)}
+          className={
+            "relative h-6 w-11 shrink-0 rounded-full transition disabled:cursor-not-allowed disabled:opacity-50 " +
+            (on ? "bg-emerald-500/80" : "bg-cart-bg-elev-2 ring-1 ring-cart-line")
+          }
+        >
+          <span
+            className={
+              "absolute top-0.5 size-5 rounded-full bg-cart-ink transition-all " +
+              (on ? "left-[22px]" : "left-0.5")
+            }
+          />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // BoxGroupEditor — edición masiva de boxes
 function DescriptionField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return (
@@ -2689,6 +2788,7 @@ function TicketsEditor({
         presaleTiers: [],
         isFree: false,
         freeUntilAt: "",
+        requiresApproval: false,
       },
     ]);
   };
@@ -2774,6 +2874,7 @@ function TicketsEditor({
             <Stepper
               label="Disponibles"
               value={t.capacity}
+              placeholder="Sin límite"
               onChange={(v) => update(t.rowKey, { capacity: v })}
             />
           </div>
@@ -2781,13 +2882,18 @@ function TicketsEditor({
           <AdvancedToggle
             open={advancedOpen.has(t.rowKey)}
             onToggle={() => toggleAdvanced(t.rowKey)}
-            hasContent={!!(t.description || t.presaleTiers.length > 0 || t.isFree)}
+            hasContent={!!(t.description || t.presaleTiers.length > 0 || t.isFree || t.requiresApproval)}
           />
           {advancedOpen.has(t.rowKey) && (
             <>
               <DescriptionField value={t.description} onChange={(v) => update(t.rowKey, { description: v })} />
               <PresaleTiersEditor tiers={t.presaleTiers} base={t.priceSoles} onChange={(tiers) => update(t.rowKey, { presaleTiers: tiers })} />
               <FreeReleaseEditor isFree={t.isFree} freeUntilAt={t.freeUntilAt} base={t.priceSoles} onChange={(patch) => update(t.rowKey, patch)} />
+              <RequiresApprovalToggle
+                requiresApproval={t.requiresApproval}
+                isFreeTicket={toCents(t.priceSoles) === 0}
+                onChange={(v) => update(t.rowKey, { requiresApproval: v })}
+              />
             </>
           )}
         </div>
@@ -2830,6 +2936,7 @@ function TicketsEditor({
                     presaleTiers: [],
                     isFree: false,
                     freeUntilAt: "",
+                    requiresApproval: false,
                   },
                 ]);
               }}
@@ -2958,11 +3065,13 @@ function Stepper({
   suffix,
   value,
   onChange,
+  placeholder,
 }: {
   label: string;
   suffix?: string;
   value: string;
   onChange: (v: string) => void;
+  placeholder?: string;
 }) {
   return (
     <label className="flex flex-col gap-1 rounded-xl bg-cart-bg-elev px-3 py-2">
@@ -2972,8 +3081,9 @@ function Stepper({
         <input
           inputMode="numeric"
           value={value}
+          placeholder={placeholder}
           onChange={(e) => onChange(e.target.value.replace(/[^\d]/g, ""))}
-          className="w-full bg-transparent font-mono text-[15px] font-semibold text-cart-ink outline-none"
+          className="w-full bg-transparent font-mono text-[15px] font-semibold text-cart-ink outline-none placeholder:text-cart-ink-4"
         />
       </div>
     </label>

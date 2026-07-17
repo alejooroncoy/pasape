@@ -61,6 +61,14 @@ const resolveScopeLabel = async (
       .maybeSingle<{ name: string }>();
     return data?.name ?? "una razón social";
   }
+  if (scope.type === "event") {
+    const { data } = await db
+      .from("events")
+      .select("title")
+      .eq("id", scope.id)
+      .maybeSingle<{ title: string }>();
+    return data?.title ? `Evento: ${data.title}` : "Evento";
+  }
   // portfolio: el nombre del owner
   const { data } = await db
     .from("profiles")
