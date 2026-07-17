@@ -545,7 +545,15 @@ const PREVIEW_LABEL: Record<string, string> = {
 function PreviewBanner({ status }: { status: string }) {
   return (
     <div className="sticky top-0 z-[60] flex items-center justify-center gap-2 bg-cart-accent px-4 py-2 text-center text-[13px] font-medium text-white">
-      <span aria-hidden="true">👁️</span>
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+        <path
+          d="M1 7s2-4.5 6-4.5S13 7 13 7s-2 4.5-6 4.5S1 7 1 7z"
+          stroke="currentColor"
+          strokeWidth="1.4"
+          strokeLinejoin="round"
+        />
+        <circle cx="7" cy="7" r="1.6" stroke="currentColor" strokeWidth="1.4" />
+      </svg>
       {PREVIEW_LABEL[status] ?? "Vista previa"}
     </div>
   );
