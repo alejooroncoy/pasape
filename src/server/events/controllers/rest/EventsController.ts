@@ -206,7 +206,14 @@ export const EventsController = {
 
   async getBySlug(
     slug: string,
-  ): Promise<Result<{ event: Event; ticketTypes: TicketType[]; promos: Promo[] }>> {
+  ): Promise<
+    Result<{
+      event: Event;
+      ticketTypes: TicketType[];
+      promos: Promo[];
+      organizationBrandColor: string | null;
+    }>
+  > {
     const data = await getEventBySlug({ repo }, slug);
     if (!data) return err("not_found");
     // Published y closed son públicos: un evento que terminó sigue siendo
@@ -224,7 +231,15 @@ export const EventsController = {
         .maybeSingle<{ role: string }>();
       if (!membership) return err("not_found");
     }
-    return { ok: true, value: data };
+    // Solo para el fallback visual cuando el evento no tiene flyer (ver
+    // FlyerCard): sin esto, un evento sin cover cae en el degradado morado
+    // de Pasape en vez del color de la marca del organizador.
+    const { data: org } = await supabaseAdmin()
+      .from("organizations")
+      .select("brand_color")
+      .eq("id", data.event.organizationId)
+      .maybeSingle<{ brand_color: string | null }>();
+    return { ok: true, value: { ...data, organizationBrandColor: org?.brand_color ?? null } };
   },
 
   async availability(slug: string) {

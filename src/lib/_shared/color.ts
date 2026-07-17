@@ -20,6 +20,39 @@ export function hexToRgb(hex: string): Rgb {
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
+export function withAlpha(hex: string, alpha: number): string {
+  const [r, g, b] = hexToRgb(hex);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+/**
+ * Variables CSS `--color-cart-accent*` derivadas de la paleta del evento —
+ * pisan el morado global de Pasape (definido en globals.css) en TODO lo que
+ * ya usa esos tokens (badges, links, bordes, focus rings: ~25 usos solo en
+ * la página de evento) sin tener que rewirear cada componente uno por uno
+ * para que reciba `palette` explícitamente. Se aplican como `style` en el
+ * contenedor raíz de la página del evento.
+ */
+// Fondo real de `.home-light` (globals.css) — la página de evento vive en
+// ese scope. Sin pasar el accent por este contraste ANTES de exponerlo como
+// variable global, un color de marca claro/brillante (cyan, amarillo) se lee
+// invisible en todo lo que usa `text-cart-accent`/`border-cart-accent` sobre
+// el fondo casi blanco (visto en vivo: "Ver todo" ilegible).
+const HOME_LIGHT_BG = "#fbfaff";
+
+export function paletteAccentCssVars(palette: Palette): Record<string, string> {
+  const safeAccent = ensureContrastOnLight(palette.accent, HOME_LIGHT_BG, "#7c3aed", 4.5);
+  return {
+    "--color-cart-accent": safeAccent,
+    // mixColors se declara más abajo en este módulo — function declaration,
+    // así que el hoisting la deja llamable desde acá sin problema.
+    "--color-cart-accent-strong": mixColors(safeAccent, "#000000", 0.22),
+    "--color-cart-accent-soft": withAlpha(safeAccent, 0.14),
+    "--color-cart-accent-glow": withAlpha(safeAccent, 0.5),
+    "--color-cart-accent-glow-strong": withAlpha(safeAccent, 0.72),
+  };
+}
+
 // Luminancia relativa WCAG (sRGB → lineal → ponderado).
 function relativeLuminance([r, g, b]: Rgb): number {
   const chan = (v: number) => {
@@ -117,6 +150,29 @@ export function ensureContrast(
   for (const amount of [0.25, 0.5, 0.7, 0.85]) {
     const lightened = mixWithWhite(fgHex, amount);
     if (contrastRatio(lightened, bgHex) >= minRatio) return lightened;
+  }
+  return fallback;
+}
+
+/**
+ * Igual que `ensureContrast` pero OSCURECE en vez de aclarar — para cuando
+ * `bgHex` es claro (una card en la paleta clara del producto, no el hero
+ * oscuro). Sin esto, un accent de marca claro/brillante (cyan, amarillo)
+ * nunca gana contraste aclarándolo más sobre un fondo ya claro, así que
+ * `ensureContrast` siempre termina en `fallback` (el morado de Pasape) — el
+ * organizador elige un color y en media página no se nota, porque las cards
+ * claras (precio, "+ Elegir") lo descartan silenciosamente.
+ */
+export function ensureContrastOnLight(
+  fgHex: string,
+  bgHex: string,
+  fallback: string,
+  minRatio = 2.5,
+): string {
+  if (contrastRatio(fgHex, bgHex) >= minRatio) return fgHex;
+  for (const amount of [0.15, 0.3, 0.45, 0.6]) {
+    const darkened = mixColors(fgHex, "#000000", amount);
+    if (contrastRatio(darkened, bgHex) >= minRatio) return darkened;
   }
   return fallback;
 }

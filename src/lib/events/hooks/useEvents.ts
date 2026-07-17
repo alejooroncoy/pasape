@@ -43,8 +43,11 @@ export const useEvent = (slug: string) =>
   useQuery({
     queryKey: ["events", "detail", slug],
     queryFn: () =>
-      api.get<{ event: Event; ticketTypes: TicketType[]; promos: Promo[] }>(
-        `/api/events/${slug}`,
-      ),
+      api.get<{
+        event: Event;
+        ticketTypes: TicketType[];
+        promos: Promo[];
+        organizationBrandColor: string | null;
+      }>(`/api/events/${slug}`),
     enabled: !!slug,
   });
