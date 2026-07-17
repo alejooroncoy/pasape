@@ -260,8 +260,11 @@ export function EventDetailClient({
   // así que ocultamos la línea meta bajo el título para no repetirla.
   const heroStub = heroVariant === "ticket" && Boolean(event.coverUrl);
 
+  const isPreview = event.status !== "published" && event.status !== "closed";
+
   return (
     <PageContainer palette={palette}>
+      {isPreview ? <PreviewBanner status={event.status} /> : null}
       <UserHeader initialUser={initialUser} />
       <div className="mx-auto w-full max-w-[1120px] px-5 lg:px-8">
         <div className="grid gap-8 pt-4 lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-10 lg:pt-8">
@@ -527,6 +530,24 @@ export function EventDetailClient({
         }
       />
     </PageContainer>
+  );
+}
+
+const PREVIEW_LABEL: Record<string, string> = {
+  draft: "Vista previa, este evento todavía no está publicado",
+  pending_review: "Vista previa, en revisión antes de publicarse",
+  cancelled: "Vista previa, este evento fue cancelado",
+};
+
+/** Solo la ve el dueño de la org (EventsController.getBySlug ya bloquea el
+ *  acceso a no-miembros para status distinto de published/closed) — así el
+ *  organizador ve exactamente cómo quedará su evento antes de publicarlo. */
+function PreviewBanner({ status }: { status: string }) {
+  return (
+    <div className="sticky top-0 z-[60] flex items-center justify-center gap-2 bg-cart-accent px-4 py-2 text-center text-[13px] font-medium text-white">
+      <span aria-hidden="true">👁️</span>
+      {PREVIEW_LABEL[status] ?? "Vista previa"}
+    </div>
   );
 }
 

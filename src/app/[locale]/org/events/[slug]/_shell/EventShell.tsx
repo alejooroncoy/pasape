@@ -250,6 +250,25 @@ export function EventShell({
                 </button>
               )}
               {!isOver && (
+                <Link
+                  href={`/events/${slug}` as never}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-cart-line bg-cart-bg-elev px-3.5 py-1.5 text-[12.5px] font-medium text-cart-ink-2 transition hover:border-cart-line-strong hover:text-cart-ink"
+                >
+                  <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
+                    <path
+                      d="M1 7s2-4.5 6-4.5S13 7 13 7s-2 4.5-6 4.5S1 7 1 7z"
+                      stroke="currentColor"
+                      strokeWidth="1.4"
+                      strokeLinejoin="round"
+                    />
+                    <circle cx="7" cy="7" r="1.6" stroke="currentColor" strokeWidth="1.4" />
+                  </svg>
+                  {ev.status === "published" ? "Ver evento" : "Vista previa"}
+                </Link>
+              )}
+              {!isOver && (
                 <button
                   type="button"
                   data-tour="download"
