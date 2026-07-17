@@ -29,7 +29,13 @@ export const POST = async (req: Request) => {
     const url = new URL(redirectUri);
     for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
     if (state) url.searchParams.set("state", state);
-    return NextResponse.redirect(url);
+    // 303, no el 307 por defecto: el POST del form de consentimiento llegó
+    // aquí como POST, y un 307 preserva el método en el navegador, mandando
+    // el redirect a claude.ai también como POST (con el form body encima).
+    // claude.ai solo acepta GET en su auth_callback, así que respondía 405
+    // "Method Not Allowed". El 303 fuerza GET en el redirect, como corresponde
+    // a un callback de OAuth.
+    return NextResponse.redirect(url, 303);
   };
 
   if (decision !== "approve") {
