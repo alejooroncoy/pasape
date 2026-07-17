@@ -9,6 +9,7 @@ type Props = {
   className?: string;
   accent?: boolean;
   wide?: boolean;
+  href?: string;
 };
 
 export function FeatureCard({
@@ -20,50 +21,72 @@ export function FeatureCard({
   className = "",
   accent = false,
   wide = false,
+  href = "#form",
 }: Props) {
   return (
     <article
-      className={`feature-card reveal group relative flex min-h-0 flex-col rounded-[18px] border p-5 transition-[transform,border-color] duration-150 hover:-translate-y-0.5 md:min-h-[220px] md:rounded-[20px] md:p-6 ${
+      className={`feature-card reveal group relative flex min-h-0 flex-col gap-5 overflow-hidden rounded-[20px] border p-5 transition-[transform,border-color] duration-150 hover:-translate-y-0.5 md:min-h-[280px] md:p-6 ${
         accent
           ? "border-cart-accent/30 bg-cart-accent-soft hover:border-cart-accent/50"
           : "border-cart-line bg-cart-bg-elev hover:border-cart-line-strong"
-      } ${wide ? "md:min-h-[240px] md:p-8" : ""} ${className}`.trim()}
+      } ${wide ? "md:min-h-[300px]" : ""} ${className}`.trim()}
     >
-      <div
-        className={`relative z-[1] flex flex-1 flex-col gap-4 ${wide ? "md:grid md:grid-cols-[1fr_minmax(220px,280px)] md:items-end md:gap-8" : ""}`}
-      >
-        <div className="flex flex-col gap-4">
-          <div className="flex items-start justify-between gap-3">
-            <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-cart-accent">
-              {tag}
+      {visual ? (
+        <div
+          className={`feature-card-visual relative z-[1] rounded-2xl border border-cart-line bg-cart-bg/60 p-4 ${
+            wide ? "md:p-5" : ""
+          }`}
+        >
+          {visual}
+        </div>
+      ) : null}
+
+      <div className="relative z-[1] mt-auto flex flex-1 flex-col justify-end gap-2.5">
+        <div className="flex items-center gap-2">
+          {icon ? (
+            <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-cart-accent-soft text-cart-accent transition-transform duration-300 ease-out group-hover:-rotate-6 group-hover:scale-110">
+              {icon}
             </span>
-            {icon ? (
-              <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-cart-accent-soft text-cart-accent">
-                {icon}
-              </span>
-            ) : null}
-          </div>
-
-          <h3
-            className={`m-0 text-balance font-sans font-semibold leading-snug tracking-[-0.018em] text-cart-ink ${wide ? "md:max-w-[28ch] text-[clamp(20px,5vw,30px)]" : "text-[clamp(18px,4.5vw,24px)] md:max-w-[22ch]"}`}
-          >
-            {title}
-          </h3>
-
-          {wide ? (
-            <div className="mt-auto rounded-xl border border-cart-accent/25 bg-cart-bg/60 px-3.5 py-2.5 font-mono text-[11px] font-medium uppercase tracking-[0.07em] text-cart-accent md:max-w-[36ch]">
-              ✓ {payoff}
-            </div>
           ) : null}
+          <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-cart-accent">
+            {tag}
+          </span>
         </div>
 
-        {visual ? <div className={wide ? "md:self-stretch" : "mt-auto"}>{visual}</div> : null}
+        <h3
+          className={`m-0 text-balance font-sans font-semibold leading-snug tracking-[-0.018em] text-cart-ink ${
+            wide ? "md:max-w-[32ch] text-[clamp(20px,4.5vw,26px)]" : "text-[clamp(18px,4vw,21px)] md:max-w-[24ch]"
+          }`}
+        >
+          {title}
+        </h3>
 
-        {!wide ? (
-          <div className="mt-auto rounded-xl border border-cart-accent/25 bg-cart-bg/60 px-3.5 py-2.5 font-mono text-[11px] font-medium uppercase tracking-[0.07em] text-cart-accent">
-            ✓ {payoff}
-          </div>
-        ) : null}
+        <p className="m-0 max-w-[42ch] text-pretty text-[14px] leading-relaxed text-cart-ink-2">
+          {payoff}
+        </p>
+
+        <a
+          href={href}
+          className="group/link mt-1 inline-flex items-center gap-1.5 text-[13.5px] font-semibold text-cart-accent transition-colors hover:text-cart-accent/80"
+        >
+          Saber más
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 14 14"
+            fill="none"
+            aria-hidden
+            className="transition-transform duration-200 ease-out group-hover/link:translate-x-1"
+          >
+            <path
+              d="M3 7h8M7 3l4 4-4 4"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </a>
       </div>
     </article>
   );

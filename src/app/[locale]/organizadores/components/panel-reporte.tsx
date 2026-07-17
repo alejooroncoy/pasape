@@ -13,7 +13,7 @@ export function PanelReporte() {
               Cómo va tu evento, <em>sin llamar a nadie.</em>
             </>
           }
-          lede="Ventas, promotores y quién ya entró, actualizado al momento — no el reporte que alguien te arma a mano al día siguiente."
+          lede="Ventas, promotores y quién ya entró, actualizado al momento, no el reporte que alguien te arma a mano al día siguiente."
         />
 
         <div className="reveal relative mt-10">

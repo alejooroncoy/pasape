@@ -48,7 +48,7 @@ export function Price({ waHref }: { waHref: string }) {
               <Button
                 href={waHref}
                 target="_blank"
-                aria-label="Postular mi evento — hablar por WhatsApp"
+                aria-label="Postular mi evento, hablar por WhatsApp"
                 leadingIcon={<Icon name="whatsapp" width={18} height={18} />}
                 trailingIcon={<Icon name="arrow-right" width={16} height={16} />}
                 className="w-full justify-center sm:w-auto"
@@ -85,7 +85,7 @@ export function Price({ waHref }: { waHref: string }) {
             </p>
             <p className="m-0 text-[13px] leading-normal text-cart-ink-3">
               En los pilotos 2026 el 10% aplica solo a{" "}
-              <b className="font-medium text-cart-ink-2">entradas de pago</b> — las entradas gratis
+              <b className="font-medium text-cart-ink-2">entradas de pago</b>, las entradas gratis
               no suman comisión.
             </p>
           </div>

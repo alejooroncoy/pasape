@@ -28,7 +28,7 @@ export function Hero({ waHref }: { waHref: string }) {
             <Button
               href={waHref}
               target="_blank"
-              aria-label="Quiero vender con Pasape — hablar por WhatsApp"
+              aria-label="Quiero vender con Pasape, hablar por WhatsApp"
               leadingIcon={<Icon name="whatsapp" width={18} height={18} />}
               className="w-full justify-center sm:w-auto"
             >

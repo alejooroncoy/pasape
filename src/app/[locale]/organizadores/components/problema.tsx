@@ -30,7 +30,7 @@ const PROBLEMAS: { text: ReactNode }[] = [
   {
     text: (
       <>
-        No sabes qué promotor trajo a quién, ni cuánto le debes al cierre —{" "}
+        No sabes qué promotor trajo a quién, ni cuánto le debes al cierre,{" "}
         <span className="hl">todo queda a memoria</span>.
       </>
     ),
@@ -51,7 +51,7 @@ export function Problema() {
               Tu evento crece, <em>pero tu Excel no.</em>
             </>
           }
-          lede="No es que no sepas vender: las plataformas de ticketing dan por hecho que ya sabes usarlas. Pasape empieza donde tú ya estás — WhatsApp, Yape y una lista de invitados."
+          lede="No es que no sepas vender: las plataformas de ticketing dan por hecho que ya sabes usarlas. Pasape empieza donde tú ya estás, WhatsApp, Yape y una lista de invitados."
         />
         <div className="mt-10 grid grid-cols-1 gap-3.5 md:grid-cols-2 md:gap-[18px]">
           {PROBLEMAS.map((p, i) => (

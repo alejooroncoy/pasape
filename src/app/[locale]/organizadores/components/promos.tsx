@@ -20,7 +20,7 @@ const FEATURES = [
           ].map(([code, sales, rev]) => (
             <div
               key={code}
-              className="grid grid-cols-[1fr_auto_auto] items-center gap-3 border-b border-cart-line pb-2 text-[12px] last:border-0 last:pb-0"
+              className="feature-card-row grid grid-cols-[1fr_auto_auto] items-center gap-3 border-b border-cart-line pb-2 text-[12px] last:border-0 last:pb-0"
             >
               <span className="font-medium text-cart-accent">{code}</span>
               <span className="font-mono text-cart-ink-3">{sales}</span>
@@ -41,7 +41,7 @@ const FEATURES = [
         {[1, 2, 3].map((n) => (
           <div
             key={n}
-            className="flex flex-1 flex-col items-center gap-1 rounded-lg border border-cart-line bg-cart-bg/40 px-1.5 py-2"
+            className="feature-card-row flex flex-1 flex-col items-center gap-1 rounded-lg border border-cart-line bg-cart-bg/40 px-1.5 py-2"
           >
             <div className="grid size-7 place-items-center rounded bg-white p-0.5">
               <QrSquare seedOffset={n + 3} />
@@ -103,7 +103,7 @@ export function Promos() {
               Lo que hoy haces con Excel y WhatsApp, <em>ahora con su propio link.</em>
             </>
           }
-          lede="Sigues vendiendo igual — por WhatsApp, por Instagram, por tu promotor de confianza — pero cada venta llega con un link de compra, un QR por persona y un panel que te dice cómo va."
+          lede="Sigues vendiendo igual, por WhatsApp, por Instagram, por tu promotor de confianza, pero cada venta llega con un link de compra, un QR por persona y un panel que te dice cómo va."
         />
 
         <div className="mt-10 grid grid-cols-1 gap-4 md:grid-cols-6 md:gap-5">

@@ -1,7 +1,7 @@
 export const FAQS = [
   {
     q: "¿Pasape es solo una ticketera?",
-    a: "No solo eso. Además de vender la entrada, cada persona recibe su QR, tus boxes y cortesías quedan ordenados, cada promotor tiene su link y tú ves cómo va el evento en vivo — todo desde el mismo lugar donde ya vendes.",
+    a: "No solo eso. Además de vender la entrada, cada persona recibe su QR, tus boxes y cortesías quedan ordenados, cada promotor tiene su link y tú ves cómo va el evento en vivo, todo desde el mismo lugar donde ya vendes.",
   },
   {
     q: "¿Es difícil de usar si nunca usé una plataforma de ticketing?",
@@ -33,7 +33,7 @@ export const FAQS = [
   },
   {
     q: "¿Cómo se valida en la puerta?",
-    a: "Con la app del portero, que funciona incluso sin internet. Si alguien no encuentra su QR, el staff puede buscarlo por nombre o DNI — sin la lista de cientos.",
+    a: "Con la app del portero, que funciona incluso sin internet. Si alguien no encuentra su QR, el staff puede buscarlo por nombre o DNI, sin la lista de cientos.",
   },
   {
     q: "¿Cualquiera puede publicar un evento?",
