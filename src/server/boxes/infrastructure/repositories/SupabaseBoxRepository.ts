@@ -30,11 +30,13 @@ type BoxRow = {
 };
 
 type MemberRow = {
-  profile_id: string;
+  profile_id: string | null;
   ticket_id: string | null;
   joined_at: string;
-  profile: { full_name: string | null };
-  ticket: { current_holder: string | null; status: string } | null;
+  // Left join: un acompañante sin cuenta no tiene profile → el nombre cae a
+  // tickets.holder_name.
+  profile: { full_name: string | null } | null;
+  ticket: { current_holder: string | null; status: string; holder_name: string | null } | null;
 };
 
 const slug = () => crypto.randomBytes(6).toString("base64url").toLowerCase().replace(/[_-]/g, "");
@@ -66,13 +68,14 @@ const loadBox = async (id: string): Promise<Box | null> => {
   const { data: members } = await db
     .from("box_members")
     .select(
-      "profile_id, ticket_id, joined_at, profile:profiles!inner(full_name), ticket:tickets(current_holder, status)",
+      "profile_id, ticket_id, joined_at, profile:profiles(full_name), ticket:tickets(current_holder, status, holder_name)",
     )
     .eq("box_id", id)
     .order("joined_at", { ascending: true });
   const mems = ((members as unknown as MemberRow[] | null) ?? []).map((m) => ({
     profileId: m.profile_id,
-    name: m.profile.full_name ?? "—",
+    // Acompañante sin cuenta: el nombre vive en el ticket (holder_name).
+    name: m.profile?.full_name ?? m.ticket?.holder_name ?? "—",
     ticketId: m.ticket_id,
     heldByHost: m.ticket?.current_holder === ownerId,
     used: m.ticket?.status === "used",
@@ -198,10 +201,11 @@ export const supabaseBoxRepository: BoxRepository = {
       return err(error?.message ?? "box_create_failed");
     }
 
-    // Host como primer miembro. onConflict no-op si ya estaba (re-ejecución).
+    // Host como primer miembro (con su cuenta real). onConflict no-op si ya
+    // estaba (re-ejecución): la identidad del asiento es (box_id, ticket_id).
     await db.from("box_members").upsert(
       { box_id: created.id, profile_id: ownerId, ticket_id: ticketId },
-      { onConflict: "box_id,profile_id", ignoreDuplicates: true },
+      { onConflict: "box_id,ticket_id", ignoreDuplicates: true },
     );
 
     const box = await loadBox(created.id);
@@ -328,18 +332,33 @@ export const supabaseBoxRepository: BoxRepository = {
       .single<{ id: string }>();
     if (tkErr || !ticket) return err(tkErr?.message ?? "ticket_create_failed");
 
-    await db.from("box_members").insert({
+    const { error: memberErr } = await db.from("box_members").insert({
       box_id: box.id,
       profile_id: profileId,
       ticket_id: ticket.id,
     });
+    if (memberErr) {
+      // Borramos el ticket huérfano recién creado en cualquier caso (si no,
+      // quedaría active con QR válido, fuera del roster).
+      await db.from("tickets").delete().eq("id", ticket.id);
+      // Solo la colisión de unicidad (23505) es la carrera de doble-submit del
+      // mismo profile: el dedup de arriba es read-then-check y el freno real es
+      // el índice parcial (box_id, profile_id). Ahí devolvemos el box tal cual
+      // (idempotente, como el early-return). Cualquier otro error es real y no
+      // debe enmascararse como "te uniste".
+      if (memberErr.code === "23505") {
+        const existing = await loadBox(box.id);
+        return existing ? ok(existing) : err("box_load_failed");
+      }
+      return err(memberErr.message);
+    }
 
     const { count: memberCount } = await db
       .from("box_members")
-      .select("id", { count: "exact", head: true })
+      .select("ticket_id", { count: "exact", head: true })
       .eq("box_id", box.id);
     if ((memberCount ?? 0) > box.capacity) {
-      await db.from("box_members").delete().eq("box_id", box.id).eq("profile_id", profileId);
+      await db.from("box_members").delete().eq("box_id", box.id).eq("ticket_id", ticket.id);
       await db.from("tickets").delete().eq("id", ticket.id);
       return err("box_full");
     }
@@ -378,19 +397,9 @@ export const supabaseBoxRepository: BoxRepository = {
       }
     }
 
-    // Acompañante sin celular: necesita un profile para ocupar el asiento, pero
-    // su QR lo lleva el HOST (current_holder = ownerId). Creamos un profile
-    // sintético (sin teléfono) solo para el cupo y el nombre en la lista.
-    const synthEmail = `companion-${crypto.randomUUID()}@pasape.app`;
-    const { data: authUser, error: authErr } = await db.auth.admin.createUser({
-      email: synthEmail,
-      email_confirm: true,
-      user_metadata: { full_name: holderName },
-    });
-    if (authErr || !authUser?.user) return err("profile_create_failed");
-    const seatProfileId = authUser.user.id;
-    await db.from("profiles").update({ full_name: holderName, initial_role: "buyer" }).eq("id", seatProfileId);
-
+    // Acompañante SIN celular: ya no creamos un usuario para él. Su QR lo lleva
+    // el HOST (current_holder = ownerId) y su nombre vive en tickets.holder_name;
+    // el asiento en box_members se identifica por su ticket (profile_id null).
     const { data: type } = await db
       .from("ticket_types")
       .select("box_label")
@@ -418,16 +427,16 @@ export const supabaseBoxRepository: BoxRepository = {
 
     await db.from("box_members").insert({
       box_id: box.id,
-      profile_id: seatProfileId,
+      profile_id: null,
       ticket_id: ticket.id,
     });
 
     const { count: memberCount } = await db
       .from("box_members")
-      .select("id", { count: "exact", head: true })
+      .select("ticket_id", { count: "exact", head: true })
       .eq("box_id", box.id);
     if ((memberCount ?? 0) > box.capacity) {
-      await db.from("box_members").delete().eq("box_id", box.id).eq("profile_id", seatProfileId);
+      await db.from("box_members").delete().eq("box_id", box.id).eq("ticket_id", ticket.id);
       await db.from("tickets").delete().eq("id", ticket.id);
       return err("box_full");
     }
@@ -436,7 +445,7 @@ export const supabaseBoxRepository: BoxRepository = {
     return refreshed ? ok(refreshed) : err("box_load_failed");
   },
 
-  async removeMember({ token, ownerId, memberProfileId }): Promise<Result<Box>> {
+  async removeMember({ token, ownerId, memberTicketId }): Promise<Result<Box>> {
     const db = supabaseAdmin();
     const box = await this.getByToken(token);
     if (!box) return err("invalid_token");
@@ -449,27 +458,24 @@ export const supabaseBoxRepository: BoxRepository = {
       .maybeSingle<{ buyer_id: string | null }>();
     if (!order || order.buyer_id !== ownerId) return err("not_owner");
 
-    // No puede quitarse a sí mismo (el host no se va de su propio box).
-    if (memberProfileId === ownerId) return err("cannot_remove_host");
-
-    const member = box.members.find((m) => m.profileId === memberProfileId);
+    // La identidad del asiento es su ticket (un acompañante sin cuenta no tiene
+    // profile). El host no se puede quitar: se bloquea abajo por box_host_ticket_id.
+    const member = box.members.find((m) => m.ticketId === memberTicketId);
     if (!member) return err("member_not_found");
     // Seguridad extra: nunca quitar al ticket host del box.
-    if (member.ticketId) {
-      const { data: tk } = await db
-        .from("tickets")
-        .select("box_host_ticket_id")
-        .eq("id", member.ticketId)
-        .maybeSingle<{ box_host_ticket_id: string | null }>();
-      if (tk && tk.box_host_ticket_id === null) return err("cannot_remove_host");
-      // Anula su QR: ya no entra. El asiento queda libre.
-      await db.from("tickets").update({ status: "void" }).eq("id", member.ticketId);
-    }
+    const { data: tk } = await db
+      .from("tickets")
+      .select("box_host_ticket_id")
+      .eq("id", memberTicketId)
+      .maybeSingle<{ box_host_ticket_id: string | null }>();
+    if (tk && tk.box_host_ticket_id === null) return err("cannot_remove_host");
+    // Anula su QR: ya no entra. El asiento queda libre.
+    await db.from("tickets").update({ status: "void" }).eq("id", memberTicketId);
     await db
       .from("box_members")
       .delete()
       .eq("box_id", box.id)
-      .eq("profile_id", memberProfileId);
+      .eq("ticket_id", memberTicketId);
 
     const refreshed = await loadBox(box.id);
     return refreshed ? ok(refreshed) : err("box_load_failed");

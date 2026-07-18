@@ -1176,7 +1176,9 @@ export const supabaseEventRepository: EventRepository = {
       order_id: string;
       box_label: string | null;
       box_host_ticket_id: string | null;
-      current_holder: string;
+      // null en una compra de invitado no reclamada (ya no se crea placeholder);
+      // el contacto cae a order.guest_* (ver holderDiffersFromBuyer abajo).
+      current_holder: string | null;
       transfer_count: number;
       custom_field_answers: Record<string, string | string[] | boolean> | null;
       ticket_type: { id: string; name: string; unit_noun: string | null };

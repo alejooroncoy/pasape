@@ -72,7 +72,7 @@ export const useAddBoxCompanion = () => {
 export const useRemoveBoxMember = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { token: string; memberProfileId: string }) =>
+    mutationFn: (input: { token: string; memberTicketId: string }) =>
       api.post<Box>("/api/boxes/remove-member", input),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["boxes"] }),
   });

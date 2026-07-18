@@ -433,7 +433,7 @@ function BoxSummaryCard({ boxTicket, onOpen }: { boxTicket: WalletTicket; onOpen
           <span className="inline-flex shrink-0">
             {box.members.slice(0, 3).map((m, i) => (
               <span
-                key={m.profileId}
+                key={m.ticketId ?? i}
                 className="grid size-[26px] place-items-center rounded-[8px] text-[9px] font-extrabold text-white ring-2 ring-white"
                 style={{ background: avatarColorForName(m.name ?? ""), marginLeft: i === 0 ? 0 : -7 }}
               >

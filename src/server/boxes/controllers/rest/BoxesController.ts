@@ -88,7 +88,7 @@ const joinSchema = z
 
 const removeMemberSchema = z.object({
   token: z.string().min(1),
-  memberProfileId: z.string().uuid(),
+  memberTicketId: z.string().uuid(),
 });
 
 const addCompanionSchema = z.object({
@@ -180,7 +180,7 @@ export const BoxesController = {
       {
         token: parsed.data.token,
         ownerId: auth.value.profileId,
-        memberProfileId: parsed.data.memberProfileId,
+        memberTicketId: parsed.data.memberTicketId,
       },
     );
   },

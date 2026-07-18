@@ -465,62 +465,33 @@ export const supabaseTicketRepository: TicketRepository = {
       }
     }
 
-    // Why: el profile de un guest es un PLACEHOLDER desechable — solo existe
-    // para satisfacer `orders.buyer_id`/`tickets.current_holder` (NOT NULL).
-    // La identidad real del comprador vive en `orders.guest_email/guest_phone`
-    // (fuente de verdad para notificaciones y el endpoint de status), y se
-    // resuelve a una cuenta real recién cuando la persona hace login y
-    // reclama su compra en /order (ver `claimOrder`, que reasigna
-    // `current_holder`/`buyer_id` a la cuenta logueada). Por eso NO hace
-    // falta "adivinar" si ya existe un profile para este email/phone — cada
-    // checkout crea uno nuevo, con un email sintético garantizado único
-    // (nunca colisiona, sin importar cuántas compras sin reclamar tenga la
-    // misma persona). Evita la clase de bug entera de intentar deduplicar
-    // por email/phone (ninguno es UNIQUE en profiles; ver historial de este
-    // archivo si hace falta el contexto de por qué existía esa lógica).
-    let effectiveBuyerId: string | null = input.buyerId ?? null;
+    // Why: una compra de INVITADO ya NO crea un usuario. Antes se generaba un
+    // profile placeholder (auth.users sintético) solo para satisfacer
+    // `orders.buyer_id`/`tickets.current_holder`, lo que dejaba miles de cuentas
+    // desechables que nadie mantiene y que nunca se loguean. Ahora la identidad
+    // real vive en `orders.guest_email/guest_phone` (fuente de verdad para
+    // notificaciones y el endpoint de status) + los campos denormalizados
+    // `tickets.holder_*`, y `current_holder`/`buyer_id` quedan NULL. La compra se
+    // resuelve a una cuenta real recién cuando la persona hace login y reclama en
+    // /order (ver `claimOrder`, que asigna current_holder a la cuenta logueada).
+    // La llave de desbloqueo es el correo (recover por OTP) o el link HMAC de la
+    // orden — por eso nada hace lookup por email/phone en profiles.
+    // const: para un guest se queda en null a propósito (no es un usuario); para
+    // un logueado es su profileId. Nunca se reasigna.
+    const effectiveBuyerId: string | null = input.buyerId ?? null;
     if (!effectiveBuyerId && input.guest) {
       const emailNorm = input.guest.email?.trim().toLowerCase() ?? null;
       const phoneNorm = input.guest.phone?.replace(/\D/g, "") || null;
       if (!emailNorm && !phoneNorm) return err("guest_contact_required");
-
-      // Why: profiles.id es FK a auth.users(id), no podemos insertar profile
-      // directo. Creamos un auth user (el trigger handle_new_user inserta la
-      // row de profile auto) con un email SIEMPRE sintético y único —
-      // aunque el guest haya dado su email real, ese real vive en
-      // `orders.guest_email` (fuente de verdad para delivery), no acá.
-      const synthEmail = `guest+${crypto.randomUUID()}@pasape.app`;
-      const { data: authUser, error: authErr } = await db.auth.admin.createUser({
-        email: synthEmail,
-        email_confirm: true,
-        user_metadata: { full_name: input.guest.fullName },
-      });
-      if (authErr || !authUser?.user) {
-        // Punto ciego real detectado en QA: si esto falla, el comprador se
-        // queda sin poder pagar y antes no quedaba ningún rastro del porqué.
-        Sentry.captureException(new Error(authErr?.message ?? "guest_profile_create_failed"), {
-          tags: { area: "tickets-buy", stage: "guest-profile-create" },
-        });
-        return err(authErr?.message ?? "guest_profile_create_failed");
-      }
-      // El trigger creó (id, email, full_name) pero no copia phone — lo
-      // actualizamos acá solo como referencia; nada hace lookup por él.
-      // DNI vive cifrado en orders.guest_dni_enc (legacy guest_dni solo lectura).
-      await db
-        .from("profiles")
-        .update({
-          phone: phoneNorm,
-          initial_role: "buyer",
-        })
-        .eq("id", authUser.user.id);
-      effectiveBuyerId = authUser.user.id;
     }
-    if (!effectiveBuyerId) return err("buyer_required");
+    // Sin buyerId logueado ni guest no hay a quién atribuir la compra. (El guard
+    // temprano de buy() ya lo cubre; esto es defensa en profundidad.)
+    if (!input.buyerId && !input.guest) return err("buyer_required");
 
     // Why: el promotor no puede inflar su propio ranking comprando con su
     // propio código (logueado, guest con su email, o guest con su teléfono).
     if (promoterId) {
-      if (promoterId === effectiveBuyerId) return err("self_purchase_blocked");
+      if (effectiveBuyerId && promoterId === effectiveBuyerId) return err("self_purchase_blocked");
       const { data: promoterProfile } = await db
         .from("profiles")
         .select("email, phone")
@@ -624,7 +595,10 @@ export const supabaseTicketRepository: TicketRepository = {
 
     // Persistencia para autorrelleno: la primera compra guarda DNI (kyc) y
     // teléfono (profile); las siguientes el checkout los pre-llena desde /me.
-    if (attendee) {
+    // Solo aplica a compradores logueados: un guest no tiene profile (ni /me)
+    // donde persistir esto — su DNI/teléfono ya viajan a orders.guest_* y a los
+    // campos denormalizados del ticket.
+    if (attendee && effectiveBuyerId) {
       const phoneNorm = attendee.phone?.replace(/\D/g, "") || null;
       if (phoneNorm) {
         await db.from("profiles").update({ phone: phoneNorm }).eq("id", effectiveBuyerId);
@@ -645,12 +619,15 @@ export const supabaseTicketRepository: TicketRepository = {
     // Nombre del comprador como fallback para entradas nominativas: si el
     // checkout no capturó un holderName por entrada ni datos de guest/buyer,
     // el ticket hereda el nombre del perfil del comprador.
-    const { data: buyerProfile } = await db
-      .from("profiles")
-      .select("full_name")
-      .eq("id", effectiveBuyerId)
-      .single<{ full_name: string | null }>();
-    const buyerFullName = buyerProfile?.full_name ?? null;
+    let buyerFullName: string | null = null;
+    if (effectiveBuyerId) {
+      const { data: buyerProfile } = await db
+        .from("profiles")
+        .select("full_name")
+        .eq("id", effectiveBuyerId)
+        .maybeSingle<{ full_name: string | null }>();
+      buyerFullName = buyerProfile?.full_name ?? null;
+    }
 
     // Las respuestas a las preguntas del evento (customFieldAnswers) son POR
     // ENTRADA, no por orden: solo el comprador respondió en el checkout, así
@@ -931,22 +908,51 @@ export const supabaseTicketRepository: TicketRepository = {
     return finishTicketListing(db, rawRows);
   },
 
+  // Igual que listManyByHolders pero acota por order_id — para la recuperación
+  // de entradas de invitado: las compras guest ya no tienen current_holder (es
+  // NULL hasta reclamar), así que la orden (hallada por guest_email) es el único
+  // ancla. Pagina por el mismo motivo que listManyByHolders (una orden grupal
+  // podría truncar en silencio si comparte un solo límite).
+  async listByOrderIds(orderIds: string[]): Promise<WalletTicket[]> {
+    if (orderIds.length === 0) return [];
+    const db = supabaseAdmin();
+    const PAGE_SIZE = 1000;
+    const rawRows: TicketRow[] = [];
+    for (let from = 0; ; from += PAGE_SIZE) {
+      const { data } = await db
+        .from("tickets")
+        .select(WALLET_TICKET_SELECT)
+        .in("order_id", orderIds)
+        .in("status", ["active", "used", "pending_approval"])
+        .order("created_at", { ascending: false })
+        .range(from, from + PAGE_SIZE - 1);
+      const page = (data as unknown as TicketRow[] | null) ?? [];
+      rawRows.push(...page);
+      if (page.length < PAGE_SIZE) break;
+    }
+    return finishTicketListing(db, rawRows);
+  },
+
   async getById(ticketId, buyerId) {
     const db = supabaseAdmin();
     // A diferencia de listMine, NO colapsamos el box: si el usuario es dueño del
     // ticket (current_holder), puede abrir su detalle/QR aunque sea un QR de
     // acompañante que sostiene dentro de su box. La pertenencia ya la garantiza
     // current_holder = buyerId.
+    // buyerId null = acceso ya autorizado por el link HMAC de la entrada (guest
+    // sin sesión). En ese caso NO acotamos por current_holder — que puede ser
+    // NULL en una compra de invitado no reclamada; el controller ya verificó el
+    // token contra transfer_count, así que la posesión está probada.
     // Pagadas o en revisión (igual que listMine). Una reserva abandonada (pending
     // sin pago vivo) no debe abrirse; el filtro fino va en JS abajo.
-    const { data } = await db
+    let query = db
       .from("tickets")
       .select(
         "*, order:orders!inner(status,mp_status), ticket_type:ticket_types!inner(id,name,kind,event_id,event:events!inner(id,slug,title,starts_at,venue,timezone,status,cover_url,category))",
       )
-      .eq("id", ticketId)
-      .eq("current_holder", buyerId)
-      .maybeSingle();
+      .eq("id", ticketId);
+    if (buyerId !== null) query = query.eq("current_holder", buyerId);
+    const { data } = await query.maybeSingle();
     if (!data) return null;
     type Joined = TicketRow & {
       order: { status: OrderStatus; mp_status: string | null };
@@ -1213,7 +1219,9 @@ export const supabaseTicketRepository: TicketRepository = {
     const db = supabaseAdmin();
     const { data: order } = await db
       .from("orders")
-      .select("id, status, buyer_id, guest_email, guest_phone, guest_name, paid_at, event_id, claimed_at")
+      .select(
+        "id, status, buyer_id, guest_email, guest_phone, guest_name, paid_at, event_id, claimed_at, claimed_by",
+      )
       .eq("id", input.orderId)
       .maybeSingle<{
         id: string;
@@ -1225,6 +1233,7 @@ export const supabaseTicketRepository: TicketRepository = {
         paid_at: string | null;
         event_id: string;
         claimed_at: string | null;
+        claimed_by: string | null;
       }>();
     if (!order) return err("order_not_found");
     if (order.status === "pending") return err("order_not_paid"); // carrera con webhook: la UI reintenta
@@ -1238,30 +1247,37 @@ export const supabaseTicketRepository: TicketRepository = {
       .maybeSingle<{ slug: string }>();
     const eventSlug = ev?.slug ?? "";
 
-    const guest = order.buyer_id;
-
-    // Idempotencia: la orden ya es tuya (doble pestaña, o Supabase enlazó tu
-    // Google al profile-guest) → no-op exitoso, devolvemos tus entradas activas.
-    if (guest && guest === input.toProfile) {
-      const { data: mine } = await db
+    // IDs de las entradas activas de la orden que ya son de este profile — para
+    // devolver el resultado en los caminos idempotentes (doble pestaña / re-claim
+    // propio) sin volver a reasignar nada.
+    const myActiveTicketIds = async (): Promise<string[]> => {
+      const { data } = await db
         .from("tickets")
         .select("id")
         .eq("order_id", order.id)
         .eq("current_holder", input.toProfile)
         .eq("status", "active")
         .order("created_at", { ascending: true });
-      const ids = (mine ?? []).map((t) => (t as { id: string }).id);
+      return (data ?? []).map((t) => (t as { id: string }).id);
+    };
+
+    // Idempotencia: la orden ya la reclamaste tú → no-op exitoso, devolvemos tus
+    // entradas activas. `claimed_by` es la fuente de verdad de "quién reclamó"
+    // (ya no dependemos de un profile-guest placeholder, que en órdenes nuevas
+    // no existe).
+    if (order.claimed_by && order.claimed_by === input.toProfile) {
+      const ids = await myActiveTicketIds();
       return ok({ ticketsClaimed: ids.length, eventSlug, firstTicketId: ids[0] ?? null });
     }
 
-    // Guard single-use: `claimed_at` es la fuente de verdad de "ya reclamada".
-    // Si otra cuenta ya la desbloqueó (y no eres tú, cubierto arriba) → bloqueado.
+    // Guard single-use: si otra cuenta ya la desbloqueó (y no eres tú, cubierto
+    // arriba) → bloqueado.
     if (order.claimed_at) return err("order_already_claimed");
 
     // Solo se reclama una compra de INVITADO (guest_email o guest_phone
     // presente — un guest puede haber dado solo celular). Evita que el link
     // desbloquee la compra de alguien que sí compró logueado.
-    if ((!order.guest_email && !order.guest_phone) || !guest) return err("order_not_claimable");
+    if (!order.guest_email && !order.guest_phone) return err("order_not_claimable");
 
     // Ventana de 72h post-pago para desbloquear (decisión de producto).
     const CLAIM_WINDOW_MS = 72 * 60 * 60 * 1000;
@@ -1269,33 +1285,36 @@ export const supabaseTicketRepository: TicketRepository = {
       return err("order_claim_expired");
     }
 
-    // Reasignación atómica: la condición `current_holder = guest` hace que una
-    // segunda ejecución concurrente matchee 0 filas. NO toca transfer_count.
-    const { data: updated, error: upErr } = await db
-      .from("tickets")
-      .update({ current_holder: input.toProfile })
-      .eq("order_id", order.id)
-      .eq("current_holder", guest)
-      .eq("status", "active")
-      .select("id");
-    if (upErr) return err(upErr.message);
-    const updatedIds = (updated ?? []).map((t) => (t as { id: string }).id);
-
-    // Mueve la titularidad de la orden + audita el desbloqueo (quién/cuándo).
-    // CAS en claimed_at: solo la primera cuenta que reclama gana.
-    const { data: claimedOrder, error: claimErr } = await db
-      .from("orders")
-      .update({
-        buyer_id: input.toProfile,
-        claimed_at: new Date().toISOString(),
-        claimed_by: input.toProfile,
-      })
-      .eq("id", order.id)
-      .is("claimed_at", null)
-      .select("id")
-      .maybeSingle();
+    // CAS + reasignación ATÓMICOS en una función Postgres (una transacción). Antes
+    // eran dos requests separados: si el proceso moría entre el CAS de la orden y
+    // la reasignación de tickets, la orden quedaba reclamada pero los tickets con
+    // current_holder NULL, huérfanos e irrecuperables. La función gana el reclamo
+    // solo si nadie lo hizo y reasigna SOLO las entradas del holder original
+    // (NULL nuevo / profile-guest legacy vía `is not distinct from`), así un amigo
+    // que se unió al box con su cuenta no pierde su entrada. NO toca transfer_count.
+    const { data: claimedRows, error: claimErr } = await db.rpc("claim_guest_order", {
+      p_order_id: order.id,
+      p_to_profile: input.toProfile,
+    });
     if (claimErr) return err(claimErr.message);
-    if (!claimedOrder) return err("order_already_claimed");
+    const updatedIds = ((claimedRows as Array<{ claimed_ticket_id: string }> | null) ?? []).map(
+      (r) => r.claimed_ticket_id,
+    );
+
+    // Confirmamos titularidad: si la función no ganó el CAS (otra cuenta reclamó
+    // entre nuestros checks y el RPC), la orden quedó de otro → bloqueada. Si
+    // ganamos, claimed_by somos nosotros (aunque haya reasignado 0 entradas).
+    const { data: fresh } = await db
+      .from("orders")
+      .select("claimed_by")
+      .eq("id", order.id)
+      .maybeSingle<{ claimed_by: string | null }>();
+    if (fresh?.claimed_by !== input.toProfile) return err("order_already_claimed");
+
+    // La orden es nuestra. Si el RPC no movió nada (doble pestaña de la misma
+    // cuenta: el otro request ya reasignó), devolvemos las entradas reales en vez
+    // de 0 — el conteo que ve la pantalla post-claim es el correcto.
+    const claimedIds = updatedIds.length > 0 ? updatedIds : await myActiveTicketIds();
 
     // El comprador ya dejó su celular (y nombre) al pagar. Al reclamar con Google
     // aterriza en un profile nuevo SIN teléfono (Google no lo comparte) → sin esto
@@ -1317,9 +1336,9 @@ export const supabaseTicketRepository: TicketRepository = {
     }
 
     return ok({
-      ticketsClaimed: updatedIds.length,
+      ticketsClaimed: claimedIds.length,
       eventSlug,
-      firstTicketId: updatedIds[0] ?? null,
+      firstTicketId: claimedIds[0] ?? null,
     });
   },
 

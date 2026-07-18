@@ -130,7 +130,7 @@ export default function FriendJoinBoxPage({ params }: Props) {
         <div style={{ display: "flex" }}>
           {b.members.slice(0, 3).map((m, i) => (
             <div
-              key={m.profileId}
+              key={m.ticketId ?? i}
               style={{
                 width: 30,
                 height: 30,

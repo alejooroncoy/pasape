@@ -1,5 +1,7 @@
 export type BoxMember = {
-  profileId: string;
+  /** null cuando el asiento es de un acompañante SIN cuenta (su QR lo lleva el
+      host). La identidad estable del miembro es `ticketId`, no este campo. */
+  profileId: string | null;
   name: string;
   ticketId: string | null;
   /** El QR de este miembro lo sostiene el host en su device (acompañante sin

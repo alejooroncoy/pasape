@@ -214,26 +214,31 @@ export const TicketsController = {
 
   async one(id: string, linkToken: string | null = null): Promise<Result<WalletTicket>> {
     const auth = await getAuthContext();
-    // Camino auth normal — buyer logueado pidiendo su propio ticket.
-    let holderId: string | null = auth.ok ? auth.value.profileId : null;
-    // Camino guest — link público con HMAC. Cargamos current_holder + transfer_count
-    // y verificamos el token contra el contador actual: un link de un titular
-    // anterior (pre-transferencia) ya no valida. Delegamos al mismo path
-    // (getMyTicketById filtra por current_holder, así que el resultado es el mismo).
-    if (!holderId && linkToken) {
+    // Camino auth normal — buyer logueado pidiendo su propio ticket (scope por
+    // current_holder = su profile).
+    if (auth.ok) {
+      const t = await getMyTicketById({ repo }, id, auth.value.profileId);
+      if (!t) return err("not_found");
+      return { ok: true, value: t };
+    }
+    // Camino guest — link público con HMAC. Verificamos el token contra el
+    // transfer_count actual: un link de un titular anterior (pre-transferencia)
+    // ya no valida. Con token válido la posesión está probada, así que pedimos el
+    // ticket SIN scope de holder (buyerId null) — en una compra de invitado no
+    // reclamada current_holder es NULL.
+    if (linkToken) {
       const { data } = await supabaseAdmin()
         .from("tickets")
-        .select("current_holder, transfer_count")
+        .select("transfer_count")
         .eq("id", id)
-        .maybeSingle<{ current_holder: string | null; transfer_count: number }>();
+        .maybeSingle<{ transfer_count: number }>();
       if (data && verifyTicketLink(id, linkToken, data.transfer_count)) {
-        holderId = data.current_holder ?? null;
+        const t = await getMyTicketById({ repo }, id, null);
+        if (!t) return err("not_found");
+        return { ok: true, value: t };
       }
     }
-    if (!holderId) return err(auth.ok ? "not_found" : auth.error);
-    const t = await getMyTicketById({ repo }, id, holderId);
-    if (!t) return err("not_found");
-    return { ok: true, value: t };
+    return err(auth.error);
   },
 
   async transfer(input: unknown): Promise<Result<TransferOutcome>> {
