@@ -293,6 +293,7 @@ function OptionSelect({
             {open && (
               <motion.div
                 ref={listRef}
+                data-sheet-portal-content
                 role="listbox"
                 initial={{ opacity: 0, y: -6, scale: 0.97 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -305,7 +306,7 @@ function OptionSelect({
                   width: rect.width,
                   transformOrigin: "top",
                 }}
-                className="z-[999] max-h-60 overflow-y-auto rounded-2xl border border-cart-line bg-cart-bg shadow-[0_16px_40px_-12px_rgba(20,10,60,0.28)]"
+                className="pointer-events-auto z-[999] max-h-60 overflow-y-auto rounded-2xl border border-cart-line bg-cart-bg shadow-[0_16px_40px_-12px_rgba(20,10,60,0.28)]"
               >
                 {options.map((opt) => {
                   const active = opt === value;

@@ -144,7 +144,22 @@ export function Sheet({
                 (growFull ? "items-end" : "items-end lg:items-center lg:p-6")
               }
             >
-              <Dialog.Content asChild forceMount>
+              <Dialog.Content
+                asChild
+                forceMount
+                // Dropdowns propios (ej. OptionSelect de preguntas custom) que
+                // se montan en su propio portal fixed para esquivar el
+                // overflow-y-auto del cuerpo del sheet — Radix no los ve como
+                // parte del Dialog.Content y por default interpretaría un tap
+                // ahí como "click afuera", cerrando el sheet ENTERO antes de
+                // que la opción llegue a registrarse. Cualquier portal
+                // marcado con data-sheet-portal-content queda exento.
+                onPointerDownOutside={(e) => {
+                  if ((e.target as HTMLElement | null)?.closest("[data-sheet-portal-content]")) {
+                    e.preventDefault();
+                  }
+                }}
+              >
                 <motion.div
                   ref={contentRef}
                   // Móvil = bottom-sheet: entra/sale deslizando en Y. Desktop =
