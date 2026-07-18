@@ -54,6 +54,14 @@ export async function generateMetadata({
           en: localePath("en", `/events/${event.slug}`),
         },
       },
+      // Solo published entra al índice. El sitemap ya excluye todo lo demás
+      // (listPublishedForSeo), pero un evento "closed" sigue siendo público
+      // (se muestra como terminado, no 404 — ver EventsController.getBySlug)
+      // y sin esto quedaba indexable para siempre.
+      robots:
+        event.status === "published"
+          ? { index: true, follow: true }
+          : { index: false, follow: true },
       openGraph: {
         type: "website",
         url,
