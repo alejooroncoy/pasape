@@ -23,7 +23,7 @@ export function LoginGate({
   // Alto = viewport − header (68px) − tabbar (72px): centra el contenido en el
   // hueco real entre el header y la barra inferior (no en todo el alto).
   return (
-    <div className="cart-grain relative grid min-h-[calc(100dvh-68px-72px)] place-items-center bg-cart-bg px-6 font-sans text-white">
+    <div className="cart-grain relative grid min-h-[calc(100dvh-68px-72px)] place-items-center bg-cart-bg px-6 font-sans text-cart-ink">
       <div
         aria-hidden
         className="pointer-events-none absolute left-1/2 top-[-120px] z-0 h-[560px] w-[900px] -translate-x-1/2 blur-[90px]"

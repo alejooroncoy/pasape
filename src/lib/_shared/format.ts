@@ -69,19 +69,21 @@ export const eventDateTime = (iso: string, tz: string = "America/Lima"): string 
   return `${weekday}, ${p.day} de ${p.monthLong}, ${p.hour}:${p.minute} ${p.ampm.toUpperCase()}`;
 };
 
-// "sáb, 18 jul" — solo para badges/pills compactos donde el texto completo no
+// "Sáb, 18 jul" — solo para badges/pills compactos donde el texto completo no
 // entra (cards de evento, eyebrows sobre thumbnails). No usar para texto en
 // línea: ahí va siempre eventDateTime.
 export const shortEventDate = (iso: string, tz: string): string => {
   const p = dateParts(iso, tz, true);
-  return `${p.weekday}, ${p.day} ${p.month}`;
+  const weekday = p.weekday.charAt(0).toUpperCase() + p.weekday.slice(1);
+  return `${weekday}, ${p.day} ${p.month}`;
 };
 
-// "sáb, 18 jul, 10:00 p. m." — como shortEventDate pero con hora; mismo uso
+// "Sáb, 18 jul, 10:00 p. m." — como shortEventDate pero con hora; mismo uso
 // exclusivo en badges/pills compactos.
 export const shortEventDateTime = (iso: string, tz: string): string => {
   const p = dateParts(iso, tz, true);
-  return `${p.weekday}, ${p.day} ${p.month}, ${p.hour}:${p.minute} ${p.ampm}`;
+  const weekday = p.weekday.charAt(0).toUpperCase() + p.weekday.slice(1);
+  return `${weekday}, ${p.day} ${p.month}, ${p.hour}:${p.minute} ${p.ampm}`;
 };
 
 // Partes sueltas para el pill de fecha del detalle de evento: día, mes en
