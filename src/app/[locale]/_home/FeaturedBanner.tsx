@@ -63,7 +63,9 @@ export function FeaturedBanner() {
           gigante y translúcido detrás del contenido. */}
       <span
         key={`bg-${ev.id}`}
-        className="pointer-events-none absolute -bottom-[0.18em] left-[clamp(90px,16vw,220px)] select-none whitespace-nowrap font-sans text-[clamp(56px,9vw,130px)] font-extrabold uppercase leading-none tracking-[-0.04em] text-cart-accent/[0.06]"
+        // Solo desktop: en mobile la card apilada no deja espacio para que
+        // esta capa respire sin chocar con el resto del contenido.
+        className="pointer-events-none absolute -bottom-[0.18em] left-[clamp(90px,16vw,220px)] hidden select-none whitespace-nowrap font-sans text-[clamp(56px,9vw,130px)] font-extrabold uppercase leading-none tracking-[-0.04em] text-cart-accent/[0.06] sm:block"
         aria-hidden
       >
         {ev.title}
@@ -83,7 +85,7 @@ export function FeaturedBanner() {
         <Link
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           href={`/events/${ev.slug}` as any}
-          className="group/card flex items-center gap-3.5 sm:gap-[clamp(24px,4vw,48px)]"
+          className="group/card flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-[clamp(24px,4vw,48px)]"
         >
           {ev.coverUrl && (
             // eslint-disable-next-line @next/next/no-img-element
@@ -91,27 +93,33 @@ export function FeaturedBanner() {
               src={optimizeImageUrl(ev.coverUrl, "hero-lcp") ?? ev.coverUrl}
               alt={ev.title}
               fetchPriority="high"
-              className="h-[112px] w-auto flex-shrink-0 rounded-[10px] object-cover shadow-[0_14px_34px_-14px_rgba(50,30,120,0.45)] transition-transform duration-300 group-hover/card:-translate-y-0.5 sm:h-[clamp(150px,19vw,235px)] sm:rounded-[12px]"
+              className="h-[260px] w-full flex-shrink-0 rounded-[12px] object-cover object-center shadow-[0_14px_34px_-14px_rgba(50,30,120,0.45)] transition-transform duration-300 group-hover/card:-translate-y-0.5 sm:h-[clamp(150px,19vw,235px)] sm:w-auto sm:rounded-[12px]"
             />
           )}
 
-          <div className="relative min-w-0 flex-1 py-0.5 sm:py-1">
-            <span className="mb-1.5 inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-cart-accent/12 px-2.5 py-1 text-[10.5px] font-bold text-cart-accent sm:mb-3 sm:px-3 sm:py-1.5 sm:text-[clamp(11px,1.1vw,12.5px)]">
-              <span className="size-1.5 rounded-full bg-cart-accent" aria-hidden />
-              {/* Móvil: formato corto (una sola línea, no envuelve). Desktop: largo. */}
-              <span className="sm:hidden">{shortEventDateTime(ev.startsAt, ev.timezone)}</span>
-              <span className="hidden sm:inline">{eventDateTime(ev.startsAt, ev.timezone)}</span>
-            </span>
-            <h2 className="m-0 mb-0.5 line-clamp-2 font-sans text-[17.5px] font-bold leading-[1.1] tracking-[-0.02em] text-cart-ink sm:mb-1.5 sm:text-[clamp(22px,3vw,40px)] sm:leading-[1.05] sm:tracking-[-0.03em]">
-              {ev.title}
-            </h2>
-            {ev.venue && (
-              <p className="m-0 flex items-center gap-1 text-[12px] text-cart-ink-3 sm:gap-1.5 sm:text-[clamp(12.5px,1.3vw,14.5px)]">
-                <PinIcon />
-                <span className="line-clamp-1">{ev.venue}</span>
-              </p>
-            )}
-            <span className="mt-2.5 inline-flex items-center gap-1.5 text-[12.5px] font-bold text-cart-accent sm:mt-4 sm:text-[clamp(12.5px,1.3vw,14px)]">
+          {/* Mobile: todo el bloque de texto a la izquierda y el botón a la
+              derecha, en la misma fila (más fácil de tocar que el link de
+              texto, y ancla visualmente la card). Desktop: vuelve al stack
+              vertical con el link de texto original debajo. */}
+          <div className="relative flex min-w-0 flex-1 items-center justify-between gap-3 py-0.5 sm:block sm:py-1">
+            <div className="min-w-0">
+              <span className="mb-1.5 inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-cart-accent/12 px-2.5 py-1 text-[10.5px] font-bold text-cart-accent sm:mb-3 sm:px-3 sm:py-1.5 sm:text-[clamp(11px,1.1vw,12.5px)]">
+                <span className="size-1.5 rounded-full bg-cart-accent" aria-hidden />
+                {/* Móvil: formato corto (una sola línea, no envuelve). Desktop: largo. */}
+                <span className="sm:hidden">{shortEventDateTime(ev.startsAt, ev.timezone)}</span>
+                <span className="hidden sm:inline">{eventDateTime(ev.startsAt, ev.timezone)}</span>
+              </span>
+              <h2 className="m-0 mb-0.5 line-clamp-2 font-sans text-[17.5px] font-bold leading-[1.1] tracking-[-0.02em] text-cart-ink sm:mb-1.5 sm:text-[clamp(22px,3vw,40px)] sm:leading-[1.05] sm:tracking-[-0.03em]">
+                {ev.title}
+              </h2>
+              {ev.venue && (
+                <p className="m-0 flex items-center gap-1 text-[12px] text-cart-ink-3 sm:gap-1.5 sm:text-[clamp(12.5px,1.3vw,14.5px)]">
+                  <PinIcon />
+                  <span className="line-clamp-1">{ev.venue}</span>
+                </p>
+              )}
+            </div>
+            <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-cart-accent px-4 py-2 text-[12.5px] font-bold text-white shadow-[0_6px_16px_-6px_rgba(124,58,237,0.5)] sm:mt-4 sm:bg-transparent sm:p-0 sm:text-cart-accent sm:shadow-none sm:text-[clamp(12.5px,1.3vw,14px)]">
               Ver evento
               <span className="transition-transform duration-200 group-hover/card:translate-x-0.5">
                 <ArrowIcon />
