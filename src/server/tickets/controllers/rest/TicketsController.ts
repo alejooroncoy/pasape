@@ -185,7 +185,10 @@ export const TicketsController = {
     return repo.quote(parsed.data);
   },
 
-  async buy(input: unknown): Promise<Result<BuyOutput>> {
+  async buy(
+    input: unknown,
+    options: { suppressWhatsAppDelivery?: boolean } = {},
+  ): Promise<Result<BuyOutput>> {
     const parsed = buySchema.safeParse(input);
     if (!parsed.success) return err(parsed.error.issues[0]?.message ?? "invalid_input");
     const auth = await getAuthContext();
@@ -195,9 +198,17 @@ export const TicketsController = {
     if (!auth.ok) {
       if (!parsed.data.guest) return err("guest_required");
       // Sin sesión no hay perfil que actualizar — buyer no aplica.
-      res = await buyTickets({ repo }, { ...parsed.data, guest: parsed.data.guest, buyer: undefined });
+      res = await buyTickets(
+        { repo },
+        {
+          ...parsed.data,
+          guest: parsed.data.guest,
+          buyer: undefined,
+          suppressWhatsAppDelivery: options.suppressWhatsAppDelivery,
+        },
+      );
     } else {
-      res = await buyTickets({ repo }, { buyerId: auth.value.profileId, ...parsed.data });
+      res = await buyTickets({ repo }, { buyerId: auth.value.profileId, ...parsed.data, ...options });
     }
     // Adjunta la llave firmada de la orden: el cliente la conserva para leer el
     // estado de su propia compra en /processing (polling) aun sin sesión ni

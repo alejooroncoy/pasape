@@ -752,7 +752,7 @@ export const supabaseTicketRepository: TicketRepository = {
         .eq("id", orderRow.id);
 
       after(() =>
-        dispatchTicketDelivery({ db }, orderRow.id).catch((e) => {
+        dispatchTicketDelivery({ db, suppressWhatsApp: !!input.suppressWhatsAppDelivery }, orderRow.id).catch((e) => {
           console.error("[buy:free] dispatchTicketDelivery failed:", (e as Error).message);
           Sentry.captureException(e, {
             tags: { area: "ticket-delivery" },

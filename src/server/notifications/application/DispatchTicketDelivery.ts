@@ -22,6 +22,7 @@ type Deps = {
   db?: SupabaseClient;
   sender?: NotificationSender;
   whatsapp?: WhatsAppNotificationSender;
+  suppressWhatsApp?: boolean;
 };
 
 type OrderRow = {
@@ -61,8 +62,10 @@ type TicketRow = {
   ticket_type: { unit_noun: string | null } | null;
 };
 
-const defaultSender = (): NotificationSender =>
-  new CompositeNotificationSender([new ResendEmailSender(), new WhatsAppNotificationSender()]);
+const defaultSender = (suppressWhatsApp: boolean): NotificationSender =>
+  new CompositeNotificationSender(
+    suppressWhatsApp ? [new ResendEmailSender()] : [new ResendEmailSender(), new WhatsAppNotificationSender()],
+  );
 
 const appBaseUrl = (): string =>
   process.env.APP_BASE_URL ?? process.env.NEXT_PUBLIC_APP_BASE_URL ?? "https://app.pasape.lat";
@@ -72,7 +75,7 @@ export const dispatchTicketDelivery = async (
   orderId: string,
 ): Promise<{ dispatched: number; emailSent: boolean; whatsappSent: boolean }> => {
   const db = deps.db ?? supabaseAdmin();
-  const sender = deps.sender ?? defaultSender();
+  const sender = deps.sender ?? defaultSender(!!deps.suppressWhatsApp);
   const whatsapp = deps.whatsapp ?? new WhatsAppNotificationSender();
 
   const { data: order, error: orderErr } = await db
@@ -213,7 +216,7 @@ export const dispatchTicketDelivery = async (
   // handler de pago, pero sin garantía de orden respecto a este despacho, así
   // que lo re-aseguramos antes de leer su invite_token.
   const boxHostTickets = tickets.filter((t) => t.box_label && !t.box_host_ticket_id);
-  if (boxHostTickets.length > 0) {
+  if (!deps.suppressWhatsApp && boxHostTickets.length > 0) {
     await supabaseBoxRepository.ensureForOrder(order.id).catch((e) => {
       console.error("[dispatchTicketDelivery] ensureForOrder (box invite) falló:", (e as Error).message);
     });

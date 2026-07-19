@@ -6,23 +6,46 @@ import { serverEvents } from "@/lib/analytics/serverEvents";
 import { assessCheckout } from "@/server/tickets/application/CheckoutGuard";
 import { purchaseSignalFields } from "@/server/tickets/application/purchaseSignalFields";
 import { purchaseSignalsRepo } from "@/server/tickets/infrastructure/PurchaseSignalsRepo";
+import { isAuthorizedLoadTest } from "@/server/tickets/application/LoadTestMode";
 
 // 10 req/min por IP: tráfico de compra alto el día del evento, pero conservador
 // para no bloquear compras legítimas (reintentos, checkout con varios pasos).
 const limiter = createRateLimiter("tickets:buy", 10);
+const authorizedLoadTestAssessment = {
+  allowed: true,
+  action: "logged" as const,
+  score: 0,
+  reasons: [],
+  delayMs: 0,
+  signalId: null,
+  challengeRequired: false,
+  challenge: null,
+};
 
 export const POST = async (req: NextRequest) => {
-  if (!(await limiter.check(req))) return limiter.response();
   const body = await req.json().catch(() => ({}));
   const fields = purchaseSignalFields(body);
+  const isLoadTest = isAuthorizedLoadTest(req, fields.eventId);
+
+  // Un load test firmado simula compradores independientes desde una sola
+  // salida. El endpoint público jamás entra aquí sin flag+secreto+allow-list.
+  if (!isLoadTest && !(await limiter.check(req))) return limiter.response();
 
   // Anti-bot por comportamiento: puntúa el intento y decide según BOT_ENFORCEMENT.
   // En shadow (default) siempre permite; solo registra. El bloqueo se enmascara
   // como 429 genérico; el tarpit ralentiza al sospechoso sin revelar la detección.
   // stockRemaining alimenta bulk_stock_grab (vaciar stock de golpe) — sin esto la
   // señal nunca dispara en producción.
-  const stockRemaining = await purchaseSignalsRepo.minStockRemaining(fields.ticketTypeIds);
-  const assessment = await assessCheckout({ req, phase: "buy", ...fields, stockRemaining });
+  // Un ensayo autorizado no debe contaminar las señales que protegen compras
+  // reales. No basta assess:false: ese modo igual persiste la señal cruda.
+  const assessment = isLoadTest
+    ? authorizedLoadTestAssessment
+    : await assessCheckout({
+        req,
+        phase: "buy",
+        ...fields,
+        stockRemaining: await purchaseSignalsRepo.minStockRemaining(fields.ticketTypeIds),
+      });
   if (!assessment.allowed) return NextResponse.json({ error: "rate_limited" }, { status: 429 });
   // Step-up challenge: el intento cae en zona sospechosa y aún no adjuntó una
   // solución válida. Respondemos 428 con un PoW (dificultad escalada por el score);
@@ -40,7 +63,7 @@ export const POST = async (req: NextRequest) => {
   // Redis en assessCheckout y leída por el proxy) por si una futura política
   // reintroduce delay puro. Ver tarpitStore.ts y src/proxy.ts.
 
-  const result = await TicketsController.buy(body);
+  const result = await TicketsController.buy(body, { suppressWhatsAppDelivery: isLoadTest });
   if (result.ok) {
     const orderId = result.value?.order?.id;
     // Enlaza la señal anti-bot con la orden recién creada, para correlacionar

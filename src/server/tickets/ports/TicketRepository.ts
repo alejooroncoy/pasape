@@ -27,6 +27,9 @@ export type BuyInput = {
       cortesía. El endpoint público de compra nunca lo acepta (buySchema no lo
       incluye, zod lo descarta). */
   courtesy?: boolean;
+  /** SOLO uso interno de carga autorizada: conserva la orden/QR reales, pero
+      evita despachar WhatsApp. El body público nunca puede activar este flag. */
+  suppressWhatsAppDelivery?: boolean;
   /** Respuestas del comprador a events.customFields (estilo Luma). Keyed por
       field.id — ver @/lib/events/customFields, único módulo con el shape. */
   customFieldAnswers?: Record<string, string | string[] | boolean> | null;
