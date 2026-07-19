@@ -139,7 +139,7 @@ export function DatosForm({
             value={guestEmail}
             onChange={(v) => setGuestEmail(sanitizeEmail(v))}
             placeholder="juan@gmail.com"
-            hint={isLogged ? "Solo si pagas con tarjeta." : "Respaldo si no te llega el WhatsApp."}
+            hint={isLogged ? "Solo si pagas con tarjeta." : "Lo usamos para validar y desbloquear tus entradas."}
           />
         </div>
       </Section>
