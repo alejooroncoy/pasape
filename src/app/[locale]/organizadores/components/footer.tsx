@@ -24,6 +24,7 @@ export function SiteFooter() {
               ["Todos los eventos", "/"],
               ["Conciertos", "/eventos/conciertos"],
               ["Eventos en Lima", "/eventos/lima"],
+              ["Guías para organizadores", "/blog"],
             ]}
           />
           <FootCol

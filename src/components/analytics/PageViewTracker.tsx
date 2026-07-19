@@ -8,9 +8,12 @@ import { trackPageView, trackDeferredPageView } from "@/lib/analytics/track";
 export function PageViewTracker() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  // `useSearchParams()` puede entregar una nueva instancia durante renders
+  // sucesivos. El string sí es estable mientras la URL no cambie; depender del
+  // objeto hacía que rutas con `?next=` dispararan pageviews sin parar.
+  const query = searchParams.toString();
 
   useEffect(() => {
-    const query = searchParams.toString();
     const path = query ? `${pathname}?${query}` : pathname;
 
     posthog.capture("page_view", { page_path: path });
@@ -21,7 +24,7 @@ export function PageViewTracker() {
       const deferred = window.setTimeout(() => trackDeferredPageView(), 3000);
       return () => window.clearTimeout(deferred);
     }
-  }, [pathname, searchParams]);
+  }, [pathname, query]);
 
   return null;
 }

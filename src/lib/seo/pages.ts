@@ -93,6 +93,10 @@ export const TERMINOS_PAGE = {
 
 export const SITEMAP_STATIC_PATHS = [
   "/",
+  "/mcp",
+  "/blog",
+  "/blog/mcp-para-organizadores",
+  "/blog/como-crear-un-evento",
   "/eventos/lima",
   ...EVENTOS_LANDINGS.map((p) => `/eventos/${p.slug}`),
   "/organizadores",
