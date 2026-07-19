@@ -90,14 +90,14 @@ export default function BuyerProfileEditPage() {
             alt={fullName || "Tu perfil"}
             referrerPolicy="no-referrer"
             className="size-24 rounded-[28px] object-cover"
-            style={{ boxShadow: "0 0 0 3px rgba(255,255,255,0.08), 0 20px 50px -10px rgba(124,58,237,0.5)" }}
+            style={{ boxShadow: "0 0 0 3px var(--color-cart-line-strong), 0 20px 50px -10px rgba(124,58,237,0.5)" }}
           />
         ) : (
           <div
             className="grid size-24 place-items-center rounded-[28px] text-[36px] font-extrabold tracking-[-0.02em] text-white"
             style={{
               background: "linear-gradient(135deg, #FF4D5E, #7C3AED 60%, #4B1F9A)",
-              boxShadow: "0 0 0 3px rgba(255,255,255,0.08), 0 20px 50px -10px rgba(124,58,237,0.5)",
+              boxShadow: "0 0 0 3px var(--color-cart-line-strong), 0 20px 50px -10px rgba(124,58,237,0.5)",
             }}
           >
             {initialsOf(fullName || data?.user?.fullName)}
@@ -112,7 +112,7 @@ export default function BuyerProfileEditPage() {
           <Field label="Nombre completo" value={fullName} onChange={setFullNameDraft} placeholder="Juan Pérez García" />
           <Field label="Email" value={email} onChange={setEmailDraft} placeholder="juan@gmail.com" type="email" inputMode="email" />
           <label className="block">
-            <span className="mb-1.5 block text-[12px] font-medium text-white/55">WhatsApp</span>
+            <span className="mb-1.5 block text-[12px] font-medium text-cart-ink-3">WhatsApp</span>
             <PhoneField value={phone} onChange={setPhoneDraft} />
           </label>
           <Field label="DNI" value={dni} onChange={setDni} placeholder="71234567" mono inputMode="numeric" />

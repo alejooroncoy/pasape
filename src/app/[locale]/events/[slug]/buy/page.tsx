@@ -2138,7 +2138,7 @@ function Radio({ active, color }: { active: boolean; color: string }) {
     <span
       className="grid size-5 flex-shrink-0 place-items-center rounded-full border-2 transition"
       style={{
-        borderColor: active ? color : "rgba(255,255,255,0.18)",
+        borderColor: active ? color : "var(--color-cart-line-strong)",
       }}
     >
       {active && <span className="size-2.5 rounded-full" style={{ background: color }} />}
