@@ -12,6 +12,7 @@ import { EventsSection } from "./EventsSection";
 import { Footer } from "./Footer";
 import { SeoBrowseLead } from "@/components/seo/SeoBrowseLead";
 import { UserTabbar } from "@/components/layout/UserTabbar";
+import { useCurrentUser } from "@/lib/identity/hooks/useCurrentUser";
 
 const SideDrawer = dynamic(() => import("./SideDrawer").then((m) => ({ default: m.SideDrawer })), {
   ssr: false,
@@ -47,7 +48,18 @@ export function HomeClient({
   searchLocation = "home",
   variant = "light",
 }: Props) {
-  const loggedIn = !!user;
+  // El shell público llega desde ISR. La identidad es privada y se resuelve
+  // después de hidratar; así una cookie no invalida el cache compartido.
+  const currentUser = useCurrentUser();
+  const resolvedUser =
+    user ??
+    (currentUser.data?.user
+      ? {
+          fullName: currentUser.data.user.fullName,
+          avatarUrl: currentUser.data.user.avatarUrl,
+        }
+      : null);
+  const loggedIn = !!resolvedUser;
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [signInOpen, setSignInOpen] = useState(false);
   const [category, setCategory] = useState<EventCategory | null>(initialCategory);
@@ -81,7 +93,7 @@ export function HomeClient({
     <div className={wrapperClass}>
       <div className="relative z-[1]">
         <Nav
-          user={user}
+          user={resolvedUser}
           onOpenDrawer={() => setDrawerOpen(true)}
           onOpenSignIn={() => setSignInOpen(true)}
           onSearch={setSearch}
@@ -130,7 +142,7 @@ export function HomeClient({
         <Footer />
         <UserTabbar />
         <SideDrawer
-          user={user}
+          user={resolvedUser}
           open={drawerOpen}
           onClose={() => setDrawerOpen(false)}
           onSignIn={() => setSignInOpen(true)}
@@ -141,4 +153,3 @@ export function HomeClient({
     </div>
   );
 }
-

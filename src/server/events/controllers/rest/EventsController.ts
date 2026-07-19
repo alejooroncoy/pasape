@@ -183,6 +183,28 @@ const listPublicCached = unstable_cache(
   { revalidate: 60, tags: ["events:browse"] },
 );
 
+// El detalle publicado se consulta desde el RSC, la API pública y el cliente.
+// Cachearlo aquí (en la capa de aplicación, no en UI) evita que cada una de
+// esas rutas repita las cuatro consultas de Supabase. El checkout nunca usa
+// este read-model para autorizar una venta: allí el repositorio recalcula stock
+// y precio dentro de su transacción.
+const getPublicBySlugCached = unstable_cache(
+  async (slug: string) => {
+    const data = await getEventBySlug({ repo }, slug);
+    if (!data || (data.event.status !== "published" && data.event.status !== "closed")) return null;
+
+    const { data: org } = await supabaseAdmin()
+      .from("organizations")
+      .select("brand_color")
+      .eq("id", data.event.organizationId)
+      .maybeSingle<{ brand_color: string | null }>();
+
+    return { ...data, organizationBrandColor: org?.brand_color ?? null };
+  },
+  ["events:public-detail"],
+  { revalidate: 30, tags: ["events:public"] },
+);
+
 export const EventsController = {
   async listPublic(
     opts: { limit?: number; cursor?: string | null; category?: EventCategory | null; search?: string | null } = {},
@@ -214,6 +236,11 @@ export const EventsController = {
       organizationBrandColor: string | null;
     }>
   > {
+    // Camino público, sin leer cookies: permite cache compartida para el 99 %
+    // de visitas. Draft/cancelled caen al camino autenticado de abajo.
+    const publicData = await getPublicBySlugCached(slug);
+    if (publicData) return ok(publicData);
+
     const data = await getEventBySlug({ repo }, slug);
     if (!data) return err("not_found");
     // Published y closed son públicos: un evento que terminó sigue siendo
@@ -301,6 +328,7 @@ export const EventsController = {
     // Publicar cambia el listado público del home → invalidar su cache ISR
     // al instante (antes solo se limpiaba al cumplirse los 60s de revalidate).
     revalidateTag("events:browse", "max");
+    revalidateTag("events:public", "max");
     // Solo notificar si ESTA llamada causó la transición real (ver
     // SupabaseEventRepository.publish) — evita duplicar el correo interno de
     // revisión si dos requests concurrentes (doble clic, retry) llegan aquí.
@@ -338,7 +366,10 @@ export const EventsController = {
     );
     // Editar / despublicar / cerrar / reabrir cambia lo que ve el home →
     // invalidar el cache ISR del listado al instante.
-    if (result.ok) revalidateTag("events:browse", "max");
+    if (result.ok) {
+      revalidateTag("events:browse", "max");
+      revalidateTag("events:public", "max");
+    }
     return result;
   },
 

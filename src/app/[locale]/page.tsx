@@ -4,7 +4,6 @@ import { setRequestLocale } from "next-intl/server";
 import { HomeClient } from "./_home/HomeClient";
 import { buildPageMetadata } from "@/lib/seo/metadata";
 import { HOME_TITLE, DEFAULT_DESCRIPTION } from "@/lib/seo/site";
-import { getSessionUser } from "@/server/identity/application/GetSessionUser";
 import { makeQueryClient } from "@/lib/_shared/query-client-config";
 import { BROWSE_EVENTS_LIMIT } from "@/lib/events/constants";
 import { optimizeImageUrl } from "@/lib/images/optimizeUrl";
@@ -13,6 +12,11 @@ import { EventsController } from "@/server/events/controllers/rest/EventsControl
 type Props = {
   params: Promise<{ locale: string }>;
 };
+
+// El home es contenido público. La sesión se hidrata en el cliente para que el
+// HTML/RSC pueda usar ISR y la CDN; antes una cookie convertía cada visita en
+// un render dinámico aunque el listado ya estaba cacheado en el backend.
+export const revalidate = 60;
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { locale } = await params;
@@ -28,10 +32,7 @@ export default async function HomePage({ params }: Props) {
   const { locale } = await params;
   setRequestLocale(locale);
 
-  const [user, eventsResult] = await Promise.all([
-    getSessionUser(),
-    EventsController.listPublic({ limit: BROWSE_EVENTS_LIMIT }),
-  ]);
+  const eventsResult = await EventsController.listPublic({ limit: BROWSE_EVENTS_LIMIT });
 
   const qc = makeQueryClient();
   if (eventsResult.ok) {
@@ -51,7 +52,7 @@ export default async function HomePage({ params }: Props) {
       <HydrationBoundary state={dehydrate(qc)}>
         <h1 className="sr-only">Pasape — Compra entradas para eventos en Perú</h1>
         <HomeClient
-          user={user ? { fullName: user.fullName, avatarUrl: user.avatarUrl } : null}
+          user={null}
         />
       </HydrationBoundary>
     </>
