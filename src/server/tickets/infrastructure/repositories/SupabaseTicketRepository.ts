@@ -83,6 +83,11 @@ type TicketRow = {
   box_host_ticket_id: string | null;
 };
 
+type PendingOrderAtomicResult = {
+  order: OrderRow;
+  tickets: TicketRow[];
+};
+
 const toOrder = (r: OrderRow): Order => ({
   id: r.id,
   buyerId: r.buyer_id,
@@ -558,63 +563,9 @@ export const supabaseTicketRepository: TicketRepository = {
       }
     }
 
-    const { data: orderRow, error: orderErr } = await db
-      .from("orders")
-      .insert({
-        buyer_id: effectiveBuyerId,
-        event_id: input.eventId,
-        promoter_link_id: promoterLinkId,
-        // F10: la order arranca pending; el webhook MP la marca paid/failed.
-        // Tradeoff: los tickets se insertan con status='active' porque el
-        // check constraint del schema actual no permite 'pending_payment'.
-        // Reservamos capacity con `sold` tentativo; si el webhook reporta
-        // failed/cancelled, se hace rollback (tickets -> void, sold -=).
-        status: "pending",
-        total_cents: total,
-        service_fee_cents: serviceFeeCents,
-        currency: tts[0]?.currency ?? "PEN",
-        guest_email: input.guest?.email ?? null,
-        guest_phone: input.guest?.phone ?? null,
-        guest_name: input.guest?.fullName ?? null,
-        // || (no ??): la cortesía manda dni "" — se captura al reclamar el link.
-        guest_dni: null,
-        guest_dni_enc: encryptDni(input.guest?.dni),
-        guest_dni_last4: dniLast4(input.guest?.dni),
-        // Solo en cortesías: así una compra normal no depende de la columna
-        // (el default false lo pone la DB).
-        ...(input.courtesy ? { is_courtesy: true } : {}),
-        ...(input.customFieldAnswers ? { custom_field_answers: input.customFieldAnswers } : {}),
-      })
-      .select("*")
-      .single<OrderRow>();
-    if (orderErr || !orderRow) return err(orderErr?.message ?? "order_create_failed");
-
     // Datos de identidad del que compra: guest o logueado (buyer). Mismo shape;
     // la diferencia es que buyer no crea auth user — ya existe sesión.
     const attendee = input.guest ?? input.buyer ?? null;
-
-    // Persistencia para autorrelleno: la primera compra guarda DNI (kyc) y
-    // teléfono (profile); las siguientes el checkout los pre-llena desde /me.
-    // Solo aplica a compradores logueados: un guest no tiene profile (ni /me)
-    // donde persistir esto — su DNI/teléfono ya viajan a orders.guest_* y a los
-    // campos denormalizados del ticket.
-    if (attendee && effectiveBuyerId) {
-      const phoneNorm = attendee.phone?.replace(/\D/g, "") || null;
-      if (phoneNorm) {
-        await db.from("profiles").update({ phone: phoneNorm }).eq("id", effectiveBuyerId);
-      }
-      if (attendee.dni && attendee.dni.length >= 6) {
-        await db.from("kyc_documents").upsert(
-          {
-            profile_id: effectiveBuyerId,
-            doc_kind: "dni",
-            doc_number: attendee.dni,
-            last2: attendee.dni.slice(-2),
-          },
-          { onConflict: "profile_id,doc_kind" },
-        );
-      }
-    }
 
     // Nombre del comprador como fallback para entradas nominativas: si el
     // checkout no capturó un holderName por entrada ni datos de guest/buyer,
@@ -635,6 +586,11 @@ export const supabaseTicketRepository: TicketRepository = {
     // respuestas. El resto las pide recién quien reclame esa entrada
     // (ClaimTransfer) — cada persona responde por su cuenta.
     let firstTicketAssigned = false;
+    // RSVP con aprobación se persiste desde el primer commit: nunca existe una
+    // ventana donde una inscripción pendiente tenga ticket activo o reserve cupo.
+    const requiresApproval = input.items.some(
+      (item) => tts.find((t) => t.id === item.ticketTypeId)?.requires_approval,
+    );
     const ticketsToInsert = input.items.flatMap((item) => {
       const tt = tts.find((t) => t.id === item.ticketTypeId);
       // Why: para boxes solo generamos 1 ticket (el "host") sin importar qty.
@@ -653,7 +609,6 @@ export const supabaseTicketRepository: TicketRepository = {
         const isFirstOfOrder = !firstTicketAssigned;
         if (isFirstOfOrder) firstTicketAssigned = true;
         return {
-          order_id: orderRow.id,
           ticket_type_id: item.ticketTypeId,
           price_cents: base + (i === 0 ? remainder : 0),
           custom_field_answers: isFirstOfOrder ? input.customFieldAnswers ?? {} : {},
@@ -675,71 +630,78 @@ export const supabaseTicketRepository: TicketRepository = {
           qr_code: generateQr(),
           current_holder: effectiveBuyerId,
           box_label: tt?.box_label ?? null,
-          box_host_ticket_id: null,
         };
       });
     });
 
-    const { data: tkRows, error: tkErr } = await db
-      .from("tickets")
-      .insert(ticketsToInsert)
-      .select("*");
-    if (tkErr || !tkRows) {
-      // Why: el check de arriba (`tt.sold + item.qty > tt.capacity`) es
-      // lectura-luego-escritura sin lock — solo una validación temprana de
-      // UX. El backstop atómico real es el constraint
-      // ticket_types_sold_le_capacity (ver migración
-      // 20260702180000_ticket_type_sold_capacity_check.sql): el trigger
-      // tickets_sync_sold recalcula `sold` con un UPDATE que toma row-lock,
-      // así que compras concurrentes del último cupo se serializan y la
-      // segunda choca contra el constraint (23514) en vez de sobrevender.
-      // La orden queda huérfana en 'pending' y expira sola (30min, ver
-      // expire_stale_pending_orders).
-      // Dos CHECK atómicos comparten el código 23514: el de stock
-      // (ticket_types_sold_le_capacity) y el del cap por persona
-      // (dni_event_usage_used_le_cap). Se distinguen por el nombre del constraint
-      // en el mensaje para devolver el error correcto al checkout.
-      if (tkErr?.code === "23514") {
-        if ((tkErr.message ?? "").includes("dni_event_usage")) {
-          return err("max_per_person_exceeded");
-        }
+    // Orden + entradas se escriben en una sola transacción de Postgres. El
+    // trigger/constraint de stock y el cap por DNI siguen siendo el backstop;
+    // ahora un fallo revierte también la orden, sin pending huérfanas.
+    const { data: atomicData, error: atomicErr } = await db.rpc(
+      "create_pending_order_with_tickets",
+      {
+        p_order: {
+          buyer_id: effectiveBuyerId,
+          event_id: input.eventId,
+          promoter_link_id: promoterLinkId,
+          initial_status: requiresApproval ? "pending_approval" : "pending",
+          total_cents: total,
+          service_fee_cents: serviceFeeCents,
+          currency: tts[0]?.currency ?? "PEN",
+          guest_email: input.guest?.email ?? null,
+          guest_phone: input.guest?.phone ?? null,
+          guest_name: input.guest?.fullName ?? null,
+          guest_dni_enc: encryptDni(input.guest?.dni),
+          guest_dni_last4: dniLast4(input.guest?.dni),
+          is_courtesy: !!input.courtesy,
+          custom_field_answers: input.customFieldAnswers ?? {},
+        },
+        p_tickets: ticketsToInsert,
+        p_promoter_effective_quota: promoterEffectiveQuota,
+      },
+    );
+    if (atomicErr || !atomicData) {
+      const message = atomicErr?.message ?? "order_create_failed";
+      if (atomicErr?.code === "23514") {
+        if (message.includes("dni_event_usage")) return err("max_per_person_exceeded");
         return err("sold_out");
       }
-      return err(tkErr?.message ?? "tickets_create_failed");
+      if (message.includes("promoter_quota_exceeded")) return err("promoter_quota_exceeded");
+      return err(message);
     }
+    const atomic = atomicData as PendingOrderAtomicResult;
+    const orderRow = atomic.order;
+    const tkRows = atomic.tickets;
+    if (!orderRow || !Array.isArray(tkRows)) return err("order_create_failed");
 
-    if (promoterLinkId && promoterEffectiveQuota != null) {
-      const usedAfter = await promoterLinkTicketsUsed(db, promoterLinkId);
-      if (usedAfter > promoterEffectiveQuota) {
-        await db.from("tickets").delete().eq("order_id", orderRow.id);
-        await db.from("orders").delete().eq("id", orderRow.id);
-        return err("promoter_quota_exceeded");
+    // Persistencia para autorrelleno: es información auxiliar. Se ejecuta DESPUÉS
+    // del commit crítico para que un fallo de perfil/KYC nunca pueda romper una
+    // compra ya consistente.
+    if (attendee && effectiveBuyerId) {
+      const phoneNorm = attendee.phone?.replace(/\D/g, "") || null;
+      if (phoneNorm) {
+        await db.from("profiles").update({ phone: phoneNorm }).eq("id", effectiveBuyerId);
+      }
+      if (attendee.dni && attendee.dni.length >= 6) {
+        await db.from("kyc_documents").upsert(
+          {
+            profile_id: effectiveBuyerId,
+            doc_kind: "dni",
+            doc_number: attendee.dni,
+            last2: attendee.dni.slice(-2),
+          },
+          { onConflict: "profile_id,doc_kind" },
+        );
       }
     }
 
     // ticket_types.sold lo mantiene el trigger tickets_sync_sold a partir de los
     // tickets reales — no se toca a mano (antes se desfasaba).
 
-    // RSVP con aprobación: si CUALQUIER línea es de un ticket_type que exige
-    // aprobación, la orden entera queda pending_approval (no paid) y sus
-    // tickets pending_approval (no active, sin QR válido) — el organizador
-    // decide desde la bandeja de aprobación (ver ApproveRegistration.ts).
-    // Solo aplica a gratis (validado al crear/editar el ticket_type).
-    const requiresApproval = input.items.some(
-      (item) => tts.find((t) => t.id === item.ticketTypeId)?.requires_approval,
-    );
     if (requiresApproval) {
-      await db
-        .from("orders")
-        .update({ status: "pending_approval" })
-        .eq("id", orderRow.id);
-      await db
-        .from("tickets")
-        .update({ status: "pending_approval" })
-        .eq("order_id", orderRow.id);
       return ok({
-        order: { ...toOrder(orderRow), status: "pending_approval" as const },
-        tickets: (tkRows as TicketRow[]).map((r) => toTicket({ ...r, status: "pending_approval" })),
+        order: toOrder(orderRow),
+        tickets: tkRows.map(toTicket),
         preference: { id: "", initPoint: "" },
       });
     }

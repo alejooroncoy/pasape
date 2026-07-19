@@ -10,10 +10,13 @@ import { purchaseSignalFields } from "@/server/tickets/application/purchaseSigna
 const limiter = createRateLimiter("tickets:quote", 30);
 
 export const POST = async (req: NextRequest) => {
+  const startedAt = performance.now();
   if (!(await limiter.check(req))) return limiter.response();
   const body = await req.json().catch(() => ({}));
   // Solo REGISTRA la señal (velocidad + historial de device que luego alimenta el
   // score de /buy). No se bloquea ni se puntúa el quote: es read-only e inofensivo.
   await assessCheckout({ req, phase: "quote", assess: false, ...purchaseSignalFields(body) });
-  return json(await TicketsController.quote(body));
+  const response = json(await TicketsController.quote(body));
+  response.headers.set("Server-Timing", `quote;dur=${(performance.now() - startedAt).toFixed(1)}`);
+  return response;
 };

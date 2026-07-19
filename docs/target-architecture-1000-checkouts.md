@@ -93,10 +93,10 @@ caída de WhatsApp, Resend o analytics nunca bloquea un pago aprobado.
 ## Estado actual y brechas
 
 La base actual ya tiene controles útiles: validación de stock en la base,
-idempotencia del pago y expiración de órdenes pendientes. Sin embargo, la
-creación de orden aún concentra varias escrituras y efectos alrededor del flujo
-HTTP; las notificaciones se difieren para no frenar la respuesta, pero todavía
-no constituyen una cola durable con reintentos auditables. Tampoco existe la
+idempotencia del pago, expiración de órdenes pendientes y una RPC que crea la
+orden pendiente junto con sus tickets en una sola transacción. Las
+notificaciones se difieren para no frenar la respuesta, pero todavía no
+constituyen una cola durable con reintentos auditables. Tampoco existe la
 reserva explícita ni la admisión por evento.
 
 Por eso, el objetivo no se declara conseguido por usar Vercel o Supabase. Se

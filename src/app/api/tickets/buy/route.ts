@@ -23,6 +23,7 @@ const authorizedLoadTestAssessment = {
 };
 
 export const POST = async (req: NextRequest) => {
+  const startedAt = performance.now();
   const body = await req.json().catch(() => ({}));
   const fields = purchaseSignalFields(body);
   const isLoadTest = isAuthorizedLoadTest(req, fields.eventId);
@@ -81,5 +82,9 @@ export const POST = async (req: NextRequest) => {
       has_promo: !!body.promoCode,
     });
   }
-  return json(result, 201);
+  const response = json(result, 201);
+  // Visible en DevTools, CDN logs y ensayos de carga. No expone reglas internas;
+  // solo permite separar la latencia total del checkout antes de mover compute.
+  response.headers.set("Server-Timing", `checkout;dur=${(performance.now() - startedAt).toFixed(1)}`);
+  return response;
 };

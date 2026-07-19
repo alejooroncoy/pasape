@@ -28,8 +28,8 @@ lo que una modificación no espera al TTL para aparecer.
 ## Camino de compra
 
 ```text
-Cliente → quote autoritativo → buy → transacción PostgreSQL → orden / QR
-                                          └→ after() → email / WhatsApp
+Cliente → quote autoritativo → buy → RPC transaccional PostgreSQL → orden / QR
+                                                        └→ after() → email / WhatsApp
 ```
 
 La caché **nunca** autoriza una venta. Precio, cupo, promociones y estado se
@@ -41,11 +41,12 @@ de staleness sin riesgo de sobreventa.
 
 - Lecturas: home con ISR de 60 s; ficha pública con CDN 30 s y SWR 60 s.
 - Mutaciones: invalidación por tag al publicar/editar un evento.
-- Compras: rate limit por IP, anti-bot y reserva/orden en backend.
+- Compras: rate limit por IP, anti-bot y creación atómica de orden + entradas
+  en una RPC de Postgres. Un fallo de stock o de capacidad revierte ambos.
 - Entrega: `after()` evita que email/WhatsApp aumenten la latencia de la
   respuesta de compra.
-- Observabilidad: métricas de p50/p95 de los ensayos de carga y Sentry para
-  errores de backend.
+- Observabilidad: cabecera `Server-Timing` en `quote` y `buy`, métricas de
+  p50/p95 de los ensayos de carga y Sentry para errores de backend.
 
 ## Próximos escalones
 
