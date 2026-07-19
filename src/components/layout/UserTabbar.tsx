@@ -134,7 +134,10 @@ export function UserTabbar() {
               key={id}
               href={href as never}
               aria-current={isOn ? "page" : undefined}
-              className="group relative flex flex-col items-center justify-center gap-0.5 px-0.5 py-1"
+              className={
+                "group relative flex flex-col items-center justify-center gap-0.5 px-0.5 py-1 " +
+                (useCompactBrowserDock ? "min-h-11" : "")
+              }
             >
               {/* Indicador activo que se desliza entre tabs (layoutId) */}
               {isOn && (
