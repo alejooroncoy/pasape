@@ -47,6 +47,7 @@ export function Footer() {
             title="Organizadores"
             links={[
               ["Crear evento", "/organizadores"],
+              ["Guías para organizadores", "/blog"],
               ["Precios", "/organizadores#precio"],
               ["Cómo funciona", "/organizadores#como-funciona"],
             ]}

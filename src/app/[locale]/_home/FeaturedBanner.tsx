@@ -59,17 +59,13 @@ export function FeaturedBanner() {
       onTouchStart={onTouchStart}
       onTouchEnd={onTouchEnd}
     >
-      {/* Capa tipográfica de fondo (patrón de Posh): el nombre del evento
-          gigante y translúcido detrás del contenido. */}
-      <span
-        key={`bg-${ev.id}`}
-        // Solo desktop: en mobile la card apilada no deja espacio para que
-        // esta capa respire sin chocar con el resto del contenido.
-        className="pointer-events-none absolute -bottom-[0.18em] left-[clamp(90px,16vw,220px)] hidden select-none whitespace-nowrap font-sans text-[clamp(56px,9vw,130px)] font-extrabold uppercase leading-none tracking-[-0.04em] text-cart-accent/[0.06] sm:block"
-        aria-hidden
-      >
-        {ev.title}
-      </span>
+      {/* En vez de repetir el título gigante (que se cortaba y competía con
+          la ficha), dejamos una firma editorial discreta: identifica el
+          bloque sin tapar la información que realmente importa. */}
+      <div aria-hidden className="pointer-events-none absolute bottom-6 right-7 hidden items-center gap-3 sm:flex">
+        <span className="h-px w-12 bg-cart-accent/45" />
+        <span className="font-mono text-[10px] font-semibold uppercase tracking-[.18em] text-cart-accent/70">Evento destacado · Pasape</span>
+      </div>
 
       {/* Contenido del slide — anima la entrada en cada cambio (sin capa de
           salida: evita saltos de layout). */}
@@ -119,7 +115,7 @@ export function FeaturedBanner() {
                 </p>
               )}
             </div>
-            <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-cart-accent px-4 py-2 text-[12.5px] font-bold text-white shadow-[0_6px_16px_-6px_rgba(124,58,237,0.5)] sm:mt-4 sm:bg-transparent sm:p-0 sm:text-cart-accent sm:shadow-none sm:text-[clamp(12.5px,1.3vw,14px)]">
+            <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-cart-accent px-4 py-2 text-[12.5px] font-bold text-white shadow-[0_8px_20px_-7px_var(--color-cart-accent-glow-strong)] transition-[background-color,transform] group-hover/card:bg-cart-accent-strong sm:mt-5 sm:px-5 sm:py-2.5 sm:text-[clamp(12.5px,1.3vw,14px)]">
               Ver evento
               <span className="transition-transform duration-200 group-hover/card:translate-x-0.5">
                 <ArrowIcon />

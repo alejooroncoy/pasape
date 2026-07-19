@@ -7,7 +7,7 @@ import { Button } from "./ui/button";
 import { Icon } from "./icons";
 import { Logo } from "./logo";
 
-const LINKS = [
+const LANDING_LINKS = [
   { href: "#promos", label: "Funciones" },
   { href: "#panel", label: "Panel en vivo" },
   { href: "#como-funciona", label: "Cómo funciona" },
@@ -15,9 +15,16 @@ const LINKS = [
   { href: "#faq", label: "FAQ" },
 ];
 
-export function Nav(_props: { waHref?: string }) {
+const RESOURCE_LINKS = [
+  { href: "/blog", label: "Guías" },
+  { href: "/mcp", label: "MCP" },
+  { href: "/organizadores", label: "Página para organizadores" },
+];
+
+export function Nav({ variant = "landing" }: { waHref?: string; variant?: "landing" | "resources" }) {
   const locale = useLocale();
   const orgHref = `/${locale}/org`;
+  const links = variant === "resources" ? RESOURCE_LINKS : LANDING_LINKS;
   const [menuOpen, setMenuOpen] = useState(false);
   const headerRef = useRef<HTMLElement>(null);
   const burgerRef = useRef<HTMLButtonElement>(null);
@@ -89,17 +96,23 @@ export function Nav(_props: { waHref?: string }) {
           className="hidden h-full items-stretch gap-7 text-sm font-medium text-cart-ink-3 lg:inline-flex"
           aria-label="Principal"
         >
-          {LINKS.map((l) => (
-            <a
+          {links.map((l) => (
+            <Link
               key={l.href}
-              href={l.href}
+              href={l.href as never}
               className="relative flex items-center transition-colors hover:text-cart-ink after:absolute after:bottom-[22px] after:left-0 after:right-0 after:h-px after:origin-left after:scale-x-0 after:bg-cart-accent after:transition-transform after:duration-200 hover:after:scale-x-100"
             >
               {l.label}
-            </a>
+            </Link>
           ))}
         </nav>
         <div className="hidden items-center gap-4 lg:inline-flex">
+          <Link
+            href="/blog"
+            className="text-sm font-medium text-cart-ink-3 transition-colors hover:text-cart-ink"
+          >
+            Guías
+          </Link>
           {/* Ver eventos como text link sutil — secundario */}
           <Link
             href="/"
@@ -162,10 +175,10 @@ export function Nav(_props: { waHref?: string }) {
           </button>
         </div>
         <nav className="nav-drawer-links" aria-label="Secciones">
-          {LINKS.map((l, i) => (
-            <a
+          {links.map((l, i) => (
+            <Link
               key={l.href}
-              href={l.href}
+              href={l.href as never}
               ref={i === 0 ? firstLinkRef : undefined}
               onClick={() => setMenuOpen(false)}
               style={{
@@ -177,7 +190,7 @@ export function Nav(_props: { waHref?: string }) {
               <span className="ndl-arrow">
                 <Icon name="arrow-up-right" width={16} height={16} />
               </span>
-            </a>
+            </Link>
           ))}
         </nav>
         <div className="nav-drawer-foot flex flex-col gap-2.5">
@@ -188,6 +201,13 @@ export function Nav(_props: { waHref?: string }) {
           >
             Ingresar al panel
           </Button>
+          <Link
+            href="/organizadores"
+            onClick={() => setMenuOpen(false)}
+            className="block w-full px-[18px] py-2 text-center text-sm font-medium text-cart-ink-3 transition-colors hover:text-cart-ink"
+          >
+            Página para organizadores →
+          </Link>
           <Link
             href="/"
             onClick={() => setMenuOpen(false)}
