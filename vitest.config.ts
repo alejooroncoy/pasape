@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 
 // Carga .env / .env.local en process.env para los tests de integración que
 // tocan Supabase (los unitarios puros lo ignoran). Sin credenciales, esos tests
@@ -37,5 +37,9 @@ export default defineConfig({
   },
   test: {
     env: loadDotenv(),
+    // Los worktrees de asistentes viven dentro del repo durante una sesión. No
+    // son código de esta rama y Vitest no debe ejecutar sus copias de tests: al
+    // hacerlo se duplican fixtures remotos y aparecen falsos negativos.
+    exclude: [...configDefaults.exclude, "**/.claude/worktrees/**"],
   },
 });

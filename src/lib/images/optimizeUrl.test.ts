@@ -7,7 +7,7 @@ const SAMPLE =
 describe("optimizeImageUrl", () => {
   it("transforma URLs de Supabase a render/image webp", () => {
     expect(optimizeImageUrl(SAMPLE, "hero-lcp")).toBe(
-      "https://liajgsczxhtrpahqemex.supabase.co/storage/v1/render/image/public/event-assets/events/demo/cover.png?width=512&quality=75&format=webp",
+      "https://liajgsczxhtrpahqemex.supabase.co/storage/v1/render/image/public/event-assets/events/demo/cover.png?width=512&quality=75&format=webp&resize=contain",
     );
   });
 

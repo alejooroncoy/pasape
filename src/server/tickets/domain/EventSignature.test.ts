@@ -115,8 +115,11 @@ describe("verifySignedQr", () => {
     const now = Date.now();
     const w = windowAt(now);
     const sig = await signWindow(ticket.priv, claims.ticketId, w);
-    // Adultera un caracter de la firma.
-    const tampered = sig.slice(0, -2) + (sig.endsWith("A") ? "BB" : "AA");
+    // Alterar el último carácter puede tocar solo bits de padding base64url y
+    // decodificar exactamente a los mismos bytes. Mutamos un byte efectivo en
+    // el centro de la firma para que el caso realmente pruebe la verificación.
+    const middle = Math.floor(sig.length / 2);
+    const tampered = `${sig.slice(0, middle)}${sig[middle] === "A" ? "B" : "A"}${sig.slice(middle + 1)}`;
     const qr = buildSignedQrPayload(cert, w, tampered);
     const out = await verifySignedQr(event.publicJwk, qr, now);
     expect(out.valid).toBe(false);
