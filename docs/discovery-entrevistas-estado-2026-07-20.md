@@ -73,11 +73,36 @@ Aceptaron conexión y **ya se les mandó el mensaje** de propuesta de llamada
 5. Ailin Quijano Lopez — Estratega Comunicación/Marketing
 6. Roberto Kharlos Aquije Del Aguila — Head BTL, Bizarro
 7. Luciana Cristofoli — Marketing/Comunicación/Prensa, DF Entertainment
+8. Daniel Díaz Salgado — Producer of Live Events and TV Shows, FOX (México)
+9. Yury Angel — Directora/Productora freelance de congresos y ferias
+   (Bogotá) — perfil "en busca de empleo" en LinkedIn, pero con experiencia
+   senior real; se decidió escribirle igual (Mom Test = comportamiento
+   pasado, no situación laboral actual)
+10. Daniel Merino — Entertainment Executive, Bizarro Live & Festival de Viña
+    del Mar (Chile)
+11. Rosa Loredana Bravo Burgos — Marketing & Events Manager, La Europea
+    México (+60 eventos)
+12. Milenko Ilic — Productor Senior técnico BTL/TV (Chile) — también "en
+    busca de empleo", mismo criterio que Yury Angel
+13. Lucas Nettle Naso — Jefe de eventos, Movistar Arena (Chile)
+14. Fernando Domínguez — Marketing Festivales, OCESA (México)
+15. Gianpiero Sampieri — Marketing Manager, Bizarro Live (Chile)
+16. Sharon Khodriya — Project Manager, Producción de Eventos & BTL
+    (Argentina)
+17. Carlos Andrés Pinto Padgett — Event Production & Operations, +60 eventos
+    (Puebla, México) — recién egresado (tituló hace 1 semana), solo
+    pasantías (Disney College Program, Televicentro); se le escribió también
+    a pedido explícito del usuario pese a ser junior sin rol operativo
+    senior
 
 **Pendiente de seguimiento:** revisar periódicamente quién más de los 40
 acepta la conexión y mandarle el mensaje (mismo patrón: chequear si ya tiene
 mensaje antes de reenviar, personalizar por rol/empresa, saludo según hora
-real del destinatario — ver nota de horario abajo).
+real del destinatario — ver nota de horario abajo). Antes de escribirle a
+alguien, si su banner de LinkedIn muestra "en busca de empleo", revisar si
+tiene experiencia operativa senior real (sí vale la pena, el Mom Test es
+sobre el pasado) o si es alguien recién egresado sin ese rol (vale la pena
+igual pero con expectativas más bajas de profundidad en la respuesta).
 
 ## Nota operativa: hora del destinatario antes de escribir
 
