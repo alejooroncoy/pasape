@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AnimatePresence } from "motion/react";
-import { Sheet } from "../_shell/Sheet";
+import { OrgSheet as Sheet } from "@/components/domain/org/OrgSheet";
 import { RequestsSheet } from "../team/page";
 
 // Drawer de Solicitudes compartido por la ruta interceptora (soft-nav) y la

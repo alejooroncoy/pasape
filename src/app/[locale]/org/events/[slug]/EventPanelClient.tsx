@@ -10,7 +10,7 @@ import { useEventPartners, useAddEventPartner, useRemoveEventPartner } from "@/l
 import { formatMoney } from "@/lib/_shared/format";
 import { Money } from "@/lib/_shared/money";
 import { EventShell } from "./_shell/EventShell";
-import { Sheet } from "./_shell/Sheet";
+import { OrgSheet as Sheet } from "@/components/domain/org/OrgSheet";
 import { SpotlightTour } from "@/components/ui/SpotlightTour";
 import { createSupabaseBrowserClient } from "@/server/_shared/supabase/client";
 import {

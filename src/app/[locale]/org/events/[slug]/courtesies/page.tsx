@@ -8,7 +8,7 @@ import { formatMoney } from "@/lib/_shared/format";
 import { isBox, boxSeats, unitNoun, unitsRemaining } from "@/lib/events/ticketDisplay";
 import { PhoneField } from "@/components/design/PhoneField";
 import { EventShell } from "../_shell/EventShell";
-import { Sheet } from "../_shell/Sheet";
+import { OrgSheet as Sheet } from "@/components/domain/org/OrgSheet";
 import type { TicketType } from "@/server/events/domain/Event";
 import type { CourtesySummary } from "@/server/tickets/ports/TicketRepository";
 

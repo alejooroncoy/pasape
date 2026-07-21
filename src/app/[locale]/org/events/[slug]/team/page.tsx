@@ -34,8 +34,10 @@ import type { EventPromoterAssignment } from "@/server/promoters/application/Eve
 import type { EventPromoterScheme } from "@/server/events/ports/EventRepository";
 import type { CommissionConfig } from "@/server/promoters/domain/OrgPromoter";
 import { CommissionSchemeEditor } from "@/components/promoters/CommissionSchemeEditor";
+import { Avatar } from "@/components/ui/Avatar";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { EventShell } from "../_shell/EventShell";
-import { Sheet } from "../_shell/Sheet";
+import { OrgSheet as Sheet } from "@/components/domain/org/OrgSheet";
 
 type Params = Promise<{ slug: string; locale: string }>;
 
@@ -94,7 +96,14 @@ function InheritedAccessSection() {
         {members.length === 0 ? (
           <EmptyState
             title="Nadie con acceso heredado todavía."
-            cta={{ href: "/org/team", label: "Invita gente en Equipo de la marca →" }}
+            action={
+              <Link
+                href={"/org/team" as never}
+                className="mt-1 text-[13px] font-semibold text-cart-accent hover:underline"
+              >
+                Invita gente en Equipo de la marca →
+              </Link>
+            }
           />
         ) : (
           <ul className="divide-y divide-cart-line">
@@ -103,7 +112,7 @@ function InheritedAccessSection() {
                 key={m.profileId}
                 className="flex items-center gap-3 px-4 py-3 lg:px-5"
               >
-                <Avatar name={m.fullName || m.email || "?"} />
+                <Avatar alt={m.fullName || m.email || "?"} size={36} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[14px] font-semibold tracking-[-0.01em]">
                     {m.fullName || m.email}
@@ -192,7 +201,7 @@ function EventCoOrganizersSection({ slug }: { slug: string }) {
         {(coorgs.data?.length ?? 0) === 0 ? (
           <EmptyState
             title="Nadie invitado a este evento todavía."
-            description="Suma personas que ya están en tu equipo de marca para que vean y editen solo este evento."
+            body="Suma personas que ya están en tu equipo de marca para que vean y editen solo este evento."
           />
         ) : (
           <ul className="divide-y divide-cart-line">
@@ -201,7 +210,7 @@ function EventCoOrganizersSection({ slug }: { slug: string }) {
                 key={c.profileId}
                 className="flex items-center gap-3 px-4 py-3 lg:px-5"
               >
-                <Avatar name={c.fullName || c.email || "?"} />
+                <Avatar alt={c.fullName || c.email || "?"} size={36} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[14px] font-semibold tracking-[-0.01em]">
                     {c.fullName || c.email}
@@ -303,7 +312,7 @@ function CoOrgPicker({
               onClick={() => onPick(m.profileId)}
               className="flex items-center gap-3 rounded-2xl border border-cart-line bg-cart-bg-elev p-3 text-left transition hover:border-cart-line-strong disabled:opacity-60"
             >
-              <Avatar name={m.fullName || m.email || "?"} />
+              <Avatar alt={m.fullName || m.email || "?"} size={36} />
               <div className="min-w-0 flex-1">
                 <div className="truncate text-[14px] font-semibold">
                   {m.fullName || m.email}
@@ -1571,41 +1580,6 @@ function SectionHeader({
       </div>
       {action ? <div className="shrink-0">{action}</div> : null}
     </header>
-  );
-}
-
-function EmptyState({
-  title,
-  description,
-  cta,
-}: {
-  title: string;
-  description?: string;
-  cta?: { href: string; label: string };
-}) {
-  return (
-    <div className="flex flex-col items-center gap-2 px-4 py-8 text-center lg:px-5">
-      <div className="text-[14px] font-semibold">{title}</div>
-      {description && (
-        <p className="max-w-[400px] text-[12.5px] text-cart-ink-3">{description}</p>
-      )}
-      {cta && (
-        <Link
-          href={cta.href as never}
-          className="mt-1 text-[13px] font-semibold text-cart-accent hover:underline"
-        >
-          {cta.label}
-        </Link>
-      )}
-    </div>
-  );
-}
-
-function Avatar({ name }: { name: string }) {
-  return (
-    <span className="grid size-9 shrink-0 place-items-center rounded-full bg-cart-bg-elev-2 text-[12px] font-semibold text-cart-ink-2">
-      {(name[0] ?? "?").toUpperCase()}
-    </span>
   );
 }
 

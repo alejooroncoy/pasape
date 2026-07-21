@@ -21,15 +21,27 @@ export function useIsDesktop() {
   return isDesktop;
 }
 
-/** Panel lateral en desktop, drawer deslizable en móvil — mismo componente. */
-export function Sheet({
+/**
+ * Panel lateral en desktop, drawer deslizable en móvil — mismo componente.
+ *
+ * Primitivo compartido de los paneles del lado ORGANIZADOR (equipo, promotores,
+ * cortesías, etc). No confundir con `@/components/ui/Sheet`, que es el
+ * primitivo del lado FAN (login, checkout) — API y breakpoints distintos a
+ * propósito, cada lado tiene su propio patrón de interacción.
+ */
+export function OrgSheet({
   onClose,
   title,
   children,
+  /** Atajo ⌘/Ctrl+Enter que dispara el botón marcado `data-primary-cta` del
+   *  contenido, con hint visible en desktop. Opt-in: solo tiene sentido si el
+   *  consumidor efectivamente marca su CTA primario con ese atributo. */
+  shortcutHint = false,
 }: {
   onClose: () => void;
   title: string;
   children: ReactNode;
+  shortcutHint?: boolean;
 }) {
   const isDesktop = useIsDesktop();
   const sheetRef = useRef<HTMLDivElement>(null);
@@ -39,11 +51,21 @@ export function Sheet({
       if (e.key === "Escape") {
         e.preventDefault();
         onClose();
+        return;
+      }
+      if (shortcutHint && (e.metaKey || e.ctrlKey) && e.key === "Enter") {
+        const cta = sheetRef.current?.querySelector<HTMLButtonElement>(
+          "[data-primary-cta]:not(:disabled)",
+        );
+        if (cta) {
+          e.preventDefault();
+          cta.click();
+        }
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [onClose, shortcutHint]);
 
   if (isDesktop) {
     return (
@@ -71,16 +93,25 @@ export function Sheet({
         >
           <div className="sticky top-0 z-10 flex items-center justify-between border-b border-cart-line bg-cart-bg-elev/95 px-6 py-4 backdrop-blur">
             <h3 className="font-sans text-[20px] font-semibold tracking-[-0.02em]">{title}</h3>
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Cerrar"
-              className="grid size-8 place-items-center rounded-full text-cart-ink-3 transition hover:bg-cart-ink/5 hover:text-cart-ink"
-            >
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-              </svg>
-            </button>
+            <div className="flex items-center gap-3">
+              {shortcutHint && (
+                <span className="hidden text-[11px] text-cart-ink-3 sm:inline">
+                  <kbd className="rounded border border-cart-line bg-cart-bg px-1.5 py-0.5 text-[10px] font-medium">Esc</kbd> cerrar ·{" "}
+                  <kbd className="rounded border border-cart-line bg-cart-bg px-1.5 py-0.5 text-[10px] font-medium">⌘</kbd>
+                  <kbd className="ml-0.5 rounded border border-cart-line bg-cart-bg px-1.5 py-0.5 text-[10px] font-medium">↵</kbd> guardar
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Cerrar"
+                className="grid size-8 place-items-center rounded-full text-cart-ink-3 transition hover:bg-cart-ink/5 hover:text-cart-ink"
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                </svg>
+              </button>
+            </div>
           </div>
           <div className="flex-1 overflow-y-auto px-6 py-5">{children}</div>
         </motion.div>
