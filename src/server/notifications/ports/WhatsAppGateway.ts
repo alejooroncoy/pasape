@@ -41,6 +41,11 @@ export type SendTemplateInput = {
   components: WhatsAppComponent[];
 };
 
+export type SendTextInput = {
+  to: string;
+  body: string;
+};
+
 export interface WhatsAppGateway {
   // "kapso" | "meta" — se usa en logs y en el mensaje de error (que además queda
   // grabado en notification_dispatches.error, p.ej. "kapso 401: ...").
@@ -50,4 +55,7 @@ export interface WhatsAppGateway {
   // Envía un template. LANZA si el proveedor rechaza (para que el caller lo
   // registre como `failed`). No devuelve boolean: el éxito es "no lanzó".
   sendTemplate(input: SendTemplateInput): Promise<void>;
+  // Envía texto libre — solo válido dentro de la ventana de 24h de una
+  // conversación que el usuario ya inició (ver HttpWhatsAppGateway.sendText).
+  sendText(input: SendTextInput): Promise<void>;
 }

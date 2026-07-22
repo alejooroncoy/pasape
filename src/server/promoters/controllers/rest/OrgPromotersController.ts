@@ -9,6 +9,8 @@ import type { CommissionConfig, OrgPromoter } from "../../domain/OrgPromoter";
 import { getOrgPromoterDetail, type PromoterDetail } from "../../application/PromoterDetail";
 import { coerceCommissionConfig } from "../../application/CommissionResolver";
 import { commissionConfigSchema } from "./commissionConfigSchema";
+import { supabaseWhatsAppSaleRepository } from "../../whatsappSales/infrastructure/SupabaseWhatsAppSaleRepository";
+import { exportWhatsAppSales as buildWhatsAppSalesExport } from "../../whatsappSales/application/ExportWhatsAppSales";
 
 /** Regla base de la marca (organization): el 4º nivel de la cascada de comisión. */
 export type OrgScheme = {
@@ -170,6 +172,18 @@ export const OrgPromotersController = {
     if (!guard.ok) return err(guard.error);
     const origin = await resolveOrigin();
     return ok(await getOrgPromoterDetail(guard.value.promoter, origin));
+  },
+
+  // MVP de venta por WhatsApp (docs/mvp-whatsapp-promotores-2026-07-21.md):
+  // el promotor pidió justamente esto — un Excel con todas sus ventas, sin
+  // tener que hacer nada. Mismo guard de organización que el resto del
+  // controller, así que solo la marca dueña del promotor puede descargarlo.
+  async exportWhatsAppSales(id: string): Promise<Result<{ buffer: Buffer; filename: string }>> {
+    const guard = await guardPromoterInOrg(id);
+    if (!guard.ok) return err(guard.error);
+    const sales = await supabaseWhatsAppSaleRepository.listByPromoter(id);
+    if (!sales.ok) return err(sales.error);
+    return ok(await buildWhatsAppSalesExport(guard.value.promoter.name, sales.value));
   },
 
   // Regla base de la marca (para todos los promotores y eventos). La leen todas

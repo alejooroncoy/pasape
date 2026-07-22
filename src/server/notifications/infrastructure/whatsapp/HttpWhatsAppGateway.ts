@@ -47,4 +47,34 @@ export abstract class HttpWhatsAppGateway implements WhatsAppGateway {
       throw new Error(`${this.providerName} ${res.status}: ${errText.slice(0, 200)}`);
     }
   }
+
+  // Mensaje de texto libre — válido solo dentro de la ventana de 24h desde el
+  // último mensaje del usuario (Meta no lo entrega fuera de esa ventana, a
+  // diferencia de sendTemplate). Úsalo para responder una conversación que el
+  // usuario ya inició, nunca para contactar en frío.
+  async sendText(input: { to: string; body: string }): Promise<void> {
+    const base = this.baseUrl();
+    const phoneNumberId = this.phoneNumberId();
+    const auth = this.authHeaders();
+    if (!base || !phoneNumberId || !auth) {
+      throw new Error(`${this.providerName}: proveedor sin configurar (faltan credenciales)`);
+    }
+
+    const res = await fetch(`${base}/${phoneNumberId}/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...auth },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to: formatWhatsAppPhone(input.to),
+        type: "text",
+        text: { body: input.body },
+      }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      throw new Error(`${this.providerName} ${res.status}: ${errText.slice(0, 200)}`);
+    }
+  }
 }
