@@ -49,51 +49,46 @@ celulares verificados):
 
 ## Estado de LinkedIn (solicitudes de conexión)
 
-De los 50: **40 contactados** (solicitud de conexión enviada, sin nota).
-Quedan **11 sin contactar**:
-
-No-adyacentes (prioridad media-alta): Camila Hockenheimer, Marcia Caro Olave,
-César Lozano, Enrique Battilana.
-
-Adyacentes (prioridad baja): Felipe Ojeda Reveco, Carlos Garbagna, Silvana
-Sanches Nakayama, Diego Ibáñez Sánchez, Alicia Norero Fernández, Edwin
-Betancur, Anamaria Zarta Monroy.
+**Los 50 contactos activos tienen solicitud de conexión enviada** (sin nota,
+21 jul 2026). Últimos 11 en salir: Camila Hockenheimer, Marcia Caro Olave,
+César Lozano, Enrique Battilana (prioridad media-alta) + Felipe Ojeda
+Reveco, Carlos Garbagna, Silvana Sanches Nakayama, Diego Ibáñez Sánchez,
+Alicia Norero Fernández, Edwin Betancur, Anamaria Zarta Monroy (adyacentes,
+prioridad baja).
 
 ## Estado de mensajes (ya conectados)
 
 Aceptaron conexión y **ya se les mandó el mensaje** de propuesta de llamada
-(estudio independiente, 20 min, sin pitch):
+(estudio independiente, 20 min, sin pitch). Estado por persona:
 
-1. Kimberly Mas Risso — Bizarro Live (Perú)
-2. Manuel Campusano Kellet — Prisamedia Chile
-3. Victor Balabarca Saavedra — +700 eventos PE/CL/AR
-4. Valeria Leguizamon — Coordinadora Producción Senior (⚠ verificar si es la
-   misma persona del correo de Apollo — LinkedIn la ubica en Argentina, el
-   correo de Apollo es de Corferias en Bogotá)
-5. Ailin Quijano Lopez — Estratega Comunicación/Marketing
-6. Roberto Kharlos Aquije Del Aguila — Head BTL, Bizarro
-7. Luciana Cristofoli — Marketing/Comunicación/Prensa, DF Entertainment
-8. Daniel Díaz Salgado — Producer of Live Events and TV Shows, FOX (México)
-9. Yury Angel — Directora/Productora freelance de congresos y ferias
-   (Bogotá) — perfil "en busca de empleo" en LinkedIn, pero con experiencia
-   senior real; se decidió escribirle igual (Mom Test = comportamiento
-   pasado, no situación laboral actual)
-10. Daniel Merino — Entertainment Executive, Bizarro Live & Festival de Viña
-    del Mar (Chile)
-11. Rosa Loredana Bravo Burgos — Marketing & Events Manager, La Europea
-    México (+60 eventos)
-12. Milenko Ilic — Productor Senior técnico BTL/TV (Chile) — también "en
-    busca de empleo", mismo criterio que Yury Angel
-13. Lucas Nettle Naso — Jefe de eventos, Movistar Arena (Chile)
-14. Fernando Domínguez — Marketing Festivales, OCESA (México)
-15. Gianpiero Sampieri — Marketing Manager, Bizarro Live (Chile)
-16. Sharon Khodriya — Project Manager, Producción de Eventos & BTL
-    (Argentina)
-17. Carlos Andrés Pinto Padgett — Event Production & Operations, +60 eventos
-    (Puebla, México) — recién egresado (tituló hace 1 semana), solo
-    pasantías (Disney College Program, Televicentro); se le escribió también
-    a pedido explícito del usuario pese a ser junior sin rol operativo
-    senior
+| # | Nombre | Rol / empresa | Estado | Próxima acción |
+|---|---|---|---|---|
+| 1 | Kimberly Mas Risso | Bizarro Live (Perú) | Mensaje enviado | Esperar respuesta |
+| 2 | Manuel Campusano Kellet | Productor General, Prisamedia Chile | Mensaje enviado | Esperar respuesta |
+| 3 | Victor Balabarca Saavedra | +700 eventos PE/CL/AR | Mensaje enviado | Esperar respuesta |
+| 4 | Valeria Leguizamon | Coordinadora Producción Senior | Mensaje enviado | ⚠ Verificar si es la misma persona del correo de Apollo (LinkedIn = Argentina, correo Apollo = Corferias Bogotá) |
+| 5 | Ailin Quijano Lopez | Estratega Comunicación/Marketing | Mensaje enviado | Esperar respuesta |
+| 6 | Roberto Kharlos Aquije Del Aguila | Head BTL, Bizarro | Mensaje enviado | Esperar respuesta |
+| 7 | Luciana Cristofoli | Marketing/Comunicación/Prensa, DF Entertainment | Mensaje enviado | Esperar respuesta |
+| 8 | Daniel Díaz Salgado | Producer of Live Events and TV Shows, FOX (México) | Mensaje enviado | Esperar respuesta |
+| 9 | Yury Angel | Directora/Productora freelance congresos y ferias (Bogotá) | Mensaje enviado | Esperar respuesta — perfil "en busca de empleo" pero experiencia senior real (Mom Test = pasado, no situación actual) |
+| 10 | Daniel Merino | Entertainment Executive, Bizarro Live & Festival de Viña del Mar (Chile) | Mensaje enviado | Esperar respuesta |
+| 11 | Rosa Loredana Bravo Burgos | Marketing & Events Manager, La Europea México (+60 eventos) | Mensaje enviado | Esperar respuesta |
+| 12 | Milenko Ilic | Productor Senior técnico BTL/TV (Chile) | Mensaje enviado | Esperar respuesta — también "en busca de empleo", mismo criterio que Yury Angel |
+| 13 | Lucas Nettle Naso | Jefe de eventos, Movistar Arena (Chile) | Mensaje enviado | Esperar respuesta |
+| 14 | Fernando Domínguez | Marketing Festivales, OCESA (México) | ❌ Declinó | Ninguna — preguntó por remuneración, se le ofreció el diagnóstico gratuito (PDF de cuellos de botella + automatizaciones), respondió "lo dejamos para otro día" |
+| 15 | Gianpiero Sampieri | Marketing Manager, Bizarro Live (Chile) | Mensaje enviado | Esperar respuesta |
+| 16 | Sharon Khodriya | Project Manager, Producción de Eventos & BTL (Argentina) | Mensaje enviado | Esperar respuesta |
+| 17 | Carlos Andrés Pinto Padgett | Event Production & Operations, +60 eventos (Puebla, México) | ✅ **Llamada agendada** | Miércoles 22 jul, 11:00–11:20am hora CDMX (12:00pm Perú), Google Meet (meet.google.com/onj-khei-hcv) — primera entrevista confirmada de la campaña. Recién egresado (tituló hace 1 semana), solo pasantías (Disney College Program, Televicentro); se le escribió a pedido explícito del usuario pese a ser junior |
+| 18 | Angélica María Bustos Angarita | Productora Senior Freelance, Corporativos/BTL/Ferias/Congresos (Bogotá) | Mensaje enviado | Esperar respuesta — prioridad alta (visión cruzada de varios clientes) |
+
+**Nuevo prospecto agregado (fuera de los 50 originales):** Alejandro Uribe
+Holguín Castaño — Co-Founder & Partner, LNK for Brands (Bogotá, CO), agencia
+de comercialización de marcas/patrocinios para entretenimiento en vivo
+(Festival Estéreo Picnic, Morat, Carlos Vives, Ed Sheeran vía Move Concerts).
+Rol adyacente-alto (lado comercial/sponsorship, no producción operativa pura).
+Solicitud de conexión ya enviada, estado "Pendiente" — escribirle en cuanto
+acepte.
 
 **Pendiente de seguimiento:** revisar periódicamente quién más de los 40
 acepta la conexión y mandarle el mensaje (mismo patrón: chequear si ya tiene
