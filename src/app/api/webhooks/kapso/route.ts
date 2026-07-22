@@ -4,7 +4,8 @@ import { WhatsAppSalesWebhookController } from "@/server/promoters/whatsappSales
 
 // Recibe mensajes entrantes de WhatsApp (vía Kapso, modo "Meta forward raw
 // webhook") para el bot de venta por promotores
-// (docs/mvp-whatsapp-promotores-2026-07-21.md).
+// (docs/mvp-whatsapp-promotores-2026-07-21.md). KAPSO_WEBHOOK_SECRET vive en
+// las env vars del proyecto en Vercel.
 
 // Verificación de firma: Kapso firma el body crudo con HMAC-SHA256 usando el
 // signing secret configurado en su dashboard (header X-Webhook-Signature).
