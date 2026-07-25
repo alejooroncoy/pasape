@@ -75,7 +75,7 @@ export const PhoneField = ({ value, onChange, autoFocus, disabled }: Props) => {
         height: 64,
         borderRadius: 18,
         padding: "0 14px 0 8px",
-        background: active ? "rgba(124,58,237,0.10)" : "rgba(255,255,255,0.04)",
+        background: active ? "rgba(124,58,237,0.10)" : C.fill,
         boxShadow: active
           ? `0 0 0 1.5px ${C.purple} inset, 0 0 24px -8px rgba(124,58,237,0.35)`
           : `0 0 0 1px ${C.line} inset`,
@@ -96,7 +96,7 @@ export const PhoneField = ({ value, onChange, autoFocus, disabled }: Props) => {
             alignItems: "center",
             gap: 6,
             paddingRight: 10,
-            borderRight: "1px solid rgba(255,255,255,0.1)",
+            borderRight: `1px solid ${C.line}`,
             background: "transparent",
             border: 0,
             cursor: "pointer",
@@ -127,8 +127,11 @@ export const PhoneField = ({ value, onChange, autoFocus, disabled }: Props) => {
               borderRadius: 14,
               overflow: "hidden",
               transformOrigin: "top left",
-              background: "#15121c",
-              boxShadow: `0 0 0 1px ${C.line} inset, 0 20px 40px -12px rgba(0,0,0,0.7)`,
+              // Superficie elevada por tokens: oscura en pantallas oscuras y
+              // clara dentro de .home-light (si se fija en dark, la tinta del
+              // tema claro queda negra sobre negro).
+              background: C.bg3,
+              boxShadow: `0 0 0 1px ${C.line} inset, 0 20px 40px -12px rgba(0,0,0,0.35)`,
             }}
           >
             <input
@@ -147,7 +150,7 @@ export const PhoneField = ({ value, onChange, autoFocus, disabled }: Props) => {
                 width: "100%",
                 boxSizing: "border-box",
                 padding: "12px 14px",
-                background: "rgba(255,255,255,0.04)",
+                background: C.fill,
                 border: 0,
                 borderBottom: `1px solid ${C.line}`,
                 outline: "none",
