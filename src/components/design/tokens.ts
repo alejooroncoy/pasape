@@ -12,6 +12,9 @@ export const C = {
   bg3: "var(--color-cart-bg-elev-2)",
   line: "var(--color-cart-line)",
   line2: "var(--color-cart-line-strong)",
+  // Relleno tenue (inputs/superficies sutiles). NO hardcodear
+  // "rgba(255,255,255,0.04)": eso asume fondo oscuro y se pierde en .home-light.
+  fill: "var(--color-cart-line-2)",
   text: "var(--color-cart-ink)",
   dim: "var(--color-cart-ink-3)",
   dimmer: "var(--color-cart-ink-4)",
