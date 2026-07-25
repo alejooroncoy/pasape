@@ -58,7 +58,7 @@ La identidad actual de Pasape se construye sobre **tres colores puros**: azul (#
 - `cart-accent-2` (azul #4f6df5) — detalles secundarios, líneas decorativas, contrastes menores.
 - Blanco (#ffffff, #fbfaff) — fondos y texto base. Nunca color secundario por saturación.
 
-Colores de categoría (icono-tile, fondo al 15% de opacidad) — vigentes en ambos scopes: Conciertos violeta `#8b5cf6`, Fiestas rosa `#ec4899`, Festivales naranja `#fb923c`, Comedia amarillo `#facc15`, Cultura cyan `#22d3ee`, Deportes lima `#a3e635`.
+Colores de categoría (icono-tile, fondo al 15% de opacidad) — vigentes en ambos scopes: Conciertos violeta `#8b5cf6`, Fiestas rosa `#ec4899`, Festivales naranja `#fb923c`, Comedia amarillo `#facc15`, Cultura cyan `#22d3ee`, Deportes lima `#a3e635`. El texto sobre ellos usa `--color-cart-ink-on-color` (tinta oscura: son colores claros por diseño).
 
 **Contraste — regla dura:** `cart-ink` y `cart-ink-2` son para texto de lectura (título/body); `cart-ink-3` es el piso para texto secundario que siga siendo AA; `cart-ink-4` es SOLO para hints/placeholders/metadata decorativa — nunca para el mensaje principal de una pantalla ni para un error/aviso que el usuario deba leer.
 
@@ -78,9 +78,18 @@ Colores de categoría (icono-tile, fondo al 15% de opacidad) — vigentes en amb
 
 - **Nada de blobs de gradiente radial fingiendo fotos.** Si no hay foto/flyer real: color sólido (duotono por categoría), nunca un degradado radial imitando bokeh/estudio.
 - **Hairlines, no cajas.** Bordes finísimos (`cart-line`), no bordes gruesos que griten.
-- **Ruido/grano solo donde ya está decidido** (`.cart-grain`, más sutil en `.home-light`) — no agregarlo como "textura anti-IA" en superficies nuevas.
+- **Ruido/grano solo donde ya está decidido** (`.cart-grain`, más sutil en `.home-light`, apagado en móvil) — no agregarlo como "textura anti-IA" en superficies nuevas.
 - **Color como acento**, nunca relleno de fondo — el morado vive en iconos, pills, CTA primario, no en el fondo general.
 - **Tipografía apretada**, `letter-spacing` negativo, sin black gritón.
+- **Nada de trío de tarjetas iguales** icono+título+texto como estructura de sección: es la firma de plantilla más reconocible que hay. Si son tres hechos en secuencia, se cuentan como secuencia (lista de pasos con hairlines), no como tiles.
+- **Sin emoji en el copy de producto** — además de leerse a plantilla, en varias fuentes de Android cae a un cuadro vacío.
+
+## Accesibilidad — piso, no polish
+
+- WCAG 2.2 AA es el mínimo: contraste, tamaño de target y respeto a `prefers-reduced-motion` se tratan como bugs.
+- Área táctil 44px, conseguida con un pseudo-elemento que desborda el elemento visible — **no** engordando el pill, que lo deja con cara de globo.
+- El enlace al Libro de Reclamaciones (INDECOPI) va siempre visible y nunca tapado por el tabbar.
+- `<MotionConfig reducedMotion="user">` está montado en el layout de locale: cualquier animación de `motion/react` respeta la preferencia del sistema sin tocarla una por una. El avance automático de contenido (carrusel) lo decide cada componente con `useReducedMotion`, y necesita un control de pausa alcanzable en táctil (WCAG 2.2.2).
 
 ## Estado de la migración clara — qué ya está y qué falta
 
@@ -95,7 +104,9 @@ El giro a `.home-light` es progresivo, no un rediseño de un solo commit. Estado
 - `/promo/*` — superficie de promotores.
 - `/login` de página completa y `/org/login` (solo el `SignInDrawer` portal-mounted ya migró, no la página standalone).
 
-**Al migrar una superficie nueva:** envolver el layout/shell raíz en `.home-light`, correr el flujo completo en el navegador, y cazar hardcodes que peleen con el cascade — `text-white` literal, glows/gradientes calibrados para fondo oscuro, o cualquier color que no sea un token `cart-*`. Esos son los que rompen el contraste, no el mecanismo del scope.
+**Al migrar una superficie nueva:** envolver el layout/shell raíz en `.home-light`, correr el flujo completo en el navegador **en móvil**, y cazar hardcodes que peleen con el cascade — `text-white` literal, glows/gradientes calibrados para fondo oscuro, o cualquier color que no sea un token `cart-*`. Esos son los que rompen el contraste, no el mecanismo del scope.
+
+**Ojo con `overflow-hidden` en el wrapper raíz:** `hidden` en un eje fuerza el otro a `auto`, y ese scrollport rompe el `position: sticky` del header — en móvil eso deja al usuario sin buscador ni filtros al hacer scroll. Usar `overflow-x-clip`.
 
 ## Componentes clave
 
@@ -110,7 +121,7 @@ El giro a `.home-light` es progresivo, no un rediseño de un solo commit. Estado
 
 - Transiciones 140-160ms en hover (borde a `cart-line-strong`, fondo a `cart-bg-elev`, translateY -2px en cards).
 - Nada de animaciones de entrada llamativas. La quietud es parte de la elegancia. Respetar `prefers-reduced-motion`.
-- `.home-wash` (drift ambiental sutil, no blob duro) reemplaza cualquier glow radial fingiendo foto — inspirado en Partiful, muy bajo contraste, movimiento lento.
+- `.home-wash` (drift ambiental sutil, no blob duro) reemplaza cualquier glow radial fingiendo foto — inspirado en Partiful, muy bajo contraste, movimiento lento. Anima `transform` sobre una capa sobredimensionada, no `background-position`, y se apaga en móvil (imperceptible y caro en batería).
 
 ## Logo Badge
 
@@ -128,4 +139,4 @@ El favicon (`src/app/icon.svg`) y el apple-touch-icon (`/pwa-icon/180.png`) son 
 
 ## Referencias
 
-Luma (`luma.com/discover`) para estructura de lista y descubrimiento. Vercel para precisión de hairlines/ruido/glow. Joinnus/Teleticket/Ticketmaster para el patrón "footer/QR oscuro aunque la página sea clara".
+Luma (`luma.com/discover`) para estructura de lista y descubrimiento. Vercel para precisión de hairlines/ruido/glow. Joinnus/Teleticket/Ticketmaster para el patrón "footer/QR oscuro aunque la página sea clara". DICE y Gametime para densidad de listado y para el patrón de poner el color sobre el dato (la fecha) y no sobre el botón.

@@ -27,9 +27,12 @@ export function PublicAppShell({
   const [category, setCategory] = useState<EventCategory | null>(null);
 
   return (
-    <div className="home-light cart-grain relative min-h-screen min-h-[100dvh] overflow-x-hidden bg-cart-bg text-cart-ink font-sans">
+    /* `overflow-x-clip`, no `-hidden`: `hidden` en un eje fuerza el otro a
+       `auto` y ese scrollport rompe el `position: sticky` del header. */
+    <div className="home-light cart-grain relative min-h-screen min-h-[100dvh] overflow-x-clip bg-cart-bg text-cart-ink font-sans">
       <AmbientGlow />
-      <div className="relative z-[1]">
+      {/* El colchón del tabbar cubre también el footer (queda fuera de main). */}
+      <div className="relative z-[1] pb-[calc(env(safe-area-inset-bottom,0px)+72px)] lg:pb-0">
         <Nav
           user={user}
           onOpenDrawer={() => setDrawerOpen(true)}
@@ -38,7 +41,7 @@ export function PublicAppShell({
           onSelectCategory={setCategory}
           selectedCategory={category}
         />
-        <main className="px-[clamp(20px,4vw,56px)] py-8 pb-[calc(env(safe-area-inset-bottom,0px)+88px)] lg:pb-12">
+        <main className="px-[clamp(20px,4vw,56px)] py-8 lg:pb-12">
           <div className={contentClassName}>{children}</div>
         </main>
         <Footer />

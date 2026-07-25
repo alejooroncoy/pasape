@@ -83,13 +83,10 @@ export default function BuyerProfilePage() {
                 style={{ boxShadow: "0 0 0 2px var(--color-cart-line-strong), 0 18px 40px -12px rgba(124,58,237,0.5)" }}
               />
             ) : (
-              <div
-                className="grid size-16 shrink-0 place-items-center rounded-[20px] text-[24px] font-extrabold tracking-[-0.02em] text-white"
-                style={{
-                  background: "linear-gradient(135deg, #FF4D5E, #7C3AED 60%, #4B1F9A)",
-                  boxShadow: "0 0 0 2px var(--color-cart-line-strong), 0 18px 40px -12px rgba(124,58,237,0.5)",
-                }}
-              >
+              /* Morado plano, como el avatar del header: el degradado rojo→morado
+                 con glow era relleno decorativo (DESIGN.md: color como acento) y
+                 encima no coincidía con el mismo avatar en otras pantallas. */
+              <div className="grid size-16 shrink-0 place-items-center rounded-[20px] bg-cart-accent text-[24px] font-extrabold tracking-[-0.02em] text-white">
                 {initialsOf(fullName)}
               </div>
             )}

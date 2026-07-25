@@ -84,14 +84,22 @@ export function HomeClient({
     return () => clearTimeout(timer);
   }, [search, searchLocation]);
 
+  // `overflow-x-clip` y NO `overflow-hidden`: `hidden` en un eje fuerza el otro
+  // a `auto`, o sea convierte este div en el scrollport del header sticky y lo
+  // deja scrolleando con la página (en móvil el buscador y los filtros son el
+  // único acceso a búsqueda/categoría, así que desaparecían). `clip` contiene el
+  // desborde horizontal sin crear contenedor de scroll.
   const wrapperClass =
     variant === "dark-ambient"
-      ? "home-dark-ambient cart-grain relative min-h-screen overflow-hidden text-cart-ink font-sans"
-      : "home-light home-wash cart-grain relative min-h-screen overflow-hidden bg-cart-bg text-cart-ink font-sans";
+      ? "home-dark-ambient cart-grain relative min-h-screen overflow-x-clip text-cart-ink font-sans"
+      : "home-light home-wash cart-grain relative min-h-screen overflow-x-clip bg-cart-bg text-cart-ink font-sans";
 
   return (
     <div className={wrapperClass}>
-      <div className="relative z-[1]">
+      {/* El padding del tabbar vive acá y no en <main>: el footer queda fuera de
+          main y su última fila (enlace al Libro de Reclamaciones, obligatorio)
+          terminaba tapada por el tabbar fijo. */}
+      <div className="relative z-[1] pb-[calc(env(safe-area-inset-bottom,0px)+72px)] lg:pb-0">
         <Nav
           user={resolvedUser}
           onOpenDrawer={() => setDrawerOpen(true)}
@@ -100,7 +108,7 @@ export function HomeClient({
           onSelectCategory={selectCategoryFromNav}
           selectedCategory={category}
         />
-        <main className="pb-[72px] lg:pb-0">
+        <main>
           {showHero && loggedIn && <NextEventHero />}
           {seoLead ? (
             <>

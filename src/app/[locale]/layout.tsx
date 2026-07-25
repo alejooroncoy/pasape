@@ -6,6 +6,7 @@ import { setRequestLocale } from "next-intl/server";
 import { Toaster } from "sonner";
 import { routing } from "@/i18n/routing";
 import { QueryProvider } from "@/lib/_shared/query-client";
+import { MotionPreferences } from "@/lib/_shared/motion-config";
 import { ServiceWorkerRegister } from "@/components/pwa/ServiceWorkerRegister";
 import { InstallPromptListener } from "@/components/pwa/InstallPromptListener";
 import { PostLoginRedirect } from "@/components/auth/PostLoginRedirect";
@@ -28,14 +29,16 @@ export default async function LocaleLayout({ children, params }: Props) {
 
   return (
     <NextIntlClientProvider locale={locale}>
-      <QueryProvider>
-        {children}
-        <PostLoginRedirect />
-        <PostHogIdentify />
-        <Suspense fallback={null}>
-          <PageViewTracker />
-        </Suspense>
-      </QueryProvider>
+      <MotionPreferences>
+        <QueryProvider>
+          {children}
+          <PostLoginRedirect />
+          <PostHogIdentify />
+          <Suspense fallback={null}>
+            <PageViewTracker />
+          </Suspense>
+        </QueryProvider>
+      </MotionPreferences>
       <ServiceWorkerRegister />
       <InstallPromptListener />
       {/* Estilo alineado al sistema cart-*: tarjeta elevada sobria, sin los

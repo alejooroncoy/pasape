@@ -1365,10 +1365,7 @@ function Avatar({
   return (
     <div className="text-center">
       {kind === "me" ? (
-        <div
-          className="mx-auto grid size-12 place-items-center rounded-full text-[16px] font-extrabold text-white"
-          style={{ background: "linear-gradient(135deg, #FF4D5E, #7C3AED 60%, #4B1F9A)" }}
-        >
+        <div className="mx-auto grid size-12 place-items-center rounded-full bg-cart-accent text-[16px] font-extrabold text-white">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
             <path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM4 20v-1a6 6 0 016-6h4a6 6 0 016 6v1" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
           </svg>

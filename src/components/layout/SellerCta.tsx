@@ -51,14 +51,11 @@ export function SellerCta() {
               <rect x="9" y="9" width="5" height="5" rx="1.3" stroke="currentColor" strokeWidth="1.4" />
             </svg>
           ) : (
-            // Destello — invita a crear
+            // Crear. Antes había un destello de cuatro puntas: en toda la
+            // industria ese icono significa "esto lo hace una IA", así que en un
+            // botón de publicar no dice nada y sí delata la plantilla.
             <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
-              <path
-                d="M8 1.5l1.4 3.7L13 6.5l-3.6 1.3L8 11.5 6.6 7.8 3 6.5l3.6-1.3L8 1.5z"
-                stroke="currentColor"
-                strokeWidth="1.3"
-                strokeLinejoin="round"
-              />
+              <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
             </svg>
           )}
         </span>

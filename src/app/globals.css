@@ -40,6 +40,11 @@
   --color-cart-accent-glow: rgba(184, 124, 255, 0.55);
   --color-cart-accent-glow-strong: rgba(184, 124, 255, 0.75);
   --color-cart-accent-blue: #5b7cff;
+  /* Tinta para texto SOBRE un color de categoría. Los colores de categoría son
+     claros (se diseñaron para fondo oscuro), así que el texto encima siempre va
+     oscuro — en los dos scopes. No es `cart-ink`: ese se invierte con el scope
+     y acá invertirlo rompería el contraste. */
+  --color-cart-ink-on-color: #0f0b1e;
 
   --font-sans: var(--font-general-sans), system-ui, -apple-system, sans-serif;
   --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
@@ -176,6 +181,12 @@ button, [role="button"], a {
   opacity: 0.025;
 }
 
+/* El grano es una capa fija a pantalla completa con `mix-blend-mode`: en móvil
+   se recompone en cada scroll y a 0.025 de opacidad nadie lo ve. Se apaga. */
+@media (max-width: 768px) {
+  .cart-grain::before { display: none; }
+}
+
 /* Scope oscuro puntual dentro del home claro (ej. footer): re-declara los
    tokens cart-* a sus valores dark para que los componentes de tokens rindan
    bien sobre tinta — el patrón de las ticketeras reales es footer oscuro
@@ -200,25 +211,35 @@ button, [role="button"], a {
    blob de glow duro que quitamos. Un degradado grande, borroso y de bajo
    contraste que se mueve muy lento, para que el blanco no se sienta un vacío
    plano. Vive en un ::after fijo detrás del contenido (z-index 0). */
-@keyframes home-wash-drift {
-  0%   { background-position: 0% 20%, 100% 80%; }
-  50%  { background-position: 20% 0%, 80% 100%; }
-  100% { background-position: 0% 20%, 100% 80%; }
-}
+/* La capa va sobredimensionada (inset negativo) y el drift mueve la CAPA con
+   `transform`, no el `background-position`: mover el fondo obliga a repintar un
+   degradado del tamaño del viewport en cada frame, para siempre. Con transform
+   el compositor reutiliza la textura ya pintada. */
 .home-wash::after {
   content: "";
   position: fixed;
-  inset: 0;
+  inset: -12%;
   z-index: 0;
   pointer-events: none;
+  will-change: transform;
   background-image:
-    radial-gradient(1100px 700px at 0% 20%, rgba(124, 58, 237, 0.09), transparent 60%),
-    radial-gradient(900px 650px at 100% 80%, rgba(79, 109, 245, 0.08), transparent 60%);
+    radial-gradient(1100px 700px at 8% 26%, rgba(124, 58, 237, 0.09), transparent 60%),
+    radial-gradient(900px 650px at 92% 74%, rgba(79, 109, 245, 0.08), transparent 60%);
   background-repeat: no-repeat;
   animation: home-wash-drift 26s ease-in-out infinite;
 }
+@keyframes home-wash-drift {
+  0%,
+  100% { transform: translate3d(0, 0, 0); }
+  50%  { transform: translate3d(3%, -2%, 0); }
+}
+/* En móvil el drift es imperceptible y se paga en batería: se queda el
+   degradado, se va el movimiento. */
+@media (max-width: 768px) {
+  .home-wash::after { animation: none; will-change: auto; }
+}
 @media (prefers-reduced-motion: reduce) {
-  .home-wash::after { animation: none; }
+  .home-wash::after { animation: none; will-change: auto; }
 }
 
 /* /2 — variante "oscuro ambiental" a la Partiful: fondo oscuro-azulado con
@@ -238,6 +259,9 @@ button, [role="button"], a {
     #0a0a14;
   background-size: 180% 180%, 180% 180%, 200% 200%, 100% 100%;
   animation: home-ambient-drift 30s ease-in-out infinite;
+}
+@media (max-width: 768px) {
+  .home-dark-ambient { animation: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   .home-dark-ambient { animation: none; }
