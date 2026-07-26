@@ -7,6 +7,11 @@ import { useSaveEvent } from "@/lib/identity/hooks/useSaveEvent";
 import { shortEventDate as shortDay } from "@/lib/_shared/format";
 import type { EventCard as EventCardType, EventCategory } from "@/server/events/domain/Event";
 import { CATEGORIES } from "./categories";
+import { splitFeatured } from "./featured";
+
+// Un solo lugar: el título vive en las dos ramas del encabezado (panel del home
+// y página completa) y un cambio de copy tenía que acordarse de tocar ambas.
+const SECTION_TITLE = "Próximos en Lima";
 
 // Corazón para guardar el evento — botón fantasma en el pie de la card (como
 // Joinnus), no flotando sobre el flyer. Hermano del Link para no anidar
@@ -24,14 +29,16 @@ function SaveHeart({ eventId }: { eventId: string }) {
       disabled={isPending}
       aria-label={isSaved ? "Quitar de favoritos" : "Guardar en favoritos"}
       aria-pressed={isSaved}
-      className="absolute right-[10px] top-[10px] z-10 grid size-8 place-items-center rounded-full bg-white shadow-[0_2px_10px_rgba(0,0,0,0.25)] transition hover:scale-105 active:scale-90 disabled:opacity-60"
+      /* 40 px de target sobre el flyer (antes 32) y tokens en vez de literales:
+         el corazón se reusa en cualquier scope, no solo sobre fondo claro. */
+      className="absolute right-2 top-2 z-10 grid size-10 place-items-center rounded-full bg-cart-bg shadow-[0_2px_10px_rgba(20,10,60,0.25)] transition hover:scale-105 active:scale-90 disabled:opacity-60"
     >
       <svg
-        width="15"
-        height="15"
+        width="16"
+        height="16"
         viewBox="0 0 18 18"
-        fill={isSaved ? "#7c3aed" : "none"}
-        className={isSaved ? "text-[#7c3aed]" : "text-[#3d3654]"}
+        fill={isSaved ? "currentColor" : "none"}
+        className={isSaved ? "text-cart-accent" : "text-cart-ink-2"}
         aria-hidden
       >
         <path
@@ -141,13 +148,18 @@ export function EventsSection({
   const visibleCategories = CATEGORIES.filter((c) => categoriesWithEvents.has(c.id));
 
   const q = search?.trim().toLowerCase() ?? "";
+  // Sin filtro activo, la grilla arranca donde termina el banner destacado
+  // (`splitFeatured`): así el mismo evento no aparece dos veces seguidas. Con
+  // categoría o búsqueda se muestran todos los que calzan — ahí esconder
+  // resultados sería un bug, no un reparto.
+  const base = category === null && !q ? splitFeatured(events.data ?? []).rest : events.data;
   const filtered = q
-    ? (events.data ?? []).filter(
+    ? (base ?? []).filter(
         (e) =>
           e.title.toLowerCase().includes(q) ||
           (e.venue?.toLowerCase().includes(q) ?? false),
       )
-    : events.data;
+    : base;
 
   const body = (
     <>
@@ -156,26 +168,21 @@ export function EventsSection({
         <div className="mb-4 flex items-center justify-between">
           {framed ? (
             /* Caja normal + punto final en morado: firma tipográfica propia,
-               sin el uppercase de template. */
+               sin el uppercase de template. Dice lo que la consulta devuelve
+               (próximos), no un recorte semanal que nadie está aplicando. */
             <h2 className="m-0 font-sans text-[21px] font-bold tracking-[-0.02em] text-cart-ink">
-              Esta semana en Lima<span className="text-cart-accent">.</span>
+              {SECTION_TITLE}<span className="text-cart-accent">.</span>
             </h2>
           ) : (
-          <h2
-            className={
-              compactHeader
-                ? "m-0 font-sans text-[12px] font-medium uppercase tracking-[0.12em] text-cart-ink/35"
-                : "m-0 font-sans text-[clamp(18px,2.4vw,28px)] font-semibold tracking-[-0.02em] text-cart-ink/85"
-            }
-          >
-            {compactHeader ? "Disponibles ahora" : "Esta semana"}
-          </h2>
+            <h2 className="m-0 font-sans text-[clamp(18px,2.4vw,28px)] font-semibold tracking-[-0.02em] text-cart-ink">
+              {compactHeader ? "Disponibles ahora" : SECTION_TITLE}
+            </h2>
           )}
           {!framed && (
             <Link
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               href={"/events" as any}
-              className="text-[12.5px] font-medium text-cart-ink/35 transition-colors hover:text-cart-ink/65"
+              className="text-[12.5px] font-medium text-cart-ink-3 transition-colors hover:text-cart-ink"
             >
               Ver todos →
             </Link>
@@ -195,7 +202,7 @@ export function EventsSection({
             className={`rounded-full px-4 py-1.5 text-[12.5px] font-semibold transition-colors duration-150 ${
               category === null
                 ? "bg-cart-accent text-white shadow-[0_6px_16px_-6px_var(--color-cart-accent-glow-strong)]"
-                : "border border-cart-line bg-cart-bg text-cart-ink-2 hover:border-[#4f6df5]/50 hover:text-cart-ink"
+                : "border border-cart-line bg-cart-bg text-cart-ink-2 hover:border-cart-accent-2/50 hover:text-cart-ink"
             }`}
           >
             Todos
@@ -215,8 +222,8 @@ export function EventsSection({
                         background: color,
                         // Los colores de categoría son CLAROS (diseñados para
                         // fondo oscuro): texto oscuro para contraste, no blanco
-                        // (mismo criterio que el strip móvil).
-                        color: "#0a0a0f",
+                        // (mismo token que el strip móvil).
+                        color: "var(--color-cart-ink-on-color)",
                         boxShadow: `0 6px 16px -6px ${color}99`,
                       }
                     : undefined
@@ -256,9 +263,38 @@ export function EventsSection({
         ))}
 
         {!events.isLoading && (filtered?.length ?? 0) === 0 && (
-          <p className="col-span-full py-12 text-[13px] text-cart-ink/30">
-            {q ? `Sin resultados para "${search}"` : "Pronto habrá eventos."}
-          </p>
+          /* El vacío es el mensaje principal de la pantalla: va en tinta
+             legible (no en el gris de hint) y siempre ofrece una salida. */
+          <div className="col-span-full py-10">
+            {q ? (
+              <p className="m-0 text-[14px] text-cart-ink-2">
+                Nada que calce con <span className="font-semibold text-cart-ink">“{search?.trim()}”</span>.
+              </p>
+            ) : category ? (
+              <p className="m-0 text-[14px] text-cart-ink-2">
+                Todavía no hay eventos en esta categoría.{" "}
+                <button
+                  type="button"
+                  onClick={() => onCategoryChange(null)}
+                  className="font-semibold text-cart-accent-strong underline underline-offset-2"
+                >
+                  Ver todas
+                </button>
+              </p>
+            ) : (
+              <>
+                <p className="m-0 text-[14px] text-cart-ink-2">
+                  Todavía no hay eventos publicados.
+                </p>
+                <Link
+                  href="/organizadores"
+                  className="mt-1.5 inline-block text-[13.5px] font-semibold text-cart-accent-strong underline underline-offset-2"
+                >
+                  ¿Organizas eventos? Publica el tuyo
+                </Link>
+              </>
+            )}
+          </div>
         )}
       </div>
     </>

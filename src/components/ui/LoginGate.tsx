@@ -20,49 +20,36 @@ export function LoginGate({
   subtitle: string;
   next: string;
 }) {
-  // Alto = viewport − header (68px) − tabbar (72px): centra el contenido en el
-  // hueco real entre el header y la barra inferior (no en todo el alto).
   return (
-    <div className="cart-grain relative grid min-h-[calc(100dvh-68px-72px)] place-items-center bg-cart-bg px-6 font-sans text-cart-ink">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute left-1/2 top-[-120px] z-0 h-[560px] w-[900px] -translate-x-1/2 blur-[90px]"
-        style={{ background: "radial-gradient(closest-side, rgba(184,124,255,0.2), transparent 70%)" }}
-      />
+    /* Centrado en el hueco REAL entre la cabecera y el tabbar, con los altos
+       desde los tokens únicos de globals.css (antes cada consumidor los
+       estimaba y el bloque quedaba 11px arriba del centro):
+       — el div arranca ya debajo del header sticky, así que solo se le resta su
+         alto;
+       — el tabbar es fixed y no ocupa flujo, así que se compensa con padding
+         inferior, y en desktop desaparece (lg:pb-0). */
+    <div className="relative flex min-h-[calc(100dvh-var(--app-header-h))] items-center justify-center bg-cart-bg px-6 pb-[var(--app-tabbar-h)] font-sans text-cart-ink lg:pb-0">
+      {/* Sin símbolo: la mascota ya vive en la cabecera y repetirla en la misma
+          pantalla la debilita. Y sin el stack centrado (símbolo → título →
+          subtítulo apagado → botón a todo el ancho, todo en medio del vacío),
+          que es la silueta que delata la plantilla. El texto se alinea a la
+          izquierda y el bloque se apoya arriba del centro óptico. */}
       <motion.div
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.25 }}
-        className="relative z-[1] w-full max-w-[360px] text-center"
+        className="w-full max-w-[360px]"
       >
-        <div
-          className="mx-auto grid size-16 place-items-center rounded-[20px] text-white"
-          style={{
-            background: "linear-gradient(135deg, #FF4D5E, #7C3AED 60%, #4B1F9A)",
-            boxShadow: "0 0 0 2px rgba(255,255,255,0.1), 0 18px 40px -12px rgba(124,58,237,0.5)",
-          }}
-        >
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden>
-            <path
-              d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM4 21v-1a6 6 0 016-6h4a6 6 0 016 6v1"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </div>
-
-        <h1 className="mt-6 text-[22px] font-bold leading-tight tracking-[-0.02em]">
+        <h1 className="text-[26px] font-bold leading-[1.1] tracking-[-0.03em] text-balance">
           {title}
         </h1>
-        <p className="mt-2 text-[14px] leading-snug text-cart-ink-2">{subtitle}</p>
+        <p className="mt-2.5 max-w-[34ch] text-[14px] leading-[1.5] text-cart-ink-2">{subtitle}</p>
 
         {/* El drawer usa su copy oficial ("Entra a Pasape"); el título/subtítulo
             del gate solo viven en esta página. */}
         <SignInButton
           redirectTo={next}
-          className="mt-7 w-full rounded-full bg-cart-accent py-3.5 text-[15px] font-semibold text-cart-bg shadow-[0_8px_24px_-6px_var(--color-cart-accent-glow)] transition hover:brightness-110"
+          className="mt-6 w-full rounded-[10px] bg-cart-accent py-3.5 text-[15px] font-semibold text-white transition-colors hover:bg-cart-accent-strong"
         >
           Iniciar sesión
         </SignInButton>

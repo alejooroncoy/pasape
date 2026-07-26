@@ -26,7 +26,7 @@ export function Footer() {
               href={WA_HREF}
               target="_blank"
               rel="noopener noreferrer"
-              className="mt-5 inline-flex items-center gap-2 rounded-full bg-[#25D366]/12 px-4 py-2 text-[12.5px] font-semibold text-[#128C4A] transition-colors hover:bg-[#25D366]/20"
+              className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-full bg-[#25D366]/12 px-4 text-[12.5px] font-semibold text-[#128C4A] transition-colors hover:bg-[#25D366]/20"
             >
               <WaIcon width={15} height={15} />
               Escríbenos por WhatsApp
@@ -66,9 +66,11 @@ export function Footer() {
             <LibroReclamacionesFooterLink />
           </div>
         </div>
-        {/* Cierre centrado, como Joinnus */}
+        {/* Cierre centrado, como Joinnus. Sin emoji: en varias fuentes de
+            Android el glifo cae a un cuadro vacío, y de todas formas es la
+            firma de plantilla más reconocible que hay. */}
         <div className="mt-8 border-t border-cart-line-2 pt-4 text-center text-[12.5px] text-cart-ink-2">
-          Copyright © Pasape 2026&nbsp;&nbsp;|&nbsp;&nbsp;Todos los derechos reservados&nbsp;&nbsp;·&nbsp;&nbsp;Hecho con ☕ en Perú
+          © Pasape 2026 · Todos los derechos reservados · Hecho en Perú
         </div>
       </div>
     </footer>
@@ -81,10 +83,15 @@ function FootCol({ title, links }: { title: string; links: Array<[string, string
       <h2 className="m-0 mb-3.5 text-[13px] font-bold tracking-[-0.01em] text-cart-ink">
         {title}
       </h2>
-      <ul className="m-0 flex list-none flex-col gap-2 p-0">
+      {/* `inline-block` + padding vertical: en móvil el target era la altura de
+          la línea (17 px) y quedaban pegados entre sí. */}
+      <ul className="m-0 flex list-none flex-col gap-1 p-0">
         {links.map(([label, href]) => (
           <li key={label}>
-            <Link href={href} className="text-cart-ink-2 transition-colors hover:text-cart-ink">
+            <Link
+              href={href}
+              className="inline-block py-2 text-cart-ink-2 transition-colors hover:text-cart-ink"
+            >
               {label}
             </Link>
           </li>

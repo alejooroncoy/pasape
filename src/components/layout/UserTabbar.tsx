@@ -118,6 +118,9 @@ export function UserTabbar() {
   return (
     <nav
       aria-label="Navegación principal"
+      /* Si cambias el alto de esta barra (padding o alto de fila), actualiza
+         `--app-tabbar-h` en globals.css: de ahí sacan su colchón el shell del
+         home, PublicAppShell y LoginGate. */
       className={
         "fixed z-[70] block backdrop-blur-xl backdrop-saturate-150 [-webkit-backdrop-filter:blur(24px)_saturate(150%)] lg:hidden " +
         (useCompactBrowserDock
@@ -134,10 +137,7 @@ export function UserTabbar() {
               key={id}
               href={href as never}
               aria-current={isOn ? "page" : undefined}
-              className={
-                "group relative flex flex-col items-center justify-center gap-0.5 px-0.5 py-1 " +
-                (useCompactBrowserDock ? "min-h-11" : "")
-              }
+              className="group relative flex min-h-11 flex-col items-center justify-center gap-0.5 px-0.5 py-1"
             >
               {/* Indicador activo que se desliza entre tabs (layoutId) */}
               {isOn && (

@@ -93,13 +93,8 @@ export default function BuyerProfileEditPage() {
             style={{ boxShadow: "0 0 0 3px var(--color-cart-line-strong), 0 20px 50px -10px rgba(124,58,237,0.5)" }}
           />
         ) : (
-          <div
-            className="grid size-24 place-items-center rounded-[28px] text-[36px] font-extrabold tracking-[-0.02em] text-white"
-            style={{
-              background: "linear-gradient(135deg, #FF4D5E, #7C3AED 60%, #4B1F9A)",
-              boxShadow: "0 0 0 3px var(--color-cart-line-strong), 0 20px 50px -10px rgba(124,58,237,0.5)",
-            }}
-          >
+          /* Mismo avatar que en /profile: morado plano, sin degradado ni glow. */
+          <div className="grid size-24 place-items-center rounded-[28px] bg-cart-accent text-[36px] font-extrabold tracking-[-0.02em] text-white">
             {initialsOf(fullName || data?.user?.fullName)}
           </div>
         )}

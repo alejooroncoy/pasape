@@ -83,7 +83,7 @@ export function HeaderBrand({ mobileLabel = false }: { mobileLabel?: boolean }) 
         (mobileLabel ? "max-[560px]:text-[17px]" : "max-[560px]:text-[0]")
       }
     >
-      <span className="grid size-[40px] place-items-center max-[560px]:size-9">
+      <span className="grid size-[40px] place-items-center max-[560px]:size-10">
         <Logo className="size-full drop-shadow-[0_2px_10px_rgba(184,124,255,0.35)]" />
       </span>
       <span className={mobileLabel ? "" : "max-[560px]:sr-only"}>Pasape</span>
@@ -149,7 +149,7 @@ export function HeaderSearch({ onSearch }: { onSearch: (q: string) => void }) {
 
   return (
     <div ref={boxRef} className="relative w-full flex-1">
-      <label className="flex h-[42px] w-full items-center gap-2.5 rounded-full border border-cart-line bg-cart-bg-elev px-3.5 transition-colors focus-within:border-cart-accent focus-within:shadow-[0_0_0_4px_var(--color-cart-accent-soft),0_0_18px_var(--color-cart-accent-glow)] max-[560px]:h-10 max-[560px]:px-3 max-[560px]:gap-2">
+      <label className="flex h-[42px] w-full items-center gap-2.5 rounded-full border border-cart-line bg-cart-bg-elev px-3.5 transition-colors focus-within:border-cart-accent focus-within:shadow-[0_0_0_4px_var(--color-cart-accent-soft),0_0_18px_var(--color-cart-accent-glow)] max-[560px]:h-11 max-[560px]:gap-2 max-[560px]:px-3">
         <SearchIcon className="shrink-0 text-cart-ink-4" />
         <input
           data-cart-search
@@ -324,7 +324,7 @@ export function HeaderActions({ user, onOpenMenu }: { user: NavUser | null; onOp
         aria-label="Menú"
         whileTap={{ scale: 0.9 }}
         transition={TAP_SPRING}
-        className="hidden size-10 place-items-center rounded-full border border-cart-line bg-cart-bg-elev max-[900px]:grid"
+        className="hidden size-11 place-items-center rounded-full border border-cart-line bg-cart-bg-elev max-[900px]:grid"
       >
         <span className="block h-px w-4 bg-cart-ink-2 relative before:absolute before:top-[-5px] before:block before:h-px before:w-4 before:bg-cart-ink-2 before:content-[''] after:absolute after:top-[5px] after:block after:h-px after:w-4 after:bg-cart-ink-2 after:content-['']" />
       </motion.button>
@@ -392,7 +392,7 @@ export function CitySelector({ className = "" }: { className?: string }) {
         whileHover={{ y: -1 }}
         whileTap={{ scale: 0.95 }}
         transition={{ type: "spring", stiffness: 500, damping: 30 }}
-        className="inline-flex items-center gap-1.5 rounded-full border border-cart-line bg-cart-bg-elev px-3 py-2 text-[13px] font-medium text-cart-ink-2 transition-colors hover:border-cart-line-strong hover:text-cart-ink"
+        className="relative inline-flex items-center gap-1.5 rounded-full border border-cart-line bg-cart-bg-elev px-3.5 py-[7px] text-[13px] font-medium text-cart-ink-2 transition-colors before:absolute before:inset-x-0 before:-inset-y-[5px] before:content-[''] hover:border-cart-line-strong hover:text-cart-ink"
       >
         <PinIcon className="text-cart-accent" />
         Lima
@@ -451,7 +451,9 @@ export function MobileCategoryStrip({
 }) {
   return (
     <div
-      className="hidden items-center gap-2 overflow-x-auto border-t border-cart-line-2 px-[clamp(20px,4vw,56px)] py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden max-[560px]:flex"
+      /* La máscara avisa que la fila sigue: sin scrollbar ni degradado, el único
+         indicio de que hay más categorías era que la última quedara cortada. */
+      className="hidden items-center gap-2 overflow-x-auto border-t border-cart-line-2 px-[clamp(20px,4vw,56px)] py-1.5 [mask-image:linear-gradient(to_right,transparent_0,#000_16px,#000_calc(100%-28px),transparent_100%)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden max-[560px]:flex"
       aria-label="Filtros rápidos"
     >
       <CitySelector />
@@ -459,7 +461,7 @@ export function MobileCategoryStrip({
       {STRIP_CHIPS.map(({ label, cat }) => {
         const active = selectedCategory === cat;
         const color = cat ? CATEGORY_BY_ID[cat].color : "var(--color-cart-ink)";
-        const activeText = cat ? "#0a0a0f" : "var(--color-cart-bg)";
+        const activeText = cat ? "var(--color-cart-ink-on-color)" : "var(--color-cart-bg)";
         return (
           <motion.button
             key={label}
@@ -467,7 +469,10 @@ export function MobileCategoryStrip({
             onClick={() => onSelectCategory(cat)}
             whileTap={{ scale: 0.93 }}
             transition={TAP_SPRING}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12.5px] whitespace-nowrap transition-colors"
+            /* El pill se ve de 34 px; el área que responde al dedo llega a 44
+               con un pseudo-elemento invisible. Estirar el pill mismo lo dejaba
+               con cara de globo y le comía 11 px al viewport en cada scroll. */
+            className="relative inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3.5 py-[7px] text-[12.5px] transition-colors before:absolute before:inset-x-0 before:-inset-y-[5px] before:content-['']"
             style={
               active
                 ? {
