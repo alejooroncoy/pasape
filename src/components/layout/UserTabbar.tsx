@@ -118,6 +118,9 @@ export function UserTabbar() {
   return (
     <nav
       aria-label="Navegación principal"
+      /* Si cambias el alto de esta barra (padding o alto de fila), actualiza
+         `--app-tabbar-h` en globals.css: de ahí sacan su colchón el shell del
+         home, PublicAppShell y LoginGate. */
       className={
         "fixed z-[70] block backdrop-blur-xl backdrop-saturate-150 [-webkit-backdrop-filter:blur(24px)_saturate(150%)] lg:hidden " +
         (useCompactBrowserDock

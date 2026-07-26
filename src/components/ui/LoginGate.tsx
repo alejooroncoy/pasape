@@ -20,19 +20,15 @@ export function LoginGate({
   subtitle: string;
   next: string;
 }) {
-  // Alto = viewport − header (68px) − tabbar (72px): centra el contenido en el
-  // hueco real entre el header y la barra inferior (no en todo el alto).
   return (
-    /* Centrado en el hueco REAL entre la cabecera y el tabbar. Las medidas
-       importan y las de antes estaban mal (68/72 contra 61/57 reales), así que
-       el bloque quedaba 11px arriba del centro:
+    /* Centrado en el hueco REAL entre la cabecera y el tabbar, con los altos
+       desde los tokens únicos de globals.css (antes cada consumidor los
+       estimaba y el bloque quedaba 11px arriba del centro):
        — el div arranca ya debajo del header sticky, así que solo se le resta su
-         alto (60px + 1px de borde; 68+1 sobre 560px, el mismo corte que usa
-         AppHeader);
-       — el tabbar es fixed y no ocupa flujo, así que su alto se compensa con
-         padding inferior, con el env() del safe area incluido (en un iPhone real
-         son ~34px más que en el navegador de escritorio). */
-    <div className="relative flex min-h-[calc(100dvh-61px)] items-center justify-center bg-cart-bg px-6 pb-[calc(env(safe-area-inset-bottom,0px)+54px)] font-sans text-cart-ink min-[561px]:min-h-[calc(100dvh-69px)]">
+         alto;
+       — el tabbar es fixed y no ocupa flujo, así que se compensa con padding
+         inferior, y en desktop desaparece (lg:pb-0). */
+    <div className="relative flex min-h-[calc(100dvh-var(--app-header-h))] items-center justify-center bg-cart-bg px-6 pb-[var(--app-tabbar-h)] font-sans text-cart-ink lg:pb-0">
       {/* Sin símbolo: la mascota ya vive en la cabecera y repetirla en la misma
           pantalla la debilita. Y sin el stack centrado (símbolo → título →
           subtítulo apagado → botón a todo el ancho, todo en medio del vacío),

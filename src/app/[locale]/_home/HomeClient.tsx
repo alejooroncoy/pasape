@@ -98,8 +98,9 @@ export function HomeClient({
     <div className={wrapperClass}>
       {/* El padding del tabbar vive acá y no en <main>: el footer queda fuera de
           main y su última fila (enlace al Libro de Reclamaciones, obligatorio)
-          terminaba tapada por el tabbar fijo. */}
-      <div className="relative z-[1] pb-[calc(env(safe-area-inset-bottom,0px)+72px)] lg:pb-0">
+          terminaba tapada por el tabbar fijo. El alto sale del token único
+          `--app-tabbar-h` (globals.css), no de una estimación local. */}
+      <div className="relative z-[1] pb-[var(--app-tabbar-h)] lg:pb-0">
         <Nav
           user={resolvedUser}
           onOpenDrawer={() => setDrawerOpen(true)}

@@ -12,6 +12,9 @@ import { splitFeatured } from "./featured";
 // de 0 a 100 % en este tiempo y onAnimationEnd pasa al siguiente evento.
 const DURATION_MS = 6000;
 
+// Desplazamiento mínimo para que un arrastre cuente como cambio de slide.
+const SWIPE_PX = 40;
+
 // Controles del carrusel: 44 px de target en táctil, compactos donde hay
 // puntero fino.
 const ctrlClass =
@@ -32,26 +35,35 @@ export function FeaturedBanner() {
   // Pausa explícita del usuario. El hover no sirve en táctil, y sin un control
   // real el carrusel cambia de evento a mitad de lectura (WCAG 2.2.2).
   const [userPaused, setUserPaused] = useState(false);
-  const paused = hoverPaused || userPaused || !!reduceMotion;
+  // `reduceMotion` no entra acá: con esa preferencia la barra ni se monta, así
+  // que no hay nada que pausar (ver el guard del bloque de progreso).
+  const paused = hoverPaused || userPaused;
+  // Con `prefers-reduced-motion` no hay avance automático, así que tampoco hay
+  // controles de avance: un botón de pausa que no pausa nada es peor que no
+  // tenerlo (aria-pressed alternando sobre un no-op).
+  const showAutoAdvance = total > 1 && !reduceMotion;
 
   // Swipe horizontal en móvil (el ICP navega sobre todo con el dedo).
   const touchX = useRef<number | null>(null);
-  // El contenedor envuelve un <Link>: sin esta marca, un arrastre corto no
-  // cambia de slide Y además abre el evento que el usuario estaba dejando atrás.
+  // El contenedor envuelve un <Link>, así que hay que decidir si el clic que
+  // llega después del gesto es un tap o el residuo de un arrastre. Se marca solo
+  // cuando el swipe REALMENTE cambió de slide: bloquearlo con cualquier
+  // desplazamiento mataba taps legítimos (un dedo se mueve 10 px al tocar) y,
+  // con un solo evento en el banner, el swipe no navega pero igual anulaba el
+  // tap — o sea el elemento más importante del home no respondía.
   const swiped = useRef(false);
   const onTouchStart = (e: React.TouchEvent) => {
     touchX.current = e.touches[0].clientX;
     swiped.current = false;
   };
-  const onTouchMove = (e: React.TouchEvent) => {
-    if (touchX.current == null) return;
-    if (Math.abs(e.touches[0].clientX - touchX.current) > 10) swiped.current = true;
-  };
   const onTouchEnd = (e: React.TouchEvent) => {
-    if (touchX.current == null || total < 2) return;
-    const dx = e.changedTouches[0].clientX - touchX.current;
-    if (Math.abs(dx) > 40) go(dx < 0 ? 1 : -1);
-    touchX.current = null;
+    const startX = touchX.current;
+    touchX.current = null; // se limpia siempre, también en los early-return
+    if (startX == null || total < 2) return;
+    const dx = e.changedTouches[0].clientX - startX;
+    if (Math.abs(dx) <= SWIPE_PX) return;
+    swiped.current = true;
+    go(dx < 0 ? 1 : -1);
   };
 
   if (events.isLoading) {
@@ -79,7 +91,6 @@ export function FeaturedBanner() {
       onFocusCapture={() => setHoverPaused(true)}
       onBlurCapture={() => setHoverPaused(false)}
       onTouchStart={onTouchStart}
-      onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
     >
       {/* Contenido del slide — anima la entrada en cada cambio (sin capa de
@@ -153,6 +164,7 @@ export function FeaturedBanner() {
             {(cur % total) + 1} de {total}
           </span>
           <div className="flex gap-1.5">
+            {showAutoAdvance && (
             <button
               onClick={() => setUserPaused((v) => !v)}
               aria-pressed={userPaused}
@@ -170,6 +182,7 @@ export function FeaturedBanner() {
                 </svg>
               )}
             </button>
+            )}
             {([-1, 1] as const).map((dir) => (
               <button
                 key={dir}
@@ -189,7 +202,7 @@ export function FeaturedBanner() {
       {/* Barra de progreso del auto-avance (CSS puro, GPU): key={cur} la
           reinicia en cada slide. Con `prefers-reduced-motion` no se monta:
           sin barra no hay `onAnimationEnd`, o sea el carrusel no avanza solo. */}
-      {total > 1 && !reduceMotion && (
+      {showAutoAdvance && (
         <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-cart-accent/10">
           <div
             key={cur}

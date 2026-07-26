@@ -9,6 +9,10 @@ import type { EventCard as EventCardType, EventCategory } from "@/server/events/
 import { CATEGORIES } from "./categories";
 import { splitFeatured } from "./featured";
 
+// Un solo lugar: el título vive en las dos ramas del encabezado (panel del home
+// y página completa) y un cambio de copy tenía que acordarse de tocar ambas.
+const SECTION_TITLE = "Próximos en Lima";
+
 // Corazón para guardar el evento — botón fantasma en el pie de la card (como
 // Joinnus), no flotando sobre el flyer. Hermano del Link para no anidar
 // <button> dentro de <a>. Para invitados el toggle no persiste.
@@ -167,11 +171,11 @@ export function EventsSection({
                sin el uppercase de template. Dice lo que la consulta devuelve
                (próximos), no un recorte semanal que nadie está aplicando. */
             <h2 className="m-0 font-sans text-[21px] font-bold tracking-[-0.02em] text-cart-ink">
-              Próximos en Lima<span className="text-cart-accent">.</span>
+              {SECTION_TITLE}<span className="text-cart-accent">.</span>
             </h2>
           ) : (
             <h2 className="m-0 font-sans text-[clamp(18px,2.4vw,28px)] font-semibold tracking-[-0.02em] text-cart-ink">
-              {compactHeader ? "Disponibles ahora" : "Próximos en Lima"}
+              {compactHeader ? "Disponibles ahora" : SECTION_TITLE}
             </h2>
           )}
           {!framed && (

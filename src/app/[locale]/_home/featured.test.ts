@@ -8,6 +8,18 @@ const list = (n: number) =>
 const ids = (arr: EventCard[]) => arr.map((e) => e.id);
 
 describe("splitFeatured", () => {
+  it("con catálogo vacío no rompe ni inventa destacados", () => {
+    const { featured, rest } = splitFeatured([]);
+    expect(featured).toEqual([]);
+    expect(rest).toEqual([]);
+  });
+
+  it("en el borde de FEATURED_COUNT destaca tres y deja el cuarto a la grilla", () => {
+    const { featured, rest } = splitFeatured(list(4));
+    expect(ids(featured)).toEqual(["e0", "e1", "e2"]);
+    expect(ids(rest)).toEqual(["e3"]);
+  });
+
   it("no destaca nada cuando hay un solo evento: el banner sería un eco de la grilla", () => {
     const { featured, rest } = splitFeatured(list(1));
     expect(ids(featured)).toEqual([]);

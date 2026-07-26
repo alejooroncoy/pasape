@@ -472,9 +472,6 @@ export function MobileCategoryStrip({
             /* El pill se ve de 34 px; el área que responde al dedo llega a 44
                con un pseudo-elemento invisible. Estirar el pill mismo lo dejaba
                con cara de globo y le comía 11 px al viewport en cada scroll. */
-            /* El pill se ve de 34 px; el área que responde al dedo llega a 44
-               con un pseudo-elemento invisible. Estirar el pill mismo lo dejaba
-               con cara de globo y le comía 11 px al viewport en cada scroll. */
             className="relative inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3.5 py-[7px] text-[12.5px] transition-colors before:absolute before:inset-x-0 before:-inset-y-[5px] before:content-['']"
             style={
               active

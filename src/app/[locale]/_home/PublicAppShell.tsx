@@ -31,8 +31,9 @@ export function PublicAppShell({
        `auto` y ese scrollport rompe el `position: sticky` del header. */
     <div className="home-light cart-grain relative min-h-screen min-h-[100dvh] overflow-x-clip bg-cart-bg text-cart-ink font-sans">
       <AmbientGlow />
-      {/* El colchón del tabbar cubre también el footer (queda fuera de main). */}
-      <div className="relative z-[1] pb-[calc(env(safe-area-inset-bottom,0px)+72px)] lg:pb-0">
+      {/* El colchón del tabbar cubre también el footer (queda fuera de main).
+          Alto desde el token único `--app-tabbar-h` (globals.css). */}
+      <div className="relative z-[1] pb-[var(--app-tabbar-h)] lg:pb-0">
         <Nav
           user={user}
           onOpenDrawer={() => setDrawerOpen(true)}
