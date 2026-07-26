@@ -20,3 +20,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec tsc --noEmit
       - run: pnpm lint
+      # Los tests existían pero ningún workflow los corría: una regresión en
+      # precios, firma de QR o antifraude mergeaba en verde.
+      # Acá corren 229 tests deterministas en ~9s. Los 8 archivos
+      # *.integration.test.ts golpean el Supabase remoto y se auto-saltan sin
+      # credenciales (`describe.skipIf(!hasCreds)`), que es justo el caso de CI
+      # — así el pipeline no hereda la flakiness de la red.
+      - run: pnpm test
